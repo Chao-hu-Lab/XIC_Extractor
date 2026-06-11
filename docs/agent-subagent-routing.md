@@ -35,6 +35,17 @@ when their trigger threshold applies before recreating process instructions:
   plans, goal prompts, workflow rules, handoff docs, and public contracts. It
   must read this routing doc when running in XIC; do not maintain a duplicate
   XIC critical-review skill.
+- `xic-large-pr-review` for large XIC PR reviews, especially diagnostics,
+  architecture, preset-performance, parity, 8RAW/85RAW, activation/value-delta,
+  matrix identity, or RAW-locality changes. It complements the normal
+  code-review stance by focusing on high blast-radius contracts and validation
+  evidence.
+- `xic-architecture-preflight` before implementing or planning non-trivial
+  diagnostics, RAW-backed evidence, preset-performance changes,
+  matrix/activation/value-delta paths, model-selection work, HCD-PI, Delta Mass,
+  CID-NL expansion, or other evidence-provider additions. It forces reuse,
+  ownership, call-cost, public-contract, and validation-gate decisions before
+  coding.
 - global `pr-closeout` for durable PR/branch closeout; `xic-pr-closeout` only
   adds XIC readiness labels and artifact rules.
 - `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
@@ -330,6 +341,12 @@ closing out a PR or development branch whose description will become future
 project memory. Apply `.codex/skills/xic-pr-closeout/SKILL.md` for XIC-specific
 readiness labels, validation tiers, downstream handoff, RAW artifacts, and
 merge/history expectations.
+
+Use `.codex/skills/xic-large-pr-review/SKILL.md` when reviewing a large or
+diagnostics-heavy PR. The review should build a blast-radius map first, inspect
+shared helpers and public contracts before mechanical writer churn, and report
+the strongest evidence actually checked: CI, focused tests, 8RAW parity, 85RAW
+parity, targeted benchmark, manual EIC/MS2 review, or `diagnostic_only`.
 
 Before opening, updating, or marking a PR ready, the main agent must run the
 repo CI-equivalent lint, typecheck, and test gates in the active worktree:

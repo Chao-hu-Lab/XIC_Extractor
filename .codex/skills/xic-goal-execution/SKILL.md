@@ -1,6 +1,6 @@
 ---
 name: xic-goal-execution
-description: XIC Extractor overlay for the global goal-execution skill. Use when the user asks to create or execute a goal for XIC work, or when an XIC task is phase-sized, RAW/data-backed, PR-ready, CI/release-like, cross-turn, or repeatedly drifting. First use the global `goal-execution` contract shape, then apply XIC-specific context, validation tiers, RAW stop rules, and handoff/productization constraints. Do not use for tiny bug fixes, simple commits, one-command status checks, or focused RAW validation with an obvious done state.
+description: XIC Extractor overlay for the global goal-execution skill. Use when the user asks to create, tighten, review, audit, execute, or close a goal for XIC work, or when an XIC task is phase-sized, RAW/data-backed, PR-ready, CI/release-like, cross-turn, or repeatedly drifting. First use the global `goal-execution` contract shape, then apply XIC-specific goal quality gates, context, validation tiers, RAW stop rules, and handoff/productization constraints. Do not use for tiny bug fixes, simple commits, one-command status checks, or focused RAW validation with an obvious done state.
 ---
 
 # XIC Goal Execution
@@ -21,6 +21,93 @@ Use the global skill first for:
 - completion audit and stop rules.
 
 Then apply the XIC-specific additions below.
+
+## Execution Modes
+
+Pick the smallest mode that fits the user's request:
+
+- `create`: turn a broad request into one measurable goal contract.
+- `tighten`: fix an existing goal that is too broad, unverifiable, or missing
+  stop rules.
+- `review`: critique a proposed goal before execution; do not edit code.
+- `execute`: work against the accepted goal and update progress only when
+  evidence changes.
+- `audit`: check whether an active goal is still valid after new artifacts,
+  reviewer findings, CI results, or user direction.
+- `close`: verify completion, name residual risk, leave handoff, and mark the
+  runtime goal complete only when the objective is actually achieved.
+
+If the user asks to "set a goal and handle it", start with `tighten` for one
+pass, then `execute`. Do not skip the quality gate just because the user is
+eager to proceed.
+
+## Minimal Goal Shape
+
+If the global skill cannot be loaded, create or tighten goals with this compact
+shape:
+
+```markdown
+Objective:
+Context:
+Constraints:
+In scope:
+Out of scope:
+Current surfaces/artifacts:
+Plan:
+Verification:
+Done when:
+Stop rules:
+Handoff:
+```
+
+Keep `Objective` singular. If the work has multiple independent outcomes,
+split the goal or name the primary objective and make the rest explicit
+non-goals. `Done when` must be auditable from files, commands, PR state, or
+validation artifacts.
+
+## Goal Quality Gate
+
+Before creating or executing an XIC goal, inspect the contract. Tighten or stop
+when any answer is weak:
+
+- **Single objective**: Is there exactly one primary outcome? If not, split the
+  goal or state the non-goals.
+- **Phase type**: Is it docs, cleanup, diagnostic, engineering, science,
+  behavior change, PR/CI, or release? Mixed phase types need explicit ordering.
+- **Decision closure**: What decision can this goal close? If the proposed gate
+  cannot change the next action, shrink or remove it.
+- **Verification fit**: Does verification match the phase type: focused tests,
+  artifact parity, 8RAW, 85RAW, targeted benchmark, manual EIC/MS2 review, or
+  CI? Do not overclaim a weaker tier.
+- **Public contract risk**: Does it touch CLI/config, TSV/CSV/workbook schema,
+  matrix identity, activation decisions, selected peak/area, or downstream
+  handoff fields? If yes, require a contract update and focused output test.
+- **Architecture risk**: Does it add diagnostics, RAW-backed evidence, preset
+  performance work, matrix activation, HCD-PI, Delta Mass, CID-NL expansion, or
+  a new evidence provider? If yes, use `xic-architecture-preflight` first.
+- **Stop rules**: Are there concrete conditions that require user decision
+  instead of more tool calls?
+- **Handoff**: Will a later agent know what changed, what was verified, what
+  remains risky, and where the artifacts are?
+
+Do not create or continue a runtime goal if the objective is only "improve
+everything", "clean up the repo", or "finish all architecture debt" without a
+bounded surface and verification gate.
+
+## Governor Behavior
+
+While executing:
+
+- Keep the active goal visible in decisions; do not drift into adjacent cleanup.
+- Prefer existing diagnostics, specs, and validation outputs before rerunning
+  expensive RAW jobs.
+- If the work uncovers a larger backlog, record it as follow-up instead of
+  silently expanding the goal.
+- If a reviewer finding, CI failure, or new data invalidates the goal contract,
+  switch to `audit` and report the mismatch before continuing.
+- Near closeout, compare the actual diff and verification against `Done when`.
+  Do not mark complete because the budget is low or because partial work is
+  useful.
 
 ## Required XIC Context
 

@@ -1,0 +1,88 @@
+# Execution Gates
+
+This file owns operational gates, PR gates, and repeated local pitfalls. The
+root `AGENTS.md` keeps only the highest-frequency subset.
+
+## Before Work
+
+- Before non-trivial edits, confirm intended worktree, branch, and dirty diff
+  scope. Do not stage, rewrite, or revert unrelated user changes.
+- Before Python, RAW, DLL, or validation commands, read
+  `docs/agent-parameter-settings.md` and use documented runners and paths.
+- When sandbox, PowerShell syntax, output path, network approval, or RAW runner
+  choice is uncertain, preflight with:
+
+```powershell
+python -m scripts.agent_sandbox_doctor
+```
+
+## Outputs And Validation Status
+
+- Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
+  diagnostic output groups need a summary or index.
+- State validation status explicitly: `diagnostic_only`, `shadow_ready`,
+  `production_candidate`, `production_ready`, or `inconclusive`.
+- Tests passing is not the same as production readiness. For extraction,
+  alignment, scoring, and matrix behavior changes, report whether validation
+  used synthetic tests, 8RAW, 85RAW, targeted benchmark, or manual EIC/MS2
+  review.
+
+## RAW And Long Runs
+
+- Do not launch 85RAW or likely long RAW runs through background
+  `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
+  command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
+  for an external terminal or automation.
+- Known approval-first commands are documented in
+  `docs/agent-parameter-settings.md`: dependency sync/lock, Playwright browser
+  install, RAW/DLL loading, GUI/external-terminal launch, and global Codex
+  config changes should not be re-tried once in sandbox just to fail. If the
+  task needs them, request the documented narrow approval up front; otherwise
+  use existing artifacts or the offline path.
+
+## Diagnostic Reuse
+
+- Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
+  outputs before inventing a new diagnostic workflow.
+- Search `docs/diagnostic-ledger.md` before rerunning known targets or failure
+  modes.
+
+## Local Pitfalls
+
+Use the same operational playbook for repeated local pitfalls:
+
+- guessed pytest node ids that collect zero tests;
+- Windows git `.git\index.lock` or ref-lock friction;
+- stale or deleted `.worktrees`;
+- noisy recursive scans over generated outputs;
+- locked workbook/report files.
+
+Do not keep retrying the failing shape. Switch to the documented fixed command
+pattern.
+
+## Execution-Affecting Config
+
+Treat `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, hook scripts,
+execpolicy, and subagent TOML as execution-affecting config. Changes need:
+
+- docs or handoff review;
+- hook/script smoke check where applicable;
+- `git diff --check`;
+- secret, private local path, and accidentally tracked local config scan.
+
+## PR Verification Gate
+
+Before opening, updating, or marking a PR ready, run the CI-equivalent commands
+from `.github/workflows/ci.yml` in the current worktree:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
+
+If a command fails because of real lint/type/test errors, fix the root cause and
+rerun the failed gate. If it fails only because sandbox blocks dependency
+resolution, executable spawn, or DLL loading, rerun the same command with
+approval instead of substituting a narrower check. PR descriptions and closeout
+notes must list exact commands and observed results.

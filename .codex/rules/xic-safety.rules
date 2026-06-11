@@ -1,0 +1,85 @@
+# XIC Extractor repo-local command policy.
+# Keep this small: rules should block or prompt only high-impact actions.
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Do not discard user work. Inspect the diff and ask before any destructive rollback.",
+    match = [
+        "git reset --hard",
+        "git reset --hard HEAD~1",
+    ],
+    not_match = [
+        "git reset --soft HEAD~1",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "checkout", "--"],
+    decision = "forbidden",
+    justification = "Do not revert files through git checkout --. Use targeted review and explicit user approval.",
+    match = [
+        "git checkout -- AGENTS.md",
+    ],
+    not_match = [
+        "git checkout codex/example-branch",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "prompt",
+    justification = "Cleaning untracked files can delete generated artifacts or user notes. Inspect paths first.",
+    match = [
+        "git clean -fd",
+        "git clean -xfd",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Push only after explicit user request and current branch verification.",
+    match = [
+        "git push",
+        "git push origin HEAD",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "prompt",
+    justification = "Merge only after explicit user request, green checks, and PR closeout review.",
+    match = [
+        "gh pr merge 123 --merge",
+        "gh pr merge --squash",
+    ],
+)
+
+prefix_rule(
+    pattern = ["Remove-Item"],
+    decision = "prompt",
+    justification = "Deletion needs path review on Windows. Prefer scoped Remove-Item -LiteralPath after checking targets.",
+    match = [
+        "Remove-Item -Recurse output\\old",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rm"],
+    decision = "prompt",
+    justification = "Deletion needs path review. Prefer PowerShell Remove-Item -LiteralPath with checked targets.",
+    match = [
+        "rm -rf output/old",
+    ],
+)
+
+prefix_rule(
+    pattern = ["Start-Process"],
+    decision = "prompt",
+    justification = "External or background launches need explicit approval, especially RAW, GUI, and long-running jobs.",
+    match = [
+        "Start-Process powershell",
+        "Start-Process python",
+    ],
+)

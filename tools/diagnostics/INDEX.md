@@ -1241,12 +1241,26 @@ Not entry-points, but referenced by multiple topic groups:
 - `xic_extractor/tabular_io.py` — package-neutral shared delimited/TSV read-write, file SHA256 hashing, scalar parsing, numeric equality, header validation, label splitting, text grouping, and value formatting. `xic_extractor/diagnostics/diagnostic_io.py` and `tools/diagnostics/diagnostic_io.py` re-export it as compatibility shims for existing diagnostic imports. Cluster 1, the listed Cluster 3 loaders, alignment backfill authority/projection modules, and backfill/standard-peak diagnostics now reuse this helper; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, `_write_tsv`, `_sha256_file`, `_numeric_equal`, or `_group_by_family` copies.
 - `xic_extractor/diagnostics/backfill_overlay.py` — package-owned shared selector for seed-specific backfill overlay rows. It keeps retained backfill gates, shadow policy, and shadow projection on one fail-closed selection rule: exact seed rows beat legacy family rows when allowed, and conflict/review verdicts outrank support verdicts when duplicate rows exist for the same seed. Use it before adding local `_selected_overlay_row` or `_overlay_sort_key` copies.
 
+Large diagnostics refactor reviews should use
+`.codex/skills/xic-large-pr-review/SKILL.md`. Start from high blast-radius
+helpers and public contracts: shared tabular/overlay helpers, matrix identity,
+activation decisions, value deltas, output schemas, RAW access locality/reuse,
+and diagnostic-vs-production claims. Treat representative writer parity and
+focused tests as stronger evidence than an unactionable line-by-line pass over
+mechanical writer churn.
+
 ## Maintenance Notes
 
 - **Adding a new entry-point**: Append it to the matching group section, or
   create a new group if none fit. Always populate Purpose / Topic group /
   Originating spec — these are the minimum for an entry to be useful at
   session start.
+- **Adding a new evidence-provider diagnostic**: First use
+  `.codex/skills/xic-architecture-preflight/SKILL.md` to name the package owner,
+  reusable helper, evidence role, RAW/TSV call-cost model, public contract risk,
+  validation tier, and stop rule. HCD-PI, Delta Mass, CID-NL, RT/iRT, MS1
+  pattern, shape, standards, library, and future model evidence should enter as
+  evidence providers rather than direct matrix writers.
 - **Removing an entry-point** (RETIRED per spec): Remove the entry from the
   section and add a one-line tombstone in the deletion PR. Do not leave
   stale entries.

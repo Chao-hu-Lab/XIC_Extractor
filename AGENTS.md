@@ -1,8 +1,8 @@
 # XIC Extractor Agent Contract
 
 Repo-local rules for communication, validation, domain evidence, and code
-boundaries. Global Codex rules still apply. Keep this file short enough to
-influence every turn; move runbooks, roadmaps, and long contracts into docs.
+boundaries. Global Codex rules still apply. Keep this root file small enough to
+influence every turn; nested docs carry the longer contracts.
 
 Canonical references:
 
@@ -10,36 +10,29 @@ Canonical references:
 - Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
   [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md)
 - Known diagnostic conclusions: [`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md)
-- Subagent roles, goal usage, and review routing:
-  [`docs/agent-subagent-routing.md`](docs/agent-subagent-routing.md)
-- LC-MS/MS domain evidence contract:
+- Agent operating model, rules, hooks, skills, and automations:
+  [`docs/agent/codex-operating-system.md`](docs/agent/codex-operating-system.md)
+- Communication and human review surfaces:
+  [`docs/agent/communication-review.md`](docs/agent/communication-review.md)
+- Execution gates, PR gates, and local pitfalls:
+  [`docs/agent/execution-gates.md`](docs/agent/execution-gates.md)
+- Planning, review routing, subagents, and owner migration:
+  [`docs/agent/planning-workflows.md`](docs/agent/planning-workflows.md)
+- Product validation and LC-MS/MS evidence rules:
+  [`docs/agent/product-validation-contract.md`](docs/agent/product-validation-contract.md)
+- Architecture boundaries, CodeGraph usage, and public contracts:
+  [`docs/agent/architecture-public-contracts.md`](docs/agent/architecture-public-contracts.md)
+- Full LC-MS/MS domain evidence contract:
   [`docs/lcms-msms-evidence-rules.md`](docs/lcms-msms-evidence-rules.md)
-- Architecture and decomposition contract:
+- Full architecture and decomposition contract:
   [`docs/architecture-contract.md`](docs/architecture-contract.md)
 - Repo-local XIC overlay skills: [`.codex/skills`](.codex/skills), only when
   they add an execution checklist beyond the routing docs.
 
-## Communication And Review Surfaces
+## Hard Defaults
 
-- Non-trivial wrap-ups must state the current verdict first: what is done, what
-  is still blocked, and the next recommended step.
-- Use plain language before implementation detail. Say what changed, where,
-  how it was checked, what was skipped, and what risk remains.
-- Final answers for implementation or validation work should include, when
-  applicable: conclusion, changed files or artifact paths, verification run,
-  remaining risk, and next action.
-- Separate machine artifacts from human review surfaces. TSV/JSON may be
-  exhaustive; Markdown specs are mostly for agents; human-facing reports should
-  be short, visual or indexed, and decision-oriented.
-- Manual review requests should include a compact review index with identifiers:
-  sample, label or family id, m/z, RT/window, status, reason, and linked
-  artifact path.
-- Worktree or PR closeout should leave an operator-readable handoff: branch/task
-  purpose, verdict, important artifacts, validation commands/results, and an
-  explicit next-step recommendation.
-
-## Execution Gates
-
+- Start non-trivial wrap-ups with the current verdict: done, blocked, residual
+  risk, and next recommended step.
 - Before non-trivial edits, confirm intended worktree, branch, and dirty diff
   scope. Do not stage, rewrite, or revert unrelated user changes.
 - Before Python, RAW, DLL, or validation commands, read
@@ -48,40 +41,24 @@ Canonical references:
   diagnostic output groups need a summary or index.
 - State validation status explicitly: `diagnostic_only`, `shadow_ready`,
   `production_candidate`, `production_ready`, or `inconclusive`.
-- Tests passing is not the same as production readiness. For extraction,
-  alignment, scoring, and matrix behavior changes, report whether validation
-  used synthetic tests, 8RAW, 85RAW, targeted benchmark, or manual EIC/MS2
-  review.
+- Tests passing is not production readiness. For extraction, alignment, scoring,
+  and matrix behavior changes, report whether validation used synthetic tests,
+  8RAW, 85RAW, targeted benchmark, or manual EIC/MS2 review.
 - Do not launch 85RAW or likely long RAW runs through background
   `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
   command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
   for an external terminal or automation.
 - Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
-  outputs before inventing a new diagnostic workflow.
-- Search `docs/diagnostic-ledger.md` before rerunning known targets or failure
-  modes.
-- When sandbox, PowerShell syntax, output path, network approval, or RAW runner
-  choice is uncertain, preflight with `python -m scripts.agent_sandbox_doctor`
-  before launching expensive or permission-sensitive commands.
-- Known approval-first commands are documented in
-  `docs/agent-parameter-settings.md`: dependency sync/lock, Playwright browser
-  install, RAW/DLL loading, GUI/external-terminal launch, and global Codex
-  config changes should not be re-tried once in sandbox just to fail. If the
-  task needs them, request the documented narrow approval up front; otherwise
-  use existing artifacts or the offline path.
-- Also use the same operational playbook for repeated local pitfalls: guessed
-  pytest node ids that collect zero tests, Windows git `.git\index.lock` /
-  ref-lock friction, stale or deleted `.worktrees`, noisy recursive scans over
-  generated outputs, and locked workbook/report files. Do not keep retrying the
-  failing shape; switch to the documented fixed command pattern.
-- Treat `.codex/config.toml`, hooks, execpolicy, and subagent TOML as
-  execution-affecting config. Changes need docs/handoff review and a smoke
-  check.
-- Before staging docs/settings/config changes, scan the diff for secrets,
-  private local paths, absolute machine-specific paths, and accidentally tracked
-  local Codex config.
+  outputs before inventing a new diagnostic workflow. Search
+  `docs/diagnostic-ledger.md` before rerunning known targets or failure modes.
+- Treat `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, hook
+  scripts, execpolicy, and subagent TOML as execution-affecting config. Changes
+  need docs/handoff review, smoke check, and secret/local-path scan.
+- When a repeated agent failure suggests new guidance, decide whether the fix
+  belongs in global rules, this repo, a skill, a hook, or nowhere. Prefer
+  tightening an existing rule over adding another root bullet.
 
-## PR Verification Gate
+## PR Gate
 
 Before opening, updating, or marking a PR ready, run the CI-equivalent commands
 from `.github/workflows/ci.yml` in the current worktree:
@@ -95,109 +72,26 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
 If a command fails because of real lint/type/test errors, fix the root cause and
 rerun the failed gate. If it fails only because sandbox blocks dependency
 resolution, executable spawn, or DLL loading, rerun the same command with
-approval instead of substituting a narrower check. PR descriptions and closeout
-notes must list exact commands and observed results.
+approval instead of substituting a narrower check.
 
-## Planning And Review
+## Product North Star
 
-- Before phase plans or expensive validation, name the decision the run can
-  close, strongest existing oracle, missing independent evidence, expected
-  runtime/artifacts, and fail-fast or inconclusive path.
-- Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
-  promote, kill, externalize, or name the single missing evidence.
-- Do not expand validation when the result cannot change the next action.
-- Use a goal-shaped contract for long-running, multi-step, cross-turn, or
-  repeatedly drifting work. Goal contracts must point to canonical local
-  surfaces, active specs/plans, and existing diagnostics or validation outputs.
-- Non-trivial specs, plans, docs, workflow rules, and implementations need a
-  critical-thinking review angle: strongest assumption, stale-artifact risk,
-  cheaper existing oracle, or condition that would invalidate the path.
-- When the user asks for subagent review, follow
-  `docs/agent-subagent-routing.md`. Do not replace a requested multi-angle review
-  with one generic reviewer unless a runtime limit blocks it and the bypass is
-  reported.
-- Repo-local execution subagents are opt-in. The main agent owns synthesis,
-  edits, final judgment, and verification.
-- Reusable workflows belong in global skills first. Repo-local `.codex/skills/`
-  entries should exist only for XIC-specific checklists that cannot live cleanly
-  in routing docs.
-
-### Legacy Owner Transformation Policy
-
-- The project direction is explicit transformation: successor modules absorb the
-  useful capability and product invariants of legacy owners, fix the legacy pain
-  points, then retire or reduce the legacy owner to a thin compatibility adapter.
-- When the user explicitly asks to absorb a legacy owner into an existing
-  successor model, do not stop at another shadow/report/spec layer if a bounded
-  ownership-transfer slice can be named.
-- A valid ownership-transfer slice names: current owner, successor owner,
-  public surface, preserved invariant, expected product diff or parity oracle,
-  and the focused tests that prove it.
-- After those are named, prefer implementing one narrow transfer over creating a
-  new broad plan. Review gates should close the decision and then unblock
-  execution; they should not become an indefinite replacement for migration.
-- Tests protect product invariants, not old module shapes. When a successor owns
-  an invariant, migrate the test to the successor surface or delete the
-  legacy-specific test. Keep legacy tests only for public compatibility,
-  explicit rejection/migration behavior, or parity during an active transition.
-- Do not preserve a legacy owner merely because tests exist. First classify what
-  the tests protect: product invariant, compatibility contract, diagnostic
-  evidence, or obsolete implementation detail.
-- Keep public safety rules: if selected peak, selected area, confidence, reason,
-  matrix identity, workbook schema, TSV schema, or config behavior would change,
-  require an expected-diff contract and focused output tests before promotion.
-- `audit_only`, `shadow_only`, and `diagnostic_only` artifacts must still name an
-  exit rule, but for owner-migration work the exit rule should include the
-  smallest next production or adapter transfer, not only the missing evidence.
-
-## Product And Validation Discipline
-
-- P-specs, C-specs, and implementation plans must state whether they advance
-  `Trace` / `TraceGroup`, multi-source `PeakHypothesis`, `EvidenceVector`,
-  `IntegrationResult`, model selection, or `AuditTrail`. If they advance none,
-  label them cleanup-only.
+- XIC Extractor is an LC-MS evidence and model-selection system, not a
+  single-dataset or CID-NL-only pipeline.
+- 8RAW and 85RAW are validation fixtures and stress oracles, not architecture
+  boundaries.
+- CID-NL, HCD-PI, Delta Mass, RT/iRT, MS1 pattern, shape, standards, library
+  matches, and future learned models are evidence providers. They feed
+  `EvidenceVector`, `PeakHypothesis`, model selection, and `AuditTrail`; they
+  must not directly become permanent matrix-writing authority without an
+  explicit activation/export contract.
 - Diagnostic TSVs, shadow reports, wrappers, and sidecars prove observability,
   not product usability.
-- Prefer establishing the future spine or dual-write contract before polishing
-  legacy DTOs, resolver names, or scoring split points likely to move during
-  handoff migration.
-- CWT, WIS, local minima, curvature, derivative, and region-first logic are
-  evidence or hypothesis sources. A phase touching them must declare one mode:
-  audit-only, hypothesis enumeration, model-selection calibration, production
-  candidate, or retirement.
-- Science phases require independent domain evidence capable of disproving false
-  confidence. Median RSD alone is not enough.
-- Cleanup phases require numerical parity against the settled baseline; behavior
-  changes relabel the phase.
-- Engineering phases require characterization parity and maintainability gain;
-  do not bundle behavior changes.
-- Documentation and diagnostic phases require consistency and reviewer
-  readability; no numerical gate language applies.
-
-## Domain Evidence Guardrails
-
-Full contract: `docs/lcms-msms-evidence-rules.md`.
-
-- Prefer evidence chains over single-metric authority. RT, CWT, WIS, iRT, local
-  minima, RT models, shape similarity, product ions, neutral losses, adducts,
-  and in-source fragments are evidence inputs, not silent vetoes.
-- RT is contextual evidence. It must not prove analyte absence or override
-  co-eluting, candidate-aligned MS1/MS2 evidence unless an explicit hard RT
-  exclusion policy exists.
-- Missing DDA MS2/product/NL evidence is `not_observed` by default. Treat it as
-  negative evidence only when acquisition opportunity and comparable controls
-  show it should have been observable.
-- Clean standards can support audit, library, and instrument interpretation, but
-  cannot alone justify production correction of biological matrices.
-- Keep audit and production gates separate. Sparse, extrapolated, or low-coverage
-  evidence stays review-only until a production policy exists.
-- Targeted outputs may be benchmarks or shared low-level evidence, but target
-  labels and targeted pass/fail logic must not leak into untargeted production
-  matrix identity without an approved contract.
+- Public safety rules apply whenever selected peak, selected area, confidence,
+  reason, matrix identity, workbook schema, TSV schema, or config behavior
+  would change: require expected-diff contract and focused output tests.
 
 ## Architecture Guardrails
-
-Full contract: `docs/architecture-contract.md`.
 
 - Preserve dependency direction. Domain logic must not import GUI, workbook
   builders, CLI scripts, process backends, report renderers, or RAW/CSV
@@ -209,23 +103,25 @@ Full contract: `docs/architecture-contract.md`.
   and writers belong in package modules.
 - Diagnostic writers render only. They must not recompute domain evidence or
   re-scan RAW files.
-- Shared dataclasses and protocols belong in small model/contract modules when
-  they prevent circular imports or schema drift.
 - Move behavior before changing behavior. Add characterization tests before
   moving uncovered behavior.
-- Separate real-data validation from normal unit tests.
 
-## CodeGraph
+## Workflow Routing
 
-- Prefer the `codegraph` CLI for broad indexed search, status, files, and
-  context-building when it can answer the question cleanly.
-- Use CodeGraph MCP when the query needs capabilities the CLI does not expose or
-  exposes less clearly, especially caller/callee/impact tracing, single-symbol
-  source lookup, or explicit MCP-requested structural context.
-- For subagent reviews, tell reviewers to start with `codegraph` CLI, `rg`, and
-  targeted file reads for simple no-use checks. Allow CodeGraph MCP when the
-  review asks a structural caller/callee/impact question or CLI output is
-  insufficient.
+- Use a goal-shaped contract for long-running, multi-step, cross-turn, or
+  repeatedly drifting work. It must name one objective, context, constraints,
+  verification, done condition, stop rule, and handoff expectation. Active
+  runtime goals still require explicit user request.
+- Before non-trivial diagnostics, RAW-backed evidence, preset performance,
+  matrix activation, or evidence-provider work, use `xic-architecture-preflight`
+  and name owner/helper reuse, call-cost model, public contract risk, validation
+  gate, and stop rule.
+- For large XIC PR review, use `xic-large-pr-review` and review by blast radius:
+  shared helpers, public contracts, diagnostics boundaries, RAW locality,
+  product-vs-diagnostic claims, then parity evidence.
+- Repo-local execution subagents are opt-in. The main agent owns synthesis,
+  edits, final judgment, and verification. Use
+  `docs/agent-subagent-routing.md` when subagents are requested.
 
 ## Public Contracts
 
