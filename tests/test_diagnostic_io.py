@@ -1,18 +1,28 @@
 import csv
+import hashlib
 from pathlib import Path
 
 import pytest
 
 from tools.diagnostics import diagnostic_io as shim_diagnostic_io
-from xic_extractor.diagnostics import diagnostic_io as canonical_diagnostic_io
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor import tabular_io as canonical_tabular_io
+from xic_extractor.diagnostics import diagnostic_io as package_diagnostic_io
+from xic_extractor.tabular_io import (
     bool_value,
+    file_sha256,
     format_diagnostic_value,
+    has_semicolon_token,
+    identity_family_keys,
+    numeric_equal,
     optional_float,
     optional_int,
+    positive_int,
     read_delimited_rows,
     read_tsv_required,
+    read_tsv_with_header,
+    render_delimited_rows,
     required_indexes,
+    rows_by_text_field,
     split_semicolon_labels,
     text_value,
     write_delimited_rows,
@@ -20,13 +30,19 @@ from xic_extractor.diagnostics.diagnostic_io import (
 )
 
 
-def test_tools_diagnostic_io_shim_reexports_canonical_helpers() -> None:
+def test_diagnostic_io_shims_reexport_neutral_helpers() -> None:
     assert (
         shim_diagnostic_io.read_tsv_required
-        is canonical_diagnostic_io.read_tsv_required
+        is canonical_tabular_io.read_tsv_required
     )
-    assert shim_diagnostic_io.write_tsv is canonical_diagnostic_io.write_tsv
-    assert shim_diagnostic_io.text_value is canonical_diagnostic_io.text_value
+    assert (
+        package_diagnostic_io.read_tsv_required
+        is canonical_tabular_io.read_tsv_required
+    )
+    assert shim_diagnostic_io.write_tsv is canonical_tabular_io.write_tsv
+    assert package_diagnostic_io.write_tsv is canonical_tabular_io.write_tsv
+    assert shim_diagnostic_io.text_value is canonical_tabular_io.text_value
+    assert package_diagnostic_io.text_value is canonical_tabular_io.text_value
 
 
 def test_read_delimited_rows_fails_with_clear_missing_columns(
@@ -76,6 +92,35 @@ def test_write_tsv_can_preserve_lf_line_terminator(tmp_path: Path) -> None:
     assert path.read_bytes() == b"family_id\nFAM001\n"
 
 
+def test_write_tsv_can_preserve_utf8_sig_encoding(tmp_path: Path) -> None:
+    path = tmp_path / "rows.tsv"
+
+    write_tsv(
+        path,
+        ({"family_id": "FAM001"},),
+        ("family_id",),
+        encoding="utf-8-sig",
+    )
+
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert path.read_text(encoding="utf-8-sig").splitlines() == [
+        "family_id",
+        "FAM001",
+    ]
+
+
+def test_write_tsv_can_raise_on_extra_fields(tmp_path: Path) -> None:
+    path = tmp_path / "rows.tsv"
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        write_tsv(
+            path,
+            ({"family_id": "FAM001", "unexpected": "value"},),
+            ("family_id",),
+            extrasaction="raise",
+        )
+
+
 def test_write_delimited_rows_supports_csv_output(tmp_path: Path) -> None:
     path = tmp_path / "rows.csv"
 
@@ -85,6 +130,42 @@ def test_write_delimited_rows_supports_csv_output(tmp_path: Path) -> None:
         "sample,value",
         "S1,2",
     ]
+
+
+def test_render_delimited_rows_uses_same_default_formatting() -> None:
+    text = render_delimited_rows(
+        (
+            {
+                "sample": "S1",
+                "present": True,
+                "missing": None,
+                "score": 1.23456789,
+            },
+        ),
+        ("sample", "present", "missing", "score"),
+    )
+
+    assert text == "sample,present,missing,score\r\nS1,TRUE,,1.23457\r\n"
+
+
+def test_render_delimited_rows_can_preserve_lf_line_terminator() -> None:
+    text = render_delimited_rows(
+        ({"sample": "S1", "value": 2.0},),
+        ("sample", "value"),
+        delimiter="\t",
+        lineterminator="\n",
+    )
+
+    assert text == "sample\tvalue\nS1\t2\n"
+
+
+def test_render_delimited_rows_can_raise_on_extra_fields() -> None:
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        render_delimited_rows(
+            ({"sample": "S1", "unexpected": "value"},),
+            ("sample",),
+            extrasaction="raise",
+        )
 
 
 def test_format_diagnostic_value_hides_nan() -> None:
@@ -108,6 +189,49 @@ def test_read_tsv_required_accepts_utf8_sig_and_validates_columns(
         read_tsv_required(path, ("sample", "missing"))
 
 
+def test_read_tsv_with_header_returns_header_and_rows(tmp_path: Path) -> None:
+    path = tmp_path / "matrix.tsv"
+    path.write_text("Mz\tRT\tS1\n100\t5\t42\n", encoding="utf-8")
+
+    header, rows = read_tsv_with_header(path)
+
+    assert header == ("Mz", "RT", "S1")
+    assert rows == [{"Mz": "100", "RT": "5", "S1": "42"}]
+
+
+def test_read_tsv_with_header_validates_required_columns_and_utf8_sig(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "evidence.tsv"
+    path.write_text("\ufeffschema_version\trow_id\nv1\tR1\n", encoding="utf-8")
+
+    header, rows = read_tsv_with_header(
+        path,
+        required_columns=("schema_version", "row_id"),
+        encoding="utf-8-sig",
+    )
+
+    assert header == ("schema_version", "row_id")
+    assert rows == [{"schema_version": "v1", "row_id": "R1"}]
+    with pytest.raises(ValueError, match="missing required columns: missing"):
+        read_tsv_with_header(
+            path,
+            required_columns=("schema_version", "missing"),
+            encoding="utf-8-sig",
+        )
+
+
+def test_file_sha256_supports_uppercase_and_lowercase_metadata(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "artifact.tsv"
+    path.write_text("sample\tvalue\nS1\t1\n", encoding="utf-8")
+    expected = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    assert file_sha256(path) == expected.upper()
+    assert file_sha256(path, uppercase=False) == expected
+
+
 def test_shared_scalar_parsers_match_diagnostic_loader_contracts() -> None:
     assert optional_float(" 1.25 ") == 1.25
     assert optional_float("'-8.6973") == -8.6973
@@ -115,6 +239,9 @@ def test_shared_scalar_parsers_match_diagnostic_loader_contracts() -> None:
     assert optional_float("not numeric") is None
     assert optional_int("3.9") == 3
     assert optional_int("") is None
+    assert positive_int("3") == 3
+    assert positive_int("0") is None
+    assert positive_int("bad") is None
     assert bool_value("TRUE") is True
     assert bool_value("yes") is True
     assert bool_value("0") is False
@@ -122,6 +249,37 @@ def test_shared_scalar_parsers_match_diagnostic_loader_contracts() -> None:
     assert text_value(None) == ""
     assert text_value("  A  ") == "A"
     assert split_semicolon_labels(" a ; ; b ") == ["a", "b"]
+    assert has_semicolon_token("alpha;beta", "beta") is True
+    assert has_semicolon_token("alphabet;gamma", "alpha") is False
+    assert numeric_equal("1.0000001", "1.0000002") is True
+    assert numeric_equal("1.01", "1.02") is False
+    assert numeric_equal(" raw ", "raw") is True
+    assert numeric_equal("raw", "other") is False
+
+
+def test_identity_family_keys_preserves_order_and_deduplicates() -> None:
+    assert identity_family_keys(
+        {
+            "peak_hypothesis_id": " PH1 ",
+            "source_feature_family_ids": "FAM001; PH1 ; FAM002;;FAM001",
+        },
+    ) == ("PH1", "FAM001", "FAM002")
+
+
+def test_rows_by_text_field_preserves_group_order() -> None:
+    rows = (
+        {"family": "F1", "sample": "S1"},
+        {"family": "F2", "sample": "S2"},
+        {"family": "F1", "sample": "S3"},
+        {"family": "", "sample": "ignored"},
+    )
+
+    grouped = rows_by_text_field(rows, "family")
+
+    assert grouped == {
+        "F1": (rows[0], rows[2]),
+        "F2": (rows[1],),
+    }
 
 
 def test_required_indexes_reports_sheet_and_missing_columns() -> None:
