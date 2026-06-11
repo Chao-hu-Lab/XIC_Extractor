@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tools.diagnostics import single_dr_gate_decision_loaders as loaders
 from tools.diagnostics import single_dr_production_gate_decision_report as report
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
@@ -59,6 +60,10 @@ def test_extreme_dr_backfill_row_becomes_supported_capped_warning(
     supported = _candidate(candidates, "dr_supported_backfill_capped")
     assert supported["affected_primary_rows"] == "1"
     assert supported["recommended_action"] == "keep_warning"
+    detected_cells = _read_tsv(
+        output_dir / "single_dr_gate_decision_detected_cells.tsv",
+    )
+    assert detected_cells[0]["seed_candidate_joined"] == "False"
     assert (output_dir / "single_dr_gate_decision_summary.tsv").is_file()
     assert (output_dir / "single_dr_gate_decision_detected_cells.tsv").is_file()
     assert (output_dir / "single_dr_gate_decision.json").is_file()
@@ -156,6 +161,93 @@ def test_weak_seed_tolerated_row_is_supported_capped_warning(
     assert tolerated["affected_primary_rows"] == "0"
     supported = _candidate(candidates, "dr_supported_backfill_capped")
     assert supported["affected_primary_rows"] == "1"
+
+
+def test_discovery_candidate_loader_reuses_duplicate_candidate_tables(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    read_counts: dict[str, int] = {}
+
+    def fake_read_delimited_rows(
+        path: Path,
+    ) -> tuple[list[tuple[int, dict[str, str]]], tuple[str, ...]]:
+        read_counts[path.name] = read_counts.get(path.name, 0) + 1
+        if path.name == "index.tsv":
+            return (
+                [
+                    (2, {"sample_stem": "S_A", "candidate_csv": "candidates.csv"}),
+                    (3, {"sample_stem": "S_B", "candidate_csv": "candidates.csv"}),
+                ],
+                ("sample_stem", "candidate_csv"),
+            )
+        if path.name == "candidates.csv":
+            return (
+                [
+                    (2, {"candidate_id": "C1", "evidence_score": "80"}),
+                    (
+                        3,
+                        {
+                            "sample_stem": "S_C",
+                            "candidate_id": "C2",
+                            "evidence_score": "70",
+                        },
+                    ),
+                ],
+                ("sample_stem", "candidate_id", "evidence_score"),
+            )
+        raise AssertionError(path)
+
+    monkeypatch.setattr(loaders, "_read_delimited_rows", fake_read_delimited_rows)
+
+    result = loaders.load_discovery_candidates(tmp_path / "index.tsv")
+
+    assert read_counts["candidates.csv"] == 1
+    candidates = result["candidates"]
+    assert candidates[("S_A", "C1")]["sample_stem"] == "S_A"
+    assert candidates[("S_B", "C1")]["sample_stem"] == "S_B"
+    assert ("S_A", "C2") not in candidates
+    assert ("S_B", "C2") not in candidates
+    assert candidates[("S_C", "C2")]["sample_stem"] == "S_C"
+
+
+def test_gate_candidates_preserve_classification_bucket_order(monkeypatch) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def capture_gate_candidate(**kwargs):
+        gate_id = kwargs["gate_candidate_id"]
+        captured[gate_id] = [
+            row["feature_family_id"] for row in kwargs["families"]
+        ]
+        return {"gate_candidate_id": gate_id}
+
+    monkeypatch.setattr(report, "_gate_candidate", capture_gate_candidate)
+
+    candidates = report._gate_candidates(
+        [
+            _family_row("FAM_BLOCK_A", "blocked_low_ms1_assessable_coverage"),
+            _family_row("FAM_EXT", "risky_extreme_backfill"),
+            _family_row("FAM_BLOCK_B", "blocked_rescue_only"),
+            _family_row("FAM_DUP", "watch_duplicate_rescue"),
+            _family_row("FAM_WEAK", "risky_weak_seed_backfill"),
+        ],
+    )
+
+    assert [row["gate_candidate_id"] for row in candidates] == [
+        "dr_extreme_backfill_dependency",
+        "dr_weak_seed_backfill_dependency",
+        "dr_supported_backfill_capped",
+        "dr_backfill_policy_blocked",
+        "dr_duplicate_rescue_pressure",
+        "dr_weak_seed_tolerated_watch",
+    ]
+    assert captured["dr_extreme_backfill_dependency"] == ["FAM_EXT"]
+    assert captured["dr_weak_seed_backfill_dependency"] == ["FAM_WEAK"]
+    assert captured["dr_backfill_policy_blocked"] == [
+        "FAM_BLOCK_A",
+        "FAM_BLOCK_B",
+    ]
+    assert captured["dr_duplicate_rescue_pressure"] == ["FAM_DUP"]
 
 
 def test_tsv_adapter_excludes_review_rescue_outside_alignment_window(
@@ -825,6 +917,15 @@ def _candidate_row(
         "seed_event_count": seed_event_count,
         "neutral_loss_mass_error_ppm": nl_ppm,
         "ms1_scan_support_score": scan_support,
+    }
+
+
+def _family_row(family_id: str, risk_classification: str) -> dict[str, object]:
+    return {
+        "feature_family_id": family_id,
+        "risk_classification": risk_classification,
+        "include_in_primary_matrix": True,
+        "targeted_istd_labels": "",
     }
 
 

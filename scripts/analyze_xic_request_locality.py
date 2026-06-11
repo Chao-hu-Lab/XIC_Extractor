@@ -29,6 +29,9 @@ class RequestRecord:
     ppm_tol: float
 
 
+RequestKey = tuple[str, float, float, float, float]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     batch = read_batch_index(args.discovery_batch_index, args.raw_dir)
@@ -144,18 +147,15 @@ def collect_owner_backfill_requests(
 ) -> tuple[RequestRecord, ...]:
     detected_by_feature: dict[str, set[str]] = defaultdict(set)
     for row in _read_delimited_rows(alignment_cells, delimiter="\t"):
-        if row.get("status") == "detected":
-            detected_by_feature[row.get("feature_family_id", "")].add(
-                row.get("sample_stem", "")
-            )
+        sample_stem = row.get("sample_stem", "")
+        if row.get("status") == "detected" and sample_stem:
+            detected_by_feature[row.get("feature_family_id", "")].add(sample_stem)
 
     rt_window_min = max_rt_sec / 60.0
     records: list[RequestRecord] = []
     for row in _read_delimited_rows(alignment_review, delimiter="\t"):
         feature_id = row.get("feature_family_id", "")
-        detected_samples = {
-            sample for sample in detected_by_feature.get(feature_id, set()) if sample
-        }
+        detected_samples = detected_by_feature.get(feature_id, set())
         if len(detected_samples) < owner_backfill_min_detected_samples:
             continue
         mz = _optional_float(row.get("family_center_mz", ""))
@@ -314,11 +314,13 @@ def _summarize_same_scan_windows(
     grouped: dict[tuple[int, int], list[RequestRecord]] = defaultdict(list)
     for record, window in zip(records, windows, strict=True):
         grouped[window].append(record)
-    redundant_groups = [
-        (window, group, {_request_key(record) for record in group})
-        for window, group in grouped.items()
-        if len({_request_key(record) for record in group}) > 1
-    ]
+    redundant_groups: list[
+        tuple[tuple[int, int], list[RequestRecord], set[RequestKey]]
+    ] = []
+    for window, group in grouped.items():
+        keys = {_request_key(record) for record in group}
+        if len(keys) > 1:
+            redundant_groups.append((window, group, keys))
     redundant_groups.sort(
         key=lambda item: (-len(item[1]), -len(item[2]), item[0]),
     )
@@ -359,6 +361,12 @@ def _summarize_near_redundant_keys(
 ) -> dict[str, Any]:
     unique_records = tuple(_unique_key_records(records))
     parent = list(range(len(unique_records)))
+    indexed_by_rt_center = tuple(
+        sorted(
+            enumerate(unique_records),
+            key=lambda item: (_rt_center(item[1]), _request_key(item[1])),
+        )
+    )
 
     def find(index: int) -> int:
         while parent[index] != index:
@@ -372,9 +380,16 @@ def _summarize_near_redundant_keys(
         if left_root != right_root:
             parent[right_root] = left_root
 
-    for left_index, left in enumerate(unique_records):
-        for right_index in range(left_index + 1, len(unique_records)):
-            right = unique_records[right_index]
+    near_rt_min = near_rt_sec / 60.0
+    for sorted_left_index, (left_index, left) in enumerate(indexed_by_rt_center):
+        left_center = _rt_center(left)
+        for sorted_right_index in range(
+            sorted_left_index + 1,
+            len(indexed_by_rt_center),
+        ):
+            right_index, right = indexed_by_rt_center[sorted_right_index]
+            if _rt_center(right) - left_center > near_rt_min:
+                break
             if _near_redundant(left, right, near_mz_ppm, near_rt_sec):
                 union(left_index, right_index)
 
@@ -451,7 +466,7 @@ def _near_redundant_group_payload(
     }
 
 
-def _request_key(record: RequestRecord) -> tuple[str, float, float, float, float]:
+def _request_key(record: RequestRecord) -> RequestKey:
     return (
         record.sample_stem,
         record.mz,
@@ -461,9 +476,7 @@ def _request_key(record: RequestRecord) -> tuple[str, float, float, float, float
     )
 
 
-def _request_key_payload(
-    key: tuple[str, float, float, float, float],
-) -> dict[str, float | str]:
+def _request_key_payload(key: RequestKey) -> dict[str, float | str]:
     sample_stem, mz, rt_min, rt_max, ppm_tol = key
     return {
         "sample_stem": sample_stem,

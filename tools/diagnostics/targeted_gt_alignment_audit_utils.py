@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
+from typing import Any
 
 from tools.diagnostics.targeted_gt_alignment_audit_models import TargetGroundTruth
 
@@ -36,11 +38,11 @@ def _rt_delta_sec(
     return (rt - target.target_rt_min) * 60.0
 
 
-def _join_ids(values: object) -> str:
+def _join_ids(values: Iterable[object]) -> str:
     return ";".join(sorted({str(value) for value in values if value}))
 
 
-def _to_float(value: object) -> float | None:
+def _to_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
     try:

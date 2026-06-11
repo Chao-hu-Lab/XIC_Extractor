@@ -34,6 +34,8 @@ from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     _stable_jitter,
 )
 
+_SELECTED_PEAK_STATUSES = frozenset({"detected", "rescued"})
+
 
 def render_family_ms1_overlay(
     *,
@@ -439,7 +441,7 @@ def _plot_apex_aligned_overlay(
 def _selected_peak_focus_rows(
     rows: Sequence[TraceOverlayRow],
 ) -> tuple[TraceOverlayRow, ...]:
-    return tuple(row for row in rows if row.status in {"detected", "rescued"})
+    return tuple(row for row in rows if row.status in _SELECTED_PEAK_STATUSES)
 
 
 def _trace_group_label(row: TraceOverlayRow) -> str:
@@ -609,7 +611,7 @@ def _plot_area_distribution(ax: Any, rows: Sequence[TraceOverlayRow]) -> None:
     min_detected_area = min(detected_areas) if detected_areas else None
     rescued_above_min = 0
     for row in rows:
-        if row.status not in {"detected", "rescued"} or row.cell_area is None:
+        if row.status not in _SELECTED_PEAK_STATUSES or row.cell_area is None:
             continue
         if (
             row.status == "rescued"
@@ -704,7 +706,7 @@ def _plot_shape_similarity(
         value = shape_similarity.get(row.sample_stem)
         if value is None or not math.isfinite(value):
             continue
-        if row.status not in {"detected", "rescued"}:
+        if row.status not in _SELECTED_PEAK_STATUSES:
             continue
         x_pos = 0 if row.status == "detected" else 1
         jitter = _stable_jitter(row.sample_stem, width=0.18)

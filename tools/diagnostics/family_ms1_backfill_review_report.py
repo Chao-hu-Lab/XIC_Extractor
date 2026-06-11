@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -107,23 +107,10 @@ def build_review_report(
         )
         candidates.append(family)
 
-    candidates.sort(
-        key=lambda row: (
-            _classification_sort_key(str(row["review_classification"])),
-            -float(row["review_priority_score"]),
-            str(row["feature_family_id"]),
-        )
-    )
+    candidates.sort(key=_candidate_sort_key)
     queue = [
         row
-        for row in sorted(
-            candidates,
-            key=lambda item: (
-                _classification_sort_key(str(item["review_classification"])),
-                -float(item["review_priority_score"]),
-                item["feature_family_id"],
-            ),
-        )
+        for row in candidates
         if row["overlay_status"] == "not_provided"
     ][:image_queue_limit]
     summary = _summary_rows(candidates, queue)
@@ -142,6 +129,14 @@ def build_review_report(
         "candidates": candidates,
         "image_queue": queue,
     }
+
+
+def _candidate_sort_key(row: Mapping[str, Any]) -> tuple[int, float, str]:
+    return (
+        _classification_sort_key(str(row["review_classification"])),
+        -float(row["review_priority_score"]),
+        str(row["feature_family_id"]),
+    )
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:

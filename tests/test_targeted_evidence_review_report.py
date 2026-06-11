@@ -2,6 +2,7 @@ import csv
 from pathlib import Path
 
 from tools.diagnostics import targeted_evidence_review_report as report
+from tools.diagnostics import targeted_evidence_review_report_model as model
 
 
 def test_targeted_evidence_review_report_renders_human_first_sections(
@@ -103,6 +104,63 @@ def test_targeted_evidence_review_report_orders_mismatch_before_missing_rows(
     assert html.index("source_key=S2|MismatchTarget") < html.index(
         "source_key=S1|MissingCandidate"
     )
+
+
+def test_review_queue_uses_root_rows_as_weak_area_deduplication_keys() -> None:
+    queue = model._review_queue(
+        reliability_rows=(
+            _reliability_row(
+                sample="S1",
+                target="RootCovered",
+                state="targeted_review_positive",
+                area_ratio="0.01",
+                risk="weak_area_rank",
+            ),
+            _reliability_row(
+                sample="S2",
+                target="WeakOnly",
+                state="targeted_review_positive",
+                area_ratio="0.02",
+                risk="weak_area_rank",
+            ),
+        ),
+        root_rows=(
+            _root_row(
+                sample="S1",
+                target="RootCovered",
+                mz="284.099",
+                bucket="no_diagnostic_product",
+            ),
+        ),
+        cross_rows=(),
+    )
+
+    assert [(row["source_file"], row["source_key"]) for row in queue] == [
+        ("targeted_nl_dropout_root_cause_rows.tsv", "S1|RootCovered"),
+        ("targeted_peak_reliability_rows.tsv", "S2|WeakOnly"),
+    ]
+
+
+def test_report_summary_uses_parsed_reliability_targets() -> None:
+    targets = model._target_reliability(
+        (
+            _reliability_summary(
+                "HighBurden",
+                eligible=2,
+                review_positive=3,
+                review=1,
+            ),
+            _reliability_summary("CleanTarget", eligible=5, review_positive=0),
+        )
+    )
+
+    assert model._report_summary(targets, {"included_count": "4"}) == {
+        "eligible_count": 7,
+        "review_positive_count": 3,
+        "review_count": 1,
+        "negative_count": 0,
+        "root_cause_included_count": 4,
+    }
 
 
 def test_targeted_evidence_review_report_passes_without_manual_review(

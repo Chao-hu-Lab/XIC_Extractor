@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.tabular_io import write_tsv
+
 REQUIRED_LEDGER_COLUMNS = (
     "feature_family_id",
     "sample_stem",
@@ -116,14 +118,11 @@ def write_outputs(
         json.dumps(asdict(result), indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    with (output_dir / "p7_evidence_cost_summary.tsv").open(
-        "w",
-        newline="",
-        encoding="utf-8",
-    ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=("metric", "value"), delimiter="\t")
-        writer.writeheader()
-        writer.writerows(result.rows)
+    write_tsv(
+        output_dir / "p7_evidence_cost_summary.tsv",
+        result.rows,
+        ("metric", "value"),
+    )
     _write_markdown(output_dir / "p7_evidence_cost_summary.md", result)
     if baseline_economics_json is not None:
         shutil.copyfile(
@@ -177,26 +176,23 @@ def _timing_metrics(path: Path) -> dict[str, float | int]:
     records = payload.get("records", [])
     if not isinstance(records, list):
         raise ValueError(f"{path}: records must be a list")
-    owner_backfill_elapsed = sum(
-        _float(record.get("elapsed_sec", 0.0))
-        for record in records
-        if record.get("stage") == "alignment.owner_backfill"
-    )
-    total_stage_elapsed = sum(
-        _float(record.get("elapsed_sec", 0.0))
-        for record in records
-        if not str(record.get("stage", "")).endswith(".extract_xic")
-    )
-    owner_extract_xic_count = sum(
-        _int(record.get("metrics", {}).get("extract_xic_count", 0))
-        for record in records
-        if record.get("stage") == "alignment.owner_backfill.extract_xic"
-    )
-    owner_raw_chromatogram_call_count = sum(
-        _int(record.get("metrics", {}).get("raw_chromatogram_call_count", 0))
-        for record in records
-        if record.get("stage") == "alignment.owner_backfill.extract_xic"
-    )
+    owner_backfill_elapsed = 0.0
+    total_stage_elapsed = 0.0
+    owner_extract_xic_count = 0
+    owner_raw_chromatogram_call_count = 0
+    for record in records:
+        stage = record.get("stage")
+        elapsed = _float(record.get("elapsed_sec", 0.0))
+        if stage == "alignment.owner_backfill":
+            owner_backfill_elapsed += elapsed
+        if not str(stage or "").endswith(".extract_xic"):
+            total_stage_elapsed += elapsed
+        if stage == "alignment.owner_backfill.extract_xic":
+            metrics = record.get("metrics", {})
+            owner_extract_xic_count += _int(metrics.get("extract_xic_count", 0))
+            owner_raw_chromatogram_call_count += _int(
+                metrics.get("raw_chromatogram_call_count", 0),
+            )
     return {
         "owner_backfill_elapsed_sec": owner_backfill_elapsed,
         "total_stage_elapsed_sec": total_stage_elapsed,
@@ -219,17 +215,16 @@ def _ledger_metrics(path: Path) -> dict[str, int]:
                 f"{path}: missing required columns: {', '.join(missing)}"
             )
         rows = tuple(reader)
+    skipped_requests = 0
+    feature_ids: set[str] = set()
+    for row in rows:
+        skipped_requests += _int(row.get("raw_xic_requests_skipped", 0))
+        feature_ids.add(row.get("feature_family_id", ""))
     return {
         "skipped_evidence_row_count": len(rows),
-        "raw_xic_requests_skipped": sum(
-            _int(row.get("raw_xic_requests_skipped", 0)) for row in rows
-        ),
-        "skipped_raw_xic_requests": sum(
-            _int(row.get("raw_xic_requests_skipped", 0)) for row in rows
-        ),
-        "skipped_feature_count": len(
-            {row.get("feature_family_id", "") for row in rows}
-        ),
+        "raw_xic_requests_skipped": skipped_requests,
+        "skipped_raw_xic_requests": skipped_requests,
+        "skipped_feature_count": len(feature_ids),
     }
 
 

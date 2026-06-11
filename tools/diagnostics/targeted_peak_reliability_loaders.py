@@ -79,7 +79,7 @@ def _read_xic_results(sheet: _WorksheetLike) -> tuple[_TargetedInputRow, ...]:
     rows: list[_TargetedInputRow] = []
     for row in iterator:
         raw_sample = row[cols["SampleName"]]
-        if raw_sample not in (None, ""):
+        if raw_sample is not None and raw_sample != "":
             current_sample = _text(raw_sample)
         if not current_sample:
             continue

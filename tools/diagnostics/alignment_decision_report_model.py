@@ -32,6 +32,7 @@ _CLEANLINESS_WARNING_FLAGS = (
     "rescue_heavy",
     "weak_seed_tolerated",
 )
+_CLEANLINESS_WARNING_FLAG_SET = frozenset(_CLEANLINESS_WARNING_FLAGS)
 
 
 def build_report(
@@ -114,43 +115,53 @@ def _matrix_cleanliness(
     primary_rows = [
         row for row in review.rows if _is_true(row["include_in_primary_matrix"])
     ]
-    zero_present_rows = [row for row in primary_rows if _is_zero_present(row)]
+    zero_present_count = 0
     flag_counts: Counter[str] = Counter()
-    warning_rows: list[dict[str, Any]] = []
+    warning_row_items: list[tuple[tuple[str, ...], dict[str, Any]]] = []
     for row in primary_rows:
         flags = _split_list(row.get("row_flags", ""))
-        flag_counts.update(flag for flag in flags if flag in _CLEANLINESS_WARNING_FLAGS)
-        warning_flags = [flag for flag in flags if flag in _CLEANLINESS_WARNING_FLAGS]
-        if _is_zero_present(row) or warning_flags:
-            warning_rows.append(
-                {
-                    "feature_family_id": row["feature_family_id"],
-                    "identity_decision": row.get("identity_decision", ""),
-                    "present_rate": row.get("present_rate", ""),
-                    "detected_count": row.get("detected_count", ""),
-                    "accepted_rescue_count": row.get("accepted_rescue_count", ""),
-                    "row_flags": row.get("row_flags", ""),
-                    "warning": row.get("warning", ""),
-                }
+        warning_flags = tuple(
+            flag for flag in flags if flag in _CLEANLINESS_WARNING_FLAG_SET
+        )
+        flag_counts.update(warning_flags)
+        zero_present = _is_zero_present(row)
+        if zero_present:
+            zero_present_count += 1
+        if zero_present or warning_flags:
+            warning_row_items.append(
+                (
+                    flags,
+                    {
+                        "feature_family_id": row["feature_family_id"],
+                        "identity_decision": row.get("identity_decision", ""),
+                        "present_rate": row.get("present_rate", ""),
+                        "detected_count": row.get("detected_count", ""),
+                        "accepted_rescue_count": row.get("accepted_rescue_count", ""),
+                        "row_flags": row.get("row_flags", ""),
+                        "warning": row.get("warning", ""),
+                    },
+                )
             )
-    warning_rows.sort(
-        key=lambda row: (
-            -len(_split_list(str(row["row_flags"]))),
-            _float_value(str(row["present_rate"]), default=math.inf),
-            str(row["feature_family_id"]),
+    warning_row_items.sort(
+        key=lambda item: (
+            -len(item[0]),
+            _float_value(str(item[1]["present_rate"]), default=math.inf),
+            str(item[1]["feature_family_id"]),
         )
     )
+    warning_rows = [row for _, row in warning_row_items[:20]]
+    warning_count = zero_present_count + sum(flag_counts.values())
     return {
         "primary_row_count": len(matrix.rows),
         "review_primary_row_count": len(primary_rows),
         "identity_counts": dict(sorted(identity_counts.items())),
-        "zero_present_row_count": len(zero_present_rows),
+        "zero_present_row_count": zero_present_count,
         "flag_counts": {
             flag: flag_counts.get(flag, 0)
             for flag in _CLEANLINESS_WARNING_FLAGS
         },
-        "warning_count": len(zero_present_rows) + sum(flag_counts.values()),
-        "top_warning_rows": warning_rows[:20],
+        "warning_count": warning_count,
+        "top_warning_rows": warning_rows,
     }
 
 
@@ -375,7 +386,10 @@ def _is_known_exception(
 ) -> bool:
     if not modes:
         return False
-    return all(mode in known_exceptions.get(target, set()) for mode in modes)
+    known_modes = known_exceptions.get(target)
+    if known_modes is None:
+        return False
+    return all(mode in known_modes for mode in modes)
 
 
 def _parse_known_istd_exceptions(values: tuple[str, ...]) -> dict[str, set[str]]:

@@ -4,14 +4,17 @@ import argparse
 import csv
 import json
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from xic_extractor.alignment.adduct_annotation import (
+    ArtificialAdductPair,
     load_artificial_adducts,
     match_artificial_adduct_pairs,
 )
+from xic_extractor.tabular_io import write_tsv
 
 _REQUIRED_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -49,7 +52,7 @@ def build_audit(
         if baseline_alignment_dir is not None
         else ()
     )
-    pairs = ()
+    pairs: tuple[ArtificialAdductPair, ...] = ()
     if artificial_adduct_list is not None:
         pairs = match_artificial_adduct_pairs(
             [_family(row) for row in review_rows],
@@ -163,19 +166,27 @@ def _write_summary(path: Path, payload: dict[str, object]) -> None:
         "artificial_adduct_pair_count",
         "matrix_row_delta_vs_baseline",
     )
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
-        writer.writeheader()
-        writer.writerow(
+    write_tsv(
+        path,
+        (
             {
-                "selected_tags": ";".join(payload["selected_tags"]),  # type: ignore[arg-type]
+                "selected_tags": ";".join(
+                    cast(Sequence[str], payload["selected_tags"]),
+                ),
                 "tag_combine_mode": payload["tag_combine_mode"],
                 "matrix_row_count": payload["matrix_row_count"],
                 "review_row_count": payload["review_row_count"],
-                "artificial_adduct_pair_count": payload["artificial_adduct_pair_count"],
-                "matrix_row_delta_vs_baseline": payload["matrix_row_delta_vs_baseline"],
-            }
-        )
+                "artificial_adduct_pair_count": payload[
+                    "artificial_adduct_pair_count"
+                ],
+                "matrix_row_delta_vs_baseline": payload[
+                    "matrix_row_delta_vs_baseline"
+                ],
+            },
+        ),
+        fields,
+        formatter=_legacy_tsv_value,
+    )
 
 
 def _write_pairs(path: Path, payload: dict[str, object]) -> None:
@@ -187,10 +198,16 @@ def _write_pairs(path: Path, payload: dict[str, object]) -> None:
         "mz_delta_error_ppm",
         "rt_delta_min",
     )
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(payload["artificial_adduct_pairs"])  # type: ignore[arg-type]
+    write_tsv(
+        path,
+        cast(Sequence[Mapping[str, object]], payload["artificial_adduct_pairs"]),
+        fields,
+        formatter=_legacy_tsv_value,
+    )
+
+
+def _legacy_tsv_value(value: object) -> str:
+    return "" if value is None else str(value)
 
 
 def _markdown(payload: dict[str, object]) -> str:

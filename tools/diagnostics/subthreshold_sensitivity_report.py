@@ -25,7 +25,7 @@ import argparse
 import json
 import sys
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -75,13 +75,14 @@ def _reason_gate(reason: str) -> str:
 
 
 def summarize_subthreshold_sensitivity(
-    candidates_by_trace: Sequence[tuple[str, Sequence[SubThresholdCandidate]]],
+    candidates_by_trace: Iterable[tuple[str, Sequence[SubThresholdCandidate]]],
 ) -> SensitivitySummary:
     """Aggregate per-trace sub-threshold reports into batch-level evidence.
 
     Pure: takes (trace_key, candidates) pairs and returns counts. Never touches
     detection or files.
     """
+    traces_scanned = 0
     total = 0
     accepted = 0
     with_gate: Counter[str] = Counter()
@@ -91,6 +92,7 @@ def summarize_subthreshold_sensitivity(
         threshold: set() for threshold in HEIGHT_RECOVERY_THRESHOLDS
     }
     for trace_key, candidates in candidates_by_trace:
+        traces_scanned += 1
         for candidate in candidates:
             total += 1
             if candidate.accepted:
@@ -124,7 +126,7 @@ def summarize_subthreshold_sensitivity(
         for threshold in HEIGHT_RECOVERY_THRESHOLDS
     )
     return SensitivitySummary(
-        traces_scanned=len(candidates_by_trace),
+        traces_scanned=traces_scanned,
         total_local_maxima=total,
         accepted=accepted,
         rejected=total - accepted,
@@ -159,7 +161,7 @@ def run_subthreshold_sensitivity_report(
 ) -> tuple[Path, Path, SensitivitySummary]:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary = summarize_subthreshold_sensitivity(
-        list(iter_trace_candidates(trace_data_jsons)),
+        iter_trace_candidates(trace_data_jsons),
     )
     gate_tsv = output_dir / "subthreshold_gate_breakdown.tsv"
     recovery_tsv = output_dir / "subthreshold_height_recovery.tsv"

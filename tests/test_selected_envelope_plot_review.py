@@ -699,6 +699,31 @@ def test_plot_index_headers_are_stable() -> None:
     )
 
 
+def test_plot_index_writer_preserves_tsv_contract(tmp_path: Path) -> None:
+    index_tsv = tmp_path / "selected_envelope_plot_index.tsv"
+
+    plot_review._write_tsv(
+        index_tsv,
+        PLOT_INDEX_HEADERS,
+        [{"plot_rank": "1", "plot_group": "high_risk_externalized"}],
+    )
+
+    assert index_tsv.read_bytes().splitlines(keepends=True)[0].endswith(b"\r\n")
+    assert index_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == list(PLOT_INDEX_HEADERS)
+    row = _read_tsv(index_tsv)[0]
+    assert row["plot_rank"] == "1"
+    assert row["plot_group"] == "high_risk_externalized"
+    assert row["sample_name"] == ""
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        plot_review._write_tsv(
+            tmp_path / "invalid.tsv",
+            ("plot_rank",),
+            [{"plot_rank": "1", "unexpected": "value"}],
+        )
+
+
 def _diagnostic_row(
     *,
     sample_name: str = "sample-a",
@@ -741,6 +766,11 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 def _segment(

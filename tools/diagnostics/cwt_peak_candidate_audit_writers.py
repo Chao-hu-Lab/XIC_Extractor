@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from tools.diagnostics.cwt_peak_candidate_audit_models import (
     CwtGroupAuditRow,
     CwtOnlyAuditRow,
 )
+from tools.diagnostics.diagnostic_io import write_tsv
 
 
 def _write_outputs(
@@ -45,24 +45,25 @@ def _write_summary(path: Path, payload: dict[str, object]) -> None:
     summary = payload["summary"]
     if not isinstance(summary, dict):
         raise TypeError("summary payload must be a dictionary")
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_SUMMARY_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerow(summary)
+    write_tsv(path, (summary,), _SUMMARY_COLUMNS, extrasaction="raise")
 
 
 def _write_groups(path: Path, rows: tuple[CwtGroupAuditRow, ...]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_GROUP_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(_format_group_row(row) for row in rows)
+    write_tsv(
+        path,
+        tuple(_format_group_row(row) for row in rows),
+        _GROUP_COLUMNS,
+        extrasaction="raise",
+    )
 
 
 def _write_cwt_only(path: Path, rows: tuple[CwtOnlyAuditRow, ...]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_CWT_ONLY_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(_format_cwt_only_row(row) for row in rows)
+    write_tsv(
+        path,
+        tuple(_format_cwt_only_row(row) for row in rows),
+        _CWT_ONLY_COLUMNS,
+        extrasaction="raise",
+    )
 
 
 def _format_group_row(row: CwtGroupAuditRow) -> dict[str, str]:

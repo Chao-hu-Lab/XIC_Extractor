@@ -6,9 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_gt_alignment_audit as audit
+from tools.diagnostics import targeted_gt_alignment_audit_io as audit_io
 
 
 def test_path_style_cli_help_preserves_public_script_contract() -> None:
@@ -98,6 +100,34 @@ def test_facade_preserves_existing_helper_import_surface() -> None:
     assert set(audit.__all__) == set(expected_names)
     for name in expected_names:
         assert hasattr(audit, name), name
+
+
+def test_target_role_map_groups_requested_roles_in_one_pass() -> None:
+    rows: list[dict[str, object]] = [
+        {"Target": "d3-A", "Role": "Analyte", "SampleName": "S2", "RT": 9.2},
+        {"Target": "d3-I", "Role": "ISTD", "SampleName": "S2", "RT": 9.0},
+        {"Target": "d3-A", "Role": "Analyte", "SampleName": "S1", "RT": 8.2},
+        {"Target": "unrelated", "Role": "Analyte", "SampleName": "S3", "RT": 1.0},
+    ]
+
+    grouped = audit_io._rows_by_target_role_map(
+        rows,
+        (("d3-A", "Analyte"), ("d3-I", "ISTD")),
+    )
+
+    assert grouped[("d3-A", "Analyte")]["S1"]["RT"] == 8.2
+    assert grouped[("d3-A", "Analyte")]["S2"]["RT"] == 9.2
+    assert grouped[("d3-I", "ISTD")]["S2"]["RT"] == 9.0
+    assert set(grouped[("d3-I", "ISTD")]) == {"S2"}
+    assert audit._rows_by_target_role(rows, "d3-A", "Analyte") == grouped[
+        ("d3-A", "Analyte")
+    ]
+
+    with pytest.raises(ValueError, match="Missing sample for d3-A/Analyte"):
+        audit_io._rows_by_target_role_map(
+            [{"Target": "d3-A", "Role": "Analyte", "SampleName": ""}],
+            (("d3-A", "Analyte"),),
+        )
 
 
 def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
@@ -191,6 +221,37 @@ def test_targeted_gt_audit_writes_outputs_and_escapes_formula_values(
     assert "FAILURE MODE" not in (output_dir / "failure_mode_report.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_targeted_gt_writer_preserves_csv_contracts(tmp_path: Path) -> None:
+    path = tmp_path / "rows.csv"
+
+    audit._write_dict_csv(
+        path,
+        [
+            {"sample_stem": "=Sample_A", "count": 1, "empty": None},
+            {"sample_stem": "+Sample_B", "count": 2, "empty": ""},
+        ],
+    )
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        assert list(csv.DictReader(handle)) == [
+            {"sample_stem": "'=Sample_A", "count": "1", "empty": ""},
+            {"sample_stem": "'+Sample_B", "count": "2", "empty": ""},
+        ]
+
+    empty_path = tmp_path / "empty.csv"
+    audit._write_dict_csv(empty_path, [])
+    assert empty_path.read_text(encoding="utf-8") == ""
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        audit._write_dict_csv(
+            tmp_path / "extra.csv",
+            [
+                {"sample_stem": "Sample_A", "count": 1},
+                {"sample_stem": "Sample_B", "count": 2, "extra": "value"},
+            ],
+        )
 
 
 def test_targeted_gt_audit_classifies_pass(tmp_path: Path) -> None:

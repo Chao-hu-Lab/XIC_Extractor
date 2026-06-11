@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import csv
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from tools.diagnostics.family_ms1_backfill_review_model import _float
 
 
@@ -154,16 +154,7 @@ def _write_tsv(
     rows: Sequence[Mapping[str, Any]],
     fields: Sequence[str],
 ) -> None:
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fields})
+    write_tsv(path, rows, fields, formatter=_format_value, lineterminator="\n")
 
 
 def _candidate_fields() -> tuple[str, ...]:

@@ -14,6 +14,8 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
+
 
 ROW_FIELDS = (
     "target_label",
@@ -577,19 +579,13 @@ def _write_tsv(
     fieldnames: Sequence[str],
     rows: Iterable[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {field: _format_value(row.get(field)) for field in fieldnames}
-            )
+    write_tsv(
+        path,
+        tuple(rows),
+        fieldnames,
+        formatter=_format_value,
+        lineterminator="\n",
+    )
 
 
 def _read_tsv(path: Path, required_columns: set[str]) -> list[dict[str, str]]:

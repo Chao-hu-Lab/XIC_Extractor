@@ -38,13 +38,16 @@ def _summarize_families(
 
     anchor_context = _sample_anchor_context(residuals)
     rows: list[FamilyRtSummary] = []
-    for family_id in sorted(cells_by_family):
+    sorted_family_ids = sorted(cells_by_family)
+    for family_id in sorted_family_ids:
         family_cells = cells_by_family[family_id]
+        modelled_cells = [
+            cell for cell in family_cells if cell.sample_stem in models
+        ]
         raw_rts = [cell.apex_rt for cell in family_cells]
         normalized_rts = [
             models[cell.sample_stem].normalize_rt(cell.apex_rt)
-            for cell in family_cells
-            if cell.sample_stem in models
+            for cell in modelled_cells
         ]
         feature = features.get(
             family_id,
@@ -60,8 +63,7 @@ def _summarize_families(
         normalized_median = _median(normalized_rts)
         scopes = [
             _cell_anchor_scope(cell, anchor_context)
-            for cell in family_cells
-            if cell.sample_stem in models
+            for cell in modelled_cells
         ]
         rows.append(
             FamilyRtSummary(
@@ -111,11 +113,13 @@ def _leave_one_anchor_out(
             anchor_slope_min=anchor_slope_min,
             anchor_slope_max=anchor_slope_max,
         )
+        modelled_held_points = [
+            point for point in held_points if point.sample_stem in models
+        ]
         errors = [
             models[point.sample_stem].normalize_rt(point.observed_rt_min)
             - point.reference_rt_min
-            for point in held_points
-            if point.sample_stem in models
+            for point in modelled_held_points
         ]
         abs_errors = [abs(error) for error in errors]
         p95 = _percentile(abs_errors, 0.95)

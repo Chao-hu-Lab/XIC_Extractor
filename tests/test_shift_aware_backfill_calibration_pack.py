@@ -168,6 +168,73 @@ def test_collects_family_summary_rows_from_source_family_best_shift_files(
     ]
 
 
+def test_collects_family_summary_rows_across_files_with_missing_values(
+    tmp_path: Path,
+) -> None:
+    summary_dir = tmp_path / "shift"
+    summary_dir.mkdir()
+    _write_tsv(
+        summary_dir / "001_fam001_source_family_best_shift_summary.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "source_family": "FAM001",
+                "is_reference": "TRUE",
+                "shift_to_reference_sec": "0.00",
+                "shape_similarity_to_reference_after_group_shift": "1.0000",
+            },
+            {
+                "feature_family_id": "FAM001",
+                "source_family": "FAM001A",
+                "is_reference": "FALSE",
+                "shift_to_reference_sec": "",
+                "shape_similarity_to_reference_after_group_shift": "0.9900",
+            },
+        ],
+    )
+    _write_tsv(
+        summary_dir / "002_more_source_family_best_shift_summary.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "source_family": "FAM001B",
+                "is_reference": "FALSE",
+                "shift_to_reference_sec": "-2.50",
+                "shape_similarity_to_reference_after_group_shift": "0.9700",
+            },
+            {
+                "feature_family_id": "FAM002",
+                "source_family": "FAM002",
+                "is_reference": "TRUE",
+                "shift_to_reference_sec": "0.00",
+                "shape_similarity_to_reference_after_group_shift": "1.0000",
+            },
+            {
+                "feature_family_id": "FAM003",
+                "source_family": "FAM003A",
+                "is_reference": "FALSE",
+                "shift_to_reference_sec": "1.00",
+                "shape_similarity_to_reference_after_group_shift": "",
+            },
+        ],
+    )
+
+    rows = pack.collect_shift_aware_family_summary_rows(
+        sorted(summary_dir.glob("*_source_family_best_shift_summary.tsv")),
+    )
+
+    assert rows == [
+        {
+            "feature_family_id": "FAM001",
+            "nonref_source_families": "FAM001A;FAM001B",
+            "nonref_group_count": "2",
+            "min_shape_r_after_best_shift": "0.9700",
+            "max_shape_r_after_best_shift": "0.9900",
+            "max_abs_shift_sec": "2.50",
+        }
+    ]
+
+
 def test_default_standard_peak_threshold_keeps_broad_supported_peaks(
     tmp_path: Path,
 ) -> None:

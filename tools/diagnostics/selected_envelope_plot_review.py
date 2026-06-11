@@ -34,6 +34,7 @@ from xic_extractor.peak_detection.selected_envelope_oracle_artifacts import (
     parse_selected_envelope_boundary_oracle_rows,
 )
 from xic_extractor.raw_reader import open_raw
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
 
 PLOT_INDEX_HEADERS = (
     "plot_rank",
@@ -701,7 +702,7 @@ def _select_chrom_peak_segment_for_row(
     envelope_left = min(envelope_start, envelope_end)
     envelope_right = max(envelope_start, envelope_end)
     envelope_midpoint = (envelope_left + envelope_right) / 2.0
-    overlapping = [
+    envelope_overlaps = [
         (
             _interval_overlap(
                 envelope_left,
@@ -714,7 +715,7 @@ def _select_chrom_peak_segment_for_row(
         )
         for segment in segments
     ]
-    positive_overlaps = [entry for entry in overlapping if entry[0] > 0.0]
+    positive_overlaps = [entry for entry in envelope_overlaps if entry[0] > 0.0]
     if positive_overlaps:
         return max(positive_overlaps, key=lambda entry: (entry[0], entry[1]))[2]
     return min(
@@ -927,10 +928,7 @@ def _write_tsv(
     rows: Iterable[Mapping[str, str]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, tuple(rows), fieldnames, extrasaction="raise")
 
 
 def _selected_diagnostic_rows_for_chrom_review(

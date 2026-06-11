@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -241,17 +241,16 @@ def _read_legacy_alignment_matrix(
     }
     fieldnames = set(rows[0])
     sample_columns = sorted(fieldnames - metadata_columns)
+    sample_column_pairs = _sample_column_pairs(sample_columns)
     matrix: dict[str, dict[str, float]] = {}
-    normalized_samples = frozenset(
-        _normalize_sample_id(sample) for sample in sample_columns
-    )
+    normalized_samples = frozenset(sample for _column, sample in sample_column_pairs)
     for row in rows:
         family_id = row["feature_family_id"]
         values: dict[str, float] = {}
-        for sample in sample_columns:
-            area = _float_value(row.get(sample))
+        for column, sample in sample_column_pairs:
+            area = _float_value(row.get(column))
             if area is not None and area > 0:
-                values[_normalize_sample_id(sample)] = area
+                values[sample] = area
         matrix[family_id] = values
     return AlignmentMatrixData(
         areas_by_family=matrix,
@@ -275,10 +274,9 @@ def _read_clean_alignment_matrix(
     metadata_columns = {"Mz", "RT"}
     fieldnames = set(rows[0])
     sample_columns = sorted(fieldnames - metadata_columns)
+    sample_column_pairs = _sample_column_pairs(sample_columns)
     matrix: dict[str, dict[str, float]] = {}
-    normalized_samples = frozenset(
-        _normalize_sample_id(sample) for sample in sample_columns
-    )
+    normalized_samples = frozenset(sample for _column, sample in sample_column_pairs)
     for row_index, row in enumerate(rows, start=1):
         family_ids = identity_by_index.get(row_index)
         if family_ids is None:
@@ -286,10 +284,10 @@ def _read_clean_alignment_matrix(
                 f"{identity_path} is missing matrix_row_index {row_index}"
             )
         values: dict[str, float] = {}
-        for sample in sample_columns:
-            area = _float_value(row.get(sample))
+        for column, sample in sample_column_pairs:
+            area = _float_value(row.get(column))
             if area is not None and area > 0:
-                values[_normalize_sample_id(sample)] = area
+                values[sample] = area
         for family_id in family_ids:
             matrix[family_id] = dict(values)
     return AlignmentMatrixData(
@@ -325,6 +323,10 @@ def _matrix_identity_by_index(
             )
         identity_by_index[matrix_row_index] = family_ids
     return identity_by_index
+
+
+def _sample_column_pairs(sample_columns: Sequence[str]) -> tuple[tuple[str, str], ...]:
+    return tuple((sample, _normalize_sample_id(sample)) for sample in sample_columns)
 
 
 def _is_primary_review_row(row: Mapping[str, str]) -> bool:

@@ -1,6 +1,8 @@
 import csv
+import sys
 from pathlib import Path
 
+from tools.diagnostics import gaussian15_area_pressure_audit as audit
 from tools.diagnostics.gaussian15_area_pressure_audit import (
     gaussian15_area_pressure_rows,
     summarize_gaussian15_area_pressure,
@@ -72,6 +74,56 @@ def test_gaussian15_area_pressure_audit_reports_area_and_scan_rate_pressure(
     assert rows[2]["scan_rate_pressure_class"] == "unknown_scan_rate"
 
 
+def test_gaussian15_area_pressure_cli_reads_candidates_once(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "peak_candidates.tsv"
+    output_dir = tmp_path / "out"
+    _write_candidates(
+        path,
+        [
+            _row(
+                "S1",
+                "5-medC",
+                "c1",
+                selected="TRUE",
+                raw_area="100",
+                morphology_area="90",
+                scan_count="31",
+                duration_min="0.5",
+            ),
+        ],
+    )
+    read_paths: list[Path] = []
+    original_read = audit.read_tsv_required
+
+    def counted_read(path_arg: Path, columns: tuple[str, ...]) -> list[dict[str, str]]:
+        read_paths.append(path_arg)
+        return original_read(path_arg, columns)
+
+    monkeypatch.setattr(audit, "read_tsv_required", counted_read)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gaussian15_area_pressure_audit.py",
+            "--peak-candidates-tsv",
+            str(path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    audit.main()
+
+    assert read_paths == [path]
+    assert (output_dir / "gaussian15_area_pressure_summary.tsv").exists()
+    assert _read_tsv(output_dir / "gaussian15_area_pressure_rows.tsv")[0][
+        "scan_rate_pressure_class"
+    ] == "nominal_observed"
+
+
 def _row(
     sample: str,
     target: str,
@@ -104,3 +156,8 @@ def _write_candidates(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

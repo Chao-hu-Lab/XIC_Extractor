@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 
@@ -43,9 +44,49 @@ def test_multi_tag_adduct_audit_writes_summary_outputs(tmp_path: Path) -> None:
     assert payload["tag_overlap"] == {"dR": 1, "R": 1}
     assert payload["artificial_adduct_pair_count"] == 1
     assert payload["matrix_row_delta_vs_baseline"] == 0
-    assert (output_dir / "multi_tag_adduct_summary.tsv").is_file()
-    assert (output_dir / "multi_tag_adduct_pairs.tsv").is_file()
+    summary_path = output_dir / "multi_tag_adduct_summary.tsv"
+    pairs_path = output_dir / "multi_tag_adduct_pairs.tsv"
+    assert summary_path.is_file()
+    assert pairs_path.is_file()
     assert (output_dir / "multi_tag_adduct.md").is_file()
+
+    assert summary_path.read_text(encoding="utf-8").splitlines()[0].split("\t") == [
+        "selected_tags",
+        "tag_combine_mode",
+        "matrix_row_count",
+        "review_row_count",
+        "artificial_adduct_pair_count",
+        "matrix_row_delta_vs_baseline",
+    ]
+    assert _read_tsv(summary_path) == [
+        {
+            "selected_tags": "dR;R;MeR",
+            "tag_combine_mode": "union",
+            "matrix_row_count": "0",
+            "review_row_count": "2",
+            "artificial_adduct_pair_count": "1",
+            "matrix_row_delta_vs_baseline": "0",
+        },
+    ]
+
+    assert pairs_path.read_text(encoding="utf-8").splitlines()[0].split("\t") == [
+        "parent_family_id",
+        "related_family_id",
+        "adduct_name",
+        "mz_delta_observed",
+        "mz_delta_error_ppm",
+        "rt_delta_min",
+    ]
+    assert _read_tsv(pairs_path) == [
+        {
+            "parent_family_id": "F001",
+            "related_family_id": "F002",
+            "adduct_name": "M+Na-H",
+            "mz_delta_observed": "21.981944999999996",
+            "mz_delta_error_ppm": "1.616196236866438e-10",
+            "rt_delta_min": "0.019999999999999574",
+        },
+    ]
 
 
 def _write_review(path: Path, *, matrix: bool) -> None:
@@ -57,3 +98,8 @@ def _write_review(path: Path, *, matrix: bool) -> None:
         "F002\tR\t321.981945\t5.020\tR\tFALSE\n",
         encoding="utf-8",
     )
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

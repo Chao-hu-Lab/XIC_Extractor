@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.primary_matrix_area import (
@@ -44,10 +45,23 @@ FLAG_ROW_FIELDS = (
 
 def summarize_primary_area_authority(path: Path) -> dict[str, int | str]:
     rows = read_tsv_required(path, REQUIRED_COLUMNS)
+    summary, _flagged = _analyze_primary_area_authority_rows(rows)
+    return summary
+
+
+def flagged_primary_area_authority_rows(path: Path) -> list[dict[str, str]]:
+    rows = read_tsv_required(path, REQUIRED_COLUMNS)
+    _summary, flagged = _analyze_primary_area_authority_rows(rows)
+    return flagged
+
+
+def _analyze_primary_area_authority_rows(
+    rows: Sequence[dict[str, str]],
+) -> tuple[dict[str, int | str], list[dict[str, str]]]:
     counts = Counter(_authority_class(row) for row in rows)
     non_gaussian = counts["non_gaussian_primary_area"]
     fail_closed = counts["fail_closed_missing_morphology"]
-    return {
+    summary: dict[str, int | str] = {
         "alignment_cell_count": len(rows),
         "gaussian_primary_area_count": counts["gaussian_primary_area"],
         "fail_closed_missing_morphology_count": fail_closed,
@@ -57,17 +71,13 @@ def summarize_primary_area_authority(path: Path) -> dict[str, int | str]:
             fail_closed_missing_morphology_count=fail_closed,
         ),
     }
-
-
-def flagged_primary_area_authority_rows(path: Path) -> list[dict[str, str]]:
-    rows = read_tsv_required(path, REQUIRED_COLUMNS)
     flagged: list[dict[str, str]] = []
     for row in rows:
         authority_class = _authority_class(row)
         if authority_class == "gaussian_primary_area":
             continue
         flagged.append({**row, "authority_class": authority_class})
-    return flagged
+    return summary, flagged
 
 
 def _authority_class(row: dict[str, str]) -> str:
@@ -127,8 +137,8 @@ def main() -> None:
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    summary = summarize_primary_area_authority(args.alignment_cells_tsv)
-    flagged_rows = flagged_primary_area_authority_rows(args.alignment_cells_tsv)
+    rows = read_tsv_required(args.alignment_cells_tsv, REQUIRED_COLUMNS)
+    summary, flagged_rows = _analyze_primary_area_authority_rows(rows)
     (args.output_dir / "alignment_primary_area_authority_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",

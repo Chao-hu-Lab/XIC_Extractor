@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import peak_candidate_score_calibration_report as report
 
 
@@ -79,6 +81,80 @@ def test_facade_preserves_existing_helper_import_surface() -> None:
     assert set(report.__all__) == set(expected_names)
     for name in expected_names:
         assert hasattr(report, name), name
+
+
+def test_label_impact_accumulates_scores_and_preserves_order() -> None:
+    rows = tuple(
+        report._row_from_dict(Path("peak_candidates.tsv"), row_number, row)
+        for row_number, row in enumerate(
+            (
+                _row(
+                    "SampleA",
+                    "TargetA",
+                    "TargetA:selected",
+                    selected=True,
+                    raw_score=10,
+                    confidence="HIGH",
+                    support="shared_support;selected_only",
+                    concern="",
+                    ms2_present="TRUE",
+                    nl_match="TRUE",
+                ),
+                _row(
+                    "SampleB",
+                    "TargetB",
+                    "TargetB:selected",
+                    selected=True,
+                    raw_score=30,
+                    confidence="HIGH",
+                    support="shared_support",
+                    concern="nl_fail",
+                    ms2_present="TRUE",
+                    nl_match="FALSE",
+                ),
+                _row(
+                    "SampleC",
+                    "TargetC",
+                    "TargetC:rejected",
+                    selected=False,
+                    raw_score=80,
+                    confidence="HIGH",
+                    support="shared_support",
+                    concern="",
+                    ms2_present="TRUE",
+                    nl_match="TRUE",
+                ),
+                _row(
+                    "SampleD",
+                    "TargetD",
+                    "TargetD:rejected",
+                    selected=False,
+                    raw_score=40,
+                    confidence="HIGH",
+                    support="shared_support",
+                    concern="",
+                    ms2_present="TRUE",
+                    nl_match="TRUE",
+                ),
+            ),
+            start=2,
+        )
+    )
+
+    label_rows = report._label_impact(rows)
+
+    shared = next(row for row in label_rows if row.label == "shared_support")
+    assert shared.label_kind == "support"
+    assert shared.selected_count == 2
+    assert shared.rejected_count == 2
+    assert shared.selected_median_raw_score == 20.0
+    assert shared.rejected_median_raw_score == 60.0
+    assert [(row.label_kind, row.label) for row in label_rows] == [
+        ("cap", "nl_fail_cap"),
+        ("concern", "nl_fail"),
+        ("support", "shared_support"),
+        ("support", "selected_only"),
+    ]
 
 
 def test_score_calibration_report_flags_selected_risks_and_challengers(
@@ -269,6 +345,19 @@ def test_score_calibration_report_flags_selected_risks_and_challengers(
     assert (output_dir / "peak_candidate_score_calibration.md").is_file()
 
 
+def test_score_calibration_summary_writer_rejects_extra_keys(
+    tmp_path: Path,
+) -> None:
+    summary = {column: 0 for column in report._SUMMARY_COLUMNS}
+    summary["unexpected"] = 1
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        report._write_summary(
+            tmp_path / "summary.tsv",
+            {"summary": summary},
+        )
+
+
 def test_score_calibration_report_splits_plausible_nl_dropout_selected_rows(
     tmp_path: Path,
 ) -> None:
@@ -356,6 +445,39 @@ def test_score_calibration_report_rejects_missing_required_columns(
         "sample_name\ttarget_label\nSampleA\tTargetA\n",
         encoding="utf-8",
     )
+
+    code = report.main(
+        [
+            "--peak-candidates-tsv",
+            str(peak_candidates),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert code == 2
+    assert not (output_dir / "peak_candidate_score_calibration.json").exists()
+
+
+def test_score_calibration_report_rejects_invalid_selected_value(
+    tmp_path: Path,
+) -> None:
+    peak_candidates = tmp_path / "peak_candidates.tsv"
+    output_dir = tmp_path / "score_calibration"
+    row = _row(
+        "SampleA",
+        "TargetA",
+        "TargetA:selected",
+        selected=True,
+        raw_score=10,
+        confidence="HIGH",
+        support="strict_nl_ok",
+        concern="",
+        ms2_present="TRUE",
+        nl_match="TRUE",
+    )
+    row["selected"] = "MAYBE"
+    _write_peak_candidates(peak_candidates, [row])
 
     code = report.main(
         [

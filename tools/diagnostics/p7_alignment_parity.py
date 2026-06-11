@@ -8,6 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from xic_extractor.tabular_io import write_tsv
+
 DEFAULT_NUMERIC_TOLERANCE = 1e-9
 REVIEW_IDENTITY_COLUMNS = (
     "feature_family_id",
@@ -387,15 +389,7 @@ def _difference_rows(
 
 def _write_rows_tsv(path: Path, rows: Sequence[Mapping[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=("check", "status", "difference"),
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, rows, ("check", "status", "difference"), lineterminator="\n")
 
 
 def _error_result(error: Exception) -> P7AlignmentParityResult:

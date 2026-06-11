@@ -369,6 +369,32 @@ def test_current_git_sha_fallback_resolves_linked_worktree_head(monkeypatch) -> 
     assert inputs._current_git_sha(TIER_A_MANIFEST) == expected
 
 
+def test_resolve_ref_path_caches_repo_root_lookup_per_base_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from tools.diagnostics import asls_truth_validation_inputs as inputs
+
+    inputs._cached_ref_repo_root.cache_clear()
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("ok", encoding="utf-8")
+    calls: list[Path] = []
+
+    def fake_find_repo_root(path: Path) -> Path:
+        calls.append(path)
+        return tmp_path
+
+    monkeypatch.setattr(inputs, "_find_repo_root", fake_find_repo_root)
+
+    try:
+        base_path = tmp_path / "nested" / "manifest.json"
+        assert inputs._resolve_ref_path("artifact.txt", base_path) == artifact
+        assert inputs._resolve_ref_path("artifact.txt", base_path) == artifact
+        assert calls == [base_path.resolve()]
+    finally:
+        inputs._cached_ref_repo_root.cache_clear()
+
+
 def test_validate_tier_a_requires_p2b_85raw_refs_for_retirement(tmp_path: Path) -> None:
     manifest_path = _copy_json(TIER_A_MANIFEST, tmp_path / "tier_a.json")
     data = _load_json(manifest_path)
@@ -488,6 +514,30 @@ def test_validate_tier_c_hard_asls_blocker_fails_baseline_evidence(
     assert result.status == FAIL
     assert result.baseline_evidence_status == FAIL
     assert result.row_blocker_count == 1
+
+
+def test_validate_tier_c_counts_duplicate_row_blockers_before_set_membership(
+    tmp_path: Path,
+) -> None:
+    path = _write_json(
+        tmp_path / "tier_c.json",
+        _tier_c_baseline_evidence(
+            tmp_path,
+            baseline_status=FAIL,
+            tier_c_status=FAIL,
+            family_disposition="FAIL",
+            row_blockers=[
+                "asls_area_exceeds_raw_area",
+                "asls_area_exceeds_raw_area",
+            ],
+        ),
+    )
+
+    result = validate_tier_c(path)
+
+    assert result.status == FAIL
+    assert result.baseline_evidence_status == FAIL
+    assert result.row_blocker_count == 2
 
 
 def test_validate_tier_c_pass_family_with_hard_blocker_fails_baseline_evidence(

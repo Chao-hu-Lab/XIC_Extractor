@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from collections.abc import Sequence
 from pathlib import Path
 from statistics import median
 
@@ -75,6 +76,12 @@ SUMMARY_FIELDS = (
 
 def summarize_gaussian15_area_pressure(path: Path) -> dict[str, int | float | str]:
     rows = gaussian15_area_pressure_rows(path)
+    return _summarize_gaussian15_area_pressure_rows(rows)
+
+
+def _summarize_gaussian15_area_pressure_rows(
+    rows: Sequence[dict[str, str | float]],
+) -> dict[str, int | float | str]:
     ratios = [
         row["gaussian_to_raw_area_ratio"]
         for row in rows
@@ -246,11 +253,14 @@ def _nearest_rank_percentile(values: list[float], percentile: float) -> float | 
     return round(ordered[index], 6)
 
 
-def _count(rows: list[dict[str, str | float]], area_class: str) -> int:
+def _count(rows: Sequence[dict[str, str | float]], area_class: str) -> int:
     return sum(1 for row in rows if row["area_pressure_class"] == area_class)
 
 
-def _scan_rate_count(rows: list[dict[str, str | float]], scan_rate_class: str) -> int:
+def _scan_rate_count(
+    rows: Sequence[dict[str, str | float]],
+    scan_rate_class: str,
+) -> int:
     return sum(
         1 for row in rows if row["scan_rate_pressure_class"] == scan_rate_class
     )
@@ -269,7 +279,7 @@ def main() -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     rows = gaussian15_area_pressure_rows(args.peak_candidates_tsv)
-    summary = summarize_gaussian15_area_pressure(args.peak_candidates_tsv)
+    summary = _summarize_gaussian15_area_pressure_rows(rows)
     (args.output_dir / "gaussian15_area_pressure_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",

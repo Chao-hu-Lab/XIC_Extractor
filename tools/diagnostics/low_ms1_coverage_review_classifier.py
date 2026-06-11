@@ -30,6 +30,9 @@ from tools.diagnostics.low_ms1_coverage_review_models import (
     ZERO_TRACE_INSIDE_WINDOW_FRACTION_MIN,
 )
 
+SeedGroupKey = tuple[str, str, str, str, str]
+SeedGroupItem = tuple[SeedGroupKey, int]
+
 
 def build_audit(
     *,
@@ -479,7 +482,7 @@ def _backfill_seed_context_summary(
             "seed_context_bucket": "not_provided",
             "seed_overlay_rows": (),
         }
-    grouped: Counter[tuple[str, str, str, str, str]] = Counter(
+    grouped: Counter[SeedGroupKey] = Counter(
         (
             row.get("backfill_seed_mz", ""),
             row.get("backfill_seed_rt", ""),
@@ -500,6 +503,7 @@ def _backfill_seed_context_summary(
     far_count = sum(1 for value in apex_deltas if value > SEED_APEX_DELTA_CONCERN_SEC)
     far_fraction = _safe_fraction(far_count, len(apex_deltas))
     seed_group_count = len(grouped)
+    sorted_seed_groups = _sorted_seed_groups(grouped)
     bucket = _seed_context_bucket(
         seed_group_count=seed_group_count,
         seed_rt_span=seed_rt_span,
@@ -509,11 +513,13 @@ def _backfill_seed_context_summary(
         "backfill_seed_row_count": len(seed_rows),
         "backfill_seed_group_count": seed_group_count,
         "backfill_seed_rt_span": seed_rt_span,
-        "backfill_seed_rt_distribution": _format_seed_distribution(grouped),
+        "backfill_seed_rt_distribution": _format_seed_distribution(
+            sorted_seed_groups,
+        ),
         "seed_apex_far_count": far_count,
         "seed_apex_far_fraction": far_fraction,
         "seed_context_bucket": bucket,
-        "seed_overlay_rows": _seed_overlay_rows(grouped),
+        "seed_overlay_rows": _seed_overlay_rows(sorted_seed_groups),
     }
 
 
@@ -534,14 +540,13 @@ def _seed_context_bucket(
     return "seed_context_consistent"
 
 
-def _format_seed_distribution(
-    grouped: Counter[tuple[str, str, str, str, str]],
-) -> str:
+def _sorted_seed_groups(grouped: Counter[SeedGroupKey]) -> tuple[SeedGroupItem, ...]:
+    return tuple(sorted(grouped.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _format_seed_distribution(seed_groups: Sequence[SeedGroupItem]) -> str:
     parts = []
-    for key, count in sorted(
-        grouped.items(),
-        key=lambda item: (-item[1], item[0]),
-    ):
+    for key, count in seed_groups:
         seed_mz, seed_rt, rt_min, rt_max, ppm = key
         parts.append(
             f"mz={seed_mz},rt={seed_rt},window={rt_min}-{rt_max},ppm={ppm}:{count}"
@@ -550,13 +555,10 @@ def _format_seed_distribution(
 
 
 def _seed_overlay_rows(
-    grouped: Counter[tuple[str, str, str, str, str]],
+    seed_groups: Sequence[SeedGroupItem],
 ) -> tuple[dict[str, Any], ...]:
     rows = []
-    for index, (key, count) in enumerate(
-        sorted(grouped.items(), key=lambda item: (-item[1], item[0])),
-        start=1,
-    ):
+    for index, (key, count) in enumerate(seed_groups, start=1):
         seed_mz, seed_rt, rt_min, rt_max, ppm = key
         rows.append(
             {

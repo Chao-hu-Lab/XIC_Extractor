@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from tools.diagnostics import evidence_spine_consistency as report
+from tools.diagnostics import evidence_spine_consistency_analysis as analysis
+from tools.diagnostics.evidence_spine_consistency_models import AlignmentCell
 
 
 def test_path_style_cli_help_preserves_public_script_contract() -> None:
@@ -418,6 +420,43 @@ def test_evidence_spine_consistency_prefers_primary_match_over_audit_loser_dista
     assert result.rows[0].mismatch_reason == "consistent"
 
 
+def test_evidence_spine_rt_index_limits_candidate_cells_by_sample_and_window() -> None:
+    cells = (
+        _alignment_cell("sample-a", "FAR_LOW", 23.9),
+        _alignment_cell("sample-a", "LEFT_EDGE", 24.25),
+        _alignment_cell("sample-a", "CENTER", 25.0),
+        _alignment_cell("sample-a", "RIGHT_EDGE", 25.75),
+        _alignment_cell("sample-a", "FAR_HIGH", 25.8),
+        _alignment_cell("sample-b", "OTHER_SAMPLE", 25.0),
+        _alignment_cell("sample-a", "ABSENT", 25.0, status="absent"),
+        _alignment_cell("sample-a", "NO_MZ", 25.0, mz=None),
+    )
+
+    index = analysis._sample_rt_cell_index(cells)
+
+    window_cells = analysis._candidate_cells_for_rt_window(
+        index,
+        sample="sample-a",
+        rt=25.0,
+        match_rt_min=0.75,
+    )
+
+    assert [cell.family_id for cell in window_cells] == [
+        "LEFT_EDGE",
+        "CENTER",
+        "RIGHT_EDGE",
+    ]
+    assert (
+        analysis._candidate_cells_for_rt_window(
+            index,
+            sample="sample-a",
+            rt=None,
+            match_rt_min=0.75,
+        )
+        == ()
+    )
+
+
 def test_evidence_spine_consistency_fails_on_missing_columns(tmp_path: Path) -> None:
     targeted_dir = tmp_path / "targeted"
     alignment_dir = tmp_path / "alignment"
@@ -450,6 +489,28 @@ def test_evidence_spine_consistency_fails_on_missing_columns(tmp_path: Path) -> 
             alignment_dir=alignment_dir,
             output_dir=tmp_path / "out",
         )
+
+
+def _alignment_cell(
+    sample: str,
+    family_id: str,
+    rt: float,
+    *,
+    status: str = "detected",
+    mz: float | None = 289.0841,
+) -> AlignmentCell:
+    return AlignmentCell(
+        sample=sample,
+        family_id=family_id,
+        status=status,
+        mz=mz,
+        rt=rt,
+        area=1000.0,
+        left=rt - 0.1,
+        right=rt + 0.1,
+        region_verdict="current_supported",
+        local_mixture_diagnostic="current_single_envelope",
+    )
 
 
 def _write_minimal_targeted(targeted_dir: Path, *, mz: str) -> None:

@@ -44,6 +44,15 @@ def targeted_istd_benchmark_guardrail_rows(
         raise FileNotFoundError(str(benchmark_json))
     payload = json.loads(benchmark_json.read_text(encoding="utf-8"))
     summaries = _benchmark_summaries(payload, benchmark_json)
+    active_fail_count = _count_summaries(
+        summaries,
+        active_only=True,
+        status="FAIL",
+    )
+    failure_mode_counts = _failure_mode_counts(summaries)
+    miss_count = failure_mode_counts["MISS"]
+    split_count = failure_mode_counts["SPLIT"]
+    false_positive_tag_count = failure_mode_counts["FALSE_POSITIVE_TAG"]
     rows = [
         _targeted_istd_metric_row(
             "overall_status",
@@ -54,34 +63,30 @@ def targeted_istd_benchmark_guardrail_rows(
         ),
         _targeted_istd_metric_row(
             "active_fail_count",
-            _count_summaries(summaries, active_only=True, status="FAIL"),
+            active_fail_count,
             "0",
-            "FAIL"
-            if _count_summaries(summaries, active_only=True, status="FAIL") > 0
-            else "PASS",
+            "FAIL" if active_fail_count > 0 else "PASS",
             "active DNA ISTD failures",
         ),
         _targeted_istd_metric_row(
             "miss_count",
-            _count_failure_mode(summaries, "MISS"),
+            miss_count,
             "0",
-            "FAIL" if _count_failure_mode(summaries, "MISS") > 0 else "PASS",
+            "FAIL" if miss_count > 0 else "PASS",
             "active DNA ISTDs without primary hit",
         ),
         _targeted_istd_metric_row(
             "split_count",
-            _count_failure_mode(summaries, "SPLIT"),
+            split_count,
             "0",
-            "FAIL" if _count_failure_mode(summaries, "SPLIT") > 0 else "PASS",
+            "FAIL" if split_count > 0 else "PASS",
             "active DNA ISTDs with multiple primary hits",
         ),
         _targeted_istd_metric_row(
             "false_positive_tag_count",
-            _count_failure_mode(summaries, "FALSE_POSITIVE_TAG"),
+            false_positive_tag_count,
             "0",
-            "FAIL"
-            if _count_failure_mode(summaries, "FALSE_POSITIVE_TAG") > 0
-            else "PASS",
+            "FAIL" if false_positive_tag_count > 0 else "PASS",
             "inactive tag primary hits",
         ),
     ]
@@ -159,18 +164,20 @@ def _normalize_benchmark_summary(summary: object) -> object:
 
 
 def _count_failure_mode(summaries: list[object], failure_mode: str) -> int:
-    count = 0
+    return _failure_mode_counts(summaries)[failure_mode]
+
+
+def _failure_mode_counts(summaries: list[object]) -> Counter[str]:
+    counts: Counter[str] = Counter()
     for summary in summaries:
         if not isinstance(summary, dict):
             continue
         modes = summary.get("failure_modes", "")
         if isinstance(modes, list):
-            has_mode = failure_mode in modes
+            counts.update(mode for mode in modes if isinstance(mode, str))
         else:
-            has_mode = failure_mode in str(modes).split(";")
-        if has_mode:
-            count += 1
-    return count
+            counts.update(str(modes).split(";"))
+    return counts
 
 
 def _is_json_trueish(value: object) -> bool:

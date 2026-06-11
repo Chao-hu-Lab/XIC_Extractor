@@ -240,6 +240,14 @@ def test_cross_report_consistency_flags_mismatched_evidence(
     assert result.summary.rows_checked == 10
     assert result.summary.consistent_count == 4
     assert result.summary.mismatch_count == 6
+    assert result.summary.issue_counts == (
+        "targeted_clean_candidate_conflict:1;"
+        "review_positive_not_supported_by_candidate:1;"
+        "targeted_review_candidate_suggests_dropout:1;"
+        "targeted_negative_candidate_has_peak:1;"
+        "missing_selected_candidate:1;"
+        "missing_targeted_reliability:1"
+    )
 
     rows = _read_tsv(outputs.rows_tsv)
     with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:

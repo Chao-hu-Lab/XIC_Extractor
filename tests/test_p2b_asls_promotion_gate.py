@@ -74,6 +74,89 @@ def test_revised_gate_accepts_rsd_regression_when_truth_supports_old_bias(
         in result.rows[0].accepted_reasons
     )
     assert outputs.summary_tsv.exists()
+    assert outputs.rows_tsv.exists()
+    assert b"\r\n" not in outputs.rows_tsv.read_bytes()
+    assert b"\r\n" not in outputs.summary_tsv.read_bytes()
+    assert outputs.rows_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "target_label",
+        "selected_feature_id",
+        "old_status",
+        "old_failure_reasons",
+        "linear_area_rsd_pct",
+        "asls_area_rsd_pct",
+        "area_rsd_delta_pct",
+        "asls_exceeds_raw_area_count",
+        "baseline_truth_review_status",
+        "baseline_truth_dominant_classification",
+        "evidence_spine_status",
+        "evidence_spine_sample_count",
+        "evidence_spine_max_abs_rt_delta_sec",
+        "evidence_spine_overwide_boundary_count",
+        "evidence_spine_narrower_boundary_count",
+        "target_rt_trend_status",
+        "target_rt_trend_local_abs_delta_p95_min",
+        "target_rt_trend_local_moderate_or_severe_count",
+        "target_rt_trend_local_severe_count",
+        "revised_status",
+        "hard_blockers",
+        "accepted_reasons",
+    ]
+    assert _read_tsv(outputs.rows_tsv) == [
+        {
+            "target_label": "d3-5-hmdC",
+            "selected_feature_id": "FAM000153",
+            "old_status": "FAIL",
+            "old_failure_reasons": "area_rsd_regression",
+            "linear_area_rsd_pct": "11.2581",
+            "asls_area_rsd_pct": "15.1169",
+            "area_rsd_delta_pct": "3.85879",
+            "asls_exceeds_raw_area_count": "0",
+            "baseline_truth_review_status": (
+                "linear_edge_over_subtraction_plausible"
+            ),
+            "baseline_truth_dominant_classification": (
+                "linear_edge_over_subtraction_plausible"
+            ),
+            "evidence_spine_status": "",
+            "evidence_spine_sample_count": "0",
+            "evidence_spine_max_abs_rt_delta_sec": "",
+            "evidence_spine_overwide_boundary_count": "0",
+            "evidence_spine_narrower_boundary_count": "0",
+            "target_rt_trend_status": "",
+            "target_rt_trend_local_abs_delta_p95_min": "",
+            "target_rt_trend_local_moderate_or_severe_count": "",
+            "target_rt_trend_local_severe_count": "",
+            "revised_status": "ACCEPTED_REVIEW",
+            "hard_blockers": "",
+            "accepted_reasons": (
+                "baseline_truth_supports_linear_edge_over_subtraction"
+            ),
+        },
+    ]
+    assert outputs.summary_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "overall_status",
+        "target_count",
+        "hard_blocker_count",
+        "review_accepted_count",
+        "global_blockers",
+        "area_uncertainty_unexplained_area_mismatch_count",
+        "area_uncertainty_integration_context_incomplete_count",
+    ]
+    assert _read_tsv(outputs.summary_tsv) == [
+        {
+            "overall_status": "GO_FOR_PRODUCTION_CANDIDATE",
+            "target_count": "1",
+            "hard_blocker_count": "0",
+            "review_accepted_count": "1",
+            "global_blockers": "",
+            "area_uncertainty_unexplained_area_mismatch_count": "0",
+            "area_uncertainty_integration_context_incomplete_count": "0",
+        },
+    ]
 
 
 def test_revised_gate_keeps_raw_area_violation_as_hard_blocker(
@@ -569,6 +652,11 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 def _write_clean_area_uncertainty(path: Path) -> None:

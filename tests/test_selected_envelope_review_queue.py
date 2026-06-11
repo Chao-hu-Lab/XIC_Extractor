@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 
 from tools.diagnostics.selected_envelope_review_queue import (
+    _write_tsv as _write_review_tsv,
+)
+from tools.diagnostics.selected_envelope_review_queue import (
     main,
     run_selected_envelope_review_queue,
 )
@@ -134,6 +137,33 @@ def test_selected_envelope_review_queue_cli_fails_on_missing_columns(
     )
 
     assert code == 2
+
+
+def test_review_queue_writer_preserves_sanitized_ignore_extra_contract(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "rows.tsv"
+
+    _write_review_tsv(
+        path,
+        ("sample", "note"),
+        [
+            {
+                "sample": "S1",
+                "note": "line1\nline2\twith-tab",
+                "ignored": "value",
+            },
+        ],
+    )
+
+    assert path.read_text(encoding="utf-8") == (
+        "sample\tnote\n"
+        "S1\tline1 line2 with-tab\n"
+    )
+
+    empty_path = tmp_path / "empty.tsv"
+    _write_review_tsv(empty_path, ("sample", "note"), [])
+    assert empty_path.read_text(encoding="utf-8") == "sample\tnote\n"
 
 
 def _diagnostic_row(

@@ -47,7 +47,8 @@ def _read_tsv(path: Path, *, required_columns: Sequence[str]) -> list[dict[str, 
     with path.open("r", encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         fields = reader.fieldnames or ()
-        missing = [field for field in required_columns if field not in fields]
+        field_set = set(fields)
+        missing = [field for field in required_columns if field not in field_set]
         if missing:
             raise ValueError(f"{path} missing required columns: {', '.join(missing)}")
         return list(reader)

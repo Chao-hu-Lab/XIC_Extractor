@@ -262,18 +262,24 @@ def _risk_row(
 def _label_impact(
     rows: tuple[PeakCandidateScoreRow, ...],
 ) -> tuple[ScoreLabelImpactRow, ...]:
-    buckets: dict[tuple[str, str], list[PeakCandidateScoreRow]] = {}
+    buckets: dict[
+        tuple[str, str],
+        tuple[list[float | None], list[float | None]],
+    ] = {}
     for row in rows:
-        for label in row.support_labels:
-            buckets.setdefault(("support", label), []).append(row)
-        for label in row.concern_labels:
-            buckets.setdefault(("concern", label), []).append(row)
-        for label in row.cap_labels:
-            buckets.setdefault(("cap", label), []).append(row)
+        score_buckets = (
+            (buckets.setdefault(key, ([], [])))
+            for key in _label_keys(row)
+        )
+        for selected_scores, rejected_scores in score_buckets:
+            if row.selected:
+                selected_scores.append(row.raw_score)
+            else:
+                rejected_scores.append(row.raw_score)
 
     label_rows = tuple(
-        _label_impact_row(kind, label, label_rows)
-        for (kind, label), label_rows in buckets.items()
+        _label_impact_from_scores(kind, label, selected_scores, rejected_scores)
+        for (kind, label), (selected_scores, rejected_scores) in buckets.items()
     )
     return tuple(
         sorted(
@@ -287,6 +293,15 @@ def _label_impact(
     )
 
 
+def _label_keys(row: PeakCandidateScoreRow) -> Iterable[tuple[str, str]]:
+    for label in row.support_labels:
+        yield ("support", label)
+    for label in row.concern_labels:
+        yield ("concern", label)
+    for label in row.cap_labels:
+        yield ("cap", label)
+
+
 def _label_impact_row(
     label_kind: str,
     label: str,
@@ -294,6 +309,20 @@ def _label_impact_row(
 ) -> ScoreLabelImpactRow:
     selected_scores = [row.raw_score for row in rows if row.selected]
     rejected_scores = [row.raw_score for row in rows if not row.selected]
+    return _label_impact_from_scores(
+        label_kind,
+        label,
+        selected_scores,
+        rejected_scores,
+    )
+
+
+def _label_impact_from_scores(
+    label_kind: str,
+    label: str,
+    selected_scores: list[float | None],
+    rejected_scores: list[float | None],
+) -> ScoreLabelImpactRow:
     selected_count = len(selected_scores)
     rejected_count = len(rejected_scores)
     total = selected_count + rejected_count

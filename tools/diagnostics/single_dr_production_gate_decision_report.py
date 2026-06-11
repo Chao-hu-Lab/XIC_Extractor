@@ -230,7 +230,7 @@ def _classify_family(
     cells: tuple[dict[str, str], ...],
     *,
     sample_count: int,
-    seed_quality: Mapping[str, Any],
+    seed_quality: SeedQualitySummary,
     rt_context: str,
     targeted_istd: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -421,6 +421,7 @@ def _detected_cell_rows(
 
 
 def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    family_buckets = _gate_family_buckets(families)
     return [
         _gate_candidate(
             gate_candidate_id=_EXTREME_GATE_ID,
@@ -428,11 +429,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR primary rows with q_detected <= 2 and "
                 "rescue_fraction >= 0.70"
             ),
-            families=[
-                row
-                for row in families
-                if row["risk_classification"] == "risky_extreme_backfill"
-            ],
+            families=family_buckets.by_classification["risky_extreme_backfill"],
             default_action="implement",
             false_positive_risk_reason=(
                 "Most quantification comes from owner backfill while original "
@@ -445,11 +442,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR primary rows with q_detected <= 3, "
                 "rescue_fraction >= 0.60, and weak detected seed quality"
             ),
-            families=[
-                row
-                for row in families
-                if row["risk_classification"] == "risky_weak_seed_backfill"
-            ],
+            families=family_buckets.by_classification["risky_weak_seed_backfill"],
             default_action="implement",
             false_positive_risk_reason=(
                 "Backfill-heavy rows start from low-quality or unjoined "
@@ -462,11 +455,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR primary rows whose rescue-heavy support is accepted "
                 "only through cell-level evidence and capped confidence"
             ),
-            families=[
-                row
-                for row in families
-                if row["risk_classification"] == "supported_backfill_capped"
-            ],
+            families=family_buckets.by_classification["supported_backfill_capped"],
             default_action="keep_warning",
             false_positive_risk_reason=(
                 "The row is production-supported by cell-level MS1/RT evidence, "
@@ -479,11 +468,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR rows blocked by the shared cell-evidence promotion "
                 "policy"
             ),
-            families=[
-                row
-                for row in families
-                if str(row["risk_classification"]).startswith("blocked_")
-            ],
+            families=family_buckets.blocked_families,
             default_action="implement",
             false_positive_risk_reason=(
                 "The shared policy could not verify assessable cell-level "
@@ -496,11 +481,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR primary rows with duplicate pressure, rescue-heavy "
                 "support, and low detected support"
             ),
-            families=[
-                row
-                for row in families
-                if row["risk_classification"] == "watch_duplicate_rescue"
-            ],
+            families=family_buckets.by_classification["watch_duplicate_rescue"],
             default_action="keep_warning",
             false_positive_risk_reason=(
                 "Duplicate pressure plus rescue-heavy support can indicate a "
@@ -513,11 +494,7 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "single dR primary rows with rescue-heavy support and a "
                 "tolerated weak-seed signal"
             ),
-            families=[
-                row
-                for row in families
-                if row["risk_classification"] == "watch_weak_seed_tolerated"
-            ],
+            families=family_buckets.by_classification["watch_weak_seed_tolerated"],
             default_action="keep_warning",
             false_positive_risk_reason=(
                 "The row passes through detected support or product-authorized "
@@ -526,6 +503,24 @@ def _gate_candidates(families: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ),
         ),
     ]
+
+
+class _GateFamilyBuckets:
+    def __init__(self) -> None:
+        self.by_classification: defaultdict[str, list[dict[str, Any]]] = defaultdict(
+            list,
+        )
+        self.blocked_families: list[dict[str, Any]] = []
+
+
+def _gate_family_buckets(families: Sequence[dict[str, Any]]) -> _GateFamilyBuckets:
+    buckets = _GateFamilyBuckets()
+    for family in families:
+        classification = str(family["risk_classification"])
+        buckets.by_classification[classification].append(family)
+        if classification.startswith("blocked_"):
+            buckets.blocked_families.append(family)
+    return buckets
 
 
 def _gate_candidate(

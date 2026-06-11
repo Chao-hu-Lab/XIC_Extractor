@@ -1,8 +1,10 @@
 import csv
 import json
+from collections import Counter
 from pathlib import Path
 
 from tools.diagnostics import low_ms1_assessable_coverage_audit as audit
+from tools.diagnostics import low_ms1_coverage_review_classifier as classifier
 
 
 def test_classifies_rt_window_or_multiseed_shift(tmp_path: Path) -> None:
@@ -398,6 +400,25 @@ def test_joins_backfill_seed_audit_and_writes_seed_overlay_queue(
     assert queue[0]["backfill_seed_rt"] == "14.45"
     assert queue[0]["suggested_rt_min"] == "11.45"
     assert queue[0]["suggested_output_prefix"] == "fam_seedctx_seed1_overlay"
+
+
+def test_seed_group_order_is_shared_by_distribution_and_overlay_rows() -> None:
+    grouped = Counter(
+        {
+            ("301.0", "14.00", "11.00", "17.00", "10.0"): 2,
+            ("300.0", "14.45", "11.45", "17.45", "10.0"): 2,
+            ("299.0", "14.10", "11.10", "17.10", "10.0"): 1,
+        },
+    )
+
+    seed_groups = classifier._sorted_seed_groups(grouped)
+    distribution = classifier._format_seed_distribution(seed_groups)
+    rows = classifier._seed_overlay_rows(seed_groups)
+
+    assert [key[0] for key, _count in seed_groups] == ["300.0", "301.0", "299.0"]
+    assert distribution.split(";")[0].startswith("mz=300.0,rt=14.45")
+    assert [row["backfill_seed_mz"] for row in rows] == ["300.0", "301.0", "299.0"]
+    assert [row["seed_index"] for row in rows] == [1, 2, 3]
 
 
 def test_missing_required_columns_fail_clearly(tmp_path: Path) -> None:

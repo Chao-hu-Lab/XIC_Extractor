@@ -22,6 +22,7 @@ from tools.diagnostics.family_ms1_alignment_experiment import (
     main,
 )
 from tools.diagnostics.family_ms1_overlay_models import TraceOverlayRow
+from xic_extractor.alignment.edge_scoring import DriftPriorSource
 
 
 def test_relative_alignment_can_compare_cell_apex_and_trace_apex() -> None:
@@ -353,9 +354,21 @@ def test_cli_renders_alignment_experiment_without_raw_or_drift(tmp_path: Path) -
 
     assert exit_code == 0
     assert (out_dir / "fam001_experiment.png").is_file()
-    summary = (out_dir / "fam001_experiment_summary.tsv").read_text(
-        encoding="utf-8",
+    summary_tsv = out_dir / "fam001_experiment_summary.tsv"
+    _assert_tsv_header_and_lf(
+        summary_tsv,
+        [
+            "method",
+            "plotted_traces",
+            "total_focus_traces",
+            "basis",
+            "interpretation",
+            "absolute_trace_apex_cluster_fraction",
+            "absolute_own_max_shape_supported_fraction",
+            "cell_apex_shape_supported_fraction",
+        ],
     )
+    summary = summary_tsv.read_text(encoding="utf-8")
     assert "trace_apex_alignment" in summary
     assert "drift_corrected_rt_context\t0\t2" in summary
     assert "0.750" in summary
@@ -366,18 +379,59 @@ def test_cli_renders_alignment_experiment_without_raw_or_drift(tmp_path: Path) -
     assert (
         out_dir / "fam001_experiment_source_family_best_shift_alignment.png"
     ).is_file()
-    source_summary = (
-        out_dir / "fam001_experiment_source_family_summary.tsv"
-    ).read_text(encoding="utf-8")
+    source_summary_tsv = out_dir / "fam001_experiment_source_family_summary.tsv"
+    _assert_tsv_header_and_lf(
+        source_summary_tsv,
+        [
+            "source_family",
+            "trace_count",
+            "detected_count",
+            "rescued_count",
+            "median_cell_apex_rt",
+            "min_cell_apex_rt",
+            "max_cell_apex_rt",
+        ],
+    )
+    source_summary = source_summary_tsv.read_text(encoding="utf-8")
     assert "FAM000001" in source_summary
     assert "FAM000002" in source_summary
-    shift_summary = (
-        out_dir / "fam001_experiment_source_family_shift_summary.tsv"
-    ).read_text(encoding="utf-8")
+    shift_summary_tsv = out_dir / "fam001_experiment_source_family_shift_summary.tsv"
+    _assert_tsv_header_and_lf(
+        shift_summary_tsv,
+        [
+            "feature_family_id",
+            "source_family",
+            "is_reference",
+            "trace_count",
+            "detected_count",
+            "shift_basis",
+            "median_cell_apex_rt",
+            "shift_to_reference_min",
+            "shift_to_reference_sec",
+            "shape_similarity_to_reference_after_group_shift",
+        ],
+    )
+    shift_summary = shift_summary_tsv.read_text(encoding="utf-8")
     assert "shift_to_reference_min" in shift_summary
-    best_shift_summary = (
+    best_shift_summary_tsv = (
         out_dir / "fam001_experiment_source_family_best_shift_summary.tsv"
-    ).read_text(encoding="utf-8")
+    )
+    _assert_tsv_header_and_lf(
+        best_shift_summary_tsv,
+        [
+            "feature_family_id",
+            "source_family",
+            "is_reference",
+            "trace_count",
+            "detected_count",
+            "shift_basis",
+            "median_cell_apex_rt",
+            "shift_to_reference_min",
+            "shift_to_reference_sec",
+            "shape_similarity_to_reference_after_group_shift",
+        ],
+    )
+    best_shift_summary = best_shift_summary_tsv.read_text(encoding="utf-8")
     assert "feature_family_id" in best_shift_summary
     assert "FAM001" in best_shift_summary
     assert "median_shape_correlation" in best_shift_summary
@@ -459,9 +513,17 @@ def test_cli_no_images_writes_shift_summaries_without_pngs(tmp_path: Path) -> No
 class _FakeDriftLookup:
     def __init__(self, deltas: dict[str, float]) -> None:
         self._deltas = deltas
+        self._source: DriftPriorSource = "targeted_istd_trend"
+
+    @property
+    def source(self) -> DriftPriorSource:
+        return self._source
 
     def sample_delta_min(self, sample_stem: str) -> float | None:
         return self._deltas.get(sample_stem)
+
+    def injection_order(self, sample_stem: str) -> int | None:
+        return None
 
 
 def _trace_row(
@@ -540,3 +602,10 @@ def _trace_json(
         "rt": [7.9, 8.0, 8.1],
         "intensity": [0.0, 100.0, 0.0],
     }
+
+
+def _assert_tsv_header_and_lf(path: Path, expected_header: list[str]) -> None:
+    assert b"\r\n" not in path.read_bytes()
+    assert path.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == expected_header

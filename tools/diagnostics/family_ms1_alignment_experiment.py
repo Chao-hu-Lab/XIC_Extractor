@@ -36,6 +36,7 @@ from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     _line_style,
     _plot_unified_legend,
 )
+from xic_extractor.tabular_io import write_tsv
 
 if TYPE_CHECKING:
     from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
@@ -698,33 +699,28 @@ def write_alignment_experiment_summary(
         "absolute_own_max_shape_supported_fraction",
         "cell_apex_shape_supported_fraction",
     )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for record in records:
-            writer.writerow(
-                {
-                    **record,
-                    "absolute_trace_apex_cluster_fraction": _summary_float(
-                        resolved_evidence_summary,
-                        "absolute_trace_apex_cluster_fraction",
-                    ),
-                    "absolute_own_max_shape_supported_fraction": _summary_float(
-                        resolved_evidence_summary,
-                        "absolute_own_max_shape_supported_fraction",
-                    ),
-                    "cell_apex_shape_supported_fraction": _summary_float(
-                        resolved_evidence_summary,
-                        "shape_supported_fraction",
-                    ),
-                },
-            )
+    _write_rows_tsv(
+        path,
+        fields,
+        [
+            {
+                **record,
+                "absolute_trace_apex_cluster_fraction": _summary_float(
+                    resolved_evidence_summary,
+                    "absolute_trace_apex_cluster_fraction",
+                ),
+                "absolute_own_max_shape_supported_fraction": _summary_float(
+                    resolved_evidence_summary,
+                    "absolute_own_max_shape_supported_fraction",
+                ),
+                "cell_apex_shape_supported_fraction": _summary_float(
+                    resolved_evidence_summary,
+                    "shape_supported_fraction",
+                ),
+            }
+            for record in records
+        ],
+    )
 
 
 def write_source_family_shift_summary(
@@ -746,48 +742,43 @@ def write_source_family_shift_summary(
         "shape_similarity_to_reference_after_group_shift",
     )
     similarities = _source_family_shift_similarity(shifts)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for shift in shifts:
-            writer.writerow(
-                {
-                    "feature_family_id": family_id,
-                    "source_family": shift.source_family,
-                    "is_reference": str(shift.is_reference).upper(),
-                    "trace_count": len(shift.rows),
-                    "detected_count": sum(
-                        1 for row in shift.rows if row.status == "detected"
+    _write_rows_tsv(
+        path,
+        fields,
+        [
+            {
+                "feature_family_id": family_id,
+                "source_family": shift.source_family,
+                "is_reference": str(shift.is_reference).upper(),
+                "trace_count": len(shift.rows),
+                "detected_count": sum(
+                    1 for row in shift.rows if row.status == "detected"
+                ),
+                "shift_basis": shift.shift_basis,
+                "median_cell_apex_rt": _format_optional_float(
+                    shift.median_cell_apex_rt,
+                ),
+                "shift_to_reference_min": _format_optional_float(
+                    shift.shift_to_reference_min,
+                ),
+                "shift_to_reference_sec": _format_optional_float(
+                    (
+                        shift.shift_to_reference_min * 60.0
+                        if shift.shift_to_reference_min is not None
+                        else None
                     ),
-                    "shift_basis": shift.shift_basis,
-                    "median_cell_apex_rt": _format_optional_float(
-                        shift.median_cell_apex_rt,
-                    ),
-                    "shift_to_reference_min": _format_optional_float(
-                        shift.shift_to_reference_min,
-                    ),
-                    "shift_to_reference_sec": _format_optional_float(
-                        (
-                            shift.shift_to_reference_min * 60.0
-                            if shift.shift_to_reference_min is not None
-                            else None
-                        ),
-                    ),
-                    "shape_similarity_to_reference_after_group_shift": (
-                        _format_optional_float(
-                            shift.shape_similarity_to_reference
-                            if shift.shape_similarity_to_reference is not None
-                            else similarities.get(shift.source_family),
-                        )
-                    ),
-                },
-            )
+                ),
+                "shape_similarity_to_reference_after_group_shift": (
+                    _format_optional_float(
+                        shift.shape_similarity_to_reference
+                        if shift.shape_similarity_to_reference is not None
+                        else similarities.get(shift.source_family),
+                    )
+                ),
+            }
+            for shift in shifts
+        ],
+    )
 
 
 def write_source_family_summary(
@@ -805,43 +796,45 @@ def write_source_family_summary(
         "min_cell_apex_rt",
         "max_cell_apex_rt",
     )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
+    output_rows: list[dict[str, object]] = []
+    for source_family, group_rows in _source_family_groups(
+        rows,
+        source_family_by_sample,
+    ):
+        apexes = [
+            row.cell_apex_rt
+            for row in group_rows
+            if row.cell_apex_rt is not None and math.isfinite(row.cell_apex_rt)
+        ]
+        output_rows.append(
+            {
+                "source_family": source_family,
+                "trace_count": len(group_rows),
+                "detected_count": sum(
+                    1 for row in group_rows if row.status == "detected"
+                ),
+                "rescued_count": sum(
+                    1 for row in group_rows if row.status == "rescued"
+                ),
+                "median_cell_apex_rt": _format_optional_float(_median(apexes)),
+                "min_cell_apex_rt": _format_optional_float(
+                    min(apexes) if apexes else None,
+                ),
+                "max_cell_apex_rt": _format_optional_float(
+                    max(apexes) if apexes else None,
+                ),
+            },
         )
-        writer.writeheader()
-        for source_family, group_rows in _source_family_groups(
-            rows,
-            source_family_by_sample,
-        ):
-            apexes = [
-                row.cell_apex_rt
-                for row in group_rows
-                if row.cell_apex_rt is not None and math.isfinite(row.cell_apex_rt)
-            ]
-            writer.writerow(
-                {
-                    "source_family": source_family,
-                    "trace_count": len(group_rows),
-                    "detected_count": sum(
-                        1 for row in group_rows if row.status == "detected"
-                    ),
-                    "rescued_count": sum(
-                        1 for row in group_rows if row.status == "rescued"
-                    ),
-                    "median_cell_apex_rt": _format_optional_float(_median(apexes)),
-                    "min_cell_apex_rt": _format_optional_float(
-                        min(apexes) if apexes else None,
-                    ),
-                    "max_cell_apex_rt": _format_optional_float(
-                        max(apexes) if apexes else None,
-                    ),
-                },
-            )
+    _write_rows_tsv(path, fields, output_rows)
+
+
+def _write_rows_tsv(
+    path: Path,
+    fields: Sequence[str],
+    rows: Sequence[Mapping[str, object]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_tsv(path, rows, fields, lineterminator="\n")
 
 
 def _source_family_shift_basis_title(shifts: Sequence[SourceFamilyShift]) -> str:

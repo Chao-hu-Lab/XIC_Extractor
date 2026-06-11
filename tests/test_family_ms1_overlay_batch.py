@@ -109,7 +109,9 @@ def test_batch_uses_structured_queue_columns_and_limit(
     assert calls[0]["ppm"] == 10.0
     assert calls[0]["rt_min"] == 1.0
     assert calls[0]["rt_max"] == 1.2
-    summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
+    summary_tsv = output_dir / "family_ms1_overlay_batch_summary.tsv"
+    _assert_summary_tsv_contract(summary_tsv)
+    summary = _read_tsv(summary_tsv)
     assert summary[0]["seed_group_id"] == "seed::FAM001::a"
     assert summary[0]["png_path"].endswith("fam001_overlay.png")
     assert summary[0]["ppm"] == "10"
@@ -485,6 +487,7 @@ def test_batch_superwindow_crops_back_to_original_scan_windows(
         ("FAM_A", "FAM_B"),
     )
     extract_batch_sizes: list[int] = []
+    rt_lookup_counts: dict[int, int] = {}
 
     class FakeRaw:
         raw_chromatogram_call_count = 0
@@ -499,6 +502,7 @@ def test_batch_superwindow_crops_back_to_original_scan_windows(
             return int(round(request.rt_min * 10)), int(round(request.rt_max * 10))
 
         def retention_time_for_scan(self, scan_number: int):
+            rt_lookup_counts[scan_number] = rt_lookup_counts.get(scan_number, 0) + 1
             return scan_number / 10.0
 
         def extract_xic_many(self, xic_requests):
@@ -535,6 +539,98 @@ def test_batch_superwindow_crops_back_to_original_scan_windows(
     assert stats.to_metrics()["exact_scan_window_count"] == 2
     assert stats.to_metrics()["superwindow_group_count"] == 1
     assert stats.to_metrics()["trace_point_count"] == 8
+    assert rt_lookup_counts == {10: 1, 12: 1, 20: 1, 22: 1}
+
+
+def test_batch_reuses_duplicate_sample_xic_requests_without_dropping_rows(
+    tmp_path: Path,
+) -> None:
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    _write_alignment_cells(
+        alignment_cells,
+        [
+            _cell_row("FAM_A", "Sample_A", "detected", "1000"),
+            _cell_row("FAM_B", "Sample_A", "rescued", "900"),
+        ],
+    )
+    requests = (
+        batch.OverlayBatchRequest(
+            rank=1,
+            family_id="FAM_A",
+            seed_group_id="seed-a",
+            mz=251.0,
+            ppm=10.0,
+            rt_min=1.0,
+            rt_max=1.2,
+            family_center_rt=1.1,
+            output_prefix="fam_a",
+        ),
+        batch.OverlayBatchRequest(
+            rank=2,
+            family_id="FAM_B",
+            seed_group_id="seed-b",
+            mz=251.0,
+            ppm=10.0,
+            rt_min=1.0,
+            rt_max=1.2,
+            family_center_rt=1.1,
+            output_prefix="fam_b",
+        ),
+    )
+    cells_by_family = overlay_plot.load_family_cells_for_families(
+        alignment_cells,
+        ("FAM_A", "FAM_B"),
+    )
+    extract_batch_sizes: list[int] = []
+
+    class FakeRaw:
+        raw_chromatogram_call_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def extract_xic_many(self, xic_requests):
+            self.raw_chromatogram_call_count += 1
+            extract_batch_sizes.append(len(xic_requests))
+            return tuple(
+                SimpleNamespace(
+                    rt=(request.rt_min, request.rt_max),
+                    intensity=(request.mz, request.mz + 1),
+                )
+                for request in xic_requests
+            )
+
+    def fake_open_raw(_raw_path: Path, _dll_dir: Path) -> FakeRaw:
+        return FakeRaw()
+
+    stats = batch.OverlayExtractionStats.empty()
+    rows_by_rank = batch._extract_batch_family_trace_rows(
+        requests,
+        cells_by_family=cells_by_family,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        max_highlight_rescued=8,
+        open_raw_func=fake_open_raw,
+        extraction_stats=stats,
+    )
+
+    assert extract_batch_sizes == [1]
+    assert rows_by_rank[1][0].sample_stem == "Sample_A"
+    assert rows_by_rank[2][0].sample_stem == "Sample_A"
+    assert rows_by_rank[1][0].rt == (1.0, 1.2)
+    assert rows_by_rank[2][0].rt == (1.0, 1.2)
+    assert stats.to_metrics()["extract_xic_count"] == 2
+    assert stats.to_metrics()["extract_xic_batch_count"] == 1
+    assert stats.to_metrics()["raw_chromatogram_call_count"] == 1
+    assert stats.to_metrics()["trace_point_count"] == 4
 
 
 def test_batch_reuses_existing_outputs_without_raw_when_requested(
@@ -1028,6 +1124,13 @@ def _batch_row(
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as fh:
         return list(csv.DictReader(fh, delimiter="\t"))
+
+
+def _assert_summary_tsv_contract(path: Path) -> None:
+    assert b"\r\n" not in path.read_bytes()
+    assert path.read_text(encoding="utf-8").splitlines()[0].split("\t") == list(
+        batch._summary_fields()
+    )
 
 
 def _sha256_file(path: Path) -> str:

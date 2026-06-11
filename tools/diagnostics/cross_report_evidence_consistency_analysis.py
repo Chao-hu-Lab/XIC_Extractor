@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import Counter
 from collections.abc import Mapping, Sequence
 
 from tools.diagnostics.cross_report_evidence_consistency_models import (
@@ -222,12 +221,23 @@ def _has_review_positive_blocker(risk_reasons: Sequence[str]) -> bool:
 
 
 def _summary(rows: tuple[ConsistencyRow, ...]) -> ConsistencySummary:
-    issues = Counter(row.issue_type for row in rows if row.issue_type)
+    issue_counts: dict[str, int] = {}
+    consistent_count = 0
+    mismatch_count = 0
+    for row in rows:
+        if row.consistency_status == "consistent":
+            consistent_count += 1
+        elif row.consistency_status == "mismatch":
+            mismatch_count += 1
+        if row.issue_type:
+            issue_counts[row.issue_type] = issue_counts.get(row.issue_type, 0) + 1
     return ConsistencySummary(
         rows_checked=len(rows),
-        consistent_count=sum(row.consistency_status == "consistent" for row in rows),
-        mismatch_count=sum(row.consistency_status == "mismatch" for row in rows),
-        missing_candidate_count=issues["missing_selected_candidate"],
-        missing_reliability_count=issues["missing_targeted_reliability"],
-        issue_counts=";".join(f"{issue}:{count}" for issue, count in issues.items()),
+        consistent_count=consistent_count,
+        mismatch_count=mismatch_count,
+        missing_candidate_count=issue_counts.get("missing_selected_candidate", 0),
+        missing_reliability_count=issue_counts.get("missing_targeted_reliability", 0),
+        issue_counts=";".join(
+            f"{issue}:{count}" for issue, count in issue_counts.items()
+        ),
     )

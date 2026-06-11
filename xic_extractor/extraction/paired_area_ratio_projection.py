@@ -86,14 +86,13 @@ def paired_area_ratio_references(
     targets: Sequence[Target],
 ) -> dict[tuple[str, str], tuple[PairedAreaRatioReferencePoint, ...]]:
     references: dict[tuple[str, str], list[PairedAreaRatioReferencePoint]] = {}
+    projection_targets = _paired_area_ratio_projection_targets(targets)
     for file_result in file_results:
         sample_name = str(getattr(file_result, "sample_name", ""))
         results = getattr(file_result, "results", {})
         if not isinstance(results, Mapping):
             continue
-        for target in targets:
-            if target.is_istd or not target.istd_pair:
-                continue
+        for target in projection_targets:
             if target_sample_exclusion_reasons(target, sample_name):
                 continue
             result = results.get(target.label)
@@ -116,6 +115,16 @@ def paired_area_ratio_references(
                 )
             )
     return {key: tuple(value) for key, value in references.items()}
+
+
+def _paired_area_ratio_projection_targets(
+    targets: Sequence[Target],
+) -> tuple[Target, ...]:
+    return tuple(
+        target
+        for target in targets
+        if not target.is_istd and target.istd_pair
+    )
 
 
 def result_with_paired_area_ratio_projection(

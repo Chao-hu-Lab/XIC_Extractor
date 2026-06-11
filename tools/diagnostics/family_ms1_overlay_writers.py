@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -25,6 +24,7 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
     render_family_ms1_overlay,
     render_hypothesis_ms1_overlay,
 )
+from xic_extractor.tabular_io import write_tsv
 
 if TYPE_CHECKING:
     from xic_extractor.alignment.edge_scoring import DriftLookupProtocol
@@ -121,49 +121,47 @@ def _write_summary(path: Path, rows: Sequence[TraceOverlayRow]) -> None:
         "apex_aligned_shape_similarity",
         "absolute_own_max_shape_similarity",
     )
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    "sample_stem": row.sample_stem,
-                    "status": row.status,
-                    "cell_area": _format_float(row.cell_area),
-                    "cell_height": _format_float(row.cell_height),
-                    "cell_apex_rt": _format_float(row.cell_apex_rt, digits=6),
-                    "cell_start_rt": _format_float(row.cell_start_rt, digits=6),
-                    "cell_end_rt": _format_float(row.cell_end_rt, digits=6),
-                    "trace_max_intensity": _format_float(row.trace_max_intensity),
-                    "trace_apex_rt": _format_float(row.trace_apex_rt, digits=6),
-                    "global_trace_apex_delta_min": _format_float(
-                        _global_trace_apex_delta(row),
-                    ),
-                    "local_window_max_intensity": _format_float(
-                        _local_window_peak(row)[1],
-                    ),
-                    "local_window_apex_delta_min": _format_float(
-                        _local_window_peak(row)[0],
-                    ),
-                    "local_window_to_global_max_ratio": _format_float(
-                        _local_to_global_max_ratio(row),
-                    ),
-                    "region_shadow_verdict": row.region_shadow_verdict,
-                    "source_candidate_id": row.source_candidate_id,
-                    "highlight_group": row.group,
-                    "apex_aligned_shape_similarity": _format_float(
-                        shape_similarity.get(row.sample_stem),
-                    ),
-                    "absolute_own_max_shape_similarity": _format_float(
-                        absolute_shape_similarity.get(row.sample_stem),
-                    ),
-                }
-            )
+    write_tsv(
+        path,
+        [
+            {
+                "sample_stem": row.sample_stem,
+                "status": row.status,
+                "cell_area": _format_float(row.cell_area),
+                "cell_height": _format_float(row.cell_height),
+                "cell_apex_rt": _format_float(row.cell_apex_rt, digits=6),
+                "cell_start_rt": _format_float(row.cell_start_rt, digits=6),
+                "cell_end_rt": _format_float(row.cell_end_rt, digits=6),
+                "trace_max_intensity": _format_float(row.trace_max_intensity),
+                "trace_apex_rt": _format_float(row.trace_apex_rt, digits=6),
+                "global_trace_apex_delta_min": _format_float(
+                    _global_trace_apex_delta(row),
+                ),
+                "local_window_max_intensity": _format_float(
+                    _local_window_peak(row)[1],
+                ),
+                "local_window_apex_delta_min": _format_float(
+                    _local_window_peak(row)[0],
+                ),
+                "local_window_to_global_max_ratio": _format_float(
+                    _local_to_global_max_ratio(row),
+                ),
+                "region_shadow_verdict": row.region_shadow_verdict,
+                "source_candidate_id": row.source_candidate_id,
+                "highlight_group": row.group,
+                "apex_aligned_shape_similarity": _format_float(
+                    shape_similarity.get(row.sample_stem),
+                ),
+                "absolute_own_max_shape_similarity": _format_float(
+                    absolute_shape_similarity.get(row.sample_stem),
+                ),
+            }
+            for row in rows
+        ],
+        fields,
+        lineterminator="\n",
+        formatter=str,
+    )
 
 
 def _write_trace_data(

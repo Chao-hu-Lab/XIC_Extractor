@@ -14,6 +14,7 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
         review_rows=[
             _review_row("FAM_SUPPORT", detected=4, rescued=80, accepted=84),
             _review_row("FAM_QUEUE", detected=4, rescued=80, accepted=84),
+            _review_row("FAM_QUEUE_LOW", detected=4, rescued=60, accepted=70),
             _review_row("FAM_HIGH", detected=20, rescued=60, accepted=80),
         ],
         cell_rows=[
@@ -26,6 +27,11 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
                 "FAM_QUEUE",
                 detected_heights=(150, 140),
                 rescued_heights=(80, 70),
+            ),
+            *_cells(
+                "FAM_QUEUE_LOW",
+                detected_heights=(100, 95),
+                rescued_heights=(100, 100),
             ),
             *_cells("FAM_HIGH", detected_heights=(100,), rescued_heights=(90,)),
         ],
@@ -64,7 +70,7 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
     assert code == 0
     candidates = _read_tsv(output_dir / "family_ms1_backfill_review_candidates.tsv")
     by_family = {row["feature_family_id"]: row for row in candidates}
-    assert set(by_family) == {"FAM_SUPPORT", "FAM_QUEUE"}
+    assert set(by_family) == {"FAM_SUPPORT", "FAM_QUEUE", "FAM_QUEUE_LOW"}
     assert (
         by_family["FAM_SUPPORT"]["review_classification"]
         == "ms1_supported_dda_limited_backfill"
@@ -75,8 +81,14 @@ def test_report_builds_overlay_limited_review_queue(tmp_path: Path) -> None:
     assert by_family["FAM_QUEUE"]["review_classification"] == (
         "needs_ms1_overlay_high_priority"
     )
+    assert by_family["FAM_QUEUE_LOW"]["review_classification"] == (
+        "needs_ms1_overlay"
+    )
     queue = _read_tsv(output_dir / "family_ms1_backfill_review_queue.tsv")
-    assert [row["feature_family_id"] for row in queue] == ["FAM_QUEUE"]
+    assert [row["feature_family_id"] for row in queue] == [
+        "FAM_QUEUE",
+        "FAM_QUEUE_LOW",
+    ]
     assert queue[0]["suggested_rt_min"] == "46.2966"
     assert queue[0]["suggested_rt_max"] == "48.4966"
     assert queue[0]["suggested_output_prefix"] == "fam_queue_ms1_overlay_review"

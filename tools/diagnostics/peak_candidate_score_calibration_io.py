@@ -40,7 +40,7 @@ def _row_from_dict(
             "rt_apex_min",
             row["rt_apex_min"],
         ),
-        selected=_bool_value(row["selected"]),
+        selected=_required_bool(path, row_number, "selected", row["selected"]),
         confidence=row["confidence"],
         raw_score=_optional_float(path, row_number, "raw_score", row["raw_score"]),
         support_labels=tuple(_split_labels(row["support_labels"])),
@@ -61,6 +61,18 @@ def _bool_value(value: str) -> bool | None:
     if normalized in {"FALSE", "F", "NO", "N", "0"}:
         return False
     return None
+
+
+def _required_bool(
+    path: Path,
+    row_number: int,
+    column: str,
+    value: str,
+) -> bool:
+    parsed = _bool_value(value)
+    if parsed is None:
+        raise ValueError(f"{path}: row {row_number} invalid {column}: {value!r}")
+    return parsed
 
 
 def _optional_float(

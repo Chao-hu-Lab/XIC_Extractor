@@ -322,6 +322,7 @@ def test_anchor_quality_gate_excludes_outlier_before_family_summary(
         if row["sample_stem"] == "S2" and row["anchor_status"] == "excluded"
     ]
     assert [row["target_label"] for row in excluded] == ["anchor-b"]
+    assert excluded[0]["used_in_model"] == "FALSE"
     family_rows = _read_tsv(outputs.family_tsv)
     assert float(family_rows[0]["normalized_rt_range_min"]) == pytest.approx(0.0)
 

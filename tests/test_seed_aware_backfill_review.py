@@ -244,7 +244,8 @@ def test_outputs_all_review_and_blast_files(tmp_path: Path) -> None:
         encoding="utf-8",
         newline="",
     ) as handle:
-        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+        family_reader = csv.DictReader(handle, delimiter="\t")
+        assert family_reader.fieldnames == [
             "feature_family_id",
             "neutral_loss_tag",
             "family_center_mz",
@@ -279,11 +280,15 @@ def test_outputs_all_review_and_blast_files(tmp_path: Path) -> None:
             "primary_evidence",
             "reason",
         ]
+        family_rows = list(family_reader)
+    assert family_rows[0]["protected_family"] == "FALSE"
+    assert family_rows[0]["max_global_apex_interference_fraction"] == "0.05"
     with (output_dir / "seed_aware_backfill_blast_radius.tsv").open(
         encoding="utf-8",
         newline="",
     ) as handle:
-        assert csv.DictReader(handle, delimiter="\t").fieldnames == [
+        blast_reader = csv.DictReader(handle, delimiter="\t")
+        assert blast_reader.fieldnames == [
             "feature_family_id",
             "family_center_mz",
             "family_center_rt",
@@ -297,6 +302,9 @@ def test_outputs_all_review_and_blast_files(tmp_path: Path) -> None:
             "blast_radius_action",
             "review_reason",
         ]
+        blast_rows = list(blast_reader)
+    assert blast_rows[0]["would_withhold_family"] == "FALSE"
+    assert blast_rows[0]["protected_family"] == "FALSE"
     payload = json.loads(
         (output_dir / "seed_aware_backfill_review.json").read_text(
             encoding="utf-8",

@@ -96,7 +96,7 @@ def _read_anchor_points(
         points: list[AnchorPoint] = []
         for row in rows:
             raw_sample = row[cols["SampleName"]]
-            if raw_sample not in (None, ""):
+            if raw_sample is not None and raw_sample != "":
                 current_sample = _normalize_sample_id(_text(raw_sample))
             if not current_sample:
                 continue

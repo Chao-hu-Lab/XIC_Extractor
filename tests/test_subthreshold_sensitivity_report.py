@@ -73,6 +73,33 @@ def test_summarize_counts_gates_and_height_recovery() -> None:
     assert recovery["0.05"]["peaks_recovered_upper_bound"] == "1"
 
 
+def test_summarize_accepts_streamed_trace_candidates() -> None:
+    def iter_candidates():
+        yield (
+            "FAM:S1",
+            (
+                _candidate(False, ["height 0.14<0.20"], height_fraction=0.14),
+            ),
+        )
+        yield (
+            "FAM:S2",
+            (
+                _candidate(True, []),
+                _candidate(False, ["edge<0.20"]),
+            ),
+        )
+
+    summary = summarize_subthreshold_sensitivity(iter_candidates())
+
+    assert summary.traces_scanned == 2
+    assert summary.total_local_maxima == 3
+    assert summary.accepted == 1
+    assert summary.rejected == 2
+    gates = {row["gate"]: row for row in summary.gate_rows}
+    assert gates["height"]["candidates_sole_gate"] == "1"
+    assert gates["edge"]["candidates_sole_gate"] == "1"
+
+
 def test_run_report_end_to_end_writes_tsvs(tmp_path: Path) -> None:
     rt = [8.0 + index * 0.04 for index in range(len(_SHOULDER_PROFILE))]
     trace = {

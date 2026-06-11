@@ -12,12 +12,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from statistics import median
+from typing import Any
 
 import numpy as np
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
 from xic_extractor.peak_detection.baseline import asls_baseline, bounded_trace_interval
 
 ROW_FIELDS = (
@@ -584,40 +586,47 @@ def _build_summary_rows(rows: Sequence[BaselineTruthRow]) -> list[dict[str, obje
 
     summaries: list[dict[str, object]] = []
     for (target_label, family_id), family_rows in sorted(grouped.items()):
-        class_counts = Counter(row.classification for row in family_rows)
-        dominant = class_counts.most_common(1)[0][0] if class_counts else ""
-        summaries.append(
-            {
-                "target_label": target_label,
-                "feature_family_id": family_id,
-                "row_count": len(family_rows),
-                "dominant_classification": dominant,
-                "classification_counts": ";".join(
-                    f"{name}:{count}" for name, count in sorted(class_counts.items())
-                ),
-                "median_linear_baseline_subtracted_pct": _median_present(
-                    row.linear_baseline_subtracted_pct for row in family_rows
-                ),
-                "median_asls_baseline_subtracted_pct": _median_present(
-                    row.asls_baseline_subtracted_pct for row in family_rows
-                ),
-                "median_asls_vs_linear_pct": _median_present(
-                    row.asls_vs_linear_pct for row in family_rows
-                ),
-                "max_asls_vs_linear_pct": _max_present(
-                    row.asls_vs_linear_pct for row in family_rows
-                ),
-                "median_linear_edge_delta_pct": _median_present(
-                    row.linear_edge_delta_pct for row in family_rows
-                ),
-                "median_outside_background_pct": _median_present(
-                    row.outside_background_pct for row in family_rows
-                ),
-                "review_status": _review_status(class_counts),
-                "plot_path": family_rows[0].plot_path,
-            }
-        )
+        summaries.append(_family_summary_row(target_label, family_id, family_rows))
     return summaries
+
+
+def _family_summary_row(
+    target_label: str,
+    family_id: str,
+    family_rows: Sequence[BaselineTruthRow],
+) -> dict[str, object]:
+    class_counts: Counter[str] = Counter()
+    linear_subtracted: list[float | None] = []
+    asls_subtracted: list[float | None] = []
+    asls_vs_linear: list[float | None] = []
+    linear_edge_delta: list[float | None] = []
+    outside_background: list[float | None] = []
+    for row in family_rows:
+        class_counts[row.classification] += 1
+        linear_subtracted.append(row.linear_baseline_subtracted_pct)
+        asls_subtracted.append(row.asls_baseline_subtracted_pct)
+        asls_vs_linear.append(row.asls_vs_linear_pct)
+        linear_edge_delta.append(row.linear_edge_delta_pct)
+        outside_background.append(row.outside_background_pct)
+
+    dominant = class_counts.most_common(1)[0][0] if class_counts else ""
+    return {
+        "target_label": target_label,
+        "feature_family_id": family_id,
+        "row_count": len(family_rows),
+        "dominant_classification": dominant,
+        "classification_counts": ";".join(
+            f"{name}:{count}" for name, count in sorted(class_counts.items())
+        ),
+        "median_linear_baseline_subtracted_pct": _median_present(linear_subtracted),
+        "median_asls_baseline_subtracted_pct": _median_present(asls_subtracted),
+        "median_asls_vs_linear_pct": _median_present(asls_vs_linear),
+        "max_asls_vs_linear_pct": _max_present(asls_vs_linear),
+        "median_linear_edge_delta_pct": _median_present(linear_edge_delta),
+        "median_outside_background_pct": _median_present(outside_background),
+        "review_status": _review_status(class_counts),
+        "plot_path": family_rows[0].plot_path if family_rows else "",
+    }
 
 
 def _review_status(class_counts: Counter[str]) -> str:
@@ -723,7 +732,7 @@ def _write_family_plot(path: Path, *, rows: Sequence[_TracePlotRow]) -> None:
 
 
 def _plot_baselines(
-    axis: object,
+    axis: Any,
     rt: np.ndarray,
     intensity: np.ndarray,
     left: int,
@@ -758,19 +767,13 @@ def _write_tsv(
     fieldnames: Sequence[str],
     rows: Iterable[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {field: _format_value(row.get(field)) for field in fieldnames}
-            )
+    write_tsv(
+        path,
+        tuple(rows),
+        fieldnames,
+        formatter=_format_value,
+        lineterminator="\n",
+    )
 
 
 def _read_tsv(path: Path, required_columns: set[str]) -> list[dict[str, str]]:

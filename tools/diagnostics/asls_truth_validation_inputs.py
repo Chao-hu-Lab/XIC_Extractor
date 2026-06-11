@@ -7,6 +7,7 @@ import datetime as dt
 import hashlib
 import subprocess
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -634,7 +635,8 @@ def _roll_up_family_dispositions(
         for blocker in blockers:
             if not isinstance(blocker, str) or blocker not in TIER_C_ROW_BLOCKERS:
                 raise ValueError(f"unsupported tier_c_row_blocker {blocker!r}")
-        if any(blocker in artifact_blockers for blocker in blockers):
+        blocker_set = set(blockers)
+        if blocker_set & artifact_blockers:
             raise ValueError(
                 "artifact or row-link blocker requires regenerated evidence"
             )
@@ -676,8 +678,8 @@ def _roll_up_family_dispositions(
                     f"reviewed row plot_path does not exist: {reviewed_plot}"
                 )
 
-        has_hard_blocker = any(blocker in hard_asls_blockers for blocker in blockers)
-        has_review_blocker = any(blocker in review_blockers for blocker in blockers)
+        has_hard_blocker = bool(blocker_set & hard_asls_blockers)
+        has_review_blocker = bool(blocker_set & review_blockers)
         if disposition == FAMILY_DISPOSITION_FAIL or has_hard_blocker:
             has_fail = True
             if decision_scope == DECISION_SCOPE_C1B:
@@ -1140,7 +1142,7 @@ def _resolve_ref_path(raw_path: str, base_path: Path) -> Path:
     path = Path(raw_path)
     if path.is_absolute():
         return path
-    repo_root = _find_repo_root(base_path)
+    repo_root = _repo_root_for_ref_base(base_path)
     candidates = (
         repo_root / path,
         base_path.resolve().parent / path,
@@ -1149,6 +1151,15 @@ def _resolve_ref_path(raw_path: str, base_path: Path) -> Path:
         if candidate.exists():
             return candidate
     return repo_root / path
+
+
+def _repo_root_for_ref_base(base_path: Path) -> Path:
+    return _cached_ref_repo_root(str(base_path.resolve()))
+
+
+@lru_cache(maxsize=None)
+def _cached_ref_repo_root(base_path: str) -> Path:
+    return _find_repo_root(Path(base_path))
 
 
 def _read_artifact_columns(path: Path) -> tuple[str, ...]:

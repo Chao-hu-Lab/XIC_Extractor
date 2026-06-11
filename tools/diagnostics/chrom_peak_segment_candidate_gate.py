@@ -7,6 +7,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
 
+from tools.diagnostics.diagnostic_io import write_tsv
+
 GATE_VERSION = "chrom_peak_segment_candidate_gate_v1"
 CHROM_SOURCE = "chrom_peak_segment"
 KEY_FIELDS = ("sample_name", "target_label", "role")
@@ -531,10 +533,19 @@ def _write_tsv(
     rows: Sequence[dict[str, str]],
     fieldnames: Sequence[str],
 ) -> None:
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(
+        path,
+        rows,
+        fieldnames,
+        extrasaction="raise",
+        formatter=_format_tsv_value,
+    )
+
+
+def _format_tsv_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _row_key(row: dict[str, str]) -> tuple[str, str, str] | None:
@@ -675,8 +686,9 @@ def _rt_reference_delta(
 ) -> float | None:
     if selection_reference_rt is None:
         return None
-    apex = _float(row.get("rt_apex_min", ""))
-    if apex <= 0.0:
+    raw_apex = _float(row.get("rt_apex_min", ""))
+    apex: float | None = raw_apex
+    if raw_apex <= 0.0:
         apex = _interval_midpoint(
             row.get("rt_left_min", ""),
             row.get("rt_right_min", ""),

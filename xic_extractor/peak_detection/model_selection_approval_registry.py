@@ -83,10 +83,11 @@ def load_expected_diff_approval_registry(
 def _validate_headers(path: Path, fieldnames: Sequence[str] | None) -> None:
     if fieldnames is None:
         raise ValueError(f"{path}: expected TSV header row")
+    fieldname_set = set(fieldnames)
     missing = [
         header
         for header in EXPECTED_DIFF_APPROVAL_REGISTRY_HEADERS
-        if header not in fieldnames
+        if header not in fieldname_set
     ]
     if missing:
         raise ValueError(

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any
+
+from tools.diagnostics.diagnostic_io import write_tsv
 
 SUMMARY_COLUMNS = (
     "target_label",
@@ -70,10 +71,19 @@ def write_benchmark_outputs(
     matches: Sequence[Any],
     thresholds: Any,
 ) -> None:
-    _write_tsv(outputs.summary_tsv, SUMMARY_COLUMNS, _summary_rows(summaries))
+    summary_rows = _summary_rows(summaries)
+    overall_counts = _overall_counts(summaries)
+    _write_tsv(outputs.summary_tsv, SUMMARY_COLUMNS, summary_rows)
     _write_tsv(outputs.matches_tsv, MATCH_COLUMNS, _match_rows(matches))
-    _write_json(outputs.json_path, _json_payload(summaries, thresholds))
-    _write_markdown(outputs.markdown_path, summaries)
+    _write_json(
+        outputs.json_path,
+        _json_payload(summary_rows, thresholds, overall_counts),
+    )
+    _write_markdown(
+        outputs.markdown_path,
+        summaries,
+        overall_status=str(overall_counts["overall_status"]),
+    )
 
 
 def _summary_rows(summaries: Sequence[Any]) -> list[dict[str, object]]:
@@ -96,9 +106,18 @@ def _match_rows(matches: Sequence[Any]) -> list[dict[str, object]]:
 
 
 def _json_payload(
-    summaries: Sequence[Any],
+    summary_rows: Sequence[Mapping[str, object]],
     thresholds: Any,
+    overall_counts: Mapping[str, object],
 ) -> dict[str, object]:
+    return {
+        **overall_counts,
+        "thresholds": asdict(thresholds),
+        "summaries": list(summary_rows),
+    }
+
+
+def _overall_counts(summaries: Sequence[Any]) -> dict[str, object]:
     fail_count = sum(summary.status == "FAIL" for summary in summaries)
     warn_count = sum(
         summary.status == "WARN" or bool(summary.targeted_reliability_warning_modes)
@@ -127,22 +146,19 @@ def _json_payload(
         "active_fail_count": active_fail_count,
         "active_warn_count": active_warn_count,
         "false_positive_tag_count": false_positive_tag_count,
-        "thresholds": asdict(thresholds),
-        "summaries": _summary_rows(summaries),
     }
 
 
-def _write_markdown(path: Any, summaries: Sequence[Any]) -> None:
-    fail_count = sum(summary.status == "FAIL" for summary in summaries)
-    warn_count = sum(
-        summary.status == "WARN" or bool(summary.targeted_reliability_warning_modes)
-        for summary in summaries
-    )
-    overall = "FAIL" if fail_count else "WARN" if warn_count else "PASS"
+def _write_markdown(
+    path: Any,
+    summaries: Sequence[Any],
+    *,
+    overall_status: str,
+) -> None:
     lines = [
         "# Targeted ISTD Benchmark",
         "",
-        f"Overall status: {overall}",
+        f"Overall status: {overall_status}",
         "",
         (
             "| Target | Active | Primary hits | Selected | Status | "
@@ -173,13 +189,7 @@ def _write_tsv(
     fieldnames: Sequence[str],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {key: _format_value(row.get(key, "")) for key in fieldnames}
-            )
+    write_tsv(path, rows, fieldnames, formatter=_format_value)
 
 
 def _format_value(value: object) -> str:

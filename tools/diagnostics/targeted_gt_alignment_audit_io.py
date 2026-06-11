@@ -19,8 +19,15 @@ from tools.diagnostics.targeted_gt_alignment_audit_utils import (
 def _load_target_ground_truth(config: AuditConfig) -> list[TargetGroundTruth]:
     rows = _target_workbook_rows(config.target_workbook)
     _propagate_sample_context(rows)
-    analyte_rows = _rows_by_target_role(rows, config.target_label, "Analyte")
-    istd_rows = _rows_by_target_role(rows, config.istd_label, "ISTD")
+    rows_by_target_role = _rows_by_target_role_map(
+        rows,
+        (
+            (config.target_label, "Analyte"),
+            (config.istd_label, "ISTD"),
+        ),
+    )
+    analyte_rows = rows_by_target_role[(config.target_label, "Analyte")]
+    istd_rows = rows_by_target_role[(config.istd_label, "ISTD")]
     targets: list[TargetGroundTruth] = []
     for sample in sorted(analyte_rows):
         analyte = analyte_rows[sample]
@@ -86,14 +93,28 @@ def _rows_by_target_role(
     target: str,
     role: str,
 ) -> dict[str, dict[str, object]]:
-    selected: dict[str, dict[str, object]] = {}
+    return _rows_by_target_role_map(rows, ((target, role),))[(target, role)]
+
+
+def _rows_by_target_role_map(
+    rows: list[dict[str, object]],
+    target_roles: tuple[tuple[str, str], ...],
+) -> dict[tuple[str, str], dict[str, dict[str, object]]]:
+    selected: dict[tuple[str, str], dict[str, dict[str, object]]] = {
+        target_role: {} for target_role in target_roles
+    }
     for row in rows:
-        if row.get("Target") != target or row.get("Role") != role:
+        target = row.get("Target")
+        role = row.get("Role")
+        if not isinstance(target, str) or not isinstance(role, str):
+            continue
+        bucket = selected.get((target, role))
+        if bucket is None:
             continue
         sample = row.get("SampleName")
         if not isinstance(sample, str) or not sample:
             raise ValueError(f"Missing sample for {target}/{role}")
-        selected[sample] = row
+        bucket[sample] = row
     return selected
 
 
