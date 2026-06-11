@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
@@ -24,6 +23,7 @@ from xic_extractor.discovery.models import (
 )
 from xic_extractor.discovery.ms1_backfill import MS1XicSource, backfill_ms1_candidates
 from xic_extractor.discovery.ms2_seeds import MS2ScanSource, collect_strict_nl_seeds
+from xic_extractor.tabular_io import write_delimited_rows
 
 _BATCH_INDEX_COLUMNS = (
     "sample_stem",
@@ -213,10 +213,14 @@ def _write_batch_index(
         metrics={"raw_count": len(rows), "row_count": len(rows)},
     ):
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=_BATCH_INDEX_COLUMNS)
-            writer.writeheader()
-            writer.writerows(rows)
+        write_delimited_rows(
+            output_path,
+            rows,
+            _BATCH_INDEX_COLUMNS,
+            delimiter=",",
+            encoding="utf-8",
+            extrasaction="raise",
+        )
     return output_path
 
 

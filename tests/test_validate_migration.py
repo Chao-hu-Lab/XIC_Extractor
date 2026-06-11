@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -6,6 +7,7 @@ from scripts.validate_migration import (
     ValidationCase,
     ValidationRow,
     _stage_cases,
+    _update_settings_value,
     compare_validation_rows,
     parse_case_arg,
     strict_exit_code,
@@ -54,6 +56,20 @@ def test_compare_validation_rows_passes_with_like_for_like_smoothed_match() -> N
     assert report.targets[0].smoothed_median_ratio == 1.0005
     assert report.targets[0].nl_agreement_pct == 100.0
     assert report.failures == []
+
+
+def test_compare_validation_rows_groups_targets_and_preserves_report_order() -> None:
+    rows = [
+        _validation_row("Tumor_2", "Target-B", rt_old=10.0, rt_new=10.001),
+        _validation_row("Tumor_1", "Target-A", rt_old=8.0, rt_new=8.001),
+        _validation_row("Tumor_3", "Target-B", rt_old=10.1, rt_new=10.102),
+    ]
+
+    report = compare_validation_rows(rows)
+
+    assert [target.target for target in report.targets] == ["Target-A", "Target-B"]
+    assert [target.n_rows for target in report.targets] == [1, 2]
+    assert report.targets[1].median_rt_delta == 0.0015
 
 
 def test_compare_fails_before_thresholds_when_smoothed_missing() -> None:
@@ -268,3 +284,61 @@ def test_stage_cases_removes_stale_validation_raw_files(tmp_path: Path) -> None:
 
     assert not (data_dir / "Stale.raw").exists()
     assert (data_dir / "Tumor.raw").read_text(encoding="utf-8") == "raw"
+
+
+def test_update_settings_value_preserves_settings_csv_contract(tmp_path: Path) -> None:
+    settings_path = tmp_path / "settings.csv"
+    settings_path.write_bytes(
+        b"\xef\xbb\xbf"
+        b"key,value,description,scope\r\n"
+        b"data_dir,C:\\old,raw folder,local\r\n"
+        b"dll_dir,C:\\dll,dll,global\r\n"
+    )
+    updated_data_dir = Path("C:/new data")
+    appended_value = Path("D:/generated")
+
+    _update_settings_value(settings_path, "data_dir", updated_data_dir)
+    _update_settings_value(settings_path, "new_key", appended_value)
+
+    raw = settings_path.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw
+    with settings_path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == ["key", "value", "description", "scope"]
+        rows = list(reader)
+    assert rows[0] == {
+        "key": "data_dir",
+        "value": str(updated_data_dir),
+        "description": "raw folder",
+        "scope": "local",
+    }
+    assert rows[2] == {
+        "key": "new_key",
+        "value": str(appended_value),
+        "description": "",
+        "scope": "",
+    }
+
+
+def _validation_row(
+    sample_name: str,
+    target: str,
+    *,
+    rt_old: float,
+    rt_new: float,
+) -> ValidationRow:
+    return ValidationRow(
+        sample_name=sample_name,
+        target=target,
+        rt_old=rt_old,
+        int_old=1000.0,
+        nl_old="OK",
+        rt_new=rt_new,
+        int_new_raw=1000.0,
+        int_new_smoothed=1000.0,
+        area_new=500.0,
+        peak_start_new=rt_new - 0.1,
+        peak_end_new=rt_new + 0.1,
+        nl_new="OK",
+    )

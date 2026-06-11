@@ -3,6 +3,7 @@ import csv
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -19,7 +20,12 @@ from xic_extractor.discovery.models import (
     DiscoverySettings,
     NeutralLossProfile,
 )
-from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
+from xic_extractor.discovery.pipeline import (
+    _BATCH_INDEX_COLUMNS,
+    _write_batch_index,
+    run_discovery,
+    run_discovery_batch,
+)
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 from xic_extractor.signal_processing import PeakDetectionResult, PeakResult
 
@@ -191,6 +197,53 @@ def test_batch_pipeline_escapes_excel_formula_strings_in_index(
     assert row["raw_file"].startswith("'=")
     assert row["candidate_csv"].endswith("discovery_candidates.csv")
     assert row["review_csv"].endswith("discovery_review.csv")
+
+
+def test_batch_index_writer_preserves_csv_and_timing_contract(tmp_path: Path) -> None:
+    timing = TimingRecorder("discovery", timer=iter([1.0, 1.25]).__next__)
+    output_path = tmp_path / "nested" / "discovery_batch_index.csv"
+    row = dict.fromkeys(_BATCH_INDEX_COLUMNS, "")
+    row.update(
+        {
+            "sample_stem": "Sample_A",
+            "raw_file": "Sample_A.raw",
+            "candidate_csv": "Sample_A/discovery_candidates.csv",
+            "review_csv": "Sample_A/discovery_review.csv",
+            "candidate_count": "2",
+            "high_count": "1",
+            "medium_count": "1",
+            "low_count": "0",
+        }
+    )
+
+    returned = _write_batch_index(output_path, [row], timing_recorder=timing)
+
+    assert returned == output_path
+    raw = output_path.read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw
+    with output_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        assert reader.fieldnames == list(_BATCH_INDEX_COLUMNS)
+        assert list(reader) == [row]
+    assert [(record.stage, record.metrics) for record in timing.records] == [
+        (
+            "discover.write_batch_index",
+            {"raw_count": 1, "row_count": 1},
+        )
+    ]
+
+
+def test_batch_index_writer_rejects_unexpected_columns(tmp_path: Path) -> None:
+    row = dict.fromkeys(_BATCH_INDEX_COLUMNS, "")
+    row["unexpected"] = "value"
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        _write_batch_index(
+            tmp_path / "discovery_batch_index.csv",
+            [row],
+            timing_recorder=TimingRecorder.disabled("discovery"),
+        )
 
 
 def test_run_discovery_keeps_stale_pair_when_review_write_fails(
@@ -460,7 +513,7 @@ def _settings(**overrides: object) -> DiscoverySettings:
         "neutral_loss_profile": NeutralLossProfile("DNA_dR", NEUTRAL_LOSS_DA),
         **overrides,
     }
-    return DiscoverySettings(**values)
+    return DiscoverySettings(**cast(Any, values))
 
 
 def _peak_config(tmp_path: Path) -> ExtractionConfig:

@@ -1,3 +1,4 @@
+from scripts.audit_alignment_near_duplicates import _load_rows
 from xic_extractor.alignment.near_duplicate_audit import (
     AlignmentNearDuplicateInput,
     count_near_duplicate_pairs,
@@ -51,3 +52,47 @@ def test_audit_counts_high_shared_unresolved_near_duplicate_pairs():
     assert summary.top_pairs[0].right_id == "B"
     assert summary.top_pairs[0].shared_count == 4
     assert summary.top_pairs[0].overlap_coefficient == 1.0
+
+
+def test_script_loader_uses_matrix_sample_columns_only(tmp_path):
+    review_tsv = tmp_path / "alignment_review.tsv"
+    matrix_tsv = tmp_path / "alignment_matrix.tsv"
+    review_tsv.write_text(
+        "\t".join(
+            (
+                "feature_family_id",
+                "neutral_loss_tag",
+                "family_center_mz",
+                "family_center_rt",
+                "family_product_mz",
+                "family_observed_neutral_loss_da",
+            )
+        )
+        + "\n"
+        + "\t".join(("FAM001", "DNA_dR", "242.1", "12.5", "126.1", "116.0"))
+        + "\n",
+        encoding="utf-8",
+    )
+    matrix_tsv.write_text(
+        "\t".join(
+            (
+                "feature_family_id",
+                "neutral_loss_tag",
+                "family_center_mz",
+                "family_center_rt",
+                "S1",
+                "S2",
+                "S3",
+            )
+        )
+        + "\n"
+        + "\t".join(("FAM001", "DNA_dR", "242.1", "12.5", "123", "", "0"))
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rows = _load_rows(review_tsv, matrix_tsv)
+
+    assert len(rows) == 1
+    assert rows[0].row_id == "FAM001"
+    assert rows[0].present_samples == frozenset({"S1", "S3"})

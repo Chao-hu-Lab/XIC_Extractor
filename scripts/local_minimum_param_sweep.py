@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import multiprocessing
 import os
 import shutil
@@ -28,6 +27,7 @@ from xic_extractor.settings_schema import (
     CANONICAL_SETTINGS_DEFAULTS,
     CANONICAL_SETTINGS_DESCRIPTIONS,
 )
+from xic_extractor.tabular_io import write_delimited_rows
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,9 @@ class SweepResult:
 
 
 SweepRunner = Callable[[ParameterSet], list[ProgramPeakRow]]
+GridValues = dict[str, tuple[str, ...]]
+FailureRecord = tuple[str, object, str]
+FailureRecordsByRow = dict[PerTargetScoreRow, list[FailureRecord]]
 
 
 _STATIC_LOCAL_MINIMUM_PARAMS = {
@@ -206,7 +209,7 @@ _CALIBRATION_V2_OVERRIDES = (
     ),
 )
 
-_GRID_VALUES = {
+_GRID_VALUES: dict[str, GridValues] = {
     "quick": {
         "resolver_chrom_threshold": ("0.03", "0.05"),
         "resolver_min_search_range_min": ("0.05", "0.08"),
@@ -469,17 +472,21 @@ def _write_case_config(
 
 
 def _write_settings_csv(path: Path, settings: dict[str, str]) -> None:
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["key", "value", "description"])
-        writer.writeheader()
-        for key, value in settings.items():
-            writer.writerow(
-                {
-                    "key": key,
-                    "value": value,
-                    "description": CANONICAL_SETTINGS_DESCRIPTIONS.get(key, ""),
-                }
-            )
+    rows = [
+        {
+            "key": key,
+            "value": value,
+            "description": CANONICAL_SETTINGS_DESCRIPTIONS.get(key, ""),
+        }
+        for key, value in settings.items()
+    ]
+    write_delimited_rows(
+        path,
+        rows,
+        ("key", "value", "description"),
+        delimiter=",",
+        encoding="utf-8-sig",
+    )
 
 
 def _collect_program_rows(
@@ -547,16 +554,17 @@ def run_sweep(
 def write_sweep_workbook(output_path: Path, scores: list[ParameterSetScore]) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
+    failure_records_by_row = _collect_failure_records_by_row(scores)
 
     summary = workbook.active
     summary.title = "Summary"
     _write_summary_sheet(summary, scores)
 
     per_target = workbook.create_sheet("PerTarget")
-    _write_per_target_sheet(per_target, scores)
+    _write_per_target_sheet(per_target, scores, failure_records_by_row)
 
     failures = workbook.create_sheet("Failures")
-    _write_failures_sheet(failures, scores)
+    _write_failures_sheet(failures, scores, failure_records_by_row)
 
     run_config = workbook.create_sheet("RunConfig")
     _write_run_config_sheet(run_config, scores)
@@ -581,17 +589,25 @@ def score_parameter_set(
     per_target_rows: list[PerTargetScoreRow] = []
     for truth in truth_rows:
         program = program_by_key.get((truth.sample_name, truth.target))
-        detected = _program_peak_detected(program)
+        detected_program = program if _program_peak_detected(program) else None
         is_istd = (
             truth.target in istd_target_names
             or (program.is_istd if program is not None else False)
         )
-        rt_abs_delta = _abs_delta(program.rt, truth.manual_rt) if detected else None
+        rt_abs_delta = (
+            _abs_delta(detected_program.rt, truth.manual_rt)
+            if detected_program is not None
+            else None
+        )
         height_abs_pct_error = (
-            _abs_pct_error(program.height, truth.manual_height) if detected else None
+            _abs_pct_error(detected_program.height, truth.manual_height)
+            if detected_program is not None
+            else None
         )
         area_abs_pct_error = (
-            _abs_pct_error(program.area, truth.manual_area) if detected else None
+            _abs_pct_error(detected_program.area, truth.manual_area)
+            if detected_program is not None
+            else None
         )
         per_target_rows.append(
             PerTargetScoreRow(
@@ -600,15 +616,21 @@ def score_parameter_set(
                 target=truth.target,
                 is_istd=is_istd,
                 manual_rt=truth.manual_rt,
-                program_rt=program.rt if detected else None,
+                program_rt=(
+                    detected_program.rt if detected_program is not None else None
+                ),
                 rt_abs_delta_min=_round_optional(rt_abs_delta),
                 manual_height=truth.manual_height,
-                program_height=program.height if detected else None,
+                program_height=(
+                    detected_program.height if detected_program is not None else None
+                ),
                 height_abs_pct_error=_round_optional(height_abs_pct_error),
                 manual_area=truth.manual_area,
-                program_area=program.area if detected else None,
+                program_area=(
+                    detected_program.area if detected_program is not None else None
+                ),
                 area_abs_pct_error=_round_optional(area_abs_pct_error),
-                missing_peak=not detected,
+                missing_peak=detected_program is None,
                 manual_shape=truth.manual_shape,
             )
         )
@@ -703,6 +725,8 @@ def _row_value(row: tuple[object, ...], idx: int) -> object | None:
 def _safe_float(value: object | None) -> float | None:
     if value is None or value == "":
         return None
+    if not isinstance(value, (int, float, str)):
+        return None
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -759,7 +783,9 @@ def _write_summary_sheet(worksheet: Worksheet, scores: list[ParameterSetScore]) 
 
 
 def _write_per_target_sheet(
-    worksheet: Worksheet, scores: list[ParameterSetScore]
+    worksheet: Worksheet,
+    scores: list[ParameterSetScore],
+    failure_records_by_row: FailureRecordsByRow,
 ) -> None:
     headers = [
         "Name",
@@ -802,21 +828,23 @@ def _write_per_target_sheet(
                     row.missing_peak,
                     row.manual_shape,
                 ],
-                failed=_target_row_failed(row),
+                failed=bool(failure_records_by_row[row]),
             )
             row_idx += 1
     _autosize(worksheet, len(headers))
 
 
 def _write_failures_sheet(
-    worksheet: Worksheet, scores: list[ParameterSetScore]
+    worksheet: Worksheet,
+    scores: list[ParameterSetScore],
+    failure_records_by_row: FailureRecordsByRow,
 ) -> None:
     headers = ["Name", "SampleName", "Target", "Issue", "MetricValue", "Limit"]
     _write_header(worksheet, headers)
     row_idx = 2
     for score in scores:
         for row in score.per_target_rows:
-            for issue, metric_value, limit in _failure_records(row):
+            for issue, metric_value, limit in failure_records_by_row[row]:
                 _write_row(
                     worksheet,
                     row_idx,
@@ -873,12 +901,18 @@ def _guardrail_passes(score: ParameterSetScore) -> bool:
     )
 
 
-def _target_row_failed(row: PerTargetScoreRow) -> bool:
-    return any(_failure_records(row))
+def _collect_failure_records_by_row(
+    scores: Sequence[ParameterSetScore],
+) -> FailureRecordsByRow:
+    return {
+        row: _failure_records(row)
+        for score in scores
+        for row in score.per_target_rows
+    }
 
 
-def _failure_records(row: PerTargetScoreRow) -> list[tuple[str, object, str]]:
-    failures: list[tuple[str, object, str]] = []
+def _failure_records(row: PerTargetScoreRow) -> list[FailureRecord]:
+    failures: list[FailureRecord] = []
     if row.missing_peak:
         failures.append(("MISSING_PEAK", "", "manual peak must be detected"))
     if row.rt_abs_delta_min is not None and row.rt_abs_delta_min > 0.20:

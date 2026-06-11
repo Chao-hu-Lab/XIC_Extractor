@@ -1,5 +1,4 @@
 import argparse
-import csv
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -17,6 +16,7 @@ from xic_extractor.peak_detection.model_selection_approval_registry import (
     load_expected_diff_approval_registry,
 )
 from xic_extractor.raw_reader import RawReaderError
+from xic_extractor.tabular_io import write_delimited_rows
 
 
 @dataclass(frozen=True)
@@ -158,32 +158,28 @@ def _run_extraction_once(
 
 
 def _write_summary_csv(path: Path, results: Sequence[BenchmarkRunResult]) -> Path:
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "mode",
-                "workers",
-                "raw_count",
-                "elapsed_seconds",
-                "workbook_path",
-                "compare_result",
-                "compare_differences",
-            ],
-        )
-        writer.writeheader()
-        for result in results:
-            writer.writerow(
-                {
-                    "mode": result.mode,
-                    "workers": result.workers,
-                    "raw_count": result.raw_count,
-                    "elapsed_seconds": f"{result.elapsed_seconds:.3f}",
-                    "workbook_path": str(result.workbook_path),
-                    "compare_result": result.compare_result,
-                    "compare_differences": " | ".join(result.compare_differences),
-                }
-            )
+    fieldnames = [
+        "mode",
+        "workers",
+        "raw_count",
+        "elapsed_seconds",
+        "workbook_path",
+        "compare_result",
+        "compare_differences",
+    ]
+    rows = [
+        {
+            "mode": result.mode,
+            "workers": result.workers,
+            "raw_count": result.raw_count,
+            "elapsed_seconds": f"{result.elapsed_seconds:.3f}",
+            "workbook_path": str(result.workbook_path),
+            "compare_result": result.compare_result,
+            "compare_differences": " | ".join(result.compare_differences),
+        }
+        for result in results
+    ]
+    write_delimited_rows(path, rows, fieldnames, delimiter=",", encoding="utf-8-sig")
     return path
 
 

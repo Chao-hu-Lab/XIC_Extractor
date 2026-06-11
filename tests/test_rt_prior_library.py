@@ -85,3 +85,16 @@ def test_write_pending_round_trip(tmp_path: Path) -> None:
     assert "0.020000" in lines[1]
     loaded = load_library(pending, "aaaa1111")
     assert loaded[("A", "analyte")].median_delta_rt == 0.1
+
+
+def test_write_pending_update_writes_header_for_empty_entries(
+    tmp_path: Path,
+) -> None:
+    lib = tmp_path / "nested" / "lib.csv"
+
+    pending = write_pending_update(lib, [])
+
+    assert pending == lib.with_suffix(".pending.csv")
+    assert pending.read_text(encoding="utf-8").splitlines() == [
+        ",".join(LIBRARY_FIELDNAMES)
+    ]

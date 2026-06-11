@@ -174,7 +174,26 @@ def test_compare_resolvers_main_runs_both_modes_and_writes_csv(
 
     assert exit_code == 0
     assert output_path.exists()
+    raw_csv = output_path.read_bytes()
+    assert raw_csv.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw_csv
     csv_text = output_path.read_text(encoding="utf-8-sig")
+    assert csv_text.splitlines()[0].split(",") == [
+        "SampleName",
+        "Target",
+        "Role",
+        "Issue",
+        "LegacyDetected",
+        "LocalDetected",
+        "LegacyRT",
+        "LocalRT",
+        "RTDelta",
+        "LegacyArea",
+        "LocalArea",
+        "AreaRatioDelta",
+        "LegacyConfidence",
+        "LocalConfidence",
+    ]
     assert "SampleA,d3-N6-medA,ISTD,FLIP_DETECTED_TO_ND" in csv_text
     assert "SampleA,8-oxo-Guo,Analyte,FLIP_ND_TO_DETECTED" in csv_text
     stdout = capsys.readouterr().out

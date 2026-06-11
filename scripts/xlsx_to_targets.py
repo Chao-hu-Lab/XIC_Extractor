@@ -19,14 +19,16 @@ uv run python scripts/xlsx_to_targets.py path/to/RT_check.xlsx `
 from __future__ import annotations
 
 import argparse
-import csv
 import re
 import sys
+from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
 import openpyxl
+
+from xic_extractor.tabular_io import write_delimited_rows
 
 # Neutral-loss masses
 NL_DR: float = 116.0474  # deoxyribose  – DNA nucleosides
@@ -133,6 +135,27 @@ _MAX_RT_DIFF_MIN: float = (
 )
 
 
+@dataclass(frozen=True)
+class _StandardMatchProfile:
+    row: TargetRow
+    normalized_label: str
+    rt_center: float
+
+
+@dataclass(frozen=True)
+class _IstdMatchCandidate:
+    standard: TargetRow
+    score: float
+
+
+@dataclass(frozen=True)
+class _IstdMatchPlan:
+    istd: TargetRow
+    rt_center: float
+    sort_score: float
+    candidates: tuple[_IstdMatchCandidate, ...]
+
+
 def _assign_istd_pairs(targets: list[TargetRow]) -> None:
     """Fill ``istd_pair`` on standard rows by matching against ISTD names.
 
@@ -150,43 +173,64 @@ def _assign_istd_pairs(targets: list[TargetRow]) -> None:
     standards = [t for t in targets if t["is_istd"] == "false"]
     istds = [t for t in targets if t["is_istd"] == "true"]
 
-    std_norms = [_normalize_name(str(s["label"])) for s in standards]
-
-    def _best_name_score(istd: TargetRow) -> float:
-        core = _normalize_name(_strip_istd_prefix(str(istd["label"])))
-        return max(
-            (SequenceMatcher(None, core, n).ratio() for n in std_norms), default=0.0
+    standard_profiles = tuple(
+        _StandardMatchProfile(
+            row=standard,
+            normalized_label=_normalize_name(str(standard["label"])),
+            rt_center=_rt_center(standard),
         )
+        for standard in standards
+    )
 
-    for istd in sorted(istds, key=_best_name_score, reverse=True):
-        core = _strip_istd_prefix(str(istd["label"]))
-        norm_core = _normalize_name(core)
-        istd_rt = (float(istd["rt_min"]) + float(istd["rt_max"])) / 2
-
+    plans = tuple(_istd_match_plan(istd, standard_profiles) for istd in istds)
+    for plan in sorted(plans, key=lambda item: item.sort_score, reverse=True):
         best_std: Optional[TargetRow] = None
         best_score = 0.0
 
-        for std, norm_std in zip(standards, std_norms):
+        for candidate in plan.candidates:
+            std = candidate.standard
             if std["istd_pair"]:  # already claimed by another ISTD
                 continue
-            std_rt = (float(std["rt_min"]) + float(std["rt_max"])) / 2
-            if abs(istd_rt - std_rt) > _MAX_RT_DIFF_MIN:  # hard RT gate
-                continue
-            name_sim = SequenceMatcher(None, norm_core, norm_std).ratio()
-            if name_sim < 0.70:
-                continue
-            if name_sim > best_score:
-                best_score = name_sim
+            if candidate.score > best_score:
+                best_score = candidate.score
                 best_std = std
 
         if best_std is not None:
-            best_std["istd_pair"] = str(istd["label"])
+            best_std["istd_pair"] = str(plan.istd["label"])
         else:
             print(
-                f"  Warning: no standard matched for ISTD '{istd['label']}' "
-                f"(RT {istd_rt:.2f} min) – fill istd_pair manually",
+                f"  Warning: no standard matched for ISTD '{plan.istd['label']}' "
+                f"(RT {plan.rt_center:.2f} min) – fill istd_pair manually",
                 file=sys.stderr,
             )
+
+
+def _istd_match_plan(
+    istd: TargetRow,
+    standard_profiles: tuple[_StandardMatchProfile, ...],
+) -> _IstdMatchPlan:
+    norm_core = _normalize_name(_strip_istd_prefix(str(istd["label"])))
+    istd_rt = _rt_center(istd)
+    sort_score = 0.0
+    candidates: list[_IstdMatchCandidate] = []
+    for standard in standard_profiles:
+        name_sim = SequenceMatcher(None, norm_core, standard.normalized_label).ratio()
+        sort_score = max(sort_score, name_sim)
+        if name_sim < 0.70:
+            continue
+        if abs(istd_rt - standard.rt_center) > _MAX_RT_DIFF_MIN:
+            continue
+        candidates.append(_IstdMatchCandidate(standard=standard.row, score=name_sim))
+    return _IstdMatchPlan(
+        istd=istd,
+        rt_center=istd_rt,
+        sort_score=sort_score,
+        candidates=tuple(candidates),
+    )
+
+
+def _rt_center(target: TargetRow) -> float:
+    return (float(target["rt_min"]) + float(target["rt_max"])) / 2
 
 
 # ---------------------------------------------------------------------------
@@ -376,11 +420,21 @@ _FIELDNAMES = [
 
 def write_targets_csv(targets: list[TargetRow], output_path: Path) -> None:
     """Write targets list to a CSV file compatible with XIC Extractor."""
-    with output_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=_FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(targets)
+    write_delimited_rows(
+        output_path,
+        targets,
+        _FIELDNAMES,
+        delimiter=",",
+        encoding="utf-8",
+        formatter=_format_targets_csv_value,
+    )
     print(f"Written {len(targets)} targets to {output_path}")
+
+
+def _format_targets_csv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 # ---------------------------------------------------------------------------

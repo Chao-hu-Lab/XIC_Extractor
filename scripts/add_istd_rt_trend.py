@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -38,6 +39,12 @@ _FILL_QC = PatternFill("solid", fgColor="EAF2FB")
 _FONT_HEADER = Font(bold=True, color="FFFFFF")
 _ALIGN_CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
 _ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
+
+
+class InjectionOrderRow(TypedDict):
+    inj_name: str
+    sample_type: str
+    injection_order: int
 
 
 # ── 名稱配對（結構化 + token fallback）─────────────────
@@ -127,7 +134,7 @@ def _build_name_map(
 # ── 讀取 injection order Excel ──────────────────────────
 
 
-def _read_injection_order(path: Path) -> list[dict[str, object]]:
+def _read_injection_order(path: Path) -> list[InjectionOrderRow]:
     """回傳 [{"inj_name": str, "sample_type": str, "injection_order": int}, ...]。"""
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
@@ -145,7 +152,7 @@ def _read_injection_order(path: Path) -> list[dict[str, object]]:
             f"{path}: expected columns Sample_Name / Sample_Type / "
             f"Injection_Order; got {rows[0]}"
         ) from exc
-    result = []
+    result: list[InjectionOrderRow] = []
     for row in rows[1:]:
         if not row[name_col]:
             continue
@@ -223,39 +230,43 @@ def _rt_fill(rt_str: str, median_rt: float | None) -> PatternFill:
 
 def _compute_medians(
     istd_labels: list[str],
-    ordered_rows: list[dict],
+    ordered_rows: list[InjectionOrderRow],
     inj_to_raw: dict[str, str],
     istd_data: dict[str, dict[str, str]],
 ) -> dict[str, float | None]:
     """每個 ISTD 計算所有可用 RT 值的中位數（只用 QC 樣本；若 QC 不足則用全部）。"""
     from statistics import median
 
-    medians: dict[str, float | None] = {}
-    for label in istd_labels:
-        qc_vals: list[float] = []
-        all_vals: list[float] = []
-        for r in ordered_rows:
-            raw = inj_to_raw.get(r["inj_name"], "")
-            if not raw:
-                continue
-            rt_str = istd_data.get(raw, {}).get(label, "")
-            if not rt_str:
+    label_set = set(istd_labels)
+    qc_values: dict[str, list[float]] = {label: [] for label in istd_labels}
+    all_values: dict[str, list[float]] = {label: [] for label in istd_labels}
+    for row in ordered_rows:
+        raw = inj_to_raw.get(row["inj_name"], "")
+        if not raw:
+            continue
+        sample_rts = istd_data.get(raw, {})
+        for label, rt_str in sample_rts.items():
+            if label not in label_set or not rt_str:
                 continue
             try:
-                val = float(rt_str)
+                value = float(rt_str)
             except ValueError:
                 continue
-            all_vals.append(val)
-            if r["sample_type"] == "QC":
-                qc_vals.append(val)
-        pool = qc_vals if len(qc_vals) >= 3 else all_vals
+            all_values[label].append(value)
+            if row["sample_type"] == "QC":
+                qc_values[label].append(value)
+
+    medians: dict[str, float | None] = {}
+    for label in istd_labels:
+        qc_vals = qc_values[label]
+        pool = qc_vals if len(qc_vals) >= 3 else all_values[label]
         medians[label] = median(pool) if pool else None
     return medians
 
 
 def _build_trend_sheet(
     ws,
-    ordered_rows: list[dict],
+    ordered_rows: list[InjectionOrderRow],
     inj_to_raw: dict[str, str],
     istd_data: dict[str, dict[str, str]],
     istd_labels: list[str],

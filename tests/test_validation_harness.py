@@ -252,9 +252,22 @@ def test_run_validation_specs_compares_exact_baseline_workbook_paths(
     ]
     assert compare_calls == [(baseline_path, spec.output_path)]
     assert results[0].compare_result == "pass"
-    summary = (output_root / "run1" / "validation_summary.csv").read_text(
-        encoding="utf-8-sig"
-    )
+    summary_path = output_root / "run1" / "validation_summary.csv"
+    raw_summary = summary_path.read_bytes()
+    assert raw_summary.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw_summary
+    summary = summary_path.read_text(encoding="utf-8-sig")
+    assert summary.splitlines()[0].split(",") == [
+        "suite",
+        "kind",
+        "raw_count",
+        "output_path",
+        "compare_result",
+        "status",
+        "message",
+        "compare_differences",
+        "command",
+    ]
     assert "suite,kind,raw_count,output_path,compare_result" in summary
     assert "tissue-8raw,extraction,8," in summary
     assert ",pass," in summary
