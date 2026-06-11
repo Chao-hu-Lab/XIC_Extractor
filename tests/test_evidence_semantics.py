@@ -438,6 +438,114 @@ def test_decision_semantics_keeps_targeted_rt_conflict_as_review_not_exclusion(
     assert decision.exclusion_reasons == ()
 
 
+def test_decision_semantics_anchor_mismatch_cap_without_strict_nl_is_not_counted(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=70,
+            confidence="VERY_LOW",
+            cap_labels=("anchor_mismatch_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert decision.decision_class == "not_counted"
+    assert decision.conflict_reasons == ("anchor_conflict",)
+    assert decision.review_reasons == ("paired_istd_rt_review",)
+    assert decision.not_counted_reasons == (
+        "paired_istd_rt_mismatch_policy",
+        "paired_istd_rt_mismatch_cap",
+        "anchor_mismatch_compatibility_cap",
+    )
+    assert decision.exclusion_reasons == ()
+
+
+def test_decision_semantics_anchor_mismatch_cap_with_strict_nl_skips_anchor_policy(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=(
+                "strict_nl_ok",
+                "local_sn_strong",
+                "shape_clean",
+                "trace_clean",
+            ),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=70,
+            confidence="VERY_LOW",
+            cap_labels=("anchor_mismatch_cap",),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    # Strict-NL support sets strict_nl_supported, so the paired-ISTD anchor
+    # not-counted policy is skipped; the row only stays not_counted via the
+    # legacy VERY_LOW projection.
+    assert decision.decision_class == "not_counted"
+    assert "candidate_aligned_ms2_nl" in decision.support_reasons
+    assert decision.conflict_reasons == ("anchor_conflict",)
+    assert "paired_istd_rt_mismatch_policy" not in decision.not_counted_reasons
+    assert decision.not_counted_reasons == (
+        "legacy_review_only_projection",
+        "anchor_mismatch_compatibility_cap",
+    )
+
+
+def test_decision_semantics_unions_zero_area_and_hard_quality_caps() -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("strict_nl_ok", "local_sn_strong"),
+            concern_labels=("hard_quality_flag",),
+            ms2_present=True,
+            nl_match=True,
+            raw_score=10,
+            confidence="VERY_LOW",
+            cap_labels=("zero_area_cap", "hard_quality_flag_cap"),
+            reason="decision: review only, not counted",
+        )
+    )
+
+    assert decision.decision_class == "not_counted"
+    assert "hard_local_quality_conflict" in decision.conflict_reasons
+    assert decision.not_counted_reasons == (
+        "legacy_review_only_projection",
+        "zero_area_compatibility_cap",
+        "hard_quality_flag_compatibility_cap",
+    )
+
+
+def test_decision_semantics_unions_anchor_mismatch_and_missing_ms2_policies(
+) -> None:
+    decision = decision_semantics_from_signal_set(
+        EvidenceSignalSet(
+            support_labels=("local_sn_strong", "shape_clean", "trace_clean"),
+            concern_labels=("no_ms2",),
+            ms2_present=False,
+            nl_match=False,
+            raw_score=40,
+            confidence="VERY_LOW",
+            cap_labels=("anchor_mismatch_cap", "no_ms2_cap"),
+            reason="decision: review only, not counted",
+            count_no_ms2_as_detected=False,
+        )
+    )
+
+    assert decision.decision_class == "not_counted"
+    assert decision.not_counted_reasons == (
+        "missing_ms2_policy_not_counted",
+        "missing_ms2_compatibility_cap",
+        "paired_istd_rt_mismatch_policy",
+        "paired_istd_rt_mismatch_cap",
+        "anchor_mismatch_compatibility_cap",
+    )
+    assert "missing_ms2_not_observed" in decision.review_reasons
+    assert "paired_istd_rt_review" in decision.review_reasons
+
+
 def _candidate(
     *,
     rt: float,
