@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import median
 from typing import TypeVar
 
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     optional_float,
     read_delimited_rows,
     read_tsv_required,
@@ -95,11 +95,13 @@ def build_rt_mode_evidence_rows(
         else ()
     )
     tag_samples = _tag_supported_samples(candidate_rows)
+    assignment_rows_by_family = _rows_by_family(assignments, family_ids)
+    summary_rows_by_family = _rows_by_family(summary_rows, family_ids)
     family_contexts = {
         family_id: _build_family_context(
             feature_family_id=family_id,
-            assignments=_family_rows(assignments, family_id),
-            summary_rows=_family_rows(summary_rows, family_id),
+            assignments=assignment_rows_by_family[family_id],
+            summary_rows=summary_rows_by_family[family_id],
             tag_samples=tag_samples,
         )
         for family_id in family_ids
@@ -107,7 +109,7 @@ def build_rt_mode_evidence_rows(
     assignment_by_key = {
         (_family_id(row, family_id), text_value(row.get("sample_stem"))): row
         for family_id in family_ids
-        for row in _family_rows(assignments, family_id)
+        for row in assignment_rows_by_family[family_id]
     }
     rows: list[dict[str, str]] = []
     for family_id, sample_stem in sorted(oracle_keys):
@@ -258,6 +260,25 @@ def _family_rows(
         if not text_value(row.get("feature_family_id"))
         or text_value(row.get("feature_family_id")) == family_id
     )
+
+
+def _rows_by_family(
+    rows: Sequence[Mapping[str, str]],
+    family_ids: Sequence[str],
+) -> dict[str, tuple[Mapping[str, str], ...]]:
+    grouped: dict[str, list[Mapping[str, str]]] = {
+        family_id: [] for family_id in family_ids
+    }
+    family_id_set = frozenset(family_ids)
+    for row in rows:
+        row_family_id = text_value(row.get("feature_family_id"))
+        if row_family_id:
+            if row_family_id in family_id_set:
+                grouped[row_family_id].append(row)
+            continue
+        for family_rows in grouped.values():
+            family_rows.append(row)
+    return {family_id: tuple(values) for family_id, values in grouped.items()}
 
 
 def _overlay_assignments(path: Path) -> tuple[str, tuple[dict[str, str], ...]]:

@@ -40,7 +40,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.rt_mode_evidence_tsv
                 ).values()
             )
-            outputs = (
+            matrix_outputs = (
                 product_activation.apply_activation_to_alignment_matrix_outputs(
                     activation_decisions_tsv=args.activation_decisions_tsv,
                     activation_acceptance_tsv=args.activation_acceptance_tsv,
@@ -54,14 +54,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     rt_mode_evidence_rows=rt_mode_evidence_rows,
                 )
             )
-            print(f"Activated matrix TSV: {outputs.matrix_tsv}")
-            print(f"Activation application summary TSV: {outputs.summary_tsv}")
-            print(f"Activation value delta TSV: {outputs.value_delta_tsv}")
+            print(f"Activated matrix TSV: {matrix_outputs.matrix_tsv}")
+            print(f"Activation application summary TSV: {matrix_outputs.summary_tsv}")
+            print(f"Activation value delta TSV: {matrix_outputs.value_delta_tsv}")
             print(
                 "Activation hypothesis identity TSV: "
-                f"{outputs.hypothesis_identity_tsv}"
+                f"{matrix_outputs.hypothesis_identity_tsv}"
             )
-            print(f"Alignment matrix identity TSV: {outputs.matrix_identity_tsv}")
+            print(
+                f"Alignment matrix identity TSV: {matrix_outputs.matrix_identity_tsv}"
+            )
             return 0
         if args.alignment_cells_tsv is None:
             raise ValueError("--alignment-cells-tsv is required unless --matrix-only")

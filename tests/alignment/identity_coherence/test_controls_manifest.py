@@ -188,3 +188,30 @@ def test_duplicate_manifest_headers_are_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="duplicate fields: decision_id"):
         read_identity_controls_manifest(path)
+
+
+def test_missing_required_manifest_headers_follow_contract_order(tmp_path):
+    path = tmp_path / "identity_controls.tsv"
+    header = tuple(
+        field
+        for field in MANIFEST_HEADER
+        if field not in {"control_type", "fragment_observation_mode"}
+    )
+    row = tuple(
+        value
+        for index, value in enumerate(_positive_row())
+        if MANIFEST_HEADER[index] in header
+    )
+    path.write_text(
+        "\t".join(header) + "\n" + "\t".join(row) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "missing required fields: control_type, "
+            "fragment_observation_mode"
+        ),
+    ):
+        read_identity_controls_manifest(path)

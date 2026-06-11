@@ -128,6 +128,45 @@ def test_classifier_detects_scope_rule_manual_machine_disagreement() -> None:
     assert explanation["explanation_status"] == "explained"
 
 
+def test_classifier_preserves_first_seen_unique_diagnostic_tokens() -> None:
+    oracle = _manual_row(
+        manual_label="fail",
+        manual_scope="reviewed_cell",
+        manual_reason_tags="rt_too_far;pattern_mismatch",
+        sample_id="SampleFail",
+    )
+    evidence = [
+        {
+            "oracle_row_id": oracle.oracle_row_id,
+            "source_role": "rescued_cell",
+            "source_row_id": "alignment_cells.tsv:1",
+            "machine_current_label": "rescued",
+            "machine_reason": "synthetic classifier coverage fixture",
+            "machine_blockers": "rt_conflict;pattern_conflict;rt_conflict",
+            "source_artifact": "alignment_cells.tsv",
+        },
+        {
+            "oracle_row_id": oracle.oracle_row_id,
+            "source_role": "selected_peak",
+            "source_row_id": "alignment_review.tsv:1",
+            "machine_current_label": "detected",
+            "machine_reason": "synthetic classifier coverage fixture",
+            "machine_blockers": "pattern_conflict;scope_conflict",
+            "source_artifact": "alignment_review.tsv",
+        },
+    ]
+
+    explanation = classify_explanations([oracle], evidence)[0]
+
+    assert explanation["machine_blockers"] == (
+        "rt_conflict;pattern_conflict;scope_conflict"
+    )
+    assert explanation["source_roles_seen"] == "rescued_cell;selected_peak"
+    assert explanation["source_artifacts"] == (
+        "alignment_cells.tsv;alignment_review.tsv"
+    )
+
+
 def _real_evidence(oracle_rows):
     return [
         {

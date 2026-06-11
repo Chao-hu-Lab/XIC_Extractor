@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from xic_extractor.diagnostics.diagnostic_io import write_tsv
+from xic_extractor.tabular_io import write_tsv
 
 from .schema import (
     ACTIVATION_ACCEPTANCE_COLUMNS,

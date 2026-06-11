@@ -122,6 +122,24 @@ def test_activation_application_blanks_wrong_peak_and_writes_auto_activation(
     assert kept_delta["value_changed"] == "FALSE"
 
 
+def test_product_activation_private_write_tsv_preserves_raw_contract(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "activation.tsv"
+
+    product_activation._write_tsv(
+        path,
+        ("id", "value", "missing"),
+        [{"id": "A", "value": "100", "extra": "ignored"}],
+    )
+
+    assert path.read_text(encoding="utf-8") == "id\tvalue\tmissing\nA\t100\t\n"
+
+    empty_path = tmp_path / "empty" / "activation.tsv"
+    product_activation._write_tsv(empty_path, ("id", "value"), [])
+    assert empty_path.read_text(encoding="utf-8") == "id\tvalue\n"
+
+
 def test_activation_application_accepts_ms1_morphology_primary_area_source(
     tmp_path: Path,
 ) -> None:
@@ -324,9 +342,11 @@ def test_activation_application_formal_mode_writes_product_contract_names(
     assert _header(outputs.cells_tsv) == _header(fixture["cells"])
     matrix_rows = _read_tsv(outputs.matrix_tsv)
     assert all("peak_hypothesis_id" not in row for row in matrix_rows)
+    hypothesis_identity_tsv = outputs.hypothesis_identity_tsv
+    assert hypothesis_identity_tsv is not None
     identity_rows = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.hypothesis_identity_tsv)
+        for row in _read_tsv(hypothesis_identity_tsv)
     }
     assert identity_rows["FAM_ADD::mode_1"]["S2"] == "300"
     assert identity_rows["FAM_ADD::mode_1"]["row_identity_basis"] == (
@@ -398,9 +418,11 @@ def test_activation_formal_accepts_public_mz_rt_matrix_with_identity_sidecar(
     }
 
     assert outputs.hypothesis_identity_tsv is not None
+    hypothesis_identity_tsv = outputs.hypothesis_identity_tsv
+    assert hypothesis_identity_tsv is not None
     identity_rows = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.hypothesis_identity_tsv)
+        for row in _read_tsv(hypothesis_identity_tsv)
     }
     assert identity_rows["FAM_BLOCK"]["row_identity_basis"] == (
         "no_split_peak_hypothesis"
@@ -508,9 +530,11 @@ def test_activation_formal_preserves_public_split_rows_sharing_source_family(
         output_mode="formal",
     )
 
+    hypothesis_identity_tsv = outputs.hypothesis_identity_tsv
+    assert hypothesis_identity_tsv is not None
     identity_rows = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.hypothesis_identity_tsv)
+        for row in _read_tsv(hypothesis_identity_tsv)
     }
     assert identity_rows["FAM_SPLIT::blue"]["feature_family_id"] == "FAM_SPLIT"
     assert identity_rows["FAM_SPLIT::blue"]["S1"] == "111"
@@ -519,9 +543,11 @@ def test_activation_formal_preserves_public_split_rows_sharing_source_family(
     assert identity_rows["FAM_SPLIT::green"]["S1"] == ""
     assert identity_rows["FAM_SPLIT::green"]["S2"] == "222"
 
+    matrix_identity_tsv = outputs.matrix_identity_tsv
+    assert matrix_identity_tsv is not None
     matrix_identity_by_peak = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.matrix_identity_tsv)
+        for row in _read_tsv(matrix_identity_tsv)
     }
     assert matrix_identity_by_peak["FAM_SPLIT::blue"][
         "source_feature_family_ids"
@@ -669,9 +695,11 @@ def test_activation_formal_uses_rt_mode_evidence_for_split_hypothesis_rt(
     }
 
     assert outputs.matrix_identity_tsv is not None
+    matrix_identity_tsv = outputs.matrix_identity_tsv
+    assert matrix_identity_tsv is not None
     matrix_identity_by_peak = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.matrix_identity_tsv)
+        for row in _read_tsv(matrix_identity_tsv)
     }
     assert matrix_identity_by_peak["FAM_SPLIT::blue"]["RT"] == "10.1"
     assert matrix_identity_by_peak["FAM_SPLIT::blue"]["center_rt_basis"] == (
@@ -704,9 +732,11 @@ def test_activation_formal_ignores_raw_overlay_rt_mode_for_product_rt(
         rt_mode_evidence_rows=[raw_overlay_row],
     )
 
+    matrix_identity_tsv = outputs.matrix_identity_tsv
+    assert matrix_identity_tsv is not None
     matrix_identity_by_peak = {
         row["peak_hypothesis_id"]: row
-        for row in _read_tsv(outputs.matrix_identity_tsv)
+        for row in _read_tsv(matrix_identity_tsv)
     }
     assert matrix_identity_by_peak["FAM_SPLIT::blue"]["RT"] == "10.4"
     assert matrix_identity_by_peak["FAM_SPLIT::blue"]["center_rt_basis"] == (

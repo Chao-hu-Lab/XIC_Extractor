@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
+from xic_extractor.tabular_io import read_tsv_required
 
 from .schema import ORACLE_COLUMNS, ORACLE_SCHEMA_VERSION, validate_row_tokens
 

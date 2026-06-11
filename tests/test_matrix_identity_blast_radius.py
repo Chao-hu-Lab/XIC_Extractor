@@ -334,6 +334,60 @@ def test_blast_radius_joins_current_targeted_istd_benchmark_aliases(
     assert by_family["FAM002"]["active_dna_istd_candidate"] == ""
 
 
+def test_blast_radius_input_bundle_preserves_existing_order_contracts() -> None:
+    review_rows = [
+        _review_row("FAM_B", "TRUE", "owner_complete_link;owner_count=2"),
+        _review_row("FAM_A", "FALSE", "single_sample_local_owner"),
+    ]
+    cell_rows = [
+        _cell_row("FAM_B", "sample-b", "detected", 100.0),
+        _cell_row("FAM_A", "sample-c", "rescued", 90.0),
+        _cell_row("FAM_B", "sample-a", "detected", 80.0),
+    ]
+
+    inputs = blast._blast_radius_inputs_from_tsv(review_rows, cell_rows)
+
+    assert [cluster.feature_family_id for cluster in inputs.matrix.clusters] == [
+        "FAM_B",
+        "FAM_A",
+    ]
+    assert inputs.matrix.sample_order == ("sample-a", "sample-b", "sample-c")
+    assert [
+        row["sample_stem"] for row in inputs.cell_rows_by_family["FAM_B"]
+    ] == [
+        "sample-b",
+        "sample-a",
+    ]
+    assert inputs.current_by_family["FAM_A"]["include_in_primary_matrix"] == "FALSE"
+
+
+def test_blast_radius_writer_preserves_value_formatting(tmp_path: Path) -> None:
+    path = tmp_path / "matrix_identity_blast_radius.tsv"
+
+    blast._write_tsv(
+        path,
+        ("flag", "count", "ratio", "empty"),
+        [
+            {
+                "flag": True,
+                "count": 1,
+                "ratio": 1.25,
+                "empty": None,
+                "ignored": "value",
+            },
+        ],
+    )
+
+    assert _read_tsv(path) == [
+        {
+            "flag": "TRUE",
+            "count": "1",
+            "ratio": "1.25",
+            "empty": "",
+        },
+    ]
+
+
 def _write_alignment_run(
     path: Path,
     *,

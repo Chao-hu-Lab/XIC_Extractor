@@ -100,6 +100,32 @@ def test_write_decoy_manifest_proposal_writes_header_when_no_sources(
     assert lines[0].startswith("control_id\tcontrol_type\tcontrol_name")
 
 
+def test_decoy_manifest_writer_preserves_private_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "proposal.tsv"
+
+    decoy_manifest_proposal._write_manifest_rows(
+        path,
+        [
+            {
+                "control_id": "IDC-001",
+                "control_type": "identity_decoy",
+                "control_name": "manual review",
+                "extra": "ignored",
+            }
+        ],
+    )
+
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert lines[0].startswith("control_id\tcontrol_type\tcontrol_name")
+    assert lines[1].startswith("IDC-001\tidentity_decoy\tmanual review\t")
+    assert "ignored" not in text
+
+    empty_path = tmp_path / "empty" / "proposal.tsv"
+    decoy_manifest_proposal._write_manifest_rows(empty_path, [])
+    assert len(empty_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
 def test_write_decoy_manifest_proposal_respects_zero_limit(
     tmp_path: Path,
 ) -> None:

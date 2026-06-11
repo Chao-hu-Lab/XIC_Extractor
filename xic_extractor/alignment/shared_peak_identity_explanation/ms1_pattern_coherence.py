@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     read_tsv_required,
     text_value,
     write_tsv,

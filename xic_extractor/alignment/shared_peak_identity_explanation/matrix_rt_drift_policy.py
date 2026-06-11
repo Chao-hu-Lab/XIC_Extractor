@@ -4,10 +4,10 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     optional_float as diagnostic_optional_float,
 )
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     optional_int,
     read_tsv_required,
     text_value,

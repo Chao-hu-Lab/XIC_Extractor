@@ -7,9 +7,12 @@ import csv
 import json
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.machine_decision import (
     machine_decision_as_row,
@@ -69,6 +72,13 @@ OUTPUT_COLUMNS = (
 )
 
 
+@dataclass(frozen=True)
+class _BlastRadiusInputs:
+    matrix: AlignmentMatrix
+    current_by_family: dict[str, Mapping[str, str]]
+    cell_rows_by_family: dict[str, tuple[Mapping[str, str], ...]]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Analyze matrix identity blast radius for alignment outputs.",
@@ -121,16 +131,12 @@ def run_blast_radius(
         _write_outputs(output_dir, rows, evidence_status="evidence_incomplete")
         return 0 if allow_incomplete_summary else 2
 
-    matrix = _alignment_matrix_from_tsv(review_rows, cell_rows)
-    decisions = build_matrix_identity_decisions(matrix, AlignmentConfig())
-    current_by_family = {
-        row.get("feature_family_id", ""): row for row in review_rows
-    }
-    cell_rows_by_family = _cell_rows_by_family(cell_rows)
-    rows = []
+    inputs = _blast_radius_inputs_from_tsv(review_rows, cell_rows)
+    decisions = build_matrix_identity_decisions(inputs.matrix, AlignmentConfig())
+    output_rows: list[dict[str, object]] = []
     for family_id in sorted(decisions.rows):
         row_decision = decisions.row(family_id)
-        current_row = current_by_family.get(family_id, {})
+        current_row = inputs.current_by_family.get(family_id, {})
         current_include = _is_trueish(current_row.get("include_in_primary_matrix"))
         proposed_include = row_decision.include_in_primary_matrix
         benchmark = benchmark_by_family.get(family_id, {})
@@ -153,9 +159,9 @@ def run_blast_radius(
         }
         machine_decision = project_machine_decision(
             projected_review_row,
-            cell_rows_by_family.get(family_id, ()),
+            inputs.cell_rows_by_family.get(family_id, ()),
         )
-        rows.append(
+        output_rows.append(
             {
                 "feature_family_id": family_id,
                 "current_include_in_primary_matrix": current_include,
@@ -190,35 +196,41 @@ def run_blast_radius(
                 ),
             },
         )
-    _write_outputs(output_dir, rows, evidence_status="complete")
+    _write_outputs(output_dir, output_rows, evidence_status="complete")
     return 0
 
 
-def _alignment_matrix_from_tsv(
+def _blast_radius_inputs_from_tsv(
     review_rows: Sequence[Mapping[str, str]],
     cell_rows: Sequence[Mapping[str, str]],
-) -> AlignmentMatrix:
-    clusters = tuple(_cluster_from_review(row) for row in review_rows)
-    cells = tuple(_cell_from_row(row) for row in cell_rows)
-    sample_order = tuple(
-        sorted(
-            {
-                row.get("sample_stem", "")
-                for row in cell_rows
-                if row.get("sample_stem")
-            },
-        ),
-    )
-    return AlignmentMatrix(clusters=clusters, cells=cells, sample_order=sample_order)
+) -> _BlastRadiusInputs:
+    clusters = []
+    current_by_family: dict[str, Mapping[str, str]] = {}
+    for row in review_rows:
+        clusters.append(_cluster_from_review(row))
+        current_by_family[row.get("feature_family_id", "")] = row
 
-
-def _cell_rows_by_family(
-    cell_rows: Sequence[Mapping[str, str]],
-) -> dict[str, tuple[Mapping[str, str], ...]]:
-    grouped: dict[str, list[Mapping[str, str]]] = {}
+    cells = []
+    sample_stems = set[str]()
+    grouped_cell_rows: dict[str, list[Mapping[str, str]]] = {}
     for row in cell_rows:
-        grouped.setdefault(row.get("feature_family_id", ""), []).append(row)
-    return {family_id: tuple(rows) for family_id, rows in grouped.items()}
+        cells.append(_cell_from_row(row))
+        sample_stem = row.get("sample_stem", "")
+        if sample_stem:
+            sample_stems.add(sample_stem)
+        grouped_cell_rows.setdefault(row.get("feature_family_id", ""), []).append(row)
+
+    return _BlastRadiusInputs(
+        matrix=AlignmentMatrix(
+            clusters=tuple(clusters),
+            cells=tuple(cells),
+            sample_order=tuple(sorted(sample_stems)),
+        ),
+        current_by_family=current_by_family,
+        cell_rows_by_family={
+            family_id: tuple(rows) for family_id, rows in grouped_cell_rows.items()
+        },
+    )
 
 
 def _cluster_from_review(row: Mapping[str, str]) -> SimpleNamespace:
@@ -430,7 +442,7 @@ def _incomplete_rows(
 ) -> list[dict[str, object]]:
     if not review_rows:
         review_rows = ({"feature_family_id": ""},)
-    rows = []
+    rows: list[dict[str, object]] = []
     for review_row in review_rows:
         family_id = review_row.get("feature_family_id", "")
         benchmark = benchmark_by_family.get(family_id, {})
@@ -588,22 +600,18 @@ def _write_tsv(
     columns: Sequence[str],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(columns), delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {column: _tsv_value(row.get(column, "")) for column in columns},
-            )
+    write_tsv(path, rows, columns, formatter=_tsv_value)
 
 
-def _tsv_value(value: object) -> object:
+def _tsv_value(value: object) -> str:
+    if value is None:
+        return ""
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
-    return value
+    return str(value)
 
 
-def _float(value: object) -> float | None:
+def _float(value: Any) -> float | None:
     if value in (None, ""):
         return None
     try:

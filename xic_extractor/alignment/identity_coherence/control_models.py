@@ -21,6 +21,7 @@ _REQUIRED_TEXT_FIELDS: tuple[str, ...] = (
     "control_expected_behavior",
     "required_failure_reason_when_missed",
 )
+_REQUIRED_TEXT_FIELD_SET = frozenset(_REQUIRED_TEXT_FIELDS)
 
 _TEXT_FIELDS: tuple[str, ...] = (
     *_REQUIRED_TEXT_FIELDS,
@@ -132,7 +133,7 @@ class IdentityControlManifestEntry:
         for field_name in _TEXT_FIELDS:
             text_value = _normalize_text(getattr(self, field_name))
             object.__setattr__(self, field_name, text_value)
-            if field_name in _REQUIRED_TEXT_FIELDS and not text_value:
+            if field_name in _REQUIRED_TEXT_FIELD_SET and not text_value:
                 raise ValueError(f"{field_name} must be non-empty")
 
         for field_name in _TOLERANCE_FIELDS:

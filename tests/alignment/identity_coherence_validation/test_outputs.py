@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from xic_extractor.alignment.identity_coherence_validation import outputs
 from xic_extractor.alignment.identity_coherence_validation.models import (
+    AcceptanceReport,
+    AcceptanceRow,
     ValidationResult,
     ValidationRow,
 )
@@ -47,6 +50,48 @@ def test_write_validation_outputs_labels_controls_not_assessed(
         tmp_path / "identity_coherence_8raw_validation_summary.tsv"
     ).read_text(encoding="utf-8")
     assert "controls_manifest_assessment\tnot_assessed" in summary
+
+
+def test_validation_summary_tsv_writer_preserves_raw_contract(tmp_path: Path) -> None:
+    path = tmp_path / "summary.tsv"
+
+    outputs._write_summary_tsv(
+        path,
+        ValidationResult(
+            rows=(
+                ValidationRow(
+                    check_name="=check",
+                    status="pass",
+                    serial_value="1",
+                    process_value="1",
+                    details="@detail",
+                ),
+            )
+        ),
+    )
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "check_name\tstatus\tserial_value\tprocess_value\tdetails",
+        "=check\tpass\t1\t1\t@detail",
+    ]
+
+
+def test_acceptance_tsv_writer_preserves_lf_and_parent_creation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "acceptance.tsv"
+
+    outputs._write_acceptance_tsv(
+        path,
+        AcceptanceReport(
+            rows=(AcceptanceRow("v04_acceptance", "pass", "ok", "@detail"),),
+        ),
+    )
+
+    assert path.read_text(encoding="utf-8") == (
+        "criterion\tstatus\tevidence\tdetails\n"
+        "v04_acceptance\tpass\tok\t@detail\n"
+    )
 
 
 def test_write_validation_outputs_writes_acceptance_artifacts(

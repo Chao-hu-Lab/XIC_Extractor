@@ -469,10 +469,12 @@ def _machine_evidence_readiness(
 
 def _support_blockers(rows: Sequence[Mapping[str, str]]) -> str:
     tokens: list[str] = []
+    seen: set[str] = set()
     for row in rows:
         for token in str(row.get("missing_machine_evidence", "")).split(";"):
-            if token and token not in tokens:
+            if token and token not in seen:
                 tokens.append(token)
+                seen.add(token)
     return ";".join(tokens)
 
 

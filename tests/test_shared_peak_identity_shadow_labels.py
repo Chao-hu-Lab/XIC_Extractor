@@ -173,6 +173,48 @@ def test_v2_readiness_does_not_promote_without_machine_observed_evidence() -> No
     assert "machine_evidence_not_sufficient" in readiness["clear_answer"]
 
 
+def test_v2_readiness_preserves_first_seen_unique_machine_evidence_blockers() -> None:
+    shadow_rows = build_shadow_label_rows(
+        [
+            _explanation(
+                "row-pass",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            _explanation(
+                "row-suspect",
+                manual_label="suspect",
+                evidence_gap_class="rt_drift_policy_gap",
+            ),
+        ]
+    )
+
+    readiness = build_v2_readiness(
+        run_facts={**_slice1_run_facts(), "blast_radius_assessed": "not_assessed"},
+        shadow_rows=shadow_rows,
+        machine_evidence_support_rows=[
+            _support_row(
+                "row-pass",
+                evidence_support_status="machine_proxy_only",
+                missing_machine_evidence=(
+                    "formal_shape_metric;formal_pattern_metric;formal_shape_metric"
+                ),
+            ),
+            _support_row(
+                "row-suspect",
+                evidence_support_status="blocked_missing_metric",
+                missing_machine_evidence=(
+                    "formal_pattern_metric;matrix_rt_drift_policy"
+                ),
+            ),
+        ],
+    )
+
+    assert readiness["machine_evidence_blockers"] == (
+        "formal_shape_metric;formal_pattern_metric;matrix_rt_drift_policy"
+    )
+
+
 def test_machine_evidence_support_marks_manual_derived_metric_gaps() -> None:
     explanations = [
         {
@@ -1590,6 +1632,69 @@ def test_ms1_pattern_coherence_conflict_fails_closed() -> None:
 
     row = rows[0]
     assert row["pattern_basis_status"] == "machine_observed"
+    assert row["missing_machine_evidence"] == "pattern_metric_not_supportive"
+    assert row["evidence_support_status"] == "machine_observed_conflict"
+
+
+def test_machine_evidence_support_preserves_unique_missing_evidence_order() -> None:
+    explanations = [
+        {
+            **_explanation(
+                "FAM001|S1",
+                manual_label="pass",
+                evidence_gap_class="machine_too_conservative_shape_or_pattern_unmodeled",
+            ),
+            "feature_family_id": "FAM001",
+            "sample_id": "S1",
+            "manual_reason_tags": "pattern_similar",
+        }
+    ]
+    shadow_rows = build_shadow_label_rows(explanations)
+
+    rows = machine_evidence_support.build_machine_evidence_support_rows(
+        explanations=explanations,
+        shadow_rows=shadow_rows,
+        machine_matches={
+            "FAM001|S1": (
+                _machine_match(
+                    source_role="rescued_cell",
+                    sample_level=True,
+                    row={
+                        "status": "rescued",
+                        "apex_rt": "6.04",
+                        "peak_start_rt": "5.90",
+                        "peak_end_rt": "6.20",
+                        "rt_delta_sec": "0.0",
+                        "trace_quality": "owner_backfill",
+                    },
+                ),
+            )
+        },
+        candidate_ms2_pattern_evidence={
+            ("FAM001", "S1"): {
+                "candidate_ms2_pattern_status": "conflict",
+                "candidate_ms2_evidence_level": "sample_candidate_aligned",
+            }
+        },
+        ms1_pattern_coherence_evidence={
+            ("FAM001", "S1"): {
+                "ms1_pattern_status": "conflict",
+                "ms1_pattern_evidence_level": "sample_constellation",
+                "apex_coherence_sec": "3.0",
+                "boundary_overlap_score": "0.82",
+                "shape_correlation_score": "0.91",
+                "relative_pattern_stability_score": "0.77",
+                "local_interference_score": "0.05",
+                "constellation_peak_count": "3",
+                "reference_peak_count": "3",
+                "drift_compatible_status": "compatible",
+                "reason": "unit_test_ms1_constellation",
+                "diagnostic_only": "TRUE",
+            }
+        },
+    )
+
+    row = rows[0]
     assert row["missing_machine_evidence"] == "pattern_metric_not_supportive"
     assert row["evidence_support_status"] == "machine_observed_conflict"
 

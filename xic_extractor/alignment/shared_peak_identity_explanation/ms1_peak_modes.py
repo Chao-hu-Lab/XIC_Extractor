@@ -5,11 +5,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from xic_extractor.diagnostics.diagnostic_io import text_value
 from xic_extractor.peak_detection.ms1_morphology import (
     DEFAULT_GAUSSIAN15_WINDOW_POINTS,
     gaussian15_morphology_trace,
 )
+from xic_extractor.tabular_io import text_value
 
 GAUSSIAN15_MODE_GAP_MIN = 0.35
 GAUSSIAN15_MODE_MIN_CLUSTER_SIZE = 2
