@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -65,13 +66,20 @@ def test_append_lifecycle_dataset_writes_run_and_row_files(tmp_path: Path) -> No
     assert rows[0]["instrument_id"] == "Orbitrap-1"
     assert rows[0]["code_version"] == "abc123"
     assert rows[0]["run_fingerprint"] == result.run_fingerprint
+    with result.sdolek_tsv.open(encoding="utf-8", newline="") as handle:
+        sdolek_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert sdolek_rows[0]["area"] == "123.4"
+    assert sdolek_rows[0]["trend_flags"] == ""
+    assert result.blank_tsv.read_text(encoding="utf-8").splitlines() == [
+        "run_id\tsample_name\tstatus\ttic_area\tbpc_height"
+    ]
 
 
 def test_append_lifecycle_dataset_blocks_duplicate_by_default(
     tmp_path: Path,
 ) -> None:
     output = _write_artifacts(tmp_path / "out")
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "output": output,
         "raw_dir": tmp_path / "raw",
         "output_dir": tmp_path / "out",
@@ -91,7 +99,7 @@ def test_append_lifecycle_dataset_can_explicitly_allow_duplicate(
     tmp_path: Path,
 ) -> None:
     output = _write_artifacts(tmp_path / "out")
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "output": output,
         "raw_dir": tmp_path / "raw",
         "output_dir": tmp_path / "out",
@@ -116,7 +124,7 @@ def test_append_lifecycle_dataset_fingerprint_includes_hcd_audit_outputs(
     tmp_path: Path,
 ) -> None:
     first_output = _write_artifacts(tmp_path / "out", hcd_payload="hcd-v1")
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "raw_dir": tmp_path / "raw",
         "output_dir": tmp_path / "out",
         "lifecycle_root": tmp_path / "life",

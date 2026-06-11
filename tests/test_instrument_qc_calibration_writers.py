@@ -62,8 +62,23 @@ def test_write_calibrated_trend_tsv_header_and_rows(tmp_path: Path) -> None:
         assert reader.fieldnames == CALIBRATED_TREND_TSV_COLUMNS
         rows = list(reader)
     assert rows[0]["identity_evidence"] == "MS1_ONLY"
+    assert rows[0]["area"] == "100"
+    assert rows[0]["rt_delta_to_reference_min"] == "0.0"
+    assert rows[0]["compound_batch_median_area"] == "100.0"
     assert rows[-1]["review_bucket"] == "sensitivity_trend_review"
     assert "PRIOR_RT_SHIFT" in rows[-1]["prior_conflict_flags"]
+
+
+def test_write_calibrated_trend_tsv_writes_header_without_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "empty.tsv"
+
+    write_calibrated_trend_tsv(path, [])
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "\t".join(CALIBRATED_TREND_TSV_COLUMNS)
+    ]
 
 
 def test_write_calibration_summary_json_includes_metadata_and_counts(

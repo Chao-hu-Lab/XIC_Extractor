@@ -14,6 +14,8 @@ from xic_extractor.instrument_qc.models import (
     InstrumentQCDiagnostic,
 )
 
+_KNOWN_ACTIVATION_METHODS = frozenset({"CID", "wHCD", "HCD", "CIDwHCD", "unknown"})
+
 
 def read_sequence_manifest_context(
     path: Path | None,
@@ -28,7 +30,7 @@ def read_sequence_manifest_context(
             if not raw_stem:
                 continue
             activation = row.get("activation_method", "unknown").strip()
-            if activation not in {"CID", "wHCD", "HCD", "CIDwHCD", "unknown"}:
+            if activation not in _KNOWN_ACTIVATION_METHODS:
                 activation = "unknown"
             context[raw_stem] = (
                 row.get("instrument_method", "").strip(),

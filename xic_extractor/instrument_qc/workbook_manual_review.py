@@ -6,6 +6,15 @@ from statistics import median
 
 from xic_extractor.instrument_qc.models import HCDAuditRow, SDOLEKTrendRow
 
+_HCD_PRODUCT_REVIEW_STATUSES = frozenset(
+    {
+        "no_ms2_trigger",
+        "no_product_match",
+        "hcd_partial",
+    }
+)
+_TARGET_RT_WINDOW_REVIEW_FLAG = "target_rt_window_review"
+
 
 def manual_review_rows(
     sdolek_rows: list[SDOLEKTrendRow],
@@ -13,19 +22,17 @@ def manual_review_rows(
     hcd_rows: list[HCDAuditRow],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
+    isotope_support_index = _same_sample_isotope_support_index(hcd_rows)
+    outside_window_support_keys = _outside_window_ms2_support_keys(hcd_rows)
     for hcd_row in hcd_rows:
-        if "target_rt_window_review" in hcd_row.review_flags:
-            if _skip_target_rt_window_queue_row(hcd_row, hcd_rows):
+        if _TARGET_RT_WINDOW_REVIEW_FLAG in hcd_row.review_flags:
+            if _skip_target_rt_window_queue_row(hcd_row, isotope_support_index):
                 continue
             rows.append(_manual_row("target_rt_window_mismatch", hcd=hcd_row))
             continue
-        if _skip_hcd_product_queue_row(hcd_row, hcd_rows):
+        if _skip_hcd_product_queue_row(hcd_row, isotope_support_index):
             continue
-        if hcd_row.hcd_status in {
-            "no_ms2_trigger",
-            "no_product_match",
-            "hcd_partial",
-        }:
+        if hcd_row.hcd_status in _HCD_PRODUCT_REVIEW_STATUSES:
             rows.append(_manual_row(f"hcd_{hcd_row.hcd_status}", hcd=hcd_row))
         if hcd_row.hcd_status == "hcd_group_unmapped":
             rows.append(_manual_row("hcd_group_unmapped", hcd=hcd_row))
@@ -40,7 +47,7 @@ def manual_review_rows(
         ):
             rows.append(_manual_row("lek_rt_shift", trend=trend_row))
     for trend_row in mixstds_rows:
-        if _has_outside_window_ms2_support(trend_row, hcd_rows):
+        if _has_outside_window_ms2_support(trend_row, outside_window_support_keys):
             continue
         if trend_row.status != "detected":
             rows.append(_manual_row("mixstds_not_detected", trend=trend_row))
@@ -55,63 +62,65 @@ def format_counts(counts: dict[str, int]) -> str:
 
 def _skip_hcd_product_queue_row(
     hcd_row: HCDAuditRow,
-    hcd_rows: list[HCDAuditRow],
+    isotope_support_index: dict[tuple[str, str], frozenset[str]],
 ) -> bool:
-    if hcd_row.hcd_status not in {
-        "no_ms2_trigger",
-        "no_product_match",
-        "hcd_partial",
-    }:
+    if hcd_row.hcd_status not in _HCD_PRODUCT_REVIEW_STATUSES:
         return False
     if hcd_row.hcd_mapping_source == "unmapped":
         return True
-    return _has_same_sample_isotope_support(hcd_row, hcd_rows)
+    return _has_same_sample_isotope_support(hcd_row, isotope_support_index)
 
 
 def _skip_target_rt_window_queue_row(
     hcd_row: HCDAuditRow,
-    hcd_rows: list[HCDAuditRow],
+    isotope_support_index: dict[tuple[str, str], frozenset[str]],
 ) -> bool:
     if hcd_row.hcd_mapping_source == "unmapped":
         return True
-    return _has_same_sample_isotope_support(hcd_row, hcd_rows)
+    return _has_same_sample_isotope_support(hcd_row, isotope_support_index)
+
+
+def _same_sample_isotope_support_index(
+    hcd_rows: list[HCDAuditRow],
+) -> dict[tuple[str, str], frozenset[str]]:
+    grouped: dict[tuple[str, str], set[str]] = {}
+    for row in hcd_rows:
+        if row.hcd_status != "hcd_supported":
+            continue
+        base = _isotope_stripped_label(row.compound)
+        grouped.setdefault((row.sample_name, base), set()).add(row.compound)
+    return {key: frozenset(compounds) for key, compounds in grouped.items()}
 
 
 def _has_same_sample_isotope_support(
     hcd_row: HCDAuditRow,
-    hcd_rows: list[HCDAuditRow],
+    isotope_support_index: dict[tuple[str, str], frozenset[str]],
 ) -> bool:
     target_base = _isotope_stripped_label(hcd_row.compound)
+    supported_compounds = isotope_support_index.get((hcd_row.sample_name, target_base))
+    if not supported_compounds:
+        return False
     if target_base == hcd_row.compound:
-        companion_prefix_required = True
-    else:
-        companion_prefix_required = False
-    for candidate in hcd_rows:
-        if candidate.sample_name != hcd_row.sample_name:
-            continue
-        if candidate.hcd_status != "hcd_supported":
-            continue
-        if candidate.compound == hcd_row.compound:
-            continue
-        if _isotope_stripped_label(candidate.compound) != target_base:
-            continue
-        if companion_prefix_required and candidate.compound == target_base:
-            continue
-        return True
-    return False
+        return any(compound != target_base for compound in supported_compounds)
+    return any(compound != hcd_row.compound for compound in supported_compounds)
+
+
+def _outside_window_ms2_support_keys(
+    hcd_rows: list[HCDAuditRow],
+) -> frozenset[tuple[str, str]]:
+    return frozenset(
+        (row.sample_name, row.compound)
+        for row in hcd_rows
+        if row.hcd_status == "hcd_supported"
+        and _TARGET_RT_WINDOW_REVIEW_FLAG in row.review_flags
+    )
 
 
 def _has_outside_window_ms2_support(
     trend_row: SDOLEKTrendRow,
-    hcd_rows: list[HCDAuditRow],
+    outside_window_support_keys: frozenset[tuple[str, str]],
 ) -> bool:
-    return any(
-        row.sample_name == trend_row.sample_name
-        and row.compound == trend_row.compound
-        and row.hcd_status == "hcd_supported"
-        and "target_rt_window_review" in row.review_flags
-        for row in hcd_rows
-    )
+    return (trend_row.sample_name, trend_row.compound) in outside_window_support_keys
 
 
 def _isotope_stripped_label(label: str) -> str:

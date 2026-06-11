@@ -142,7 +142,7 @@ def _rows(payload: dict) -> list[dict]:
 def _has_flag(rows: list[dict], flag: str) -> bool:
     for row in rows:
         flags = str(row.get("trend_flags", ""))
-        if flag in {item.strip() for item in flags.split(";")}:
+        if any(item.strip() == flag for item in flags.split(";")):
             return True
     return False
 

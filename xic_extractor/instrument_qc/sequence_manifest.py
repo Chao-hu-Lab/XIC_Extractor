@@ -363,16 +363,21 @@ def _method_activation_map(
         method_name = _clean_cell(table[0][1])
         if not method_name:
             continue
-        detail_text = " ".join(
-            _clean_cell(cell)
-            for row in table
-            for cell in row
-            if _clean_cell(cell)
-        )
+        detail_text = " ".join(_clean_table_cells(table))
         activation = activation_method_from_method_detail(method_name, detail_text)
         if activation != "unknown":
             values[_method_key(method_name)] = activation
     return values
+
+
+def _clean_table_cells(table: list[list[str]]) -> tuple[str, ...]:
+    values: list[str] = []
+    for row in table:
+        for cell in row:
+            text = _clean_cell(cell)
+            if text:
+                values.append(text)
+    return tuple(values)
 
 
 def _method_key(value: str) -> str:

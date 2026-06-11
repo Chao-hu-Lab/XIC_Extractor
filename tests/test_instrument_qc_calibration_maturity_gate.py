@@ -1,5 +1,12 @@
+import csv
+
 from xic_extractor.instrument_qc.calibration_maturity_gate import (
+    CalibrationMaturityDecision,
     build_calibration_maturity_decisions,
+)
+from xic_extractor.instrument_qc.calibration_maturity_gate_io import (
+    MATURITY_GATE_COLUMNS,
+    write_calibration_maturity_gate_tsv,
 )
 
 
@@ -80,6 +87,54 @@ def test_level4_and_level5_can_pass_only_when_response_dependencies_exist() -> N
 
     assert by_level["level_4"].go_no_go == "go"
     assert by_level["level_5"].go_no_go == "go"
+
+
+def test_write_calibration_maturity_gate_tsv_preserves_schema_and_rows(
+    tmp_path,
+) -> None:
+    path = tmp_path / "nested" / "gate.tsv"
+    decisions = (
+        CalibrationMaturityDecision(
+            maturity_level="level_3",
+            target_state="production_candidate",
+            decision="blocked",
+            go_no_go="no_go",
+            blocker_count=2,
+            blockers=("loao_fail_count=1", "matrix_rt_blocked_rows=3"),
+            evidence_summary="p95_abs_error_min=0.4",
+            review_reason="needs cleaner residuals",
+        ),
+    )
+
+    write_calibration_maturity_gate_tsv(path, decisions)
+
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames == MATURITY_GATE_COLUMNS
+        assert list(reader) == [
+            {
+                "maturity_level": "level_3",
+                "target_state": "production_candidate",
+                "decision": "blocked",
+                "go_no_go": "no_go",
+                "blocker_count": "2",
+                "blockers": "loao_fail_count=1;matrix_rt_blocked_rows=3",
+                "evidence_summary": "p95_abs_error_min=0.4",
+                "review_reason": "needs cleaner residuals",
+            }
+        ]
+
+
+def test_write_calibration_maturity_gate_tsv_writes_header_without_rows(
+    tmp_path,
+) -> None:
+    path = tmp_path / "nested" / "empty.tsv"
+
+    write_calibration_maturity_gate_tsv(path, ())
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "\t".join(MATURITY_GATE_COLUMNS)
+    ]
 
 
 def _rt_summary(*, fail: int, p95: float) -> dict[str, object]:

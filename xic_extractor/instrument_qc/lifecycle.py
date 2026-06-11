@@ -14,6 +14,7 @@ from xic_extractor.instrument_qc.models import (
     InstrumentQCRunOutput,
     SDOLEKTrendRow,
 )
+from xic_extractor.tabular_io import write_tsv
 
 RUN_COLUMNS = [
     "run_id",
@@ -209,16 +210,16 @@ def _append_rows(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_rows = _read_existing_rows(path)
+    rows: list[dict[str, object]] = [
+        {column: existing_row.get(column, "") for column in columns}
+        for existing_row in existing_rows
+    ]
+    rows.extend(
+        {column: new_row.get(column, "") for column in columns}
+        for new_row in new_rows
+    )
     temp_path = path.with_suffix(path.suffix + ".tmp")
-    with temp_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t")
-        writer.writeheader()
-        for existing_row in existing_rows:
-            writer.writerow(
-                {column: existing_row.get(column, "") for column in columns}
-            )
-        for new_row in new_rows:
-            writer.writerow({column: new_row.get(column, "") for column in columns})
+    write_tsv(temp_path, rows, columns)
     temp_path.replace(path)
 
 

@@ -27,6 +27,7 @@ ALIGNMENT_CELLS_REQUIRED_COLUMNS = {
     "family_center_mz",
     "family_center_rt",
 }
+_MEASURED_CELL_STATUSES = frozenset({"detected", "rescued"})
 
 
 def build_rt_preview_rows(
@@ -77,7 +78,7 @@ def build_rt_preview_rows(
             correction_status = CorrectionStatus.BLOCKED_MISSING_VALUE
             block_reason = "raw feature RT is missing"
             review_reason = "No imputation in RT preview."
-        elif status not in {"detected", "rescued"}:
+        elif status not in _MEASURED_CELL_STATUSES:
             correction_status = CorrectionStatus.NOT_APPLICABLE
             block_reason = f"cell status is {status or 'blank'}"
             review_reason = "RT preview is only informative for measured cells."

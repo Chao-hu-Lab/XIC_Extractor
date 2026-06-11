@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from collections import Counter
 from dataclasses import asdict
@@ -12,6 +11,7 @@ from xic_extractor.instrument_qc.calibration_maturity_gate import (
     build_calibration_maturity_decisions,
 )
 from xic_extractor.instrument_qc.calibration_product_loaders import read_tsv_rows
+from xic_extractor.tabular_io import write_tsv
 
 MATURITY_GATE_COLUMNS = [
     "maturity_level",
@@ -88,15 +88,11 @@ def write_calibration_maturity_gate_tsv(
     decisions: tuple[CalibrationMaturityDecision, ...],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=MATURITY_GATE_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for decision in decisions:
-            writer.writerow(_row_to_dict(decision))
+    write_tsv(
+        path,
+        tuple(_row_to_dict(decision) for decision in decisions),
+        MATURITY_GATE_COLUMNS,
+    )
 
 
 def _summary_payload(

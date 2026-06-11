@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 from typing import Iterable
@@ -9,6 +8,7 @@ from xic_extractor.instrument_qc.sequence_manifest import (
     ManifestMatchStatus,
     SequenceManifestRow,
 )
+from xic_extractor.tabular_io import write_delimited_rows, write_tsv
 
 MANIFEST_TSV_COLUMNS = [
     "source_doc",
@@ -33,32 +33,37 @@ def write_sequence_manifest_tsv(
 ) -> None:
     row_list = list(rows)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=MANIFEST_TSV_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        for row in row_list:
-            writer.writerow(_manifest_row_to_dict(row))
+    write_tsv(
+        path,
+        [_manifest_row_to_dict(row) for row in row_list],
+        MANIFEST_TSV_COLUMNS,
+        formatter=_format_tabular_value,
+    )
 
 
 def write_injection_order_csv(
     path: Path,
     rows: Iterable[SequenceManifestRow],
 ) -> None:
+    output_rows = []
+    for row in rows:
+        if row.match_status != ManifestMatchStatus.MATCHED:
+            continue
+        if row.injection_order is None:
+            continue
+        output_rows.append(
+            {
+                "Sample_Name": row.raw_stem,
+                "Injection_Order": row.injection_order,
+            }
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=INJECTION_ORDER_COLUMNS)
-        writer.writeheader()
-        for row in rows:
-            if row.match_status != ManifestMatchStatus.MATCHED:
-                continue
-            if row.injection_order is None:
-                continue
-            writer.writerow(
-                {
-                    "Sample_Name": row.raw_stem,
-                    "Injection_Order": row.injection_order,
-                }
-            )
+    write_delimited_rows(
+        path,
+        output_rows,
+        INJECTION_ORDER_COLUMNS,
+        formatter=_format_tabular_value,
+    )
 
 
 def write_sequence_manifest_json(
@@ -137,6 +142,12 @@ def _manifest_row_to_dict(row: SequenceManifestRow) -> dict[str, object]:
         "instrument_method": row.instrument_method,
         "activation_method": row.activation_method,
     }
+
+
+def _format_tabular_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _summary(rows: list[SequenceManifestRow]) -> dict[str, object]:

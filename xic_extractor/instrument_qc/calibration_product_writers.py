@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from dataclasses import asdict, is_dataclass
 from enum import Enum
@@ -16,6 +15,7 @@ from xic_extractor.instrument_qc.calibration_product_models import (
     RtDriftModelRow,
     RtLeaveOneAnchorOutRow,
 )
+from xic_extractor.tabular_io import write_tsv
 
 CALIBRATION_EVIDENCE_COLUMNS = [
     "schema_version",
@@ -181,80 +181,35 @@ def write_calibration_evidence_tsv(
     path: Path,
     rows: Iterable[CalibrationEvidenceRow],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=CALIBRATION_EVIDENCE_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row, CALIBRATION_EVIDENCE_COLUMNS))
+    _write_tsv_rows(path, rows, CALIBRATION_EVIDENCE_COLUMNS)
 
 
 def write_matrix_rt_preview_tsv(
     path: Path,
     rows: Iterable[MatrixRTPreviewRow],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=MATRIX_RT_PREVIEW_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row, MATRIX_RT_PREVIEW_COLUMNS))
+    _write_tsv_rows(path, rows, MATRIX_RT_PREVIEW_COLUMNS)
 
 
 def write_rt_drift_model_tsv(
     path: Path,
     rows: Iterable[RtDriftModelRow],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=RT_DRIFT_MODEL_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row, RT_DRIFT_MODEL_COLUMNS))
+    _write_tsv_rows(path, rows, RT_DRIFT_MODEL_COLUMNS)
 
 
 def write_rt_leave_one_anchor_out_tsv(
     path: Path,
     rows: Iterable[RtLeaveOneAnchorOutRow],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row, RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS))
+    _write_tsv_rows(path, rows, RT_LEAVE_ONE_ANCHOR_OUT_COLUMNS)
 
 
 def write_matrix_response_preview_tsv(
     path: Path,
     rows: Iterable[MatrixResponsePreviewRow],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=MATRIX_RESPONSE_PREVIEW_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row, MATRIX_RESPONSE_PREVIEW_COLUMNS))
+    _write_tsv_rows(path, rows, MATRIX_RESPONSE_PREVIEW_COLUMNS)
 
 
 def write_preview_summary_json(path: Path, payload: dict[str, Any]) -> None:
@@ -264,6 +219,15 @@ def write_preview_summary_json(path: Path, payload: dict[str, Any]) -> None:
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _write_tsv_rows(path: Path, rows: Iterable[Any], columns: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_tsv(
+        path,
+        tuple(_row_to_dict(row, columns) for row in rows),
+        columns,
+    )
 
 
 def _row_to_dict(row: Any, columns: list[str]) -> dict[str, str]:
