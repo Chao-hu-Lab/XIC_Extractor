@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections import Counter, defaultdict
 from collections.abc import Hashable, Iterable, Mapping, Sequence
 from pathlib import Path
@@ -15,6 +14,7 @@ from xic_extractor.tabular_io import (
     write_tsv,
 )
 
+from .overlay_trace_data import load_overlay_trace_data
 from .schema import (
     RT_MODE_EVIDENCE_COLUMNS,
     RT_MODE_EVIDENCE_SCHEMA_VERSION,
@@ -282,15 +282,9 @@ def _rows_by_family(
 
 
 def _overlay_assignments(path: Path) -> tuple[str, tuple[dict[str, str], ...]]:
-    with path.open(encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if not isinstance(payload, Mapping):
-        raise ValueError(f"overlay trace data must be a JSON object: {path}")
-    family_id = text_value(payload.get("family_id"))
-    traces = payload.get("traces")
-    if not isinstance(traces, list):
-        raise ValueError(f"overlay trace data missing traces array: {path}")
-    trace_rows = tuple(trace for trace in traces if isinstance(trace, Mapping))
+    bundle = load_overlay_trace_data(path)
+    family_id = bundle.family_id
+    trace_rows = bundle.trace_mappings
     mode_ids = _raw_overlay_mode_ids(trace_rows)
     assignments: list[dict[str, str]] = []
     for index, trace in enumerate(trace_rows):

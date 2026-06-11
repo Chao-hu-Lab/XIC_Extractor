@@ -117,10 +117,13 @@ class TimingRecorder:
         return path
 
     def to_json_dict(self) -> dict[str, object]:
+        from xic_extractor.diagnostics.timing_summary import summarize_timing_records
+
         return {
             "run_id": self.run_id,
             "pipeline": self.pipeline,
             "records": [record.to_json_dict() for record in self._records],
+            "summaries": summarize_timing_records(self._records),
         }
 
     def _append_record(self, record: TimingRecord) -> None:

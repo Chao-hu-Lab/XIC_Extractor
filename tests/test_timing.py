@@ -44,6 +44,57 @@ def test_timing_recorder_records_stage_metrics_and_writes_json(tmp_path: Path) -
             },
         }
     ]
+    assert payload["summaries"]["stage_summary"] == [
+        {
+            "stage": "discover.ms2_seeds",
+            "record_count": 1,
+            "sample_count": 1,
+            "total_elapsed_sec": pytest.approx(2.5),
+            "max_elapsed_sec": pytest.approx(2.5),
+        }
+    ]
+    assert payload["summaries"]["raw_xic_locality_summary"] == []
+
+
+def test_timing_recorder_summarizes_raw_xic_locality() -> None:
+    recorder = TimingRecorder("alignment", run_id="run-locality")
+
+    recorder.record(
+        "alignment.build_owners.extract_xic",
+        elapsed_sec=2.0,
+        sample_stem="S1",
+        metrics={
+            "extract_xic_count": 10,
+            "extract_xic_batch_count": 5,
+            "raw_chromatogram_call_count": 9,
+            "point_count": 100,
+        },
+    )
+    recorder.record(
+        "alignment.owner_backfill.extract_xic",
+        elapsed_sec=1.0,
+        sample_stem="S1",
+        metrics={
+            "extract_xic_count": 100,
+            "extract_xic_batch_count": 2,
+            "raw_chromatogram_call_count": 1,
+            "point_count": 2000,
+        },
+    )
+
+    locality = {
+        row["stage"]: row
+        for row in recorder.to_json_dict()["summaries"]["raw_xic_locality_summary"]
+    }
+    assert locality["alignment.build_owners.extract_xic"][
+        "raw_calls_per_xic"
+    ] == pytest.approx(0.9)
+    assert locality["alignment.owner_backfill.extract_xic"][
+        "raw_calls_per_xic"
+    ] == pytest.approx(0.01)
+    assert locality["alignment.owner_backfill.extract_xic"][
+        "mean_xic_per_raw_chromatogram_call"
+    ] == pytest.approx(100.0)
 
 
 def test_timing_recorder_records_exception_stage_before_reraising() -> None:

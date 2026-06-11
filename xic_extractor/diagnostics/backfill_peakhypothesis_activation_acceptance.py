@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +19,13 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
-    optional_float,
+    numeric_equal,
     text_value,
     write_tsv,
+)
+from xic_extractor.diagnostics.matrix_identity_projection import (
+    matrix_value_diffs,
+    matrix_values_by_identity,
 )
 
 SCHEMA_VERSION = "backfill_peakhypothesis_activation_acceptance_v1"
@@ -130,9 +133,15 @@ def build_activation_acceptance(
         key_func=_delta_key,
         label="activation_value_delta",
     )
-    before_values = _matrix_values(input_matrix_rows, input_identity_rows)
-    after_values = _matrix_values(output_matrix_rows, output_identity_rows)
-    matrix_diffs = _matrix_diffs(before_values, after_values)
+    before_values = matrix_values_by_identity(
+        matrix_rows=input_matrix_rows,
+        matrix_identity_rows=input_identity_rows,
+    )
+    after_values = matrix_values_by_identity(
+        matrix_rows=output_matrix_rows,
+        matrix_identity_rows=output_identity_rows,
+    )
+    matrix_diffs = matrix_value_diffs(before_values, after_values)
     application_summary = _single_summary_row(application_summary_rows)
 
     matrix_diff_rows = tuple(
@@ -373,18 +382,6 @@ def _hard_fail_reasons(counts: Mapping[str, int]) -> tuple[str, ...]:
     return tuple(reasons)
 
 
-def _matrix_diffs(
-    before: Mapping[tuple[str, str], str],
-    after: Mapping[tuple[str, str], str],
-) -> tuple[tuple[tuple[str, str], str, str], ...]:
-    keys = sorted(set(before) | set(after))
-    return tuple(
-        (key, before.get(key, ""), after.get(key, ""))
-        for key in keys
-        if before.get(key, "") != after.get(key, "")
-    )
-
-
 def _matrix_diff_row(
     key: tuple[str, str],
     *,
@@ -395,7 +392,7 @@ def _matrix_diff_row(
 ) -> dict[str, str]:
     expected_row = expected.get(key)
     expected_value = _value(expected_row or {}, "projected_matrix_value")
-    matches = _numeric_equal(after_value, expected_value)
+    matches = numeric_equal(after_value, expected_value)
     delta_present = key in value_delta
     return {
         "schema_version": SCHEMA_VERSION,
@@ -410,36 +407,6 @@ def _matrix_diff_row(
         "activation_delta_present": str(delta_present).upper(),
         "diff_status": "expected_written" if expected_row is not None else "unexpected",
     }
-
-
-def _matrix_values(
-    matrix_rows: Sequence[Mapping[str, Any]],
-    identity_rows: Sequence[Mapping[str, Any]],
-) -> dict[tuple[str, str], str]:
-    identity_by_index = {
-        _positive_int(_value(row, "matrix_row_index")): row
-        for row in identity_rows
-        if _positive_int(_value(row, "matrix_row_index")) > 0
-    }
-    values: dict[tuple[str, str], str] = {}
-    for index, matrix_row in enumerate(matrix_rows, start=1):
-        identity = identity_by_index.get(index, {})
-        peak_hypothesis_id = _value(identity, "peak_hypothesis_id") or _value(
-            matrix_row,
-            "feature_family_id",
-        )
-        if not peak_hypothesis_id:
-            raise ValueError(f"matrix row {index} has no peak_hypothesis_id")
-        for column, raw_value in matrix_row.items():
-            if column in {"Mz", "RT", "feature_family_id", "neutral_loss_tag"}:
-                continue
-            if column.startswith("_") or column.startswith("family_center_"):
-                continue
-            key = (peak_hypothesis_id, column)
-            if key in values:
-                raise ValueError(f"duplicate matrix value key: {key}")
-            values[key] = text_value(raw_value)
-    return values
 
 
 def _keyed_rows(
@@ -494,7 +461,7 @@ def _value_delta_matches(
             _value(row, "matrix_value_effect") == "written",
             _value(row, "value_changed") == "TRUE",
             _value(row, "original_matrix_value") == "",
-            _numeric_equal(_value(row, "activated_matrix_value"), expected_value),
+            numeric_equal(_value(row, "activated_matrix_value"), expected_value),
         )
     )
 
@@ -568,27 +535,11 @@ def _diff_effect(before_value: str, after_value: str) -> str:
     return "changed"
 
 
-def _numeric_equal(left: str, right: str) -> bool:
-    left_value = optional_float(left)
-    right_value = optional_float(right)
-    if left_value is None or right_value is None:
-        return left == right
-    return math.isclose(left_value, right_value, rel_tol=1e-6, abs_tol=1e-9)
-
-
 def _int_value(row: Mapping[str, Any], column: str) -> int:
     try:
         return int(_value(row, column))
     except ValueError:
         return -1
-
-
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError:
-        return -1
-    return parsed if parsed > 0 else -1
 
 
 def _value(row: Mapping[str, Any], column: str) -> str:

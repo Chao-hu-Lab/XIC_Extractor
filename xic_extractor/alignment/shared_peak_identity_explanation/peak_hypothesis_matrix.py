@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import math
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
@@ -15,6 +14,7 @@ from xic_extractor.tabular_io import (
 )
 
 from . import ms1_peak_modes
+from .overlay_trace_data import load_overlay_trace_data
 from .schema import (
     HYPOTHESIS_CONSISTENCY_COLUMNS,
     PEAK_HYPOTHESIS_CELL_ASSIGNMENT_COLUMNS,
@@ -387,14 +387,9 @@ def load_overlay_peak_candidate_rows(
 ) -> tuple[dict[str, str], ...]:
     rows: list[dict[str, str]] = []
     for path in paths:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(payload, Mapping):
-            raise ValueError(f"overlay trace data must be a JSON object: {path}")
-        family_id = text_value(
-            payload.get("family_id") or payload.get("feature_family_id")
-        )
-        if not family_id:
-            raise ValueError(f"overlay trace data does not declare family_id: {path}")
+        bundle = load_overlay_trace_data(path)
+        payload = bundle.payload
+        family_id = bundle.family_id
         trace_rows = _overlay_trace_rows(payload)
         mode_windows = _mode_windows(payload.get("mode_windows"))
         if not mode_windows and _supports_gaussian15_trace_mode_windows(payload):

@@ -42,15 +42,13 @@ from xic_extractor.diagnostics.backfill_decision_explanation import (
 from xic_extractor.diagnostics.backfill_overlay import (
     selected_overlay_row as select_backfill_overlay_row,
 )
+from xic_extractor.diagnostics.matrix_identity_projection import matrix_values_from_tsv
 from xic_extractor.peak_detection.hypotheses import IntegrationResult
 from xic_extractor.tabular_io import (
     file_sha256,
     format_diagnostic_value,
-    identity_family_keys,
     optional_float,
-    positive_int,
     read_tsv_required,
-    read_tsv_with_header,
     rows_by_text_field,
     split_semicolon_labels,
     text_value,
@@ -391,38 +389,14 @@ def _current_matrix_values_by_family_sample(
 ) -> dict[tuple[str, str], str]:
     if alignment_matrix_tsv is None or alignment_matrix_identity_tsv is None:
         return {}
-    requested_by_family: dict[str, set[str]] | None = None
-    if requested_keys is not None:
-        requested_by_family = {}
-        for family_id, sample_stem in requested_keys:
-            if family_id and sample_stem:
-                requested_by_family.setdefault(family_id, set()).add(sample_stem)
-    matrix_header, matrix_rows = read_tsv_with_header(alignment_matrix_tsv)
-    identity_rows = read_tsv_required(
-        alignment_matrix_identity_tsv,
-        ("matrix_row_index", "peak_hypothesis_id"),
+    return matrix_values_from_tsv(
+        alignment_matrix_tsv=alignment_matrix_tsv,
+        alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
+        key_mode="family_aliases",
+        include_blank=True,
+        requested_keys=requested_keys,
+        duplicate_policy="last",
     )
-    sample_columns = tuple(
-        column for column in matrix_header if column not in {"Mz", "RT"}
-    )
-    values: dict[tuple[str, str], str] = {}
-    for identity in identity_rows:
-        row_index = positive_int(identity.get("matrix_row_index"))
-        if row_index is None or row_index > len(matrix_rows):
-            continue
-        matrix_row = matrix_rows[row_index - 1]
-        row_keys = identity_family_keys(identity)
-        for row_key in row_keys:
-            requested_samples = (
-                requested_by_family.get(row_key, set())
-                if requested_by_family is not None
-                else set(sample_columns)
-            )
-            for sample in sample_columns:
-                if sample not in requested_samples:
-                    continue
-                values[(row_key, sample)] = matrix_row.get(sample, "")
-    return values
 
 
 def _requested_matrix_keys(

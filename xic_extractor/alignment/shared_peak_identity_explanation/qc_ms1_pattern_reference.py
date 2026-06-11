@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -8,6 +7,8 @@ from pathlib import Path
 
 from xic_extractor.sample_groups import classify_sample_group
 from xic_extractor.tabular_io import text_value, write_tsv
+
+from .overlay_trace_data import load_overlay_trace_data
 
 QC_MS1_PATTERN_REFERENCE_COLUMNS = (
     "feature_family_id",
@@ -145,37 +146,31 @@ def _trace_metrics_by_key(
 ) -> dict[tuple[str, str], _TraceMetric]:
     metrics: dict[tuple[str, str], _TraceMetric] = {}
     for path in paths:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        family_id = text_value(data.get("family_id"))
-        if not family_id:
-            raise ValueError(f"{path}: missing family_id")
-        traces = data.get("traces")
-        if not isinstance(traces, list):
-            raise ValueError(f"{path}: missing traces array")
-        family_center_rt = _optional_float(data.get("family_center_rt"))
-        for trace in traces:
-            if not isinstance(trace, dict):
-                continue
-            sample_stem = text_value(trace.get("sample_stem"))
+        bundle = load_overlay_trace_data(path)
+        family_id = bundle.family_id
+        family_center_rt = bundle.family_center_rt
+        for trace in bundle.traces:
+            trace_values = trace.values
+            sample_stem = trace.sample_stem
             if not sample_stem:
                 continue
             metric = _TraceMetric(
                 family_id=family_id,
                 sample_stem=sample_stem,
-                group=text_value(trace.get("group")),
-                cell_apex_rt=_optional_float(trace.get("cell_apex_rt")),
-                trace_apex_rt=_optional_float(trace.get("trace_apex_rt")),
-                cell_height=_optional_float(trace.get("cell_height")),
+                group=trace.group,
+                cell_apex_rt=trace.optional_float("cell_apex_rt"),
+                trace_apex_rt=trace.optional_float("trace_apex_rt"),
+                cell_height=trace.optional_float("cell_height"),
                 local_window_max_intensity=_optional_float(
-                    trace.get("local_window_max_intensity")
+                    trace_values.get("local_window_max_intensity")
                 ),
-                trace_max_intensity=_optional_float(trace.get("trace_max_intensity")),
+                trace_max_intensity=trace.optional_float("trace_max_intensity"),
                 local_window_to_global_max_ratio=_optional_float(
-                    trace.get("local_window_to_global_max_ratio")
+                    trace_values.get("local_window_to_global_max_ratio")
                 ),
                 family_center_rt=family_center_rt,
-                rt=_optional_float_sequence(trace.get("rt")),
-                intensity=_optional_float_sequence(trace.get("intensity")),
+                rt=trace.optional_float_sequence("rt"),
+                intensity=trace.optional_float_sequence("intensity"),
                 source_json=path,
             )
             metrics[(family_id, sample_stem)] = metric
