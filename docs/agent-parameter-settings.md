@@ -292,6 +292,12 @@ When `--timing-output` or `--timing-live-output` is supplied, timing spans inclu
 the base alignment plus the post-alignment standard-peak preset stages. Use this
 shape for HEARTBEAT monitoring; older artifacts may only contain the base
 `pipeline: alignment` timing and therefore under-report preset-tail bottlenecks.
+Timing JSON now keeps the raw `records` list and also emits derived
+`summaries.stage_summary` and `summaries.raw_xic_locality_summary` sections.
+Use those derived summaries for no-RAW bottleneck triage before changing RAW
+batching/cache code: `raw_xic_locality_summary` reports stage-level
+`extract_xic_count`, `extract_xic_batch_count`, `raw_chromatogram_call_count`,
+`point_count`, and per-XIC/per-batch ratios without re-reading RAW files.
 
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight

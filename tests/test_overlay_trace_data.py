@@ -45,6 +45,31 @@ def test_overlay_trace_data_loads_typed_bundle(tmp_path: Path) -> None:
     assert bundle.traces[0].optional_float_sequence("intensity") == (10.0, 20.0)
 
 
+def test_overlay_trace_data_accepts_legacy_samples_alias(tmp_path: Path) -> None:
+    path = tmp_path / "overlay_trace_data.json"
+    path.write_text(
+        json.dumps(
+            {
+                "feature_family_id": "FAM002",
+                "samples": [
+                    {
+                        "sample_stem": "S2",
+                        "group": "QC",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    bundle = overlay_trace_data.load_overlay_trace_data(path)
+
+    assert bundle.family_id == "FAM002"
+    assert len(bundle.traces) == 1
+    assert bundle.traces[0].sample_stem == "S2"
+    assert bundle.traces[0].group == "QC"
+
+
 def test_overlay_trace_data_requires_traces_array(tmp_path: Path) -> None:
     path = tmp_path / "overlay_trace_data.json"
     path.write_text(json.dumps({"family_id": "FAM001"}), encoding="utf-8")
