@@ -37,7 +37,10 @@ Out of scope:
 Current surfaces/artifacts:
 Plan:
 Verification:
+Boundaries:
+Iteration policy:
 Done when:
+Pause if:
 Stop rules:
 Handoff:
 ```
@@ -47,6 +50,19 @@ split them into separate goals or state which one is primary. `Done when` must
 be auditable from files, commands, PR state, or validation artifacts. `Stop
 rules` must name conditions that require user decision instead of continued
 tool use.
+
+When drafting a goal for a vague request, give the best executable version
+first rather than a blank form. Choose conservative defaults for low-risk
+unknowns and ask only when the answer changes cost, risk, ownership, public
+contracts, or product direction. If the domain is unfamiliar, make discovery of
+repo docs, existing scripts, sample data, or official references part of the
+goal before implementation.
+
+Keep `Done when` for completion evidence and `Pause if` for human/external
+blockers such as credentials, production data, destructive operations,
+permissions, budget, unclear ownership, or product-direction decisions.
+Iteration should be bounded: after the same failure shape repeats twice, require
+a new source of evidence instead of another blind retry.
 
 ## Skills And Subagents
 
