@@ -1,7 +1,7 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-12
-**Total entry-points:** 83
+**Total entry-points:** 82
 **Total files (incl. helpers):** 161 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
@@ -26,7 +26,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 3 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 34 tools
+4. [Backfill Reviews](#backfill-reviews) — 33 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 8 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -473,7 +473,7 @@ must not be removed during spent-gate cleanup.
 
 ---
 
-### `standard_peak_backfill_preset.py`
+#### `standard_peak_backfill_preset.py` (preset bridge, non-CLI entry)
 
 **Purpose**: Run the standard-peak publication preset after a base alignment
 finishes, using retained-gate review rows, chunked machine evidence, and formal
