@@ -77,12 +77,55 @@ or CID-NL-only tool.
 - Direct matrix writes require an explicit activation/export contract, expected
   diff, and focused output tests.
 
+Naming rule:
+
+- Permanent package modules and CLI entry points should be named by product role
+  or evidence role, not by the validation fixture that first exposed the need.
+  Avoid new names that bake in `8raw`, `85raw`, a specific batch, or a phase code
+  when the behavior is really a reference-alignment gate, activation bridge,
+  evidence adapter, or review queue.
+- Existing fixture-shaped names may remain as compatibility or archival
+  surfaces, but new work should prefer role-named successors instead of extending
+  the fixture name into product architecture.
+- Opaque phase codes such as `p1`, `p2`, `p2b`, `p2c`, and `p7` need a behavior
+  name in docs, summaries, and PR descriptions. The code can stay for historical
+  artifacts, but it is not an acceptable standalone explanation of behavior.
+
 Before implementing non-trivial diagnostics, RAW-backed evidence, preset
 performance optimization, matrix activation, HCD-PI, Delta Mass, CID-NL
 expansion, or other evidence-provider work, use
 `.codex/skills/xic-architecture-preflight/SKILL.md` to name the existing owner,
 reuse target, call-cost model, public contract risk, validation gate, and stop
 rule.
+
+### Shared Decision Semantics Positioning
+
+`xic_extractor/evidence_semantics.py` is the shared, **role-neutral** decision
+layer. It is genuinely load-bearing, not a tiebreaker afterthought, and it serves
+two distinct consumers:
+
+- **Candidate selection** — `decision_class` ranks scored candidates in
+  `peak_detection/candidate_selection.py`.
+- **Targeted product authority** — the selected hypothesis's
+  `decision_semantics` is consumed by `selection_decision_from_hypothesis`
+  (`peak_detection/selection_decision.py`) and by the projection builder
+  (`extraction/result_assembly.py:_targeted_product_projection`) to produce the
+  `TargetedProductProjection`, which is the authority for counts and matrix
+  presence.
+
+Invariant: the shared layer stays role-neutral. Targeted-only, role-aware policy
+(ISTD plausible-dropout, paired-analyte downgrades) lives in the projection
+builder in `result_assembly.py`, **not** in `evidence_semantics.py`. The shared
+layer may say `review` with `plausible_nl_dropout_review`; it must never decide
+"this ISTD is present" or "this row is counted". Do not let targeted role policy
+leak into the shared semantics, and remember `evidence_semantics.py` is also on
+the untargeted alignment path (`common_evidence_from_aligned_cell`), so a change
+there has cross-path blast radius.
+
+The end-to-end `Confidence` / `Reason` / counted-detection resolution order is
+documented in `docs/confidence-reason-precedence-contract.md`; the authority
+migration rationale is in
+`docs/superpowers/specs/2026-06-03-targeted-evidence-chain-alignment-spec.md`.
 
 ## Diagnostics Contract
 

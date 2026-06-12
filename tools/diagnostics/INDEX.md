@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-10
-**Total entry-points:** 75
-**Total files (incl. helpers):** 159 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-12
+**Total entry-points:** 82
+**Total files (incl. helpers):** 161 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -23,25 +23,29 @@ top-level `tools/diagnostics/*.py` files for total files.
 
 ## Table of Contents
 
-1. [Phase Gates (P1/P2/P2b/P2c/P7)](#phase-gates-p1p2p2bp2cp7) — 7 tools
+1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 3 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 22 tools
-5. [Peak / Candidate Audits](#peak--candidate-audits) — 6 tools
-6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 7 tools
+4. [Backfill Reviews](#backfill-reviews) — 33 tools
+5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
+6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 8 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
-8. [Family / Overlay Visualization](#family--overlay-visualization) — 4 tools
+8. [Family / Overlay Visualization](#family--overlay-visualization) — 6 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
 
 ---
 
-## Phase Gates (P1/P2/P2b/P2c/P7)
+## Phase Gates (P1/P7)
 
 Pipeline-tier gates that compare candidate configurations against current
-production, or summarize cost/parity for production decisions. These are
-the strongest **promotion candidates** to `xic_extractor/diagnostics/gates/`
-per the lifecycle spec.
+production, or summarize cost/parity for production decisions.
+
+Maintenance note: P2/P2b/P2c AsLS-vs-linear-edge gates were retired after the
+baseline decision closed. AsLS is the current production baseline integration
+method, and `linear_edge` is retired as a selectable baseline method. Do not add
+new diagnostics that compare against or fall back to linear-edge; use current
+AsLS/boundary/product contracts instead.
 
 ### `p1_resolver_default_gate.py`
 
@@ -49,42 +53,10 @@ per the lifecycle spec.
 **Topic group**: `p1_resolver_default_gate.py` (single-file)
 **Originating spec**: `2026-05-24-peak-pipeline-resolver-default-switch-spec.md`
 **Recent doc**: `plans/2026-05-24-p1-resolver-default-real-data-validation.md`
-
----
-
-### `p2_asls_shadow_gate.py`
-
-**Purpose**: Gate P2 AsLS baseline area against historical linear-edge integration audit rows for targeted ISTD benchmark selections; supports both legacy AsLS-shadow and promoted AsLS schemas.
-**Topic group**: `p2_asls_shadow_gate.py`
-**Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md`
-**Recent doc**: `plans/2026-05-25-p2-asls-baseline-shadow-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-
----
-
-### `p2_baseline_truth_audit.py`
-
-**Purpose**: Build a diagnostic-only baseline truth audit for P2/P2b AsLS gate ISTD families; compares historical linear-edge rollback against promoted AsLS when legacy evidence is available.
-**Topic group**: `p2_baseline_truth_audit.py`
-**Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-spec.md` (shared with shadow gate)
-**Recent doc**: `plans/2026-05-25-p2-baseline-truth-audit-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-
----
-
-### `p2b_asls_promotion_gate.py`
-
-**Purpose**: Run the revised P2b AsLS promotion gate, including optional evidence-spine and target RT trend support for large RT-delta interpretation.
-**Topic group**: `p2b_asls_promotion_gate.py`
-**Originating spec**: `2026-05-24-peak-pipeline-area-baseline-asls-promotion-spec.md`
-**Recent doc**: `plans/2026-05-25-p2b-revised-asls-promotion-gate-implementation.md`, `plans/2026-05-25-p2d-rt-boundary-first-p2b-gate-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-
----
-
-### `asls_truth_validation.py`
-
-**Purpose**: Run the P2c AsLS truth-validation gate with Tier A selected-family guard, locked synthetic Tier B1/B2 benchmark, optional Tier C evidence, methodology waiver documentation, retirement prerequisite manifest, and deletion-safe exit codes.
-**Topic group**: `asls_truth_validation.py` + `_models`, `_manifests`, `_synthetic`, `_inputs`, `_analysis` (6 files)
-**Originating spec/plan**: `specs/2026-05-26-peak-pipeline-asls-truth-validation-spec.md`, `plans/2026-05-27-p2c-tier-b-b1-b2-redesign-plan.md`
-**Current gate note**: Exit `0` was the true linear-edge retirement authority consumed by the 2026-06-01 Phase 6b/Phase 7 closeout. B1 relevance fixtures are the only synthetic layer that can drive `decision_target=c1b-plan`; B2 stress evidence is reported for retirement/Tier C follow-up and must not by itself create a C1b no-go. v1 fixture outputs are non-authoritative under the B1/B2 contract and should be treated as `LEGACY_V1_NON_AUTHORITATIVE` / `INCONCLUSIVE_FIXTURE_SCOPE_MISMATCH`. After Phase 7, any linear-edge references here are historical comparison evidence, not maintained production selector support.
+**Stop-maintenance note**: The resolver-default decision is closed. Current
+public/config settings still accept the `region_first_safe_merge` token, while
+alignment production maps that token to `local_minimum`; this gate is retained
+only as decision history.
 
 ---
 
@@ -461,6 +433,9 @@ sample order, and output TSV/JSON/Markdown schemas.
 **Purpose**: Convert product-authorized standard-peak `shadow_production_projection_cells.tsv` accepts into `product_activation --matrix-only` input TSVs.
 **Topic group**: `standard_peak_shadow_activation_inputs.py` + `xic_extractor/diagnostics/standard_peak_shadow_activation_inputs.py`
 **Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Load-bearing note**: This is part of the built-in `dna_dr` standard-peak
+publication path. Treat it as product-adjacent activation infrastructure, not a
+disposable research diagnostic.
 **Status note**: Writes `standard_peak_activation_decisions.tsv`, `standard_peak_activation_values.tsv`, `standard_peak_activation_acceptance.tsv`, `standard_peak_activation_inputs.tsv`, and `standard_peak_activation_inputs_summary.json`. It selects only rows with `shadow_decision=accept`, `current_matrix_written=FALSE`, `projected_matrix_written=TRUE`, a nonblank projected value, and `same_peak_reason:shift_aware_standard_peak_gate_supported` in the product-authority chain. Current-matrix rows are counted as already written and are not reactivated; nonstandard, context, blocked, or unprovenanced rows fail closed. Before writing acceptance, the converter runs a standard-peak row-level gate that checks PeakHypothesis scope, auto-activate decision shape, matching activation values, source schema, source row SHA, and the standard-peak same-peak reason. Passing rows generate an existing-contract `activation_acceptance.tsv` with `must_not_regress_status=pass`, a max product-affecting row allowance equal to the gated selected row count, and an activation scope derived from authority provenance: manual-oracle rows stay `manual_oracle_seed_rows`, while machine-gate rows are labeled `machine_gate_standard_peak_rows` with `must_not_regress_basis=machine_shift_aware_standard_peak_gate`. With `--apply-matrix-only`, the CLI immediately calls the existing matrix-only product activation writer and emits an activated matrix under `<output-dir>/activated_matrix` unless `--activated-output-dir` is supplied. If the standard-peak gate fails, acceptance stays fail and product application must stop for review. This converter does not generate upstream evidence, change source alignment artifacts, or bypass product activation; `apply_shared_peak_identity_activation.py --matrix-only` remains the matrix writer.
 
 ---
@@ -470,6 +445,9 @@ sample order, and output TSV/JSON/Markdown schemas.
 **Purpose**: Run the reviewed standard-peak backfill path end to end: convert shadow projection accepts into activation inputs, apply matrix-only product activation, and optionally render an activation-synced reconciliation gallery.
 **Topic group**: `standard_peak_backfill_productization.py` + `xic_extractor/diagnostics/standard_peak_backfill_productization.py`
 **Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Load-bearing note**: The `dna_dr` preset can reach this path after
+`scripts/run_alignment.py` finishes base alignment. It can publish accepted
+standard-peak values into the default alignment matrix outputs.
 **Status note**: Requires `shadow_production_projection_cells.tsv`, `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, and `alignment_review.tsv`. It writes `standard_peak_backfill_productization_summary.tsv/json`, nests the converter output under `standard_peak_activation_inputs/`, and writes matrix-only activation outputs under `activated_matrix/`. It uses the same fail-closed standard-peak row gate as `standard_peak_shadow_activation_inputs.py`; rows without `same_peak_reason:shift_aware_standard_peak_gate_supported`, rows already written in the current matrix, context/block rows, and rows without positive projected values are not activated. Before activation, the orchestrator checks `current_matrix_written=TRUE` claims against the actual public matrix via `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`; stale projection rows that claim an already-written current cell while the public matrix is blank fail fast and must be regenerated. With `--write-gallery`, it also consumes optional gallery artifacts and passes the generated `activation_application_summary.tsv` / `activation_value_delta.tsv` into `backfill_evidence_reconciliation_gallery.py`, so the HTML distinguishes existing accepted-rescue writes from newly activated matrix writes. This orchestrator does not generate upstream evidence, rerun RAW, loosen nonstandard-peak policy, or mutate source alignment artifacts.
 
 ---
@@ -488,7 +466,34 @@ sample order, and output TSV/JSON/Markdown schemas.
 **Purpose**: Consolidate chunked standard-peak machine-pipeline outputs into one formal matrix-only activation pass.
 **Topic group**: `standard_peak_backfill_machine_pipeline.py` + `standard_peak_backfill_productization.py` + `xic_extractor/diagnostics/standard_peak_backfill_chunk_consolidation.py`
 **Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Load-bearing note**: This consolidation path is part of standard-peak
+publication when chunked RAW-backed evidence is used. It is not Bucket B and
+must not be removed during spent-gate cleanup.
 **Status note**: Consumes repeated chunk `standard_peak_backfill_machine_pipeline_summary.json` files or chunk directories, validates that all chunks passed, optionally verifies complete non-overlapping rank coverage against the full retained-backfill review queue by reading actual overlay summary `rank` values, deduplicates full-matrix chunk `shadow_projection_cells.tsv` rows into `consolidated_shadow_projection_cells.tsv`, preferring product-affecting accepted rows over context rows and failing closed on conflicting accepted values, then calls `standard_peak_backfill_productization.py` once to write the final matrix-only activated matrix. This is the product bridge for expensive 85RAW chunked overlay runs: individual chunk matrices are review artifacts only; the consolidated run is the formal matrix candidate. With `--emit-formal-product-output`, only a passing consolidated run with a supplied full review queue and complete non-duplicated rank coverage publishes a downstream-ready product output directory containing `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, `activation_hypothesis_identity.tsv`, `activation_value_delta.tsv`, `activation_application_summary.tsv`, and `standard_peak_formal_product_manifest.json`; the manifest records the activation output mode, decision scope, standard-peak gate basis, source shadow projection hash, artifact hashes, and queue coverage. By default that passing formal product is also promoted back to the source alignment output so the source `alignment_matrix.tsv` and `alignment_matrix_identity.tsv` become the standard-peak-backfilled final matrix; the original source files are preserved as `*.pre_standard_peak_backfill.tsv`, and `standard_peak_default_matrix_manifest.json` plus `standard_peak_*` audit sidecars are written beside the final matrix. Use `--no-publish-to-source-alignment-output` only for sidecar-only validation. After publication, reruns should use the `*.pre_standard_peak_backfill.tsv` files as activation input and supply `--publish-alignment-matrix-tsv` / `--publish-alignment-matrix-identity-tsv` pointing back to the default final matrix paths, so written-count semantics stay grounded in the pre-standard matrix. The CLI refuses to use the source alignment directory as the formal sidecar directory, requires publish target matrix/identity paths as a pair, and incomplete or duplicated coverage leaves only a failing consolidation summary while clearing known stale formal-product files from the target formal output directory. With `--write-gallery`, it also passes all chunk overlay and shift-aware gate TSVs to the activation-synced reconciliation gallery so evidence display and matrix writes use the same product-authorized rows.
+
+---
+
+#### `standard_peak_backfill_preset.py` (preset bridge, non-CLI entry)
+
+**Purpose**: Run the standard-peak publication preset after a base alignment
+finishes, using retained-gate review rows, chunked machine evidence, and formal
+chunk consolidation to publish accepted standard-peak values.
+**Topic group**: `standard_peak_backfill_machine_pipeline.py` +
+`standard_peak_backfill_chunk_consolidation.py` +
+`standard_peak_backfill_productization.py`
+**Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
+**Load-bearing note**: `scripts/run_alignment.py` calls this entry point when
+the active preset runtime options enable `standard_peak_backfill`; the built-in
+`dna_dr` preset defaults to `standard_peak_backfill_publication_mode =
+"matrix-only"`. This is the default preset publication bridge, not an optional
+research gallery.
+**Status note**: Runs the retained backfill evidence gate, reads the generated
+standard-peak review queue, dispatches chunked machine-pipeline runs, and then
+calls chunk consolidation to publish the final matrix-only standard-peak output.
+It writes `standard_peak_backfill_preset_summary.json` and records whether the
+run skipped because no review rows were present or published a consolidated
+matrix. It does not replace base alignment; it executes only after the base
+alignment artifacts exist.
 
 ---
 
@@ -937,6 +942,14 @@ not formal boundary+area oracle rows.
 
 ---
 
+### `subthreshold_sensitivity_report.py`
+
+**Purpose**: Aggregate Gaussian15 sub-threshold (missed-peak) candidates across a batch of overlay trace-data JSONs as evidence for whether/how far to relax `ms1_peak_modes.gaussian15_peak_observations` multi-peak thresholds.
+**Topic group**: reuses `subthreshold_candidate_report` (mirrors the detector's local-maximum scan).
+**Status note**: Diagnostic-only; changes NO detection logic. Reports accepted-vs-rejected local maxima, which gate (height/prominence/edge/overlapping) blocked rejects (appears-in-reasons vs SOLE blocker), and a height-recovery upper bound. Use on a real (ideally spike-in) batch, then validate any threshold change with spike-in recovery.
+
+---
+
 ### `ms1_peak_group_nl_scope_gate.py`
 
 **Purpose**: Gate selected `chrom_peak_segment` candidate MS2/NL evidence so
@@ -1021,6 +1034,14 @@ schemas.
 **Topic group**: `multi_tag_adduct_audit.py` (single-file)
 **Originating spec**: `2026-05-15-multi-nl-tag-and-artificial-adduct-contract.md`
 **Recent doc**: `plans/2026-05-15-multi-nl-tag-and-artificial-adduct-plan.md`
+
+---
+
+### `target_pair_rt_candidate_plot_review.py`
+
+**Purpose**: Render target-pair RT candidate review plots from RAW XIC traces for human adjudication of paired analyte/ISTD RT candidate selection.
+**Topic group**: target-pair RT review; reuses `gaussian15_morphology_trace`.
+**Status note**: Diagnostic-only RAW-backed review plots; does not change selection or matrix areas.
 
 ---
 
@@ -1122,6 +1143,14 @@ multiple MS1 peak modes.
 
 ---
 
+### `family_ms1_alignment_experiment.py`
+
+**Purpose**: Render honest RT-interpretation comparison panels for MS1 overlay traces for one alignment feature family.
+**Topic group**: underlying single-family experiment for `family_ms1_alignment_experiment_batch.py`; reuses `family_ms1_overlay_*` helpers.
+**Status note**: Diagnostic-only RT-interpretation comparison; does not change backfill decisions or matrix areas. The batch wrapper reads existing overlay trace JSONs and runs this per successful overlay row.
+
+---
+
 ### `family_ms1_alignment_experiment_batch.py`
 
 **Purpose**: Convert `family_ms1_overlay_batch_summary.tsv` trace JSON outputs into shift-aware source-family alignment experiment outputs in batch.
@@ -1208,7 +1237,10 @@ output, matrix values, or candidate selection.
 **Topic group**: `area_integration_uncertainty_audit.py` + `_io`, `_models`, `_analysis`, `_writers` (5 files)
 **Originating spec**: `2026-05-18-area-integration-uncertainty-audit-gate.md`
 **Recent doc**: `plans/2026-05-25-p4-area-uncertainty-formula-implementation.md`, `plans/2026-05-26-p2b-asls-production-promotion-plan.md`
-**Schema note**: The current accepted `alignment_cell_integration_audit.tsv` schema no longer emits linear-edge rollback columns. Historical promoted-AsLS rows that still include `area_baseline_corrected_linear_edge` remain readable as legacy comparison input.
+**Schema note**: The current accepted `alignment_cell_integration_audit.tsv`
+schema no longer emits or consumes linear-edge rollback columns. Area
+uncertainty uses the reported `area_baseline_corrected` value from the current
+audit schema only.
 
 ---
 

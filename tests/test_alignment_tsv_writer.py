@@ -1220,7 +1220,7 @@ def test_write_alignment_cell_integration_audit_tsv_is_sidecar(
     assert "baseline_score_linear_edge" not in audit[0]
 
 
-def test_cell_integration_audit_default_schema_uses_asls_without_linear_rollback(
+def test_cell_integration_audit_default_schema_uses_current_asls_only(
     tmp_path: Path,
 ) -> None:
     from xic_extractor.alignment.tsv_writer import (
@@ -1251,14 +1251,14 @@ def test_cell_integration_audit_default_schema_uses_asls_without_linear_rollback
     assert "baseline_score_asls" not in rows[0]
 
 
-def test_cell_integration_audit_post_rollback_schema_fixture_matches_writer() -> None:
+def test_cell_integration_audit_current_asls_schema_fixture_matches_writer() -> None:
     from xic_extractor.alignment.tsv_writer import (
         ALIGNMENT_CELL_INTEGRATION_AUDIT_COLUMNS,
     )
 
     schema_path = Path(
         "docs/superpowers/fixtures/"
-        "alignment_cell_integration_audit_post_rollback_schema.tsv"
+        "alignment_cell_integration_audit_current_asls_schema.tsv"
     )
     header = schema_path.read_text(encoding="utf-8").splitlines()[0]
     columns = tuple(header.split("\t"))
