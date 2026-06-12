@@ -281,7 +281,7 @@ def test_area_integration_uncertainty_audit_classifies_all_buckets(
     assert alignment_rows[0]["area_uncertainty_noise_source"] == "asls_residual"
 
 
-def test_uncertainty_audit_uses_linear_edge_rollback_for_promoted_asls(
+def test_uncertainty_audit_uses_reported_baseline_for_current_schema(
     tmp_path: Path,
 ) -> None:
     evidence_path = tmp_path / "evidence.tsv"
@@ -315,18 +315,15 @@ def test_uncertainty_audit_uses_linear_edge_rollback_for_promoted_asls(
     _write_tsv(
         alignment_path,
         [
-            {
-                **_alignment_row(
-                    "FAM_BASELINE",
-                    area="200",
-                    baseline_area="160",
-                    uncertainty_fraction="0.05",
-                    baseline_fraction="0.8",
-                ),
-                "area_baseline_corrected_linear_edge": "80",
-            }
+            _alignment_row(
+                "FAM_BASELINE",
+                area="200",
+                baseline_area="80",
+                uncertainty_fraction="0.05",
+                baseline_fraction="0.4",
+            )
         ],
-        fields=(*ALIGNMENT_FIELDS, "area_baseline_corrected_linear_edge"),
+        fields=ALIGNMENT_FIELDS,
     )
 
     _outputs, result = report.run_area_integration_uncertainty_audit(
@@ -341,7 +338,7 @@ def test_uncertainty_audit_uses_linear_edge_rollback_for_promoted_asls(
     assert row.integration_bucket == "baseline_explains_raw_mismatch"
     assert row.untargeted_baseline_area == pytest.approx(80.0)
     assert row.baseline_area_ratio == pytest.approx(1.0)
-    assert row.baseline_area_method == "linear_edge_compatible"
+    assert row.baseline_area_method == "reported_baseline"
 
 
 def test_area_integration_uncertainty_audit_fails_on_missing_columns(

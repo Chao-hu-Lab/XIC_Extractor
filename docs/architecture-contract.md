@@ -77,6 +77,20 @@ or CID-NL-only tool.
 - Direct matrix writes require an explicit activation/export contract, expected
   diff, and focused output tests.
 
+Naming rule:
+
+- Permanent package modules and CLI entry points should be named by product role
+  or evidence role, not by the validation fixture that first exposed the need.
+  Avoid new names that bake in `8raw`, `85raw`, a specific batch, or a phase code
+  when the behavior is really a reference-alignment gate, activation bridge,
+  evidence adapter, or review queue.
+- Existing fixture-shaped names may remain as compatibility or archival
+  surfaces, but new work should prefer role-named successors instead of extending
+  the fixture name into product architecture.
+- Opaque phase codes such as `p1`, `p2`, `p2b`, `p2c`, and `p7` need a behavior
+  name in docs, summaries, and PR descriptions. The code can stay for historical
+  artifacts, but it is not an acceptable standalone explanation of behavior.
+
 Before implementing non-trivial diagnostics, RAW-backed evidence, preset
 performance optimization, matrix activation, HCD-PI, Delta Mass, CID-NL
 expansion, or other evidence-provider work, use
