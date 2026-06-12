@@ -9,6 +9,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
 from xic_extractor.alignment.backfill_scope import read_family_allowlist_tsv
 from xic_extractor.alignment.config import AlignmentConfig
@@ -312,10 +313,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
                     source_run_id=_preset_source_run_id(preset),
-                    chunk_size=int(
-                        preset_runtime_options[
-                            "standard_peak_backfill_chunk_size"
-                        ],
+                    chunk_size=_runtime_int_option(
+                        preset_runtime_options,
+                        "standard_peak_backfill_chunk_size",
                     ),
                     reuse_existing=bool(
                         preset_runtime_options[
@@ -332,10 +332,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                             "standard_peak_backfill_publication_mode"
                         ],
                     ),
-                    min_shape_r=float(
-                        preset_runtime_options[
-                            "standard_peak_backfill_min_shape_r"
-                        ],
+                    min_shape_r=_runtime_float_option(
+                        preset_runtime_options,
+                        "standard_peak_backfill_min_shape_r",
                     ),
                     timing_recorder=timing_recorder,
                 )
@@ -870,6 +869,14 @@ def _apply_standard_peak_publication_mode_override(
         "review-gallery",
         "deep-audit",
     }
+
+
+def _runtime_int_option(runtime_options: dict[str, object], key: str) -> int:
+    return int(cast(Any, runtime_options[key]))
+
+
+def _runtime_float_option(runtime_options: dict[str, object], key: str) -> float:
+    return float(cast(Any, runtime_options[key]))
 
 
 def _standard_peak_backfill_requires_full_cells(

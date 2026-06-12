@@ -31,6 +31,8 @@ from xic_extractor.alignment.process_backend import (
     OwnerBuildTimingStats,
     OwnerBuildWorkerError,
     extract_identity_trace_sample_job,
+    owner_backfill_job_payload_metrics,
+    process_job_payload_size_bytes,
     run_identity_trace_process,
     run_owner_backfill_process,
     run_owner_build_jobs,
@@ -134,7 +136,11 @@ def test_owner_backfill_process_sends_only_sample_requested_features(
     tmp_path: Path,
 ) -> None:
     feature_a = _confirmable_feature_for_sample_a()
-    feature_b = replace(_feature(), feature_family_id="FAM000002")
+    feature_b = replace(
+        _feature(),
+        feature_family_id="FAM000002",
+        backfill_seed_centers=((500.0, 8.5), (501.0, 8.75)),
+    )
     captured_jobs = []
 
     def fake_runner(jobs, *, max_workers):
@@ -167,6 +173,53 @@ def test_owner_backfill_process_sends_only_sample_requested_features(
     )
     assert by_sample["sample-a"].feature_payload_count == 1
     assert by_sample["sample-b"].feature_payload_count == 2
+    assert by_sample["sample-a"].request_payload_count == 1
+    assert by_sample["sample-b"].request_payload_count == 3
+
+
+def test_owner_backfill_process_reports_payload_economics_without_deepening_payload(
+    tmp_path: Path,
+) -> None:
+    feature_a = _confirmable_feature_for_sample_a()
+    feature_b = replace(
+        _feature(),
+        feature_family_id="FAM000002",
+        backfill_seed_centers=((500.0, 8.5), (501.0, 8.75)),
+    )
+    captured_jobs = []
+
+    def fake_runner(jobs, *, max_workers):
+        captured_jobs.extend(jobs)
+        return []
+
+    run_owner_backfill_process(
+        (feature_a, feature_b),
+        sample_order=("sample-a", "sample-b"),
+        raw_paths={
+            "sample-a": tmp_path / "sample-a.raw",
+            "sample-b": tmp_path / "sample-b.raw",
+        },
+        dll_dir=tmp_path / "dll",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(tmp_path),
+        max_workers=2,
+        runner=fake_runner,
+    )
+
+    metrics = [owner_backfill_job_payload_metrics(job) for job in captured_jobs]
+
+    assert [
+        (item.sample_stem, item.feature_payload_count, item.request_payload_count)
+        for item in metrics
+    ] == [
+        ("sample-a", 1, 1),
+        ("sample-b", 2, 3),
+    ]
+    assert [item.requests_per_feature for item in metrics] == [1.0, 1.5]
+    assert all(item.pickle_payload_bytes > 0 for item in metrics)
+    assert process_job_payload_size_bytes(captured_jobs[0]) == (
+        metrics[0].pickle_payload_bytes
+    )
 
 
 def test_owner_backfill_process_per_sample_features_match_legacy_scan(

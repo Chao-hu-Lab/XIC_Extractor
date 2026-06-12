@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from collections import Counter
 from dataclasses import asdict
@@ -14,6 +13,7 @@ from xic_extractor.instrument_qc.rt_transfer_audit import (
     BiologicalIstdTransferAuditRow,
     build_biological_istd_transfer_audit_rows,
 )
+from xic_extractor.tabular_io import write_tsv
 
 BIOLOGICAL_ISTD_TRANSFER_COLUMNS = [
     "target_label",
@@ -87,15 +87,11 @@ def write_biological_istd_transfer_audit_tsv(
     rows: tuple[BiologicalIstdTransferAuditRow, ...],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=BIOLOGICAL_ISTD_TRANSFER_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_row_to_dict(row))
+    write_tsv(
+        path,
+        tuple(_row_to_dict(row) for row in rows),
+        BIOLOGICAL_ISTD_TRANSFER_COLUMNS,
+    )
 
 
 def _summary_payload(

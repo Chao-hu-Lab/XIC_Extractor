@@ -321,29 +321,29 @@ def load_fixture_manifest(path: Path) -> FixtureManifest:
     truth_target_type_by_class: dict[str, str] = {}
     stress_role_by_class: dict[str, str] = {}
     allowed_targets_by_class: dict[str, tuple[str, ...]] = {}
+    required_class_keys = (
+        tuple(
+            key
+            for key in _REQUIRED_FIXTURE_CLASS_KEYS
+            if key
+            not in {
+                "default_gate_layer",
+                "truth_target_type",
+                "stress_role",
+                "allowed_decision_targets",
+                "production_like_bounds_policy",
+                "promotion_requires_review_evidence",
+            }
+        )
+        if is_legacy
+        else _REQUIRED_FIXTURE_CLASS_KEYS
+    )
     for row in classes:
         if not isinstance(row, Mapping):
             raise ValueError(f"{path}: fixture_classes entries must be objects")
         class_name = _require_text(row, "fixture_class", path)
         class_names.append(class_name)
-        required_keys = (
-            tuple(
-                key
-                for key in _REQUIRED_FIXTURE_CLASS_KEYS
-                if key
-                not in {
-                    "default_gate_layer",
-                    "truth_target_type",
-                    "stress_role",
-                    "allowed_decision_targets",
-                    "production_like_bounds_policy",
-                    "promotion_requires_review_evidence",
-                }
-            )
-            if is_legacy
-            else _REQUIRED_FIXTURE_CLASS_KEYS
-        )
-        for key in required_keys:
+        for key in required_class_keys:
             if key not in row:
                 raise ValueError(f"{path}: {class_name} missing {key}")
         gate_layer = _optional_class_gate_layer(class_name, row, is_legacy, path)
@@ -509,12 +509,12 @@ def validate_fixture_lock_coverage(
 ) -> None:
     records = lock.records
     counts = Counter((row.fixture_class, row.split) for row in records)
+    heldout_by_class: dict[str, list[FixtureLockRecord]] = {}
+    for row in records:
+        if row.split == "heldout_gate":
+            heldout_by_class.setdefault(row.fixture_class, []).append(row)
     for class_name in REQUIRED_FIXTURE_CLASSES:
-        class_heldout = [
-            row
-            for row in records
-            if row.fixture_class == class_name and row.split == "heldout_gate"
-        ]
+        class_heldout = heldout_by_class.get(class_name, [])
         if counts[(class_name, "calibration")] < MIN_CALIBRATION_REPLICATES_PER_CLASS:
             raise ValueError(f"{path}: {class_name} has too few calibration rows")
         if counts[(class_name, "heldout_gate")] < MIN_HELDOUT_REPLICATES_PER_CLASS:

@@ -7,7 +7,12 @@ from pathlib import Path
 from openpyxl import Workbook
 
 from tools.diagnostics import targeted_istd_benchmark as benchmark
+from tools.diagnostics import targeted_istd_benchmark_loaders as loaders
+from tools.diagnostics import targeted_istd_benchmark_writers as writers
 from tools.diagnostics.targeted_istd_benchmark_models import (
+    BenchmarkOutputs,
+    BenchmarkSummary,
+    BenchmarkThresholds,
     TargetedPoint,
     TargetedReliabilityPoint,
 )
@@ -235,6 +240,45 @@ def test_main_writes_outputs_and_returns_one_when_gate_fails(tmp_path: Path):
     assert payload["active_fail_count"] == 1
 
 
+def test_writer_reuses_overall_counts_for_json_and_markdown(tmp_path: Path) -> None:
+    outputs = BenchmarkOutputs(
+        summary_tsv=tmp_path / "targeted_istd_benchmark_summary.tsv",
+        matches_tsv=tmp_path / "targeted_istd_benchmark_matches.tsv",
+        json_path=tmp_path / "targeted_istd_benchmark.json",
+        markdown_path=tmp_path / "targeted_istd_benchmark.md",
+    )
+
+    writers.write_benchmark_outputs(
+        outputs,
+        summaries=(
+            _benchmark_summary(
+                "ActiveFail",
+                status="FAIL",
+                active_tag=True,
+                failure_modes=("FALSE_POSITIVE_TAG",),
+            ),
+            _benchmark_summary(
+                "WarningOnly",
+                status="PASS",
+                active_tag=True,
+                warning_modes=("targeted_review_positive",),
+            ),
+            _benchmark_summary("InactiveWarn", status="WARN", active_tag=False),
+        ),
+        matches=(),
+        thresholds=BenchmarkThresholds(),
+    )
+
+    payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
+    assert payload["overall_status"] == "FAIL"
+    assert payload["fail_count"] == 1
+    assert payload["warn_count"] == 2
+    assert payload["active_fail_count"] == 1
+    assert payload["active_warn_count"] == 1
+    assert payload["false_positive_tag_count"] == 1
+    assert "Overall status: FAIL" in outputs.markdown_path.read_text(encoding="utf-8")
+
+
 def test_main_reports_missing_required_workbook_column(
     tmp_path: Path,
     capsys,
@@ -335,6 +379,43 @@ def test_sample_normalization_maps_qc_underscore_names(tmp_path: Path):
     )
 
     assert summaries[0].paired_area_n == 3
+
+
+def test_alignment_matrix_normalizes_sample_columns_once(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    matrix_path = tmp_path / "alignment_matrix.tsv"
+    _write_tsv(
+        matrix_path,
+        [
+            _matrix_row("FAM001", (10.0, 100.0), samples=("QC_1", "S2")),
+            _matrix_row("FAM002", (20.0, 200.0), samples=("QC_1", "S2")),
+            _matrix_row("FAM003", (30.0, 300.0), samples=("QC_1", "S2")),
+        ],
+        (
+            "feature_family_id",
+            "neutral_loss_tag",
+            "family_center_mz",
+            "family_center_rt",
+            "QC_1",
+            "S2",
+        ),
+    )
+    normalized: list[str] = []
+    original_normalize = loaders._normalize_sample_id
+
+    def counted_normalize(sample_id: str) -> str:
+        normalized.append(sample_id)
+        return original_normalize(sample_id)
+
+    monkeypatch.setattr(loaders, "_normalize_sample_id", counted_normalize)
+
+    matrix = loaders.read_alignment_matrix(matrix_path)
+
+    assert normalized == ["QC_1", "S2"]
+    assert matrix.sample_stems == frozenset({"QC1", "S2"})
+    assert matrix.areas_by_family["FAM002"] == {"QC1": 20.0, "S2": 200.0}
 
 
 def test_active_istd_can_pass_with_primary_isotope_shift_fallback(tmp_path: Path):
@@ -716,7 +797,7 @@ def _write_targeted_workbook(
     )
     for sample_index, sample in enumerate(samples, start=1):
         for target_index, target in enumerate(targets):
-            rt = float(target["RT min"]) + 0.5 + sample_index * 0.01
+            rt = float(str(target["RT min"])) + 0.5 + sample_index * 0.01
             area = 10.0 ** sample_index
             results.append(
                 [
@@ -901,6 +982,45 @@ def _cell_row(
         "area": area,
         "apex_rt": apex_rt,
     }
+
+
+def _benchmark_summary(
+    target_label: str,
+    *,
+    status: str,
+    active_tag: bool,
+    failure_modes: tuple[str, ...] = (),
+    warning_modes: tuple[str, ...] = (),
+) -> BenchmarkSummary:
+    return BenchmarkSummary(
+        target_label=target_label,
+        role="ISTD",
+        active_tag=active_tag,
+        neutral_loss_da=116.0474,
+        target_mz=245.0,
+        target_rt_min=10.0,
+        target_rt_max=11.0,
+        targeted_positive_count=3,
+        targeted_total_count=3,
+        targeted_mean_rt=10.5,
+        candidate_match_count=1,
+        primary_match_count=1,
+        primary_feature_ids=("FAM001",),
+        selected_feature_id="FAM001",
+        untargeted_positive_count=3,
+        coverage_minimum=3,
+        paired_area_n=3,
+        log_area_pearson=0.95,
+        log_area_spearman=0.96,
+        family_mean_rt_delta_min=0.01,
+        sample_rt_pair_n=3,
+        sample_rt_median_abs_delta_min=0.01,
+        sample_rt_p95_abs_delta_min=0.02,
+        status=status,
+        failure_modes=failure_modes,
+        note="",
+        targeted_reliability_warning_modes=warning_modes,
+    )
 
 
 def _read_tsv(path: Path) -> list[dict[str, str]]:

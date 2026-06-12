@@ -111,11 +111,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def _parse_known_exceptions(values: Sequence[str]) -> dict[str, str]:
     known: dict[str, str] = {}
     for value in values:
-        if ":" not in value:
+        target, separator, mode = value.partition(":")
+        if not separator:
             raise ValueError(
                 "--known-target-exception must use TARGET:FAILURE_MODE form"
             )
-        target, mode = value.split(":", 1)
         target = target.strip()
         mode = mode.strip()
         if not target or not mode:

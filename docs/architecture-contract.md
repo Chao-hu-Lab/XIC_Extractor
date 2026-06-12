@@ -61,6 +61,29 @@ Boundary ownership note:
   ISTD fallback references must be resolved before `peak_detection` enumerates
   Gaussian15/ChromPeakSegment candidates.
 
+## Dataset-Agnostic Evidence Architecture
+
+This repo is an LC-MS evidence and model-selection system, not a single-dataset
+or CID-NL-only tool.
+
+- 8RAW and 85RAW are validation fixtures and stress oracles. They are not the
+  architecture boundary.
+- CID-NL, HCD-PI, Delta Mass, MS1 isotope/adduct pattern, RT/iRT, shape, clean
+  standards, library matches, and future learned models are evidence providers.
+- Evidence providers should enter through `EvidenceVector`, `PeakHypothesis`,
+  model selection, and `AuditTrail` before any matrix/export mutation.
+- A new evidence source must state whether it is `audit_only`, hypothesis
+  enumeration, model-selection calibration, production candidate, or retirement.
+- Direct matrix writes require an explicit activation/export contract, expected
+  diff, and focused output tests.
+
+Before implementing non-trivial diagnostics, RAW-backed evidence, preset
+performance optimization, matrix activation, HCD-PI, Delta Mass, CID-NL
+expansion, or other evidence-provider work, use
+`.codex/skills/xic-architecture-preflight/SKILL.md` to name the existing owner,
+reuse target, call-cost model, public contract risk, validation gate, and stop
+rule.
+
 ## Diagnostics Contract
 
 Treat `tools/diagnostics/` as maintained product-adjacent code.
@@ -78,6 +101,11 @@ Treat `tools/diagnostics/` as maintained product-adjacent code.
   artifact.
 - Optional diagnostics should use sidecar artifacts. Do not silently change
   established TSV/workbook schemas unless an approved contract says so.
+- Architecture reviews for large diagnostics PRs should start from the shared
+  helper and public-contract blast radius, not from an even line-by-line pass
+  over every writer. Check package-neutral helpers, matrix identity/value-delta
+  surfaces, RAW-access fallback behavior, and diagnostic-vs-production claims
+  before treating mechanical TSV writer churn as low risk.
 
 Before any PR that adds, removes, or renames a CLI entry point in
 `tools/diagnostics/`, read `tools/diagnostics/INDEX.md` and cite which existing

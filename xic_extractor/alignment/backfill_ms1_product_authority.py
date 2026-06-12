@@ -6,6 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from xic_extractor.alignment._backfill_util import (
+    allowlist_rows_by_family_sample_key,
+    has_semicolon_token,
+    rows_by_family_sample_key,
+)
 from xic_extractor.alignment.backfill_evidence_projection import (
     PRODUCT_AUTHORITY_SCOPE_FIELD,
     PRODUCT_AUTHORITY_SOURCE_FIELD,
@@ -19,7 +24,7 @@ from xic_extractor.alignment.promotion_policy import (
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     machine_evidence_support,
 )
-from xic_extractor.diagnostics.diagnostic_io import optional_float, text_value
+from xic_extractor.tabular_io import optional_float, text_value
 
 SCHEMA_VERSION = "backfill_ms1_pattern_product_authority_v1"
 DEFAULT_MIN_ANCHOR_OWN_MAX_SHAPE_SIMILARITY = 0.5
@@ -81,6 +86,13 @@ class _OverlayTraceDataValidation:
 
 
 @dataclass(frozen=True)
+class _OverlayTraceDataFile:
+    status: str
+    sha256: str = ""
+    data: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
 class _AuthorizationDecision:
     decision: str
     reason: str
@@ -97,6 +109,7 @@ def authorize_ms1_pattern_rows(
 ) -> ProductAuthorityResult:
     source_by_key = _rows_by_key(ms1_pattern_rows)
     allowlist_by_key = _allowlist_by_key(allowlist_rows)
+    trace_data_cache: dict[str, _OverlayTraceDataFile] = {}
     authorized_rows: list[dict[str, str]] = []
     audit_rows: list[dict[str, str]] = []
     for key in sorted(allowlist_by_key):
@@ -106,6 +119,7 @@ def authorize_ms1_pattern_rows(
             source_row,
             allowlist_row,
             artifact_base_dir=artifact_base_dir,
+            trace_data_cache=trace_data_cache,
         )
         audit_rows.append(
             _audit_row(
@@ -151,47 +165,22 @@ def output_columns(source_columns: Sequence[str]) -> tuple[str, ...]:
 def _rows_by_key(
     rows: Sequence[Mapping[str, str]],
 ) -> dict[tuple[str, str], Mapping[str, str]]:
-    by_key: dict[tuple[str, str], Mapping[str, str]] = {}
-    for row in rows:
-        family_id = text_value(row.get("feature_family_id"))
-        sample_stem = text_value(row.get("sample_stem") or row.get("sample_id"))
-        if family_id and sample_stem:
-            key = (family_id, sample_stem)
-            if key in by_key:
-                raise ValueError(
-                    "duplicate backfill MS1 product authority source key: "
-                    f"{family_id}, {sample_stem}"
-                )
-            by_key[key] = row
-    return by_key
+    return rows_by_family_sample_key(
+        rows,
+        duplicate_label="backfill MS1 product authority source",
+    )
 
 
 def _allowlist_by_key(
     rows: Sequence[Mapping[str, str]],
 ) -> dict[tuple[str, str], Mapping[str, str]]:
-    by_key: dict[tuple[str, str], Mapping[str, str]] = {}
-    for row in rows:
-        schema_version = text_value(row.get("schema_version"))
-        if schema_version != SCHEMA_VERSION:
-            raise ValueError(
-                "unsupported backfill MS1 product authority schema version: "
-                f"{schema_version!r}"
-            )
-        family_id = text_value(row.get("feature_family_id"))
-        sample_stem = text_value(row.get("sample_stem"))
-        if not family_id or not sample_stem:
-            raise ValueError(
-                "backfill MS1 product authority allowlist rows require "
-                "feature_family_id and sample_stem"
-            )
-        key = (family_id, sample_stem)
-        if key in by_key:
-            raise ValueError(
-                "duplicate backfill MS1 product authority allowlist key: "
-                f"{family_id}, {sample_stem}"
-            )
-        by_key[key] = row
-    return by_key
+    return allowlist_rows_by_family_sample_key(
+        rows,
+        expected_schema_version=SCHEMA_VERSION,
+        schema_label="backfill MS1 product authority",
+        missing_label="backfill MS1 product authority",
+        duplicate_label="backfill MS1 product authority allowlist",
+    )
 
 
 def _authorization_decision(
@@ -199,6 +188,7 @@ def _authorization_decision(
     allowlist_row: Mapping[str, str],
     *,
     artifact_base_dir: Path | None,
+    trace_data_cache: dict[str, _OverlayTraceDataFile],
 ) -> _AuthorizationDecision:
     if text_value(allowlist_row.get("authority_status")) != PRODUCT_AUTHORIZED_STATUS:
         return _reject("allowlist_status_not_product_authorized")
@@ -222,6 +212,7 @@ def _authorization_decision(
     overlay_trace_data = _validate_overlay_trace_data(
         source_row,
         artifact_base_dir=artifact_base_dir,
+        trace_data_cache=trace_data_cache,
     )
     if overlay_trace_data.status != "valid":
         return _reject(
@@ -269,7 +260,7 @@ def _authorization_decision(
             "source_peak_quality_not_supportive",
             overlay_trace_data=overlay_trace_data,
         )
-    if not _has_reason_token(
+    if not has_semicolon_token(
         source_row.get("reason"),
         ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
     ):
@@ -392,36 +383,30 @@ def _reject(
     return _AuthorizationDecision("rejected", reason, overlay_trace_data)
 
 
-def _has_reason_token(value: object, token: str) -> bool:
-    return token in {
-        part.strip()
-        for part in text_value(value).split(";")
-        if part.strip()
-    }
-
-
 def _validate_overlay_trace_data(
     source_row: Mapping[str, str],
     *,
     artifact_base_dir: Path | None,
+    trace_data_cache: dict[str, _OverlayTraceDataFile],
 ) -> _OverlayTraceDataValidation:
     path_text = text_value(source_row.get("family_ms1_overlay_trace_data_json"))
-    path = _resolve_bundle_path(path_text, artifact_base_dir)
-    if path is None:
+    relative_path = _bundle_relative_path(path_text, artifact_base_dir)
+    if relative_path is None:
         return _OverlayTraceDataValidation(
             "source_overlay_trace_json_path_outside_bundle"
         )
-    try:
-        payload = path.read_bytes()
-    except OSError:
-        return _OverlayTraceDataValidation("source_overlay_trace_json_unreadable")
-
-    try:
-        data = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return _OverlayTraceDataValidation("source_overlay_trace_json_invalid")
-    if not isinstance(data, dict):
-        return _OverlayTraceDataValidation("source_overlay_trace_json_not_object")
+    path = (
+        Path(relative_path)
+        if artifact_base_dir is None
+        else artifact_base_dir.resolve() / Path(relative_path)
+    )
+    trace_file = trace_data_cache.get(relative_path)
+    if trace_file is None:
+        trace_file = _read_overlay_trace_data_file(path)
+        trace_data_cache[relative_path] = trace_file
+    if trace_file.status != "valid" or trace_file.data is None:
+        return _OverlayTraceDataValidation(trace_file.status, trace_file.sha256)
+    data = trace_file.data
 
     family_id = text_value(source_row.get("feature_family_id"))
     if text_value(data.get("family_id")) != family_id:
@@ -453,7 +438,26 @@ def _validate_overlay_trace_data(
         )
     return _OverlayTraceDataValidation(
         "valid",
+        trace_file.sha256,
+    )
+
+
+def _read_overlay_trace_data_file(path: Path) -> _OverlayTraceDataFile:
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        return _OverlayTraceDataFile("source_overlay_trace_json_unreadable")
+
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _OverlayTraceDataFile("source_overlay_trace_json_invalid")
+    if not isinstance(data, dict):
+        return _OverlayTraceDataFile("source_overlay_trace_json_not_object")
+    return _OverlayTraceDataFile(
+        "valid",
         hashlib.sha256(payload).hexdigest().upper(),
+        data,
     )
 
 
@@ -476,15 +480,6 @@ def _expected_overlay_path_status(
     if source_path != expected_path:
         return "allowlist_overlay_trace_json_path_mismatch"
     return "valid"
-
-
-def _resolve_bundle_path(path_text: str, base_dir: Path | None) -> Path | None:
-    relative_path = _bundle_relative_path(path_text, base_dir)
-    if relative_path is None:
-        return None
-    if base_dir is None:
-        return Path(relative_path)
-    return base_dir.resolve() / Path(relative_path)
 
 
 def _bundle_relative_path(path_text: str, base_dir: Path | None) -> str | None:

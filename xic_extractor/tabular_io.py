@@ -1,0 +1,324 @@
+"""Small tabular and scalar helpers shared across package layers.
+
+Keep this module deliberately narrow. It is not a diagnostic framework; it only
+holds repeated CSV/TSV mechanics and scalar parsing that are safe for domain,
+diagnostic, and tool adapters to share.
+"""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import io
+import math
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from pathlib import Path
+from typing import Any, Literal
+
+
+def read_delimited_rows(
+    path: Path,
+    *,
+    required_columns: Sequence[str],
+    delimiter: str = "\t",
+    encoding: str = "utf-8",
+) -> list[dict[str, str]]:
+    with path.open(newline="", encoding=encoding) as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        fieldnames = tuple(reader.fieldnames or ())
+        missing = [column for column in required_columns if column not in fieldnames]
+        if missing:
+            raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
+        return [dict(row) for row in reader]
+
+
+def read_tsv_required(
+    path: Path,
+    required_columns: Sequence[str],
+) -> tuple[dict[str, str], ...]:
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    return tuple(
+        read_delimited_rows(
+            path,
+            required_columns=required_columns,
+            encoding="utf-8-sig",
+        )
+    )
+
+
+def read_tsv_with_header(
+    path: Path,
+    *,
+    required_columns: Sequence[str] = (),
+    encoding: str = "utf-8",
+) -> tuple[tuple[str, ...], list[dict[str, str]]]:
+    with path.open(encoding=encoding, newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        header = tuple(reader.fieldnames or ())
+        missing = [column for column in required_columns if column not in header]
+        if missing:
+            raise ValueError(
+                f"{path}: missing required columns: {', '.join(missing)}",
+            )
+        return header, list(reader)
+
+
+def file_sha256(path: Path, *, uppercase: bool = True) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    value = digest.hexdigest()
+    return value.upper() if uppercase else value
+
+
+def require_fields(
+    rows: Sequence[Mapping[str, Any]],
+    required_columns: Sequence[str],
+    path: Path,
+) -> None:
+    if not rows:
+        raise ValueError(f"{path} has no data rows")
+    fieldnames = set(rows[0])
+    missing = [column for column in required_columns if column not in fieldnames]
+    if missing:
+        raise ValueError(f"{path} is missing required columns: {missing}")
+
+
+def write_tsv(
+    path: Path,
+    rows: Sequence[Mapping[str, Any]],
+    fieldnames: Sequence[str],
+    *,
+    encoding: str = "utf-8",
+    extrasaction: Literal["ignore", "raise"] = "ignore",
+    formatter: Callable[[Any], str] | None = None,
+    lineterminator: str | None = None,
+) -> None:
+    write_delimited_rows(
+        path,
+        rows,
+        fieldnames,
+        delimiter="\t",
+        encoding=encoding,
+        extrasaction=extrasaction,
+        formatter=formatter,
+        lineterminator=lineterminator,
+    )
+
+
+def write_delimited_rows(
+    path: Path,
+    rows: Sequence[Mapping[str, Any]],
+    fieldnames: Sequence[str],
+    *,
+    delimiter: str = ",",
+    encoding: str = "utf-8",
+    extrasaction: Literal["ignore", "raise"] = "ignore",
+    formatter: Callable[[Any], str] | None = None,
+    lineterminator: str | None = None,
+) -> None:
+    with path.open("w", newline="", encoding=encoding) as handle:
+        writer = csv.DictWriter(
+            handle,
+            **_delimited_writer_kwargs(
+                fieldnames,
+                delimiter=delimiter,
+                extrasaction=extrasaction,
+                lineterminator=lineterminator,
+            ),
+        )
+        _write_formatted_delimited_rows(
+            writer,
+            rows,
+            fieldnames,
+            extrasaction=extrasaction,
+            formatter=formatter,
+        )
+
+
+def render_delimited_rows(
+    rows: Sequence[Mapping[str, Any]],
+    fieldnames: Sequence[str],
+    *,
+    delimiter: str = ",",
+    extrasaction: Literal["ignore", "raise"] = "ignore",
+    formatter: Callable[[Any], str] | None = None,
+    lineterminator: str | None = None,
+) -> str:
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        output,
+        **_delimited_writer_kwargs(
+            fieldnames,
+            delimiter=delimiter,
+            extrasaction=extrasaction,
+            lineterminator=lineterminator,
+        ),
+    )
+    _write_formatted_delimited_rows(
+        writer,
+        rows,
+        fieldnames,
+        extrasaction=extrasaction,
+        formatter=formatter,
+    )
+    return output.getvalue()
+
+
+def _delimited_writer_kwargs(
+    fieldnames: Sequence[str],
+    *,
+    delimiter: str,
+    extrasaction: Literal["ignore", "raise"],
+    lineterminator: str | None,
+) -> dict[str, Any]:
+    if extrasaction not in {"ignore", "raise"}:
+        raise ValueError("extrasaction must be 'ignore' or 'raise'")
+    writer_kwargs: dict[str, Any] = {
+        "delimiter": delimiter,
+        "fieldnames": fieldnames,
+        "extrasaction": extrasaction,
+    }
+    if lineterminator is not None:
+        writer_kwargs["lineterminator"] = lineterminator
+    return writer_kwargs
+
+
+def _write_formatted_delimited_rows(
+    writer: Any,
+    rows: Sequence[Mapping[str, Any]],
+    fieldnames: Sequence[str],
+    *,
+    extrasaction: Literal["ignore", "raise"],
+    formatter: Callable[[Any], str] | None,
+) -> None:
+    value_formatter = formatter or format_diagnostic_value
+    fieldname_set = set(fieldnames)
+    writer.writeheader()
+    for row in rows:
+        if extrasaction == "raise":
+            extra_fields = set(row) - fieldname_set
+            if extra_fields:
+                joined = ", ".join(repr(field) for field in extra_fields)
+                raise ValueError(
+                    "dict contains fields not in fieldnames: " + joined,
+                )
+        writer.writerow(
+            {key: value_formatter(row.get(key, "")) for key in fieldnames},
+        )
+
+
+def format_diagnostic_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, float):
+        if math.isnan(value):
+            return ""
+        return f"{value:.6g}"
+    return str(value)
+
+
+def optional_float(value: object) -> float | None:
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value) if math.isfinite(value) else None
+    text = str(value).strip()
+    if text.startswith("'"):
+        text = text[1:].strip()
+    try:
+        parsed = float(text)
+    except ValueError:
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def optional_int(value: object) -> int | None:
+    parsed = optional_float(value)
+    if parsed is None:
+        return None
+    return int(parsed)
+
+
+def positive_int(value: object) -> int | None:
+    try:
+        parsed = int(text_value(value))
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def required_float(value: object, field: str, label: str) -> float:
+    parsed = optional_float(value)
+    if parsed is None:
+        raise ValueError(f"{label} has invalid {field}: {value!r}")
+    return parsed
+
+
+def bool_value(value: object) -> bool | None:
+    normalized = text_value(value).upper()
+    if normalized in {"TRUE", "T", "YES", "Y", "1"}:
+        return True
+    if normalized in {"FALSE", "F", "NO", "N", "0"}:
+        return False
+    return None
+
+
+def numeric_equal(left: object, right: object) -> bool:
+    left_value = optional_float(left)
+    right_value = optional_float(right)
+    if left_value is None or right_value is None:
+        return text_value(left) == text_value(right)
+    return math.isclose(left_value, right_value, rel_tol=1e-6, abs_tol=1e-9)
+
+
+def text_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def has_semicolon_token(value: object, token: str) -> bool:
+    return token in set(split_semicolon_labels(value))
+
+
+def rows_by_text_field(
+    rows: Iterable[Mapping[str, str]],
+    field: str,
+) -> dict[str, tuple[Mapping[str, str], ...]]:
+    grouped: dict[str, list[Mapping[str, str]]] = {}
+    for row in rows:
+        key = text_value(row.get(field))
+        if key:
+            grouped.setdefault(key, []).append(row)
+    return {key: tuple(items) for key, items in grouped.items()}
+
+
+def identity_family_keys(identity: Mapping[str, str]) -> tuple[str, ...]:
+    keys = [text_value(identity.get("peak_hypothesis_id"))]
+    keys.extend(split_semicolon_labels(identity.get("source_feature_family_ids")))
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def split_semicolon_labels(value: object) -> list[str]:
+    return [part.strip() for part in text_value(value).split(";") if part.strip()]
+
+
+def required_indexes(
+    header: Sequence[object],
+    required_columns: Sequence[str],
+    sheet_name: str,
+) -> dict[str, int]:
+    indexes = {
+        str(value).strip(): index for index, value in enumerate(header) if value
+    }
+    missing = [column for column in required_columns if column not in indexes]
+    if missing:
+        raise ValueError(
+            f"{sheet_name}: missing required columns: {', '.join(missing)}"
+        )
+    return {column: indexes[column] for column in required_columns}

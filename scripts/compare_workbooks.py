@@ -1,7 +1,7 @@
 import argparse
 import math
 import sys
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,12 +47,14 @@ def compare_workbooks(
     left = load_workbook(left_path, data_only=True)
     right = load_workbook(right_path, data_only=True)
     differences: list[str] = []
+    left_sheetnames = set(left.sheetnames)
+    right_sheetnames = set(right.sheetnames)
 
-    for sheet_name in _sheets_to_compare(left.sheetnames, right.sheetnames):
-        if sheet_name not in left.sheetnames:
+    for sheet_name in _sheets_to_compare(left_sheetnames, right_sheetnames):
+        if sheet_name not in left_sheetnames:
             differences.append(f"{left_path}: missing sheet {sheet_name!r}")
             continue
-        if sheet_name not in right.sheetnames:
+        if sheet_name not in right_sheetnames:
             differences.append(f"{right_path}: missing sheet {sheet_name!r}")
             continue
         differences.extend(
@@ -68,7 +70,7 @@ def compare_workbooks(
 
 
 def _sheets_to_compare(
-    left_sheetnames: Sequence[str], right_sheetnames: Sequence[str]
+    left_sheetnames: Container[str], right_sheetnames: Container[str]
 ) -> tuple[str, ...]:
     optional = tuple(
         sheet

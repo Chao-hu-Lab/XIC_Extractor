@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tools.diagnostics.authorize_backfill_ms1_pattern_evidence import main
+from xic_extractor.alignment import backfill_ms1_product_authority as authority_module
 from xic_extractor.alignment.backfill_evidence_projection import (
     PRODUCT_AUTHORITY_SCOPE_FIELD,
     PRODUCT_AUTHORITY_SOURCE_FIELD,
@@ -54,6 +55,55 @@ def test_authorizes_allowlisted_anchor_own_max_ms1_pattern_row(
     )
     assert result.audit_rows[0]["decision"] == "authorized"
     assert result.audit_rows[0]["source_overlay_trace_data_status"] == "valid"
+
+
+def test_authorize_reuses_trace_json_validation_for_multiple_samples(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay_json = _write_overlay_trace_data_json(tmp_path)
+    trace_path = tmp_path / overlay_json
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    payload["traces"].append(
+        {
+            **payload["traces"][0],
+            "sample_stem": "S3",
+        }
+    )
+    trace_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    original_reader = authority_module._read_overlay_trace_data_file
+    read_paths: list[Path] = []
+
+    def counting_reader(path: Path) -> object:
+        read_paths.append(path)
+        return original_reader(path)
+
+    monkeypatch.setattr(
+        authority_module,
+        "_read_overlay_trace_data_file",
+        counting_reader,
+    )
+
+    result = authorize_ms1_pattern_rows(
+        ms1_pattern_rows=[
+            _ms1_row(overlay_json),
+            {
+                **_ms1_row(overlay_json),
+                "sample_stem": "S3",
+            },
+        ],
+        allowlist_rows=[
+            _allowlist_row(tmp_path, overlay_json),
+            {
+                **_allowlist_row(tmp_path, overlay_json),
+                "sample_stem": "S3",
+            },
+        ],
+        artifact_base_dir=tmp_path,
+    )
+
+    assert result.summary["authorized_row_count"] == 2
+    assert len(read_paths) == 1
 
 
 def test_rejects_anchor_own_max_similarity_at_or_below_threshold(
@@ -155,6 +205,23 @@ def test_duplicate_source_ms1_pattern_keys_raise() -> None:
         authorize_ms1_pattern_rows(
             ms1_pattern_rows=[_ms1_row(), _ms1_row()],
             allowlist_rows=[_allowlist_row()],
+        )
+
+
+def test_duplicate_ms1_allowlist_keys_raise(tmp_path: Path) -> None:
+    overlay_json = _write_overlay_trace_data_json(tmp_path)
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate backfill MS1 product authority allowlist key",
+    ):
+        authorize_ms1_pattern_rows(
+            ms1_pattern_rows=[_ms1_row(overlay_json)],
+            allowlist_rows=[
+                _allowlist_row(tmp_path, overlay_json),
+                _allowlist_row(tmp_path, overlay_json),
+            ],
+            artifact_base_dir=tmp_path,
         )
 
 

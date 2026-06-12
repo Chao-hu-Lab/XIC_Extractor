@@ -38,6 +38,32 @@ def test_same_sample_same_resolved_peak_becomes_one_owner():
     ]
 
 
+def test_same_peak_primary_order_uses_resolved_sort_key_not_input_order() -> None:
+    candidates = (
+        _candidate("s1#low", seed_rt=12.5940, evidence_score=70),
+        _candidate("s1#high", seed_rt=12.5927, evidence_score=80),
+    )
+    source = FakeXICSource(
+        rt=np.array([12.55, 12.58, 12.593, 12.61, 12.64], dtype=float),
+        intensity=np.array([0.0, 30.0, 100.0, 30.0, 0.0], dtype=float),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(owner_apex_close_sec=2.0),
+        peak_config=_peak_config(),
+    )
+
+    owner = result.owners[0]
+    assert owner.primary_identity_event.candidate_id == "s1#high"
+    assert [event.candidate_id for event in owner.supporting_events] == ["s1#low"]
+    assert [(a.candidate_id, a.assignment_status) for a in result.assignments] == [
+        ("s1#high", "primary"),
+        ("s1#low", "supporting"),
+    ]
+
+
 def test_tail_events_on_one_peak_become_supporting_events():
     candidates = (
         _candidate("s1#7001", mz=251.084, seed_rt=8.50, evidence_score=85),

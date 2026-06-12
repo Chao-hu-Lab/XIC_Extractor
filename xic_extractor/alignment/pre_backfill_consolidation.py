@@ -85,7 +85,11 @@ def _identity_groups(
     config: AlignmentConfig,
 ) -> tuple[tuple[OwnerAlignedFeature, ...], ...]:
     groups: list[list[OwnerAlignedFeature]] = []
-    for feature in sorted(features, key=_feature_sort_key):
+    ordered_features = tuple(sorted(features, key=_feature_sort_key))
+    sample_stems_by_feature = {
+        id(feature): _sample_stems(feature) for feature in ordered_features
+    }
+    for feature in ordered_features:
         if feature.review_only:
             groups.append([feature])
             continue
@@ -94,7 +98,11 @@ def _identity_groups(
             for index, group in enumerate(groups)
             if all(
                 not existing.review_only
-                and _sample_stems_disjoint(feature, existing)
+                and _sample_stems_disjoint(
+                    feature,
+                    existing,
+                    sample_stems_by_feature=sample_stems_by_feature,
+                )
                 and _compatible_identity(feature, existing, config)
                 for existing in group
             )
@@ -251,8 +259,12 @@ def _recenter_cell(
 def _sample_stems_disjoint(
     left: OwnerAlignedFeature,
     right: OwnerAlignedFeature,
+    *,
+    sample_stems_by_feature: dict[int, set[str]],
 ) -> bool:
-    return _sample_stems(left).isdisjoint(_sample_stems(right))
+    return sample_stems_by_feature[id(left)].isdisjoint(
+        sample_stems_by_feature[id(right)]
+    )
 
 
 def _sample_stems(feature: OwnerAlignedFeature) -> set[str]:

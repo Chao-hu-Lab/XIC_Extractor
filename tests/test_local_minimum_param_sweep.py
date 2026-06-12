@@ -1,3 +1,4 @@
+import csv
 import subprocess
 import sys
 from pathlib import Path
@@ -315,6 +316,111 @@ def test_write_sweep_workbook_contains_required_sheets(tmp_path: Path) -> None:
     wb = load_workbook(output, read_only=True, data_only=True)
     assert wb.sheetnames == ["Summary", "PerTarget", "Failures", "RunConfig"]
     assert wb["Summary"]["A1"].value == "Rank"
+
+
+def test_write_settings_csv_preserves_staging_config_contract(tmp_path: Path) -> None:
+    import scripts.local_minimum_param_sweep as module
+
+    settings_csv = tmp_path / "settings.csv"
+
+    module._write_settings_csv(
+        settings_csv,
+        {
+            "data_dir": "C:/data",
+            "custom_setting": "abc",
+        },
+    )
+
+    raw_settings = settings_csv.read_bytes()
+    assert raw_settings.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw_settings
+    with settings_csv.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert tuple(rows[0]) == ("key", "value", "description")
+    assert [row["key"] for row in rows] == ["data_dir", "custom_setting"]
+    assert rows[0]["value"] == "C:/data"
+    assert rows[1]["description"] == ""
+
+
+def test_write_sweep_workbook_lists_per_target_failures(tmp_path: Path) -> None:
+    truth = [
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "LargeError",
+            10.0,
+            1000.0,
+            10000.0,
+            1.0,
+            "正常",
+        ),
+        ManualTruthRow(
+            "DNA",
+            "SampleA",
+            "Missing",
+            11.0,
+            1200.0,
+            12000.0,
+            1.0,
+            "正常",
+        ),
+    ]
+    peaks = [
+        ProgramPeakRow(
+            "SampleA",
+            "LargeError",
+            False,
+            10.25,
+            1000.0,
+            14000.0,
+            True,
+        )
+    ]
+    score = score_parameter_set(
+        "candidate",
+        {"resolver_mode": "local_minimum"},
+        truth,
+        peaks,
+    )
+    output = tmp_path / "summary.xlsx"
+
+    write_sweep_workbook(output, [score])
+
+    wb = load_workbook(output, read_only=True, data_only=True)
+    per_target_rows = list(wb["PerTarget"].iter_rows(values_only=True))
+    failure_rows = list(wb["Failures"].iter_rows(values_only=True))
+
+    assert per_target_rows[0] == (
+        "Name",
+        "SampleName",
+        "Target",
+        "ISTD",
+        "ManualRT",
+        "ProgramRT",
+        "RTAbsDeltaMin",
+        "ManualHeight",
+        "ProgramHeight",
+        "HeightAbsPctError",
+        "ManualArea",
+        "ProgramArea",
+        "AreaAbsPctError",
+        "MissingPeak",
+        "ManualShape",
+    )
+    assert [row[2] for row in per_target_rows[1:]] == ["LargeError", "Missing"]
+    assert per_target_rows[2][13] is True
+    assert failure_rows[1:] == [
+        ("candidate", "SampleA", "LargeError", "RT_MAX_DELTA", 0.25, "<=0.20"),
+        ("candidate", "SampleA", "LargeError", "AREA_ERROR", 0.4, "<=0.20"),
+        (
+            "candidate",
+            "SampleA",
+            "Missing",
+            "MISSING_PEAK",
+            None,
+            "manual peak must be detected",
+        ),
+    ]
 
 
 def test_main_writes_workbook_with_injected_runner(

@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 from tools.diagnostics import p7_alignment_parity
@@ -298,11 +299,41 @@ def test_p7_alignment_parity_cli_writes_documented_artifacts(tmp_path: Path) -> 
     )
 
     assert code == 0
-    assert (output_dir / "8raw_matrix_parity.tsv").exists()
-    assert (output_dir / "8raw_identity_parity.tsv").exists()
-    assert (output_dir / "8raw_targeted_benchmark_delta.tsv").exists()
+    matrix_parity = output_dir / "8raw_matrix_parity.tsv"
+    identity_parity = output_dir / "8raw_identity_parity.tsv"
+    targeted_delta = output_dir / "8raw_targeted_benchmark_delta.tsv"
+    assert matrix_parity.exists()
+    assert identity_parity.exists()
+    assert targeted_delta.exists()
     assert (output_dir / "8raw_p7_alignment_parity.json").exists()
     assert (output_dir / "8raw_p7_alignment_parity.md").exists()
+    for artifact_path in (matrix_parity, identity_parity, targeted_delta):
+        assert b"\r\n" not in artifact_path.read_bytes()
+        assert artifact_path.read_text(encoding="utf-8").splitlines()[0].split(
+            "\t"
+        ) == ["check", "status", "difference"]
+    assert _read_tsv(matrix_parity) == [
+        {"check": "primary_matrix_tsv", "status": "PASS", "difference": ""}
+    ]
+    assert _read_tsv(identity_parity) == [
+        {
+            "check": "primary_identity_decisions",
+            "status": "PASS",
+            "difference": "",
+        }
+    ]
+    assert _read_tsv(targeted_delta) == [
+        {
+            "check": "targeted_istd_benchmark",
+            "status": "PASS",
+            "difference": "",
+        }
+    ]
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 def _write(path: Path, text: str) -> None:

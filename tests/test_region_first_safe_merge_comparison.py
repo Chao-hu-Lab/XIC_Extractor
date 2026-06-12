@@ -92,6 +92,18 @@ def test_comparison_reports_changed_safe_merge_rows(tmp_path: Path) -> None:
         output_dir=output_dir,
     )
 
+    assert outputs.comparison_tsv.read_bytes().splitlines(keepends=True)[
+        0
+    ].endswith(b"\r\n")
+    assert outputs.summary_tsv.read_bytes().splitlines(keepends=True)[0].endswith(
+        b"\r\n"
+    )
+    assert outputs.comparison_tsv.read_text(encoding="utf-8").splitlines()[
+        0
+    ].split("\t") == list(comparison.COMPARISON_FIELDS)
+    assert outputs.summary_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == list(comparison.SUMMARY_FIELDS)
     rows = _read_tsv(outputs.comparison_tsv)
     assert rows == [
         {

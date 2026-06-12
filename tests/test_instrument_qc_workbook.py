@@ -332,7 +332,7 @@ def _hcd_row(
     activation_method: str = "CIDwHCD",
     review_flags: tuple[str, ...] | None = None,
 ) -> HCDAuditRow:
-    row_review_flags = (
+    row_review_flags: tuple[str, ...] = (
         ("activation_unknown_review",)
         if activation_method == "unknown"
         else ()

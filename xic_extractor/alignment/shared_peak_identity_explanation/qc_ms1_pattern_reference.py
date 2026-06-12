@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from xic_extractor.diagnostics.diagnostic_io import text_value, write_tsv
 from xic_extractor.sample_groups import classify_sample_group
+from xic_extractor.tabular_io import text_value, write_tsv
+
+from .overlay_trace_data import load_overlay_trace_data
 
 QC_MS1_PATTERN_REFERENCE_COLUMNS = (
     "feature_family_id",
@@ -91,6 +92,7 @@ class _QcComparison:
     status: str
     reason: str
     order_delta: int
+    apex_delta_sec: float | None
     apex_abs_delta_sec: float | None
     shape_similarity: float | None
 
@@ -144,37 +146,31 @@ def _trace_metrics_by_key(
 ) -> dict[tuple[str, str], _TraceMetric]:
     metrics: dict[tuple[str, str], _TraceMetric] = {}
     for path in paths:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        family_id = text_value(data.get("family_id"))
-        if not family_id:
-            raise ValueError(f"{path}: missing family_id")
-        traces = data.get("traces")
-        if not isinstance(traces, list):
-            raise ValueError(f"{path}: missing traces array")
-        family_center_rt = _optional_float(data.get("family_center_rt"))
-        for trace in traces:
-            if not isinstance(trace, dict):
-                continue
-            sample_stem = text_value(trace.get("sample_stem"))
+        bundle = load_overlay_trace_data(path)
+        family_id = bundle.family_id
+        family_center_rt = bundle.family_center_rt
+        for trace in bundle.traces:
+            trace_values = trace.values
+            sample_stem = trace.sample_stem
             if not sample_stem:
                 continue
             metric = _TraceMetric(
                 family_id=family_id,
                 sample_stem=sample_stem,
-                group=text_value(trace.get("group")),
-                cell_apex_rt=_optional_float(trace.get("cell_apex_rt")),
-                trace_apex_rt=_optional_float(trace.get("trace_apex_rt")),
-                cell_height=_optional_float(trace.get("cell_height")),
+                group=trace.group,
+                cell_apex_rt=trace.optional_float("cell_apex_rt"),
+                trace_apex_rt=trace.optional_float("trace_apex_rt"),
+                cell_height=trace.optional_float("cell_height"),
                 local_window_max_intensity=_optional_float(
-                    trace.get("local_window_max_intensity")
+                    trace_values.get("local_window_max_intensity")
                 ),
-                trace_max_intensity=_optional_float(trace.get("trace_max_intensity")),
+                trace_max_intensity=trace.optional_float("trace_max_intensity"),
                 local_window_to_global_max_ratio=_optional_float(
-                    trace.get("local_window_to_global_max_ratio")
+                    trace_values.get("local_window_to_global_max_ratio")
                 ),
                 family_center_rt=family_center_rt,
-                rt=_optional_float_sequence(trace.get("rt")),
-                intensity=_optional_float_sequence(trace.get("intensity")),
+                rt=trace.optional_float_sequence("rt"),
+                intensity=trace.optional_float_sequence("intensity"),
                 source_json=path,
             )
             metrics[(family_id, sample_stem)] = metric
@@ -209,12 +205,6 @@ def _row_for_key(
             "family_ms1_overlay_trace_data_json": str(target.source_json),
             "reason": "target_injection_order_missing",
         }
-    nearest_qc = _nearest_qc_trace(
-        target=target,
-        target_order=target_order,
-        family_metrics=family_metrics,
-        injection_order=injection_order,
-    )
     comparisons = _qc_comparisons(
         target=target,
         target_order=target_order,
@@ -223,6 +213,7 @@ def _row_for_key(
         max_injection_order_delta=max_injection_order_delta,
     )
     consensus = _qc_consensus(comparisons)
+    nearest_qc = _nearest_qc_comparison(comparisons)
     if nearest_qc is None:
         return {
             **base,
@@ -235,27 +226,14 @@ def _row_for_key(
             "family_ms1_overlay_trace_data_json": str(target.source_json),
             "reason": "nearest_qc_reference_missing",
         }
-    qc_metric, qc_order = nearest_qc
-    order_delta = abs(qc_order - target_order)
-    apex_delta_sec = _apex_delta_sec(target, qc_metric)
-    shape_similarity = _apex_aligned_shape_similarity(target, qc_metric)
-    apex_abs_delta_sec = abs(apex_delta_sec) if apex_delta_sec is not None else None
-    status, reason = _status_and_reason(
-        target=target,
-        qc_metric=qc_metric,
-        order_delta=order_delta,
-        max_injection_order_delta=max_injection_order_delta,
-        apex_abs_delta_sec=apex_abs_delta_sec,
-        shape_similarity=shape_similarity,
-    )
     (
         final_status,
         final_reason,
         reference_policy,
         conflict_status,
     ) = _combine_local_and_consensus(
-        local_status=status,
-        local_reason=reason,
+        local_status=nearest_qc.status,
+        local_reason=nearest_qc.reason,
         consensus=consensus,
     )
     return {
@@ -265,7 +243,7 @@ def _row_for_key(
             reference_policy,
         ),
         "qc_reference_policy": reference_policy,
-        "local_qc_reference_status": status,
+        "local_qc_reference_status": nearest_qc.status,
         "qc_consensus_status": consensus.status,
         "qc_consensus_support_count": str(consensus.support_count),
         "qc_consensus_conflict_count": str(consensus.conflict_count),
@@ -273,25 +251,29 @@ def _row_for_key(
         "qc_consensus_usable_qc_count": str(consensus.usable_count),
         "qc_reference_conflict_status": conflict_status,
         "target_injection_order": str(target_order),
-        "nearest_qc_sample_stem": qc_metric.sample_stem,
-        "nearest_qc_injection_order": str(qc_order),
-        "nearest_qc_injection_order_delta": str(order_delta),
+        "nearest_qc_sample_stem": nearest_qc.metric.sample_stem,
+        "nearest_qc_injection_order": str(nearest_qc.order),
+        "nearest_qc_injection_order_delta": str(nearest_qc.order_delta),
         "target_apex_rt": _format_float(target.apex_rt),
-        "nearest_qc_apex_rt": _format_float(qc_metric.apex_rt),
-        "target_minus_qc_apex_delta_sec": _format_float(apex_delta_sec),
-        "target_qc_apex_abs_delta_sec": _format_float(apex_abs_delta_sec),
-        "target_qc_shape_similarity": _format_float(shape_similarity),
+        "nearest_qc_apex_rt": _format_float(nearest_qc.metric.apex_rt),
+        "target_minus_qc_apex_delta_sec": _format_float(
+            nearest_qc.apex_delta_sec
+        ),
+        "target_qc_apex_abs_delta_sec": _format_float(
+            nearest_qc.apex_abs_delta_sec
+        ),
+        "target_qc_shape_similarity": _format_float(nearest_qc.shape_similarity),
         "target_local_window_to_global_max_ratio": _format_float(
             target.local_window_to_global_max_ratio
         ),
         "nearest_qc_local_window_to_global_max_ratio": _format_float(
-            qc_metric.local_window_to_global_max_ratio
+            nearest_qc.metric.local_window_to_global_max_ratio
         ),
         "target_cell_to_local_window_max_ratio": _format_float(
             target.cell_to_local_window_max_ratio
         ),
         "nearest_qc_cell_to_local_window_max_ratio": _format_float(
-            qc_metric.cell_to_local_window_max_ratio
+            nearest_qc.metric.cell_to_local_window_max_ratio
         ),
         "family_ms1_overlay_trace_data_json": str(target.source_json),
         "reason": final_reason,
@@ -331,43 +313,6 @@ def _base_row(feature_family_id: str, sample_stem: str) -> dict[str, str]:
     }
 
 
-def _nearest_qc_trace(
-    *,
-    target: _TraceMetric,
-    target_order: int,
-    family_metrics: Sequence[_TraceMetric],
-    injection_order: Mapping[str, int],
-) -> tuple[_TraceMetric, int] | None:
-    candidates: list[tuple[int, int, int, str, _TraceMetric, int]] = []
-    for metric in family_metrics:
-        if metric.sample_stem == target.sample_stem or not metric.is_qc:
-            continue
-        order = injection_order.get(metric.sample_stem)
-        if order is None:
-            continue
-        usable_rank = (
-            0 if _has_local_signal(metric) and metric.apex_rt is not None else 1
-        )
-        centered_rank = _family_centered_qc_rank(metric)
-        candidates.append(
-            (
-                usable_rank,
-                centered_rank,
-                abs(order - target_order),
-                metric.sample_stem,
-                metric,
-                order,
-            )
-        )
-    if not candidates:
-        return None
-    _, _, _, _, metric, order = min(
-        candidates,
-        key=lambda item: (item[0], item[1], item[2], item[3]),
-    )
-    return metric, order
-
-
 def _qc_comparisons(
     *,
     target: _TraceMetric,
@@ -404,11 +349,30 @@ def _qc_comparisons(
                 status=status,
                 reason=reason,
                 order_delta=order_delta,
+                apex_delta_sec=apex_delta_sec,
                 apex_abs_delta_sec=apex_abs_delta_sec,
                 shape_similarity=shape_similarity,
             )
         )
     return tuple(sorted(comparisons, key=lambda item: item.order_delta))
+
+
+def _nearest_qc_comparison(
+    comparisons: Sequence[_QcComparison],
+) -> _QcComparison | None:
+    if not comparisons:
+        return None
+    return min(
+        comparisons,
+        key=lambda item: (
+            0
+            if _has_local_signal(item.metric) and item.metric.apex_rt is not None
+            else 1,
+            _family_centered_qc_rank(item.metric),
+            item.order_delta,
+            item.metric.sample_stem,
+        ),
+    )
 
 
 def _qc_consensus(comparisons: Sequence[_QcComparison]) -> _QcConsensus:

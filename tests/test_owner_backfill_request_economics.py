@@ -2,6 +2,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import owner_backfill_request_economics as economics
 
 
@@ -92,6 +94,7 @@ def test_owner_backfill_economics_groups_requests_by_identity_and_tag(
     assert features[0]["feature_family_id"] == "FAM002"
     assert features[0]["request_target_count"] == "2"
     assert features[0]["rescued_target_count"] == "0"
+    assert features[0]["include_in_primary_matrix"] == "False"
     assert (output_dir / "owner_backfill_request_economics.md").is_file()
 
 
@@ -133,6 +136,36 @@ def test_owner_backfill_economics_accounts_for_preconsolidated_confirm_requests(
     assert feature["request_target_count"] == 2
     assert feature["request_extract_count_estimate"] == 4
     assert feature["confirmation_target_count"] == 1
+
+
+def test_owner_backfill_cell_index_preserves_order_contracts() -> None:
+    rows = (
+        _cell_row("FAM002", "S2", "detected"),
+        _cell_row("FAM001", "S1", "absent"),
+        _cell_row("FAM002", "S1", "rescued"),
+        _cell_row("FAM001", "S2", "detected"),
+    )
+
+    index = economics._index_cell_rows(rows)
+
+    assert index.sample_order == ("S2", "S1")
+    assert [
+        row["sample_stem"] for row in index.cells_by_feature["FAM002"]
+    ] == [
+        "S2",
+        "S1",
+    ]
+
+
+def test_owner_backfill_writer_rejects_later_extra_fields(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        economics._write_tsv(
+            tmp_path / "rows.tsv",
+            [
+                {"family": "FAM001", "request_count": 1},
+                {"family": "FAM002", "request_count": 2, "unexpected": "value"},
+            ],
+        )
 
 
 def _review_row(

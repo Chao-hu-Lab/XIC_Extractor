@@ -43,13 +43,17 @@ def load_discovery_candidates(path: Path | None) -> dict[str, Any]:
     ]
     if missing:
         raise ValueError(f"{path}: missing required columns: {', '.join(missing)}")
-    candidates: dict[tuple[str, str], dict[str, float | str]] = {}
+    candidates: dict[tuple[str, str], dict[str, float | str | None]] = {}
+    samples_by_candidate_path: dict[Path, list[str]] = defaultdict(list)
     for _, row in rows:
         sample = _machine_text(row.get("sample_stem", ""))
         candidate_csv = _machine_text(row.get("candidate_csv", ""))
         if not sample or not candidate_csv:
             continue
         candidate_path = _resolve_artifact_path(path.parent, candidate_csv)
+        samples_by_candidate_path[candidate_path].append(sample)
+
+    for candidate_path, index_samples in samples_by_candidate_path.items():
         candidate_rows, candidate_fieldnames = _read_delimited_rows(candidate_path)
         if "candidate_id" not in candidate_fieldnames:
             raise ValueError(
@@ -59,29 +63,33 @@ def load_discovery_candidates(path: Path | None) -> dict[str, Any]:
             candidate_id = _machine_text(candidate_row.get("candidate_id", ""))
             if not candidate_id:
                 continue
-            quality = {
-                "sample_stem": _machine_text(
-                    candidate_row.get("sample_stem", sample),
-                )
-                or sample,
-                "candidate_id": candidate_id,
-                "evidence_score": _float_or_none(
-                    candidate_row.get("evidence_score", ""),
-                ),
-                "seed_event_count": _float_or_none(
-                    candidate_row.get("seed_event_count", ""),
-                ),
-                "neutral_loss_mass_error_ppm": _float_or_none(
-                    candidate_row.get("neutral_loss_mass_error_ppm", ""),
-                ),
-                "ms1_scan_support_score": _float_or_none(
-                    candidate_row.get("ms1_scan_support_score", ""),
-                ),
-            }
-            candidate_sample = str(quality["sample_stem"])
-            candidates[(candidate_sample, candidate_id)] = quality
-            candidates[("", candidate_id)] = quality
+            row_sample = _machine_text(candidate_row.get("sample_stem", ""))
+            candidate_samples = (row_sample,) if row_sample else tuple(index_samples)
+            for candidate_sample in candidate_samples:
+                quality = _candidate_quality(candidate_row, candidate_sample)
+                candidates[(candidate_sample, candidate_id)] = quality
+                candidates[("", candidate_id)] = quality
     return {"status": "provided", "candidates": candidates}
+
+
+def _candidate_quality(
+    candidate_row: Mapping[str, str],
+    sample_stem: str,
+) -> dict[str, float | str | None]:
+    return {
+        "sample_stem": sample_stem,
+        "candidate_id": _machine_text(candidate_row.get("candidate_id", "")),
+        "evidence_score": _float_or_none(candidate_row.get("evidence_score", "")),
+        "seed_event_count": _float_or_none(
+            candidate_row.get("seed_event_count", ""),
+        ),
+        "neutral_loss_mass_error_ppm": _float_or_none(
+            candidate_row.get("neutral_loss_mass_error_ppm", ""),
+        ),
+        "ms1_scan_support_score": _float_or_none(
+            candidate_row.get("ms1_scan_support_score", ""),
+        ),
+    }
 
 
 def load_rt_context(path: Path | None) -> dict[str, str]:

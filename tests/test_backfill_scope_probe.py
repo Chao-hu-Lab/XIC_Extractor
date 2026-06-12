@@ -1,8 +1,61 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from tools.diagnostics import backfill_scope_probe
 from xic_extractor.alignment.config import AlignmentConfig
+
+
+def test_request_summary_uses_shared_request_plan_counts() -> None:
+    features = (
+        _feature(
+            "FAM000001",
+            seed_centers=((100.0, 5.0), (101.0, 5.0)),
+        ),
+        _feature(
+            "FAM000002",
+            seed_centers=((200.0, 8.0),),
+        ),
+    )
+
+    summary = backfill_scope_probe._request_summary(
+        features,
+        sample_order=("sample-a", "sample-b"),
+        raw_sample_stems=frozenset({"sample-a", "sample-b"}),
+        alignment_config=AlignmentConfig(),
+    )
+
+    assert summary["totals"] == {
+        "request_target_count": 2,
+        "extract_request_count": 3,
+        "max_sample_extract_request_count": 3,
+        "median_sample_extract_request_count": 3.0,
+    }
+    assert summary["sample_rows"] == [
+        {
+            "sample_stem": "sample-a",
+            "request_target_count": 0,
+            "extract_request_count": 0,
+        },
+        {
+            "sample_stem": "sample-b",
+            "request_target_count": 2,
+            "extract_request_count": 3,
+        },
+    ]
+    assert [
+        (
+            row["feature_family_id"],
+            row["seed_center_count"],
+            row["request_target_count"],
+            row["extract_request_count"],
+        )
+        for row in summary["feature_rows"]
+    ] == [
+        ("FAM000001", 2, 1, 2),
+        ("FAM000002", 1, 1, 1),
+    ]
 
 
 def test_locality_summary_uses_actual_backfill_seed_centers(tmp_path: Path) -> None:
@@ -60,6 +113,41 @@ def test_locality_summary_uses_actual_backfill_seed_centers(tmp_path: Path) -> N
     ]
 
 
+def test_write_tsv_preserves_dynamic_first_row_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "rows.tsv"
+
+    backfill_scope_probe._write_tsv(
+        path,
+        [
+            {"sample_stem": "S1", "request_count": 1, "selected": True},
+            {"sample_stem": "S2", "request_count": 2, "selected": False},
+        ],
+    )
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "sample_stem\trequest_count\tselected",
+        "S1\t1\tTrue",
+        "S2\t2\tFalse",
+    ]
+
+
+def test_write_tsv_preserves_empty_output_and_extra_field_failure(
+    tmp_path: Path,
+) -> None:
+    empty_path = tmp_path / "empty" / "rows.tsv"
+    backfill_scope_probe._write_tsv(empty_path, [])
+    assert empty_path.read_text(encoding="utf-8") == ""
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        backfill_scope_probe._write_tsv(
+            tmp_path / "extra" / "rows.tsv",
+            [
+                {"sample_stem": "S1", "request_count": 1},
+                {"sample_stem": "S2", "request_count": 2, "extra": "value"},
+            ],
+        )
+
+
 def _feature(
     family_id: str,
     *,
@@ -72,6 +160,7 @@ def _feature(
         family_center_rt=seed_centers[0][1],
         family_product_mz=384.0,
         family_observed_neutral_loss_da=116.0,
+        evidence="synthetic_test_fixture",
         review_only=False,
         confirm_local_owners_with_backfill=False,
         backfill_seed_centers=seed_centers,

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+
+from xic_extractor.tabular_io import write_tsv
 
 from .output_models import (
     IdentityCoherenceOutputContext,
@@ -113,13 +114,11 @@ def _write_tsv(
     rows: Sequence[Mapping[str, str]],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=columns,
-            dialect="excel-tab",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in columns})
+    write_tsv(path, rows, columns, formatter=_format_tsv_value)
     return path
+
+
+def _format_tsv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)

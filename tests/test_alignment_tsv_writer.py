@@ -2,6 +2,7 @@ import csv
 import math
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TypeGuard
 
 import pytest
 
@@ -1433,6 +1434,30 @@ def test_tsv_writers_escape_formula_like_text(tmp_path: Path):
     assert "'=sample" in matrix_rows[0]
 
 
+def test_private_write_tsv_preserves_lf_formula_and_format_contract(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment import tsv_writer
+
+    path = tsv_writer._write_tsv(
+        tmp_path / "nested" / "alignment.tsv",
+        ("=formula_header", "float_value", "blank"),
+        [{"=formula_header": "=formula_value", "float_value": 100.0}],
+    )
+
+    assert path.read_text(encoding="utf-8") == (
+        "'=formula_header\tfloat_value\tblank\n"
+        "'=formula_value\t100\t\n"
+    )
+
+    empty_path = tsv_writer._write_tsv(
+        tmp_path / "empty" / "alignment.tsv",
+        ("family_id", "value"),
+        [],
+    )
+    assert empty_path.read_text(encoding="utf-8") == "family_id\tvalue\n"
+
+
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
@@ -1639,7 +1664,7 @@ def _integration(
     )
 
 
-def _positive_area(value: float | None) -> bool:
+def _positive_area(value: float | None) -> TypeGuard[float]:
     return (
         value is not None
         and isinstance(value, (int, float))

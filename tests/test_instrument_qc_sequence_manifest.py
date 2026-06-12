@@ -11,6 +11,8 @@ from xic_extractor.instrument_qc.sequence_manifest import (
     parse_sequence_tables,
 )
 from xic_extractor.instrument_qc.sequence_manifest_writers import (
+    INJECTION_ORDER_COLUMNS,
+    MANIFEST_TSV_COLUMNS,
     write_injection_order_csv,
     write_sequence_manifest_json,
     write_sequence_manifest_markdown,
@@ -319,3 +321,18 @@ def test_sequence_manifest_writers_emit_audit_and_injection_order(
         "unmatched": 1,
     }
     assert "SDOLEK-missing" in manifest_md.read_text(encoding="utf-8")
+
+
+def test_sequence_manifest_writers_emit_header_only_empty_outputs(
+    tmp_path: Path,
+) -> None:
+    manifest_tsv = tmp_path / "nested" / "manifest.tsv"
+    order_csv = tmp_path / "nested" / "order.csv"
+
+    write_sequence_manifest_tsv(manifest_tsv, [])
+    write_injection_order_csv(order_csv, [])
+
+    with manifest_tsv.open(encoding="utf-8") as handle:
+        assert list(csv.reader(handle, delimiter="\t")) == [MANIFEST_TSV_COLUMNS]
+    with order_csv.open(encoding="utf-8") as handle:
+        assert list(csv.reader(handle)) == [INJECTION_ORDER_COLUMNS]

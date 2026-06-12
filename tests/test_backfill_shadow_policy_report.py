@@ -180,6 +180,47 @@ def test_shadow_policy_html_rejects_dangerous_overlay_links(tmp_path: Path) -> N
     assert html.count(">none</span>") == 3
 
 
+def test_shadow_policy_prefers_conflicting_duplicate_overlay_verdict(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_dir(tmp_path / "alignment")
+    gate_tsv = _write_gate_tsv(tmp_path / "retained_gate.tsv")
+    overlay_tsv = tmp_path / "overlay.tsv"
+    _write_tsv(
+        overlay_tsv,
+        [
+            _overlay_row("FAM_WOULD", "0.920"),
+            _overlay_row(
+                "FAM_WOULD",
+                "0.750",
+                verdict="review_required_neighboring_ms1_interference",
+            ),
+        ],
+    )
+    output_dir = tmp_path / "shadow"
+
+    code = shadow_cli.main(
+        [
+            "--alignment-dir",
+            str(alignment_dir),
+            "--retained-gate-tsv",
+            str(gate_tsv),
+            "--overlay-batch-summary-tsv",
+            str(overlay_tsv),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(output_dir / "backfill_shadow_policy_cells.tsv")
+    row = next(row for row in rows if row["feature_family_id"] == "FAM_WOULD")
+    assert row["shadow_policy_decision"] == "would_fill_under_ms1_rt_policy"
+    assert row["decision_reason"] == "ms1_rt_shadow_supported"
+    assert row["own_max_shape_supported_fraction"] == "0.750"
+    assert row["overlay_png_path"] == "plots/fam-would.png"
+
+
 def _write_alignment_dir(path: Path) -> Path:
     path.mkdir(parents=True)
     _write_tsv(

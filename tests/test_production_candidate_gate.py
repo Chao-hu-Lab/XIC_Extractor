@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -525,7 +526,7 @@ def test_invalid_tier2_sidecar_fields_do_not_promote(
 ) -> None:
     evidence, review_row, source_context = _load_tier2_fixture(
         tmp_path,
-        **overrides,
+        **cast(Any, overrides),
     )
 
     decision = evaluate_production_candidate_gate(

@@ -7,6 +7,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Sequence
 
+from tools.diagnostics.diagnostic_io import write_tsv
+
 GATE_VERSION = "ms1_peak_group_nl_scope_gate_v1"
 CHROM_SOURCE = "chrom_peak_segment"
 MS1_PEAK_GROUP_SOURCE = "gaussian15_ms1_peak_group"
@@ -285,10 +287,19 @@ def _write_tsv(
     rows: Sequence[dict[str, str]],
     fieldnames: Sequence[str],
 ) -> None:
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(
+        path,
+        rows,
+        fieldnames,
+        extrasaction="raise",
+        formatter=_format_tsv_value,
+    )
+
+
+def _format_tsv_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _missing_required_columns(rows: Sequence[dict[str, str]]) -> list[str]:

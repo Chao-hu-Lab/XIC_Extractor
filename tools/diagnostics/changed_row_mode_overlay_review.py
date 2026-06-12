@@ -344,6 +344,7 @@ def run_changed_row_mode_overlay_review(
     gaussian15_modes_by_family = {
         item.family_id: _gaussian15_trace_mode_windows(item) for item in trace_data
     }
+    subthreshold_reports_by_trace = _subthreshold_reports_by_trace(trace_data)
     mode_plot_paths: dict[str, Path] = {}
     mode_aligned_plot_paths: dict[str, Path] = {}
     sample_rows = _sample_review_rows(
@@ -355,6 +356,7 @@ def run_changed_row_mode_overlay_review(
         global_mode_ids_by_family=global_mode_ids_by_family,
         alignment_modes_by_family=alignment_modes_by_family,
         gaussian15_modes_by_family=gaussian15_modes_by_family,
+        subthreshold_reports_by_trace=subthreshold_reports_by_trace,
         drift_lookup=drift_lookup,
         output_dir=output_dir,
     )
@@ -369,6 +371,7 @@ def run_changed_row_mode_overlay_review(
                 trace_data=item,
                 sample_rows=family_sample_rows,
                 gaussian15_modes=gaussian15_modes_by_family.get(item.family_id, ()),
+                subthreshold_reports_by_trace=subthreshold_reports_by_trace,
                 drift_lookup=drift_lookup,
                 output_dir=output_dir,
             )
@@ -408,6 +411,7 @@ def run_changed_row_mode_overlay_review(
         mode_plot_paths=mode_plot_paths,
         mode_aligned_plot_paths=mode_aligned_plot_paths,
         gaussian15_modes_by_family=gaussian15_modes_by_family,
+        subthreshold_reports_by_trace=subthreshold_reports_by_trace,
         drift_lookup=drift_lookup,
     )
 
@@ -524,6 +528,9 @@ def _sample_review_rows(
         str,
         Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
     ],
+    subthreshold_reports_by_trace: (
+        Mapping[int, tuple[SubThresholdCandidate, ...]] | None
+    ) = None,
     drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
 ) -> list[dict[str, str]]:
@@ -543,6 +550,8 @@ def _sample_review_rows(
         )
         global_modes = global_mode_ids_by_family.get(family_id, {})
         alignment_modes = alignment_modes_by_family.get(family_id, {})
+        global_mode_count = len(set(global_modes.values()))
+        alignment_mode_count = _alignment_mode_count(alignment_modes)
         gaussian15_modes = gaussian15_modes_by_family.get(family_id, ())
         for trace in item.traces:
             sample_stem = text_value(trace.get("sample_stem"))
@@ -564,9 +573,9 @@ def _sample_review_rows(
             warning = _sample_mode_warning(
                 rt_row=rt_row,
                 global_mode_id=global_modes.get(sample_stem, ""),
-                global_mode_count=len(set(global_modes.values())),
+                global_mode_count=global_mode_count,
                 alignment_mode_id=text_value(alignment_row.get("alignment_mode_id")),
-                alignment_mode_count=_alignment_mode_count(alignment_modes),
+                alignment_mode_count=alignment_mode_count,
                 mode_basis=mode_basis,
                 gaussian15_trace_mode_ids=gaussian15_trace_modes,
             )
@@ -582,7 +591,10 @@ def _sample_review_rows(
             )
             subthreshold_rejected = sum(
                 1
-                for candidate in subthreshold_candidate_report(trace)
+                for candidate in _subthreshold_candidates_for_trace(
+                    trace,
+                    subthreshold_reports_by_trace,
+                )
                 if not candidate.accepted
             )
             rows.append(
@@ -684,6 +696,9 @@ def _family_summary_rows(
         str,
         Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
     ],
+    subthreshold_reports_by_trace: (
+        Mapping[int, tuple[SubThresholdCandidate, ...]] | None
+    ) = None,
     drift_lookup: DriftLookupProtocol | None = None,
 ) -> list[dict[str, str]]:
     samples_by_family: dict[str, list[Mapping[str, str]]] = defaultdict(list)
@@ -711,7 +726,10 @@ def _family_summary_rows(
         ]
         subthreshold_rejected = sum(
             1
-            for candidate in _family_subthreshold_candidates(item.traces)
+            for candidate in _family_subthreshold_candidates(
+                item.traces,
+                subthreshold_reports_by_trace=subthreshold_reports_by_trace,
+            )
             if not candidate.accepted
         )
         rows.append(
@@ -1801,12 +1819,43 @@ def _corrected_apex_span_sec(
 
 def _family_subthreshold_candidates(
     traces: Sequence[Mapping[str, Any]],
+    *,
+    subthreshold_reports_by_trace: Mapping[
+        int,
+        tuple[SubThresholdCandidate, ...],
+    ]
+    | None = None,
 ) -> tuple[SubThresholdCandidate, ...]:
     return tuple(
         candidate
         for trace in traces
-        for candidate in subthreshold_candidate_report(trace)
+        for candidate in _subthreshold_candidates_for_trace(
+            trace,
+            subthreshold_reports_by_trace,
+        )
     )
+
+
+def _subthreshold_reports_by_trace(
+    trace_data: Sequence[TraceData],
+) -> dict[int, tuple[SubThresholdCandidate, ...]]:
+    return {
+        id(trace): subthreshold_candidate_report(trace)
+        for item in trace_data
+        for trace in item.traces
+    }
+
+
+def _subthreshold_candidates_for_trace(
+    trace: Mapping[str, Any],
+    reports_by_trace: Mapping[int, tuple[SubThresholdCandidate, ...]] | None,
+) -> tuple[SubThresholdCandidate, ...]:
+    if reports_by_trace is None:
+        return subthreshold_candidate_report(trace)
+    cached = reports_by_trace.get(id(trace))
+    if cached is not None:
+        return cached
+    return subthreshold_candidate_report(trace)
 
 
 # Triage categories, in review priority order. (key, label) — label is shown in
@@ -1885,6 +1934,9 @@ def _render_mode_plot(
     trace_data: TraceData,
     sample_rows: Sequence[Mapping[str, str]],
     gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+    subthreshold_reports_by_trace: (
+        Mapping[int, tuple[SubThresholdCandidate, ...]] | None
+    ) = None,
     drift_lookup: DriftLookupProtocol | None = None,
     output_dir: Path,
 ) -> Path:
@@ -1941,7 +1993,10 @@ def _render_mode_plot(
                 s=20,
                 zorder=3,
             )
-        for candidate in subthreshold_candidate_report(trace):
+        for candidate in _subthreshold_candidates_for_trace(
+            trace,
+            subthreshold_reports_by_trace,
+        ):
             if candidate.accepted:
                 continue
             marker_y = _nearest_plot_value(
@@ -2134,6 +2189,31 @@ def _plot_alignment_rt(
     return max(peaks, key=lambda peak: peak.height).apex_rt
 
 
+def _mode_trace_entries_by_mode(
+    *,
+    trace_data: TraceData,
+    sample_rows: Sequence[Mapping[str, str]],
+    gaussian15_modes: Sequence[ms1_peak_modes.Gaussian15PeakModeWindow],
+) -> dict[str, list[tuple[Mapping[str, Any], Mapping[str, str]]]]:
+    by_sample = {row["sample_stem"]: row for row in sample_rows}
+    entries: dict[str, list[tuple[Mapping[str, Any], Mapping[str, str]]]] = (
+        defaultdict(list)
+    )
+    for trace in trace_data.traces:
+        sample = text_value(trace.get("sample_stem"))
+        row = by_sample.get(sample)
+        if row is None:
+            continue
+        mode_ids = (
+            _split_semicolon_values(row.get("gaussian15_trace_mode_ids"))
+            if gaussian15_modes
+            else (_display_mode_from_row(row),)
+        )
+        for mode_id in mode_ids:
+            entries[mode_id].append((trace, row))
+    return entries
+
+
 def _render_mode_aligned_plot(
     *,
     trace_data: TraceData,
@@ -2148,7 +2228,6 @@ def _render_mode_aligned_plot(
     import matplotlib.pyplot as plt
     import numpy as np
 
-    by_sample = {row["sample_stem"]: row for row in sample_rows}
     png_path = output_dir / f"{trace_data.family_id.lower()}_mode_aligned_overlay.png"
     mode_ids = [mode.mode_id for mode in gaussian15_modes]
     rows_by_mode: dict[str, list[Mapping[str, str]]] = defaultdict(list)
@@ -2161,6 +2240,11 @@ def _render_mode_aligned_plot(
         for row in sample_rows:
             rows_by_mode[_display_mode_from_row(row)].append(row)
         mode_ids = sorted(rows_by_mode) or ["unassigned"]
+    trace_entries_by_mode = _mode_trace_entries_by_mode(
+        trace_data=trace_data,
+        sample_rows=sample_rows,
+        gaussian15_modes=gaussian15_modes,
+    )
     modes = tuple(mode_ids)
     fig_height = max(3.6, 2.6 * len(modes))
     fig, axes = plt.subplots(
@@ -2173,13 +2257,9 @@ def _render_mode_aligned_plot(
     for axis_row, mode_id in zip(axes, modes, strict=True):
         ax = axis_row[0]
         mode_rows = rows_by_mode.get(mode_id, [])
-        mode_samples = {row["sample_stem"] for row in mode_rows}
         detected_count = 0
         plotted_count = 0
-        for trace in trace_data.traces:
-            sample = text_value(trace.get("sample_stem"))
-            if sample not in mode_samples:
-                continue
+        for trace, row in trace_entries_by_mode.get(mode_id, ()):
             selected_rt = _plot_alignment_rt(
                 trace=trace,
                 mode_id=mode_id,
@@ -2200,7 +2280,6 @@ def _render_mode_aligned_plot(
             if max_intensity <= 0:
                 continue
             relative_rt = np.asarray(rt[:limit], dtype=float) - selected_rt
-            row = by_sample.get(sample, {})
             is_detected = text_value(row.get("cell_status")) == "detected"
             detected_count += 1 if is_detected else 0
             color = "#005f73" if is_detected else "#c75b12"

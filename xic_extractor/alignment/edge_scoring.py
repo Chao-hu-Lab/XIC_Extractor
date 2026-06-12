@@ -26,7 +26,8 @@ DuplicateContext = Literal["none", "same_owner_events", "tail_assignment"]
 
 
 class DriftLookupProtocol(Protocol):
-    source: DriftPriorSource
+    @property
+    def source(self) -> DriftPriorSource: ...
 
     def sample_delta_min(self, sample_stem: str) -> float | None: ...
 

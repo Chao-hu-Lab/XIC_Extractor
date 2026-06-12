@@ -19,6 +19,7 @@ from xic_extractor.alignment.owner_group_delivery import (
     OwnerGroupDeliveryFeatures,
 )
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
+from xic_extractor.tabular_io import write_tsv
 
 BackfillScope = Literal["full-audit", "production-equivalent", "selected-families"]
 PREDICATE_VERSION = "p7-backfill-scope-v1"
@@ -94,6 +95,10 @@ def select_backfill_features(
             "or selected-families"
         )
 
+    compatible_neighbor_ids = _loose_compatible_neighbor_ids(
+        features,
+        alignment_config=alignment_config,
+    )
     selected: list[OwnerGroupDeliveryFeature] = []
     skipped: list[SkippedEvidenceRecord] = []
     for feature in features:
@@ -116,8 +121,7 @@ def select_backfill_features(
 
         if _can_skip_for_production_equivalence(
             feature,
-            features,
-            alignment_config=alignment_config,
+            compatible_neighbor_ids=compatible_neighbor_ids,
         ):
             skipped.extend(
                 _skipped_records(
@@ -158,6 +162,11 @@ def backfill_request_sample_stems(
         owners_by_sample[owner.sample_stem].append(owner)
 
     requested: list[str] = []
+    family_area = (
+        median_owner_area(feature)
+        if bool(getattr(feature, "confirm_local_owners_with_backfill", False))
+        else None
+    )
     for sample_stem in sample_order:
         if sample_stem not in raw_sample_stems:
             continue
@@ -169,6 +178,7 @@ def backfill_request_sample_stems(
         if sample_stem in detected_samples and not any_detected_owner_can_be_superseded(
             feature,
             owners_by_sample.get(sample_stem),
+            family_area=family_area,
         ):
             continue
         requested.append(sample_stem)
@@ -207,23 +217,84 @@ def backfill_seed_centers(
 def any_detected_owner_can_be_superseded(
     feature: OwnerGroupDeliveryFeature,
     owners: Sequence[SampleLocalMS1Owner] | None,
+    *,
+    family_area: float | None = None,
 ) -> bool:
     return any(
-        detected_owner_can_be_superseded(feature, owner) for owner in owners or ()
+        detected_owner_can_be_superseded(feature, owner, family_area=family_area)
+        for owner in owners or ()
     )
 
 
 def detected_owner_can_be_superseded(
     feature: OwnerGroupDeliveryFeature,
     owner: SampleLocalMS1Owner,
+    *,
+    family_area: float | None = None,
 ) -> bool:
     detected_area = positive_finite(owner.owner_area)
     if detected_area is None:
         return False
-    family_area = median_owner_area(feature)
+    if family_area is None:
+        family_area = median_owner_area(feature)
     if family_area is None:
         return False
     return detected_area <= family_area * 0.25
+
+
+def _loose_compatible_neighbor_ids(
+    features: OwnerGroupDeliveryFeatures,
+    *,
+    alignment_config: AlignmentConfig,
+) -> frozenset[int]:
+    by_tag: dict[str, list[OwnerGroupDeliveryFeature]] = defaultdict(list)
+    for feature in features:
+        if bool(getattr(feature, "review_only", False)):
+            continue
+        by_tag[str(feature.neutral_loss_tag)].append(feature)
+
+    neighbor_ids: set[int] = set()
+    rt_window_min = alignment_config.identity_rt_candidate_window_sec / 60.0
+    for tag_features in by_tag.values():
+        ordered = sorted(tag_features, key=family_center_rt)
+        for index, feature in enumerate(ordered):
+            feature_rt = family_center_rt(feature)
+            for other in _rt_window_neighbors(
+                ordered,
+                index=index,
+                center_rt=feature_rt,
+                rt_window_min=rt_window_min,
+            ):
+                if loose_compatible_primary_family(
+                    feature,
+                    other,
+                    alignment_config,
+                ):
+                    neighbor_ids.add(id(feature))
+                    neighbor_ids.add(id(other))
+                    break
+    return frozenset(neighbor_ids)
+
+
+def _rt_window_neighbors(
+    features: Sequence[OwnerGroupDeliveryFeature],
+    *,
+    index: int,
+    center_rt: float,
+    rt_window_min: float,
+) -> tuple[OwnerGroupDeliveryFeature, ...]:
+    neighbors: list[OwnerGroupDeliveryFeature] = []
+    for cursor in range(index - 1, -1, -1):
+        other = features[cursor]
+        if center_rt - family_center_rt(other) > rt_window_min:
+            break
+        neighbors.append(other)
+    for cursor in range(index + 1, len(features)):
+        other = features[cursor]
+        if family_center_rt(other) - center_rt > rt_window_min:
+            break
+        neighbors.append(other)
+    return tuple(neighbors)
 
 
 def read_family_allowlist_tsv(
@@ -250,17 +321,21 @@ def write_skipped_evidence_ledger_tsv(
     rows: Sequence[SkippedEvidenceRecord],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=SKIPPED_EVIDENCE_LEDGER_COLUMNS,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(asdict(row))
+    write_tsv(
+        path,
+        [asdict(row) for row in rows],
+        SKIPPED_EVIDENCE_LEDGER_COLUMNS,
+        extrasaction="raise",
+        formatter=_format_skipped_evidence_ledger_value,
+        lineterminator="\n",
+    )
     return path
+
+
+def _format_skipped_evidence_ledger_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def skipped_evidence_summary(rows: Sequence[SkippedEvidenceRecord]) -> dict[str, int]:
@@ -272,9 +347,8 @@ def skipped_evidence_summary(rows: Sequence[SkippedEvidenceRecord]) -> dict[str,
 
 def _can_skip_for_production_equivalence(
     feature: OwnerGroupDeliveryFeature,
-    features: OwnerGroupDeliveryFeatures,
     *,
-    alignment_config: AlignmentConfig,
+    compatible_neighbor_ids: frozenset[int],
 ) -> bool:
     if bool(getattr(feature, "review_only", False)):
         return True
@@ -282,12 +356,7 @@ def _can_skip_for_production_equivalence(
         return False
     if len({owner.sample_stem for owner in feature.owners}) != 1:
         return False
-    return not any(
-        other is not feature
-        and not bool(getattr(other, "review_only", False))
-        and loose_compatible_primary_family(feature, other, alignment_config)
-        for other in features
-    )
+    return id(feature) not in compatible_neighbor_ids
 
 
 def _skipped_records(

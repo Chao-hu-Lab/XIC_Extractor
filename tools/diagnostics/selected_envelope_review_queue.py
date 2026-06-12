@@ -13,6 +13,7 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from xic_extractor.peak_detection.selected_envelope_diagnostics import (
     SELECTED_ENVELOPE_DIAGNOSTIC_HEADERS,
     SELECTED_ENVELOPE_GATE_MANIFEST_FIELDS,
@@ -151,22 +152,17 @@ def _write_tsv(
     rows: Iterable[Mapping[str, object]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    field: _sanitize_field(str(row.get(field, "")))
-                    for field in fieldnames
-                }
-            )
+    write_tsv(
+        path,
+        tuple(rows),
+        fieldnames,
+        formatter=_format_tsv_value,
+        lineterminator="\n",
+    )
+
+
+def _format_tsv_value(value: object) -> str:
+    return _sanitize_field(str(value))
 
 
 def _write_json(

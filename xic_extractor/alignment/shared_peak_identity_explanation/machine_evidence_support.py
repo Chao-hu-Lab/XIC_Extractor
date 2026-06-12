@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
+from xic_extractor.tabular_io import read_tsv_required
 
 from .machine_artifacts import MachineMatch
 from .schema import (
@@ -1651,9 +1651,11 @@ def _split_semicolon(value: object) -> tuple[str, ...]:
 
 def _unique(values: Sequence[str]) -> tuple[str, ...]:
     result: list[str] = []
+    seen: set[str] = set()
     for value in values:
-        if value and value not in result:
+        if value and value not in seen:
             result.append(value)
+            seen.add(value)
     return tuple(result)
 
 

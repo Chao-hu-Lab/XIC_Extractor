@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import pickle
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass, fields, is_dataclass
@@ -14,7 +13,6 @@ from typing import Any
 
 from xic_extractor.alignment.backfill_scope import (
     REQUEST_PLAN_VERSION,
-    backfill_request_sample_stems,
 )
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
@@ -32,10 +30,10 @@ from xic_extractor.alignment.owner_backfill import (
     OwnerBackfillWindowStrategy,
     build_owner_backfill_result,
 )
-from xic_extractor.alignment.owner_group_delivery import (
-    OwnerGroupDeliveryFeature,
-    OwnerGroupDeliveryFeatures,
+from xic_extractor.alignment.owner_backfill_request_plan import (
+    build_owner_backfill_request_plan,
 )
+from xic_extractor.alignment.owner_group_delivery import OwnerGroupDeliveryFeatures
 from xic_extractor.alignment.ownership import (
     OwnershipBuildResult,
     build_sample_local_owners,
@@ -119,6 +117,17 @@ class OwnerBackfillSampleJob:
     request_plan_id: str = REQUEST_PLAN_VERSION
     backfill_scope: str = "full-audit"
     feature_payload_count: int = 0
+    request_payload_count: int = 0
+
+
+@dataclass(frozen=True)
+class OwnerBackfillJobPayloadMetrics:
+    sample_index: int
+    sample_stem: str
+    feature_payload_count: int
+    request_payload_count: int
+    requests_per_feature: float | None
+    pickle_payload_bytes: int
 
 
 @dataclass(frozen=True)
@@ -442,27 +451,17 @@ def run_owner_backfill_process(
         raise ValueError("owner_backfill_superwindow_span_factor must be >= 1")
     jobs: list[OwnerBackfillSampleJob] = []
     raw_sample_stems = frozenset(raw_paths)
-    # Compute each feature's backfill sample set ONCE (pure per-feature) and
-    # bucket features per sample, instead of recomputing
-    # backfill_request_sample_stems for every (sample, feature) pair. Produces
-    # identical per-sample feature lists while turning the O(samples x features)
-    # request scan into O(features).
-    features_by_sample: defaultdict[str, list[OwnerGroupDeliveryFeature]] = (
-        defaultdict(list)
+    request_plan = build_owner_backfill_request_plan(
+        features,
+        sample_order=sample_order,
+        raw_sample_stems=raw_sample_stems,
+        alignment_config=alignment_config,
     )
-    for feature in features:
-        for stem in backfill_request_sample_stems(
-            feature,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        ):
-            features_by_sample[stem].append(feature)
     for index, sample_stem in enumerate(sample_order, start=1):
         raw_path = raw_paths.get(sample_stem)
         if raw_path is None:
             continue
-        sample_features = tuple(features_by_sample.get(sample_stem, ()))
+        sample_features = request_plan.features_for_sample(sample_stem)
         if not sample_features:
             continue
         jobs.append(
@@ -486,6 +485,9 @@ def run_owner_backfill_process(
                 request_plan_id=REQUEST_PLAN_VERSION,
                 backfill_scope=backfill_scope,
                 feature_payload_count=len(sample_features),
+                request_payload_count=request_plan.request_count_for_sample(
+                    sample_stem,
+                ),
             )
         )
     if not jobs:
@@ -1016,10 +1018,32 @@ def validate_owner_backfill_job_payload(job: OwnerBackfillSampleJob) -> None:
     validate_process_job_payload(job)
 
 
+def owner_backfill_job_payload_metrics(
+    job: OwnerBackfillSampleJob,
+) -> OwnerBackfillJobPayloadMetrics:
+    requests_per_feature = (
+        job.request_payload_count / job.feature_payload_count
+        if job.feature_payload_count
+        else None
+    )
+    return OwnerBackfillJobPayloadMetrics(
+        sample_index=job.sample_index,
+        sample_stem=job.sample_stem,
+        feature_payload_count=job.feature_payload_count,
+        request_payload_count=job.request_payload_count,
+        requests_per_feature=requests_per_feature,
+        pickle_payload_bytes=process_job_payload_size_bytes(job),
+    )
+
+
 def validate_process_job_payload(job: Any) -> None:
+    process_job_payload_size_bytes(job)
+
+
+def process_job_payload_size_bytes(job: Any) -> int:
     _validate_payload_value(job, path="job")
     try:
-        pickle.dumps(job)
+        return len(pickle.dumps(job))
     except Exception as exc:
         raise TypeError(f"job payload is not pickleable: {exc}") from exc
 

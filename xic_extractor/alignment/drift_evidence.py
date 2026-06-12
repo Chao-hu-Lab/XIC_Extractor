@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
@@ -36,30 +37,38 @@ class DriftEvidenceLookup:
         return "batch_istd_trend"
 
     def sample_delta_min(self, sample_stem: str) -> float | None:
-        deltas = [
-            point.rt_drift_delta_min
-            for point in self.points
-            if point.sample_stem == sample_stem
-        ]
-        if not deltas:
-            return None
-        return float(statistics.median(deltas))
+        return self._sample_delta_medians.get(sample_stem)
 
     def injection_order(self, sample_stem: str) -> int | None:
-        orders = {
-            point.injection_order
-            for point in self.points
-            if point.sample_stem == sample_stem
-        }
+        orders = self._injection_orders_by_sample.get(sample_stem)
         if not orders:
             return None
         if len(orders) == 1:
-            return next(iter(orders))
-        ordered_values = sorted(orders)
+            return orders[0]
         raise ValueError(
             "conflicting injection order for "
-            f"sample {sample_stem!r}: {ordered_values}"
+            f"sample {sample_stem!r}: {list(orders)}"
         )
+
+    @cached_property
+    def _sample_delta_medians(self) -> dict[str, float]:
+        by_sample: dict[str, list[float]] = {}
+        for point in self.points:
+            by_sample.setdefault(point.sample_stem, []).append(point.rt_drift_delta_min)
+        return {
+            sample_stem: float(statistics.median(deltas))
+            for sample_stem, deltas in by_sample.items()
+        }
+
+    @cached_property
+    def _injection_orders_by_sample(self) -> dict[str, tuple[int, ...]]:
+        by_sample: dict[str, set[int]] = {}
+        for point in self.points:
+            by_sample.setdefault(point.sample_stem, set()).add(point.injection_order)
+        return {
+            sample_stem: tuple(sorted(orders))
+            for sample_stem, orders in by_sample.items()
+        }
 
 
 def read_targeted_istd_drift_evidence(
@@ -69,12 +78,13 @@ def read_targeted_istd_drift_evidence(
 ) -> DriftEvidenceLookup:
     injection_order = read_injection_order(sample_info)
     rt_by_label = _read_istd_rt_by_label(targeted_workbook)
+    ordered_labels = tuple(sorted(rt_by_label))
     trend_ids = {
         label: f"trend-{index:03d}"
-        for index, label in enumerate(sorted(rt_by_label), start=1)
+        for index, label in enumerate(ordered_labels, start=1)
     }
     points: list[SampleDriftEvidence] = []
-    for label in sorted(rt_by_label):
+    for label in ordered_labels:
         rt_by_sample = rt_by_label[label]
         for sample_stem in sorted(
             rt_by_sample,

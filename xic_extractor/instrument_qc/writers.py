@@ -1,4 +1,3 @@
-import csv
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -9,6 +8,7 @@ from xic_extractor.instrument_qc.models import (
     InstrumentQCDiagnostic,
     SDOLEKTrendRow,
 )
+from xic_extractor.tabular_io import write_tsv
 
 TREND_TSV_COLUMNS = [
     "sample_name",
@@ -60,35 +60,22 @@ HCD_AUDIT_TSV_COLUMNS = [
 
 
 def write_trend_tsv(path: Path, rows: Iterable[SDOLEKTrendRow]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=TREND_TSV_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_trend_row_to_dict(row))
+    _write_tsv_rows(
+        path,
+        (_trend_row_to_dict(row) for row in rows),
+        TREND_TSV_COLUMNS,
+    )
 
 
 def write_diagnostics_tsv(
     path: Path,
     diagnostics: Iterable[InstrumentQCDiagnostic],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=DIAGNOSTIC_TSV_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for diagnostic in diagnostics:
-            writer.writerow(
-                {
-                    "sample_name": diagnostic.sample_name,
-                    "raw_path": str(diagnostic.raw_path),
-                    "issue": diagnostic.issue,
-                    "detail": diagnostic.detail,
-                }
-            )
+    _write_tsv_rows(
+        path,
+        (_diagnostic_to_dict(diagnostic) for diagnostic in diagnostics),
+        DIAGNOSTIC_TSV_COLUMNS,
+    )
 
 
 def write_sdolek_json(
@@ -115,16 +102,11 @@ def write_sdolek_json(
 
 
 def write_hcd_audit_tsv(path: Path, rows: Iterable[HCDAuditRow]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=HCD_AUDIT_TSV_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_hcd_row_to_dict(row))
+    _write_tsv_rows(
+        path,
+        (_hcd_row_to_dict(row) for row in rows),
+        HCD_AUDIT_TSV_COLUMNS,
+    )
 
 
 def write_hcd_audit_json(path: Path, rows: Iterable[HCDAuditRow]) -> None:
@@ -164,6 +146,26 @@ def _diagnostic_to_dict(diagnostic: InstrumentQCDiagnostic) -> dict[str, object]
         "issue": diagnostic.issue,
         "detail": diagnostic.detail,
     }
+
+
+def _write_tsv_rows(
+    path: Path,
+    rows: Iterable[dict[str, object]],
+    columns: list[str],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_tsv(
+        path,
+        tuple(rows),
+        columns,
+        formatter=_format_csv_value,
+    )
+
+
+def _format_csv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _counts(values: Iterable[str]) -> dict[str, int]:

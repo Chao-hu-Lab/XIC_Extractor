@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     read_tsv_required,
     text_value,
     write_tsv,

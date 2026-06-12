@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from statistics import median
 
 from tools.diagnostics.targeted_peak_reliability_models import (
@@ -161,40 +162,56 @@ def _area_context_by_key(
 def _summarize_rows(
     rows: Sequence[TargetedReliabilityRow],
 ) -> tuple[TargetedReliabilitySummary, ...]:
-    grouped: dict[str, list[TargetedReliabilityRow]] = defaultdict(list)
+    by_target: dict[str, _TargetReliabilitySummaryBuilder] = {}
     for row in rows:
-        grouped[row.target_label].append(row)
-    summaries: list[TargetedReliabilitySummary] = []
-    for target_label in sorted(grouped):
-        target_rows = grouped[target_label]
-        reasons = Counter(reason for row in target_rows for reason in row.risk_reasons)
-        top_reasons = ";".join(reason for reason, _count in reasons.most_common(5))
-        known_exception = next(
-            (row.known_exception for row in target_rows if row.known_exception),
-            "",
+        builder = by_target.get(row.target_label)
+        if builder is None:
+            builder = _TargetReliabilitySummaryBuilder(role=row.role)
+            by_target[row.target_label] = builder
+        builder.add(row)
+    return tuple(
+        by_target[target_label].to_summary(target_label)
+        for target_label in sorted(by_target)
+    )
+
+
+@dataclass
+class _TargetReliabilitySummaryBuilder:
+    role: str
+    benchmark_eligible_count: int = 0
+    targeted_review_positive_count: int = 0
+    targeted_review_count: int = 0
+    targeted_negative_count: int = 0
+    reasons: Counter[str] = field(default_factory=Counter)
+    known_exception: str = ""
+
+    def add(self, row: TargetedReliabilityRow) -> None:
+        if row.reliability_state == "benchmark_eligible":
+            self.benchmark_eligible_count += 1
+        elif row.reliability_state == "targeted_review_positive":
+            self.targeted_review_positive_count += 1
+        elif row.reliability_state == "targeted_review":
+            self.targeted_review_count += 1
+        elif row.reliability_state == "targeted_negative":
+            self.targeted_negative_count += 1
+        self.reasons.update(row.risk_reasons)
+        if not self.known_exception and row.known_exception:
+            self.known_exception = row.known_exception
+
+    def to_summary(self, target_label: str) -> TargetedReliabilitySummary:
+        top_reasons = ";".join(
+            reason for reason, _count in self.reasons.most_common(5)
         )
-        summaries.append(
-            TargetedReliabilitySummary(
-                target_label=target_label,
-                role=target_rows[0].role,
-                benchmark_eligible_count=sum(
-                    row.reliability_state == "benchmark_eligible" for row in target_rows
-                ),
-                targeted_review_positive_count=sum(
-                    row.reliability_state == "targeted_review_positive"
-                    for row in target_rows
-                ),
-                targeted_review_count=sum(
-                    row.reliability_state == "targeted_review" for row in target_rows
-                ),
-                targeted_negative_count=sum(
-                    row.reliability_state == "targeted_negative" for row in target_rows
-                ),
-                top_risk_reasons=top_reasons,
-                known_exception=known_exception,
-            )
+        return TargetedReliabilitySummary(
+            target_label=target_label,
+            role=self.role,
+            benchmark_eligible_count=self.benchmark_eligible_count,
+            targeted_review_positive_count=self.targeted_review_positive_count,
+            targeted_review_count=self.targeted_review_count,
+            targeted_negative_count=self.targeted_negative_count,
+            top_risk_reasons=top_reasons,
+            known_exception=self.known_exception,
         )
-    return tuple(summaries)
 
 
 def _is_nl_fail(value: str) -> bool:

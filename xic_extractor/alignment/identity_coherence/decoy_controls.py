@@ -233,9 +233,10 @@ def _shift_outside_ppm(mz: float, tolerance_ppm: float) -> float:
 
 def _default_decoy_tags(source_tags: tuple[str, ...]) -> tuple[str, ...]:
     base = "identity_decoy_unmatched_tag"
-    if base not in source_tags:
+    source_tag_set = set(source_tags)
+    if base not in source_tag_set:
         return (base,)
     index = 2
-    while f"{base}_{index}" in source_tags:
+    while f"{base}_{index}" in source_tag_set:
         index += 1
     return (f"{base}_{index}",)

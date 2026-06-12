@@ -11,6 +11,7 @@ from scripts.benchmark_parallel import (
     run_benchmark,
 )
 from scripts.compare_workbooks import WorkbookCompareResult
+from xic_extractor.config import ExtractionConfig
 
 
 def test_build_run_specs_uses_expected_mode_worker_matrix_and_output_dirs(
@@ -115,17 +116,28 @@ def test_run_benchmark_writes_summary_csv(tmp_path: Path) -> None:
         timer=_fake_timer(),
     )
 
-    summary = (tmp_path / "parallel_benchmark" / "benchmark_summary.csv").read_text(
-        encoding="utf-8-sig"
-    )
+    summary_path = tmp_path / "parallel_benchmark" / "benchmark_summary.csv"
+    raw_summary = summary_path.read_bytes()
+    assert raw_summary.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" in raw_summary
+    summary = summary_path.read_text(encoding="utf-8-sig")
+    assert summary.splitlines()[0].split(",") == [
+        "mode",
+        "workers",
+        "raw_count",
+        "elapsed_seconds",
+        "workbook_path",
+        "compare_result",
+        "compare_differences",
+    ]
 
     assert (
         "mode,workers,raw_count,elapsed_seconds,workbook_path,compare_result"
         in summary
     )
-    assert "serial,1,1," in summary
+    assert "serial,1,1,1.000," in summary
     assert "baseline" in summary
-    assert "process,2,1," in summary
+    assert "process,2,1,2.000," in summary
     assert "fail" in summary
     assert "XIC Results!R2C3: 1 != 2" in summary
 
@@ -144,10 +156,11 @@ def test_run_extraction_once_applies_data_dir_override_before_validation(
         dll_dir=dll_dir,
     )
     _write_benchmark_targets(config_dir)
+    captured_configs: list[ExtractionConfig] = []
     captured: dict[str, object] = {}
 
     def fake_run(config, targets, *, model_selection_expected_diff_approvals=None):
-        captured["config"] = config
+        captured_configs.append(config)
         captured["targets"] = targets
         captured["approvals"] = model_selection_expected_diff_approvals
         return object()
@@ -166,7 +179,7 @@ def test_run_extraction_once_applies_data_dir_override_before_validation(
         output_dir=tmp_path / "out",
     )
 
-    assert captured["config"].data_dir == validation_dir
+    assert captured_configs[0].data_dir == validation_dir
     assert captured["approvals"] is None
     assert workbook_path == tmp_path / "out" / "xic_results_serial_w1.xlsx"
 
@@ -185,10 +198,11 @@ def test_run_extraction_once_applies_additional_settings_overrides(
         dll_dir=dll_dir,
     )
     _write_benchmark_targets(config_dir)
+    captured_configs: list[ExtractionConfig] = []
     captured: dict[str, object] = {}
 
     def fake_run(config, targets, *, model_selection_expected_diff_approvals=None):
-        captured["config"] = config
+        captured_configs.append(config)
         captured["targets"] = targets
         captured["approvals"] = model_selection_expected_diff_approvals
         return object()
@@ -208,10 +222,10 @@ def test_run_extraction_once_applies_additional_settings_overrides(
         settings_overrides={"resolver_mode": "local_minimum"},
     )
 
-    assert captured["config"].data_dir == validation_dir
-    assert captured["config"].resolver_mode == "local_minimum"
-    assert captured["config"].parallel_mode == "process"
-    assert captured["config"].parallel_workers == 4
+    assert captured_configs[0].data_dir == validation_dir
+    assert captured_configs[0].resolver_mode == "local_minimum"
+    assert captured_configs[0].parallel_mode == "process"
+    assert captured_configs[0].parallel_workers == 4
     assert captured["approvals"] is None
 
 

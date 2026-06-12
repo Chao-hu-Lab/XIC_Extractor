@@ -8,15 +8,16 @@ import hashlib
 import json
 import sys
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
 
 _DEFAULT_LOAD_FAMILY_CELLS = overlay_plot.load_family_cells
 _DEFAULT_EXTRACT_FAMILY_TRACE_ROWS = overlay_plot.extract_family_trace_rows
@@ -36,6 +37,11 @@ OVERLAY_BATCH_SOURCE = "family_ms1_overlay_batch_v1"
 OVERLAY_SUPERWINDOW_SPAN_FACTOR = 2
 OverlayTraceItem = tuple[int, overlay_plot.FamilyCell, str, Any]
 WindowedOverlayTraceItem = tuple[int, OverlayTraceItem, tuple[int, int]]
+ScanRetentionTimeCache = MutableMapping[int, float | None]
+
+
+class _BatchRawReader(Protocol):
+    def extract_xic_many(self, requests: Sequence[Any]) -> Sequence[Any]: ...
 
 
 @dataclass(frozen=True)
@@ -326,6 +332,7 @@ def _render_family(
         request,
         source_provenance=source_provenance,
     )
+    outputs: Mapping[str, Path | None] | overlay_plot.FamilyMs1OverlayOutputs
     if evidence_only:
         output_dir.mkdir(parents=True, exist_ok=True)
         outputs = _request_output_paths(
@@ -499,16 +506,23 @@ def _extract_overlay_traces(
     *,
     extraction_stats: OverlayExtractionStats | None = None,
 ):
+    unique_items, original_to_unique = _deduplicate_overlay_items(items)
+    retention_time_by_scan: dict[int, float | None] = {}
     groups = _overlay_superwindow_groups(
         raw,
-        items,
+        unique_items,
         superwindow_span_factor=OVERLAY_SUPERWINDOW_SPAN_FACTOR,
+        retention_time_by_scan=retention_time_by_scan,
     )
     if groups is None:
         if extraction_stats is not None:
             extraction_stats.superwindow_fallback_sample_count += 1
-            extraction_stats.extract_xic_batch_count += 1 if items else 0
-        return tuple(raw.extract_xic_many(tuple(item[3] for item in items)))
+            extraction_stats.extract_xic_batch_count += 1 if unique_items else 0
+        raw_reader = cast(_BatchRawReader, raw)
+        unique_traces = tuple(
+            raw_reader.extract_xic_many(tuple(item[3] for item in unique_items))
+        )
+        return tuple(unique_traces[index] for index in original_to_unique)
 
     from xic_extractor.raw_reader import RawReaderError
     from xic_extractor.xic_models import XICRequest
@@ -524,12 +538,20 @@ def _extract_overlay_traces(
         extraction_stats.superwindow_group_count += len(groups)
         extraction_stats.extract_xic_batch_count += len(groups)
 
-    traces: list[Any | None] = [None] * len(items)
+    traces: list[Any | None] = [None] * len(unique_items)
     for group in groups:
         union_start = min(scan_window[0] for _index, _item, scan_window in group)
         union_end = max(scan_window[1] for _index, _item, scan_window in group)
-        union_rt_min = _retention_time_for_scan(raw, union_start)
-        union_rt_max = _retention_time_for_scan(raw, union_end)
+        union_rt_min = _retention_time_for_scan(
+            raw,
+            union_start,
+            retention_time_by_scan=retention_time_by_scan,
+        )
+        union_rt_max = _retention_time_for_scan(
+            raw,
+            union_end,
+            retention_time_by_scan=retention_time_by_scan,
+        )
         if union_rt_min is None or union_rt_max is None:
             raise RawReaderError("overlay super-window RT lookup became unavailable")
         if union_rt_min > union_rt_max:
@@ -543,18 +565,51 @@ def _extract_overlay_traces(
             )
             for _index, item, _scan_window in group
         )
-        union_traces = tuple(raw.extract_xic_many(union_requests))
+        raw_reader = cast(_BatchRawReader, raw)
+        union_traces = tuple(raw_reader.extract_xic_many(union_requests))
         for trace, (index, _item, scan_window) in zip(
             union_traces,
             group,
             strict=True,
         ):
-            traces[index] = _crop_trace_to_scan_window(raw, trace, scan_window)
+            traces[index] = _crop_trace_to_scan_window(
+                raw,
+                trace,
+                scan_window,
+                retention_time_by_scan=retention_time_by_scan,
+            )
     if any(trace is None for trace in traces):
         raise RawReaderError(
             "overlay super-window extraction returned incomplete traces",
         )
-    return tuple(trace for trace in traces if trace is not None)
+    unique_traces = tuple(trace for trace in traces if trace is not None)
+    return tuple(unique_traces[index] for index in original_to_unique)
+
+
+def _deduplicate_overlay_items(
+    items: Sequence[OverlayTraceItem],
+) -> tuple[tuple[OverlayTraceItem, ...], tuple[int, ...]]:
+    unique_items: list[OverlayTraceItem] = []
+    unique_index_by_request: dict[tuple[float, float, float, float], int] = {}
+    original_to_unique: list[int] = []
+    for item in items:
+        key = _xic_request_key(item[3])
+        unique_index = unique_index_by_request.get(key)
+        if unique_index is None:
+            unique_index = len(unique_items)
+            unique_index_by_request[key] = unique_index
+            unique_items.append(item)
+        original_to_unique.append(unique_index)
+    return tuple(unique_items), tuple(original_to_unique)
+
+
+def _xic_request_key(request: Any) -> tuple[float, float, float, float]:
+    return (
+        float(request.mz),
+        float(request.rt_min),
+        float(request.rt_max),
+        float(request.ppm_tol),
+    )
 
 
 def _overlay_superwindow_groups(
@@ -562,15 +617,30 @@ def _overlay_superwindow_groups(
     items: Sequence[OverlayTraceItem],
     *,
     superwindow_span_factor: int,
+    retention_time_by_scan: ScanRetentionTimeCache,
 ) -> tuple[tuple[WindowedOverlayTraceItem, ...], ...] | None:
     windowed_items: list[WindowedOverlayTraceItem] = []
     for index, item in enumerate(items):
         scan_window = _scan_window_for_request(raw, item[3])
         if scan_window is None:
             return None
-        if _retention_time_for_scan(raw, scan_window[0]) is None:
+        if (
+            _retention_time_for_scan(
+                raw,
+                scan_window[0],
+                retention_time_by_scan=retention_time_by_scan,
+            )
+            is None
+        ):
             return None
-        if _retention_time_for_scan(raw, scan_window[1]) is None:
+        if (
+            _retention_time_for_scan(
+                raw,
+                scan_window[1],
+                retention_time_by_scan=retention_time_by_scan,
+            )
+            is None
+        ):
             return None
         windowed_items.append((index, item, scan_window))
     if not windowed_items:
@@ -632,11 +702,21 @@ def _crop_trace_to_scan_window(
     raw: object,
     trace: Any,
     scan_window: tuple[int, int],
+    *,
+    retention_time_by_scan: ScanRetentionTimeCache,
 ):
     from xic_extractor.xic_models import XICTrace
 
-    rt_min = _retention_time_for_scan(raw, scan_window[0])
-    rt_max = _retention_time_for_scan(raw, scan_window[1])
+    rt_min = _retention_time_for_scan(
+        raw,
+        scan_window[0],
+        retention_time_by_scan=retention_time_by_scan,
+    )
+    rt_max = _retention_time_for_scan(
+        raw,
+        scan_window[1],
+        retention_time_by_scan=retention_time_by_scan,
+    )
     if rt_min is None or rt_max is None:
         return trace
     if rt_min > rt_max:
@@ -656,14 +736,28 @@ def _scan_window_for_request(raw: object, request: Any) -> tuple[int, int] | Non
     return int(start_scan), int(end_scan)
 
 
-def _retention_time_for_scan(raw: object, scan_number: int) -> float | None:
+def _retention_time_for_scan(
+    raw: object,
+    scan_number: int,
+    *,
+    retention_time_by_scan: ScanRetentionTimeCache | None = None,
+) -> float | None:
+    if retention_time_by_scan is not None and scan_number in retention_time_by_scan:
+        return retention_time_by_scan[scan_number]
     resolver = getattr(raw, "retention_time_for_scan", None)
     if not callable(resolver):
+        if retention_time_by_scan is not None:
+            retention_time_by_scan[scan_number] = None
         return None
     try:
-        return float(resolver(scan_number))
+        retention_time = float(resolver(scan_number))
     except (AttributeError, NotImplementedError):
+        if retention_time_by_scan is not None:
+            retention_time_by_scan[scan_number] = None
         return None
+    if retention_time_by_scan is not None:
+        retention_time_by_scan[scan_number] = retention_time
+    return retention_time
 
 
 def _scan_span(start_scan: int, end_scan: int) -> int:
@@ -1139,16 +1233,15 @@ def _write_tsv(
     rows: Sequence[Mapping[str, Any]],
     fields: Sequence[str],
 ) -> None:
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=fields,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fields})
+    formatted_rows = tuple(
+        {field: _format_value(row.get(field)) for field in fields} for row in rows
+    )
+    write_tsv(
+        path,
+        formatted_rows,
+        fields,
+        lineterminator="\n",
+    )
 
 
 def _summary_fields() -> tuple[str, ...]:

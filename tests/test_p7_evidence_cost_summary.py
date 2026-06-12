@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 
@@ -55,7 +56,16 @@ def test_p7_evidence_cost_summary_passes_when_backfill_cost_drops(
     assert result.metrics["owner_backfill_speedup_ratio"] == 2.5
     assert result.metrics["raw_xic_requests_skipped"] == 2
     assert (tmp_path / "summary" / "p7_evidence_cost_summary.json").exists()
-    assert (tmp_path / "summary" / "p7_evidence_cost_summary.tsv").exists()
+    with (tmp_path / "summary" / "p7_evidence_cost_summary.tsv").open(
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        tsv_rows = {row["metric"]: row["value"] for row in reader}
+        assert reader.fieldnames == ["metric", "value"]
+    assert tsv_rows["owner_backfill_elapsed_saved_sec"] == "60"
+    assert tsv_rows["request_target_reduction_pct"] == "60"
+    assert tsv_rows["status"] == "inconclusive"
     assert (tmp_path / "summary" / "p7_evidence_cost_summary.md").exists()
     assert (
         tmp_path / "summary" / "owner_backfill_economics_8raw_full_audit.json"

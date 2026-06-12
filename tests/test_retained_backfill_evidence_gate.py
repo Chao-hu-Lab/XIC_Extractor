@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from tools.diagnostics import retained_backfill_evidence_gate as gate_cli
+from xic_extractor.diagnostics import retained_backfill_evidence_gate as gate
 from xic_extractor.diagnostics.retained_backfill_evidence_gate import (
     RETAINED_BACKFILL_EVIDENCE_GATE_COLUMNS,
 )
@@ -13,12 +14,22 @@ from xic_extractor.diagnostics.retained_backfill_evidence_gate import (
 
 def test_cli_writes_retained_product_backfill_gate_and_summary(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     alignment_dir = _write_alignment_run(tmp_path / "alignment")
     output_dir = tmp_path / "gate"
     overlay_path = _write_overlay_summary(tmp_path / "overlay.tsv")
     matrix_path = alignment_dir / "alignment_matrix.tsv"
     before_hash = _sha256_file(matrix_path)
+    candidate_calls = 0
+    original_candidates = gate._missing_overlay_queue_candidates
+
+    def counted_candidates(rows):
+        nonlocal candidate_calls
+        candidate_calls += 1
+        return original_candidates(rows)
+
+    monkeypatch.setattr(gate, "_missing_overlay_queue_candidates", counted_candidates)
 
     code = gate_cli.main(
         [
@@ -118,6 +129,7 @@ def test_cli_writes_retained_product_backfill_gate_and_summary(
     assert payload["matrix_contract_changed"] is False
     assert payload["source_matrix_sha256"] == before_hash
     assert payload["source_overlay_artifacts"] == str(overlay_path)
+    assert candidate_calls == 1
 
 
 def test_overlay_support_without_seed_provenance_fails_closed(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import html
 import json
 import re
@@ -12,9 +11,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from xic_extractor.diagnostics.backfill_decision_explanation import (
+    BackfillDecisionExplanation,
+    decision_explanation,
+)
+from xic_extractor.diagnostics.backfill_overlay import (
+    selected_overlay_row as select_backfill_overlay_row,
+)
 from xic_extractor.diagnostics.diagnostic_io import (
+    file_sha256,
     optional_float,
     read_tsv_required,
+    rows_by_text_field,
     split_semicolon_labels,
     text_value,
     write_tsv,
@@ -123,7 +131,7 @@ def run_backfill_shadow_policy_report(
     for path in overlay_batch_summary_tsvs:
         overlay_rows.extend(read_tsv_required(path, OVERLAY_REQUIRED_COLUMNS))
     matrix_sha256 = (
-        _sha256_file(alignment_matrix_tsv)
+        file_sha256(alignment_matrix_tsv)
         if alignment_matrix_tsv is not None and alignment_matrix_tsv.exists()
         else ""
     )
@@ -132,8 +140,8 @@ def run_backfill_shadow_policy_report(
         retained_gate_rows=gate_rows,
         overlay_rows=overlay_rows,
         source_run_id=source_run_id,
-        source_cell_sha256=_sha256_file(alignment_cells_tsv),
-        source_gate_sha256=_sha256_file(retained_gate_tsv),
+        source_cell_sha256=file_sha256(alignment_cells_tsv),
+        source_gate_sha256=file_sha256(retained_gate_tsv),
         source_matrix_sha256=matrix_sha256,
         source_overlay_artifacts=tuple(
             str(path) for path in overlay_batch_summary_tsvs
@@ -226,7 +234,7 @@ def _shadow_row(
     overlay_row: Mapping[str, str],
 ) -> dict[str, str]:
     current_state = _current_product_cell_state(cell)
-    decision, reason, production_gap = _shadow_decision(
+    explanation = _shadow_decision(
         gate_row=gate_row,
         cell=cell,
         overlay_row=overlay_row,
@@ -240,9 +248,9 @@ def _shadow_row(
         "seed_group_id": text_value(gate_row.get("seed_group_id")),
         "sample_stem": sample_stem,
         "current_product_cell_state": current_state,
-        "shadow_policy_decision": decision,
-        "decision_reason": reason,
-        "production_gap": production_gap,
+        "shadow_policy_decision": explanation.decision,
+        "decision_reason": explanation.reason_text,
+        "production_gap": explanation.production_gap,
         "diagnostic_authority": "diagnostic_only",
         "seed_mz": text_value(gate_row.get("seed_mz")),
         "seed_rt": text_value(gate_row.get("seed_rt")),
@@ -282,21 +290,21 @@ def _shadow_decision(
     cell: Mapping[str, str],
     overlay_row: Mapping[str, str],
     current_product_cell_state: str,
-) -> tuple[ShadowPolicyDecision, str, str]:
+) -> BackfillDecisionExplanation:
     if current_product_cell_state == "filled_now":
-        return ("fill_now", "product_already_writes_rescue", "")
+        return decision_explanation("fill_now", "product_already_writes_rescue")
     if text_value(cell.get("status")) != "rescued":
-        return ("blocked", "rescued_cell_missing_or_not_rescued", "")
+        return decision_explanation("blocked", "rescued_cell_missing_or_not_rescued")
     if optional_float(gate_row.get("detected_cell_count")) in (None, 0.0):
-        return ("blocked", "detected_seed_missing", "")
+        return decision_explanation("blocked", "detected_seed_missing")
     missing = split_semicolon_labels(gate_row.get("missing_evidence"))
     if "missing_seed_provenance" in missing:
-        return ("blocked", "missing_seed_provenance", "")
+        return decision_explanation("blocked", "missing_seed_provenance")
     blockers = split_semicolon_labels(gate_row.get("challenge_blockers"))
     if blockers:
-        return ("blocked", "visual_conflict_or_review_required", "")
+        return decision_explanation("blocked", "visual_conflict_or_review_required")
     if missing:
-        return ("blocked", "missing_evidence", "")
+        return decision_explanation("blocked", "missing_evidence")
     if (
         text_value(gate_row.get("evidence_gate_status")) == "visual_support"
         and text_value(gate_row.get("overlay_family_verdict"))
@@ -306,18 +314,20 @@ def _shadow_decision(
             overlay_row.get("absolute_own_max_shape_supported_fraction"),
         )
         if own_max_fraction is None:
-            return ("blocked", "own_max_shape_metric_missing", "")
+            return decision_explanation("blocked", "own_max_shape_metric_missing")
         if own_max_fraction <= 0.5:
-            return ("blocked", "own_max_shape_at_or_below_threshold", "")
-        return (
+            return decision_explanation(
+                "blocked",
+                "own_max_shape_at_or_below_threshold",
+            )
+        return decision_explanation(
             "would_fill_under_ms1_rt_policy",
             "ms1_rt_shadow_supported",
-            "",
         )
-    return (
+    return decision_explanation(
         "needs_ms1_same_peak_evidence",
         "ms1_rt_evidence_inconclusive_or_unlinked",
-        "needs_ms1_same_peak_evidence",
+        production_gap="needs_ms1_same_peak_evidence",
     )
 
 
@@ -541,38 +551,18 @@ def _selected_overlay_row(
     *,
     seed_group_id: str,
 ) -> Mapping[str, str]:
-    if not rows:
-        return {}
-    exact = [
-        row
-        for row in rows
-        if text_value(row.get("seed_group_id")) == seed_group_id
-    ]
-    legacy = [row for row in rows if not text_value(row.get("seed_group_id"))]
-    selected = exact or legacy
-    if not selected:
-        return {}
-    return sorted(selected, key=_overlay_sort_key)[0]
-
-
-def _overlay_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
-    verdict = text_value(row.get("family_verdict"))
-    if verdict == SUPPORT_OVERLAY_VERDICT:
-        return (0, verdict)
-    if verdict:
-        return (1, verdict)
-    return (2, verdict)
+    return select_backfill_overlay_row(
+        rows,
+        seed_group_id=seed_group_id,
+        support_verdict=SUPPORT_OVERLAY_VERDICT,
+        allow_legacy_family_row=True,
+    )
 
 
 def _group_by_family(
     rows: Iterable[Mapping[str, str]],
 ) -> dict[str, tuple[Mapping[str, str], ...]]:
-    grouped: dict[str, list[Mapping[str, str]]] = {}
-    for row in rows:
-        family_id = text_value(row.get("feature_family_id"))
-        if family_id:
-            grouped.setdefault(family_id, []).append(row)
-    return {family_id: tuple(items) for family_id, items in grouped.items()}
+    return rows_by_text_field(rows, "feature_family_id")
 
 
 def _row_sort_key(row: Mapping[str, str]) -> tuple[int, str, str, str]:
@@ -588,10 +578,6 @@ def _row_sort_key(row: Mapping[str, str]) -> tuple[int, str, str, str]:
         text_value(row.get("seed_group_id")),
         text_value(row.get("sample_stem")),
     )
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
 
 
 def _h(value: object) -> str:

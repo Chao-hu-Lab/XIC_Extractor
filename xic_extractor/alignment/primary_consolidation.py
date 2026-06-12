@@ -241,6 +241,9 @@ def _near_duplicate_primary_competition(
 def _connected_components(graph: dict[str, set[str]]) -> tuple[tuple[str, ...], ...]:
     visited: set[str] = set()
     components: list[tuple[str, ...]] = []
+    ordered_neighbors = {
+        node: tuple(sorted(neighbors)) for node, neighbors in graph.items()
+    }
     for start in sorted(graph):
         if start in visited:
             continue
@@ -250,7 +253,7 @@ def _connected_components(graph: dict[str, set[str]]) -> tuple[tuple[str, ...], 
         while queue:
             current = queue.popleft()
             component.append(current)
-            for neighbor in sorted(graph[current]):
+            for neighbor in ordered_neighbors[current]:
                 if neighbor in visited:
                     continue
                 visited.add(neighbor)

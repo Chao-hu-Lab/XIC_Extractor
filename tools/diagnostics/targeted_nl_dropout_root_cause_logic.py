@@ -234,20 +234,27 @@ def _summary(
     reliability_rows: Sequence[ReliabilityRow],
     rows: Sequence[RootCauseRow],
 ) -> RootCauseSummary:
-    bucket_counts = Counter(row.root_cause_bucket for row in rows)
-    target_counts = Counter(row.target_label for row in rows)
-    product_absence_counts = Counter(
-        row.diagnostic_product_absence_reason
-        for row in rows
-        if row.root_cause_bucket == "no_diagnostic_product"
-        and row.diagnostic_product_absence_reason
-    )
+    review_positive_count = 0
+    for reliability in reliability_rows:
+        if reliability.reliability_state == "targeted_review_positive":
+            review_positive_count += 1
+
+    bucket_counts: Counter[str] = Counter()
+    target_counts: Counter[str] = Counter()
+    product_absence_counts: Counter[str] = Counter()
+    for root_cause in rows:
+        bucket_counts[root_cause.root_cause_bucket] += 1
+        target_counts[root_cause.target_label] += 1
+        if (
+            root_cause.root_cause_bucket == "no_diagnostic_product"
+            and root_cause.diagnostic_product_absence_reason
+        ):
+            product_absence_counts[
+                root_cause.diagnostic_product_absence_reason
+            ] += 1
     return RootCauseSummary(
         rows_checked=len(reliability_rows),
-        review_positive_count=sum(
-            row.reliability_state == "targeted_review_positive"
-            for row in reliability_rows
-        ),
+        review_positive_count=review_positive_count,
         included_count=len(rows),
         missing_candidate_count=bucket_counts["no_selected_candidate"],
         bucket_counts=_format_counter(bucket_counts),

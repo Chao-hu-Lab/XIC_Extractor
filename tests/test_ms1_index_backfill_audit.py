@@ -1,3 +1,6 @@
+import csv
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -25,6 +28,85 @@ def test_audit_requests_compares_max_and_sum_against_vendor() -> None:
     assert summary["modes"]["sum"]["area_relative_delta_median"] == 0.0
     assert examples[0]["sample_stem"] == "sample-a"
     assert examples[0]["mode"] == "max"
+
+
+def test_write_outputs_preserves_dynamic_tsv_contract(tmp_path: Path) -> None:
+    outputs = audit.AuditOutputs(
+        summary_tsv=tmp_path / "nested" / "summary.tsv",
+        examples_tsv=tmp_path / "nested" / "examples.tsv",
+        json_path=tmp_path / "nested" / "audit.json",
+    )
+    result = {
+        "aggregate": {
+            "modes": {
+                "max": {
+                    "request_count": 2,
+                    "area_relative_delta_median": 0.0,
+                },
+            },
+        },
+        "samples": [
+            {
+                "sample_stem": "sample-a",
+                "vendor_extract_sec": 1.25,
+                "index_build_sec": 2.5,
+                "ms1_scan_count": 7,
+                "modes": {
+                    "max": {
+                        "request_count": 1,
+                        "area_relative_delta_median": 0.0,
+                        "sample_only_metric": None,
+                    },
+                },
+            },
+        ],
+        "examples": [
+            {
+                "sample_stem": "sample-a",
+                "mode": "max",
+                "area_relative_delta": 0.0,
+            },
+        ],
+    }
+
+    audit._write_outputs(outputs, result)
+
+    assert outputs.json_path.read_text(encoding="utf-8").endswith("\n")
+    assert json.loads(outputs.json_path.read_text(encoding="utf-8")) == result
+    assert b"\r\n" in outputs.summary_tsv.read_bytes()
+    with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
+        summary_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert tuple(summary_rows[0]) == (
+        "scope",
+        "sample_stem",
+        "mode",
+        "request_count",
+        "area_relative_delta_median",
+        "vendor_extract_sec",
+        "index_build_sec",
+        "ms1_scan_count",
+        "sample_only_metric",
+    )
+    assert summary_rows[0]["area_relative_delta_median"] == "0.0"
+    assert summary_rows[1]["sample_only_metric"] == ""
+
+    assert b"\r\n" in outputs.examples_tsv.read_bytes()
+    with outputs.examples_tsv.open(encoding="utf-8", newline="") as handle:
+        example_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert tuple(example_rows[0]) == (
+        "sample_stem",
+        "mode",
+        "area_relative_delta",
+    )
+    assert example_rows[0]["area_relative_delta"] == "0.0"
+
+
+def test_write_examples_tsv_empty_examples_is_bare_newline(tmp_path: Path) -> None:
+    examples_tsv = tmp_path / "examples.tsv"
+
+    audit._write_examples_tsv(examples_tsv, [])
+
+    assert examples_tsv.read_bytes() == b"\n"
 
 
 class FakeRawHandle:
@@ -83,10 +165,10 @@ class FakeRawHandle:
 
 def _peak_config() -> ExtractionConfig:
     return ExtractionConfig(
-        data_dir=".",
-        dll_dir=".",
-        output_csv="out.csv",
-        diagnostics_csv="diag.csv",
+        data_dir=Path("."),
+        dll_dir=Path("."),
+        output_csv=Path("out.csv"),
+        diagnostics_csv=Path("diag.csv"),
         smooth_window=3,
         smooth_polyorder=1,
         peak_rel_height=0.95,

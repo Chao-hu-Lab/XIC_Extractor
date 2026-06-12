@@ -16,6 +16,7 @@ from openpyxl.utils import get_column_letter
 from xic_extractor.config import Target, load_config
 from xic_extractor.extractor import RunOutput
 from xic_extractor.extractor import run as run_extractor
+from xic_extractor.tabular_io import write_delimited_rows
 
 RT_MEDIAN_LIMIT = 0.003
 RT_MAX_LIMIT = 0.010
@@ -121,10 +122,14 @@ def parse_case_arg(value: str) -> ValidationCase:
 
 
 def compare_validation_rows(rows: list[ValidationRow]) -> ValidationReport:
+    rows_by_target: dict[str, list[ValidationRow]] = {}
+    for row in rows:
+        rows_by_target.setdefault(row.target, []).append(row)
+
     reports: list[TargetReport] = []
     failures: list[FailureRecord] = []
-    for target in sorted({row.target for row in rows}):
-        target_rows = [row for row in rows if row.target == target]
+    for target in sorted(rows_by_target):
+        target_rows = rows_by_target[target]
         target_failures = _target_failures(target, target_rows)
         failures.extend(target_failures)
         reports.append(_target_report(target, target_rows, target_failures))
@@ -219,10 +224,13 @@ def merge_old_new_rows(
     for key in sorted(old_by_key.keys() | new_by_key.keys()):
         old = old_by_key.get(key)
         new = new_by_key.get(key)
+        source = new if new is not None else old
+        if source is None:
+            continue
         merged.append(
             ValidationRow(
-                sample_name=new.sample_name if new else old.sample_name,
-                target=new.target if new else old.target,
+                sample_name=source.sample_name,
+                target=source.target,
                 rt_old=old.rt_old if old else None,
                 int_old=old.int_old if old else None,
                 nl_old=old.nl_old if old else "",
@@ -657,10 +665,7 @@ def _update_settings_value(path: Path, key: str, value: Path) -> None:
             break
     if not found:
         rows.append({"key": key, "value": str(value), "description": ""})
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    write_delimited_rows(path, rows, fieldnames, delimiter=",", encoding="utf-8-sig")
 
 
 def _run_old_pipeline(old_worktree: Path) -> Path:

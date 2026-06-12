@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import time
 from collections import defaultdict
@@ -23,6 +22,7 @@ from xic_extractor.config import ExtractionConfig
 from xic_extractor.raw_reader import open_raw
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 from xic_extractor.signal_processing import find_peak_and_area
+from xic_extractor.tabular_io import write_tsv
 from xic_extractor.xic_models import XICRequest, XICTrace
 
 _MODES: tuple[MS1IndexIntensityMode, ...] = ("max", "sum")
@@ -259,6 +259,10 @@ def _compare_request(
     )
     vendor_peak = vendor_result.peak
     local_peak = local_result.peak
+    vendor_area: float | None
+    local_area: float | None
+    area_relative_delta: float | None
+    apex_delta_min: float | None
     if vendor_peak is not None and local_peak is not None:
         vendor_area = vendor_peak.area
         local_area = local_peak.area
@@ -474,21 +478,22 @@ def _write_summary_tsv(path: Path, result: dict[str, Any]) -> None:
         for mode, summary in sample["modes"].items():
             rows.append({**base, "mode": mode, **summary})
     fieldnames = tuple(dict.fromkeys(key for row in rows for key in row))
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, rows, fieldnames, formatter=_format_tsv_value)
 
 
 def _write_examples_tsv(path: Path, examples: list[dict[str, Any]]) -> None:
     fieldnames = tuple(dict.fromkeys(key for row in examples for key in row))
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        if not fieldnames:
+    if not fieldnames:
+        with path.open("w", newline="", encoding="utf-8") as handle:
             handle.write("\n")
-            return
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(examples)
+        return
+    write_tsv(path, examples, fieldnames, formatter=_format_tsv_value)
+
+
+def _format_tsv_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _peak_config(raw_dir: Path, dll_dir: Path) -> ExtractionConfig:
@@ -496,8 +501,8 @@ def _peak_config(raw_dir: Path, dll_dir: Path) -> ExtractionConfig:
     return ExtractionConfig(
         data_dir=raw_dir,
         dll_dir=dll_dir,
-        output_csv="xic_results.csv",
-        diagnostics_csv="xic_diagnostics.csv",
+        output_csv=Path("xic_results.csv"),
+        diagnostics_csv=Path("xic_diagnostics.csv"),
         smooth_window=int(defaults["smooth_window"]),
         smooth_polyorder=int(defaults["smooth_polyorder"]),
         ms1_morphology_smoothing_window_points=int(

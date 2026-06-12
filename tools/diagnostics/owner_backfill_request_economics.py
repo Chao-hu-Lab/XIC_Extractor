@@ -6,9 +6,12 @@ import json
 import math
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 from typing import Any
+
+from tools.diagnostics.diagnostic_io import write_tsv
 
 _REVIEW_REQUIRED_COLUMNS = (
     "feature_family_id",
@@ -18,6 +21,12 @@ _REVIEW_REQUIRED_COLUMNS = (
     "include_in_primary_matrix",
 )
 _CELLS_REQUIRED_COLUMNS = ("feature_family_id", "sample_stem", "status")
+
+
+@dataclass(frozen=True)
+class _CellInputIndex:
+    cells_by_feature: dict[str, tuple[dict[str, str], ...]]
+    sample_order: tuple[str, ...]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -45,13 +54,12 @@ def build_economics(
         alignment_dir / "alignment_cells.tsv",
         required_columns=_CELLS_REQUIRED_COLUMNS,
     )
-    cells_by_feature = _cells_by_feature(cell_rows)
-    sample_order = _sample_order(cell_rows)
+    cell_index = _index_cell_rows(cell_rows)
     features = [
         _feature_economics(
             row,
-            cells_by_feature.get(row["feature_family_id"], ()),
-            sample_order=sample_order,
+            cell_index.cells_by_feature.get(row["feature_family_id"], ()),
+            sample_order=cell_index.sample_order,
             owner_backfill_min_detected_samples=(
                 owner_backfill_min_detected_samples
             ),
@@ -62,7 +70,7 @@ def build_economics(
     return {
         "alignment_dir": str(alignment_dir),
         "owner_backfill_min_detected_samples": owner_backfill_min_detected_samples,
-        "sample_count": len(sample_order),
+        "sample_count": len(cell_index.sample_order),
         "totals": _totals(features),
         "summary": summary,
         "features": sorted(
@@ -307,24 +315,24 @@ def _is_pre_backfill_consolidated(row: dict[str, str]) -> bool:
     )
 
 
-def _cells_by_feature(
+def _index_cell_rows(
     rows: tuple[dict[str, str], ...],
-) -> dict[str, tuple[dict[str, str], ...]]:
+) -> _CellInputIndex:
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    seen_samples: set[str] = set()
+    sample_order: list[str] = []
     for row in rows:
         grouped[row["feature_family_id"]].append(row)
-    return {feature_id: tuple(items) for feature_id, items in grouped.items()}
-
-
-def _sample_order(rows: tuple[dict[str, str], ...]) -> tuple[str, ...]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for row in rows:
         sample = row.get("sample_stem", "")
-        if sample and sample not in seen:
-            seen.add(sample)
-            ordered.append(sample)
-    return tuple(ordered)
+        if sample and sample not in seen_samples:
+            seen_samples.add(sample)
+            sample_order.append(sample)
+    return _CellInputIndex(
+        cells_by_feature={
+            feature_id: tuple(items) for feature_id, items in grouped.items()
+        },
+        sample_order=tuple(sample_order),
+    )
 
 
 def _read_tsv(
@@ -352,14 +360,19 @@ def _write_tsv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
         return
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=tuple(rows[0]),
-            delimiter="\t",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(
+        path,
+        rows,
+        tuple(rows[0]),
+        extrasaction="raise",
+        formatter=_format_value,
+    )
+
+
+def _format_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _markdown(result: dict[str, Any]) -> str:

@@ -133,7 +133,9 @@ def test_tier2_trace_producer_marks_raw_seed_trace_failures_inconclusive(
     cell_rows = _candidate_cell_rows()
     source_context = _source_context(tmp_path)
 
-    def failing_loader(*_args: object) -> tuple[object, object]:
+    def failing_loader(
+        *_args: object,
+    ) -> tuple[tuple[float, ...], tuple[float, ...]]:
         raise RuntimeError("raw read failed")
 
     rows = build_tier2_trace_evidence_rows(
@@ -159,6 +161,36 @@ def test_tier2_trace_producer_marks_raw_seed_trace_failures_inconclusive(
     assert "neighbor_interference_not_assessed" in row["dependent_context"]
     assert "raw_trace_reread_v0_1" in row["dependent_context"]
     assert row["neighbor_interference_status"] == "not_assessed"
+
+
+def test_tier2_trace_producer_rejects_multiple_detected_seed_cells(
+    tmp_path: Path,
+) -> None:
+    cell_rows = (
+        _cell("Seed_A", "detected", "8.000", "7.960", "8.040", "1.0"),
+        _cell("Seed_B", "detected", "8.010", "7.970", "8.050", "1.0"),
+        _cell("Rescue_A", "rescued", "8.020", "7.980", "8.060", "0.9"),
+    )
+
+    rows = build_tier2_trace_evidence_rows(
+        candidate_rows=[_candidate_review_row()],
+        cells_by_family={"FAM001": cell_rows},
+        source_context=_source_context(tmp_path),
+        raw_manifest_sha256="ABC123",
+        source_expected_sample_count=3,
+        trace_loader=_passing_trace_loader,
+        config=Tier2TraceProducerConfig(),
+        producer_command="pytest fake producer",
+        generated_at_utc="2026-05-29T00:00:00Z",
+        python_executable=".venv\\Scripts\\python.exe",
+        dll_dir="C:\\Xcalibur\\system\\programs",
+    )
+
+    row = rows[0]
+    assert row["evidence_status"] == "blocked"
+    assert row["raw_trace_reread_status"] == "fail"
+    assert "multiple_detected_seed_cells" in row["challenge_blockers"]
+    assert "tier2_v0_1_diagnostic_only" in row["challenge_blockers"]
 
 
 def test_tier2_trace_producer_marks_seed_metric_unavailable_coherence_inconclusive(
@@ -302,7 +334,7 @@ def _passing_trace_loader(
     rt_min: float,
     rt_max: float,
     _ppm_tolerance: float,
-) -> tuple[object, object]:
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
     step = (rt_max - rt_min) / 8.0
     rt = tuple(rt_min + step * index for index in range(9))
     center = (rt_min + rt_max) / 2.0
@@ -316,7 +348,7 @@ def _low_scan_trace_loader(
     rt_min: float,
     rt_max: float,
     _ppm_tolerance: float,
-) -> tuple[object, object]:
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
     step = (rt_max - rt_min) / 4.0
     rt = tuple(rt_min + step * index for index in range(5))
     return rt, tuple(0.0 for _ in rt)

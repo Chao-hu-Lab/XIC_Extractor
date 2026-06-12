@@ -768,10 +768,11 @@ def _read_tsv_versioned_tier2_sidecar(path: Path) -> tuple[dict[str, str], ...]:
         fieldnames = tuple(reader.fieldnames or ())
         if not fieldnames:
             raise ValueError(f"{path}: missing required columns: feature_family_id")
+        fieldname_set = set(fieldnames)
         base_missing = [
             column
             for column in TIER2_TRACE_EVIDENCE_V0_COLUMNS
-            if column not in fieldnames
+            if column not in fieldname_set
         ]
         if base_missing:
             raise ValueError(
@@ -780,7 +781,7 @@ def _read_tsv_versioned_tier2_sidecar(path: Path) -> tuple[dict[str, str], ...]:
         rows = tuple({key: value or "" for key, value in row.items()} for row in reader)
     for row in rows:
         required = _tier2_required_columns_for_row(row)
-        missing = [column for column in required if column not in fieldnames]
+        missing = [column for column in required if column not in fieldname_set]
         if missing:
             raise ValueError(
                 f"{path}: missing required columns: {', '.join(missing)}"

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import csv
 import html
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, cast
 
+from tools.diagnostics.diagnostic_io import write_delimited_rows
 from tools.diagnostics.targeted_gt_alignment_audit_models import (
     DRIFT_MODE,
     DUPLICATE_MODE,
@@ -52,29 +54,38 @@ def _write_report(
             "|---|---:|---:|---|---|",
         ],
     )
-    for row in review_rows:
+    for review_row in review_rows:
         lines.append(
             "| "
-            f"{row.get('feature_family_id', '')} | "
-            f"{row.get('family_center_mz', '')} | "
-            f"{row.get('family_center_rt', '')} | "
-            f"{row.get('has_anchor', '')} | "
-            f"{row.get('warning', '')} |"
+            f"{review_row.get('feature_family_id', '')} | "
+            f"{review_row.get('family_center_mz', '')} | "
+            f"{review_row.get('family_center_rt', '')} | "
+            f"{review_row.get('has_anchor', '')} | "
+            f"{review_row.get('warning', '')} |"
         )
     lines.extend(["", "## Per-Sample Detail", ""])
-    for row in comparison:
+    for comparison_row in comparison:
         lines.extend(
             [
-                f"### {row['sample_stem']} - `{row['failure_mode']}`",
+                (
+                    f"### {comparison_row['sample_stem']} - "
+                    f"`{comparison_row['failure_mode']}`"
+                ),
                 "",
-                f"- GT RT: {row['gt_target_rt_min']} min",
-                f"- Production families: {row['production_family_ids'] or '(none)'}",
-                f"- Duplicate families: {row['duplicate_family_ids'] or '(none)'}",
+                f"- GT RT: {comparison_row['gt_target_rt_min']} min",
+                (
+                    "- Production families: "
+                    f"{comparison_row['production_family_ids'] or '(none)'}"
+                ),
+                (
+                    "- Duplicate families: "
+                    f"{comparison_row['duplicate_family_ids'] or '(none)'}"
+                ),
                 (
                     "- Closest: "
-                    f"{row['closest_family_id'] or '(none)'} "
-                    f"{row['closest_status']} "
-                    f"delta={row['closest_rt_delta_sec']} sec"
+                    f"{comparison_row['closest_family_id'] or '(none)'} "
+                    f"{comparison_row['closest_status']} "
+                    f"delta={comparison_row['closest_rt_delta_sec']} sec"
                 ),
                 "",
             ],
@@ -124,18 +135,25 @@ def _write_svg(
     path.write_text(svg, encoding="utf-8")
 
 
-def _write_dict_csv(path: Path, rows: list[object]) -> None:
+def _write_dict_csv(path: Path, rows: Sequence[object]) -> None:
     serialized = [_as_output_dict(row) for row in rows]
     if not serialized:
         path.write_text("", encoding="utf-8")
         return
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(serialized[0].keys()))
-        writer.writeheader()
-        for row in serialized:
-            writer.writerow(
-                {key: _escape_excel_formula(value) for key, value in row.items()},
-            )
+    write_delimited_rows(
+        path,
+        serialized,
+        tuple(serialized[0]),
+        extrasaction="raise",
+        formatter=_format_csv_value,
+    )
+
+
+def _format_csv_value(value: object) -> str:
+    escaped = _escape_excel_formula(value)
+    if escaped is None:
+        return ""
+    return str(escaped)
 
 
 def _as_output_dict(row: object) -> dict[str, object]:
@@ -155,7 +173,7 @@ def _as_output_dict(row: object) -> dict[str, object]:
             "istd_rt_min": _format_float(row.istd_rt_min, 4),
             "istd_rt_delta_sec": _format_float(row.istd_rt_delta_sec, 2),
         }
-    return dict(row)  # type: ignore[arg-type]
+    return dict(cast(Any, row))
 
 
 def _escape_excel_formula(value: object) -> object:

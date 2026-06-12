@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from xic_extractor.alignment.identity_coherence_validation.bundle import (
@@ -10,6 +9,7 @@ from xic_extractor.alignment.identity_coherence_validation.models import (
     CONTROL_MANIFEST_COLUMNS,
     DiagnosticBundle,
 )
+from xic_extractor.tabular_io import write_tsv
 
 
 def write_decoy_manifest_proposal(
@@ -123,17 +123,15 @@ def _decoy_manifest_row(
 
 def _write_manifest_rows(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=CONTROL_MANIFEST_COLUMNS,
-            dialect="excel-tab",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    column: row.get(column, "")
-                    for column in CONTROL_MANIFEST_COLUMNS
-                }
-            )
+    write_tsv(
+        path,
+        rows,
+        CONTROL_MANIFEST_COLUMNS,
+        formatter=_format_tsv_value,
+    )
+
+
+def _format_tsv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)

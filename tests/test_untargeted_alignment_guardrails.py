@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import untargeted_alignment_guardrails as guardrails
 
 
@@ -45,6 +47,88 @@ def test_facade_preserves_existing_helper_import_surface() -> None:
 
     for name in expected_names:
         assert hasattr(guardrails, name), name
+
+
+def test_write_dict_csv_preserves_dynamic_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / "comparison.csv"
+
+    guardrails._write_dict_csv(
+        path,
+        [
+            {"case": "case1", "status": "pass"},
+            {"case": "case2", "status": "fail"},
+        ],
+    )
+
+    with path.open(newline="", encoding="utf-8") as handle:
+        assert list(csv.DictReader(handle)) == [
+            {"case": "case1", "status": "pass"},
+            {"case": "case2", "status": "fail"},
+        ]
+
+
+def test_write_dict_csv_preserves_empty_and_error_contracts(tmp_path: Path) -> None:
+    empty_path = tmp_path / "empty" / "comparison.csv"
+    guardrails._write_dict_csv(empty_path, [])
+    assert empty_path.read_text(encoding="utf-8") == ""
+
+    with pytest.raises(ValueError, match="comparison output path is required"):
+        guardrails._write_dict_csv(None, [])
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        guardrails._write_dict_csv(
+            tmp_path / "extra.csv",
+            [
+                {"case": "case1", "status": "pass"},
+                {"case": "case2", "status": "fail", "extra": "value"},
+            ],
+        )
+
+
+def test_write_case_assertion_summary_tsv_preserves_schema_order_and_empty_contract(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "case_assertion_summary.tsv"
+
+    returned_path = guardrails.write_case_assertion_summary_tsv(
+        path,
+        {
+            "case_a": guardrails.CaseAssertion(
+                production_family_count=1,
+                owner_count=2,
+                event_count=3,
+                supporting_event_count=4,
+                strong_edge_count=5,
+                preserved_split_or_ambiguous=True,
+                status="PASS",
+                reason="kept",
+            ),
+            "case_b": guardrails.CaseAssertion(
+                production_family_count=0,
+                owner_count=0,
+                event_count=1,
+                supporting_event_count=0,
+                strong_edge_count=0,
+                preserved_split_or_ambiguous=False,
+                status="FAIL",
+                reason="missing",
+            ),
+        },
+    )
+
+    assert returned_path == path
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines[0].split("\t") == guardrails.CASE_SUMMARY_COLUMNS
+    rows = _read_tsv(path)
+    assert [row["case"] for row in rows] == ["case_a", "case_b"]
+    assert rows[0]["preserved_split_or_ambiguous"] == "true"
+    assert rows[1]["preserved_split_or_ambiguous"] == "false"
+
+    empty_path = tmp_path / "empty" / "case_assertion_summary.tsv"
+    guardrails.write_case_assertion_summary_tsv(empty_path, {})
+    assert empty_path.read_text(encoding="utf-8").splitlines() == [
+        "\t".join(guardrails.CASE_SUMMARY_COLUMNS),
+    ]
 
 
 def test_compute_guardrails_counts_families_cases_and_writes_case_summary(

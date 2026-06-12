@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from tools.diagnostics import family_ms1_overlay_plot as report
+from tools.diagnostics.family_ms1_overlay_models import TraceOverlayRow
+from xic_extractor.alignment.edge_scoring import DriftPriorSource
 
 
 def test_path_style_cli_help_preserves_public_script_contract() -> None:
@@ -127,10 +129,12 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
     )
 
     assert outputs.png_path.is_file()
+    assert outputs.pdf_path is not None
     assert outputs.pdf_path.is_file()
     assert (outputs.png_path.parent / "fam001_ms1_overlay_hypothesis.png").is_file()
     assert (outputs.png_path.parent / "fam001_ms1_overlay_hypothesis.pdf").is_file()
     assert outputs.trace_data_json.is_file()
+    assert b"\r\n" not in outputs.summary_tsv.read_bytes()
     with outputs.summary_tsv.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         assert reader.fieldnames == [
@@ -200,7 +204,11 @@ def test_write_family_ms1_overlay_outputs_from_synthetic_traces(
 class _DriftLookup:
     def __init__(self, deltas: dict[str, float]) -> None:
         self._deltas = deltas
-        self.source = "targeted_istd_trend"
+        self._source: DriftPriorSource = "targeted_istd_trend"
+
+    @property
+    def source(self) -> DriftPriorSource:
+        return self._source
 
     def sample_delta_min(self, sample_stem: str) -> float | None:
         return self._deltas.get(sample_stem)
@@ -209,7 +217,7 @@ class _DriftLookup:
         return None
 
 
-def _synthetic_rows() -> list[object]:
+def _synthetic_rows() -> list[TraceOverlayRow]:
     return [
         report.trace_row_from_arrays(
             report.FamilyCell(
@@ -265,6 +273,7 @@ def test_overlay_keeps_drift_lookup_backcompat_without_irt_panel(
     )
 
     assert outputs.png_path.is_file()
+    assert outputs.pdf_path is not None
     assert outputs.pdf_path.is_file()
 
 
@@ -282,6 +291,7 @@ def test_overlay_renders_without_drift_lookup_backcompat(tmp_path: Path) -> None
     )
 
     assert outputs.png_path.is_file()
+    assert outputs.pdf_path is not None
     assert outputs.pdf_path.is_file()
 
 

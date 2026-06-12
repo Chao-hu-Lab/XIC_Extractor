@@ -1,8 +1,16 @@
+import csv
+from pathlib import Path
+
 import pytest
 
 from xic_extractor.instrument_qc.rt_transfer_audit import (
+    BiologicalIstdTransferAuditRow,
     build_biological_istd_transfer_audit_rows,
     classify_biological_istd_transfer,
+)
+from xic_extractor.instrument_qc.rt_transfer_audit_io import (
+    BIOLOGICAL_ISTD_TRANSFER_COLUMNS,
+    write_biological_istd_transfer_audit_tsv,
 )
 
 
@@ -87,6 +95,54 @@ def test_build_transfer_rows_joins_by_target_label_and_compound() -> None:
 
     assert by_target["A"].transfer_status == "transfer_supported"
     assert by_target["B"].transfer_status == "insufficient_clean_standard"
+
+
+def test_write_biological_istd_transfer_audit_tsv_preserves_schema_and_values(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "transfer.tsv"
+
+    write_biological_istd_transfer_audit_tsv(
+        path,
+        (
+            BiologicalIstdTransferAuditRow(
+                target_label="d3-5-medC",
+                transfer_status="transfer_supported",
+                direction_status="same_direction",
+                biological_qc_count=7,
+                clean_standard_count=4,
+                biological_rt_range_min=0.9,
+                clean_rt_delta_range_min=1.0,
+                biological_slope_min_per_injection=0.009,
+                clean_slope_min_per_injection=0.010,
+                slope_magnitude_ratio=0.9,
+                clean_warning_count=1,
+                review_reason="Clean and biological slopes match.",
+            ),
+        ),
+    )
+
+    with path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        assert reader.fieldnames == BIOLOGICAL_ISTD_TRANSFER_COLUMNS
+        rows = list(reader)
+
+    assert rows[0]["biological_slope_min_per_injection"] == "0.009"
+    assert rows[0]["clean_slope_min_per_injection"] == "0.01"
+    assert rows[0]["slope_magnitude_ratio"] == "0.9"
+    assert rows[0]["clean_warning_count"] == "1"
+
+
+def test_write_biological_istd_transfer_audit_tsv_writes_header_without_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "empty.tsv"
+
+    write_biological_istd_transfer_audit_tsv(path, ())
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "\t".join(BIOLOGICAL_ISTD_TRANSFER_COLUMNS)
+    ]
 
 
 def _bio(*, count: int, slope: float, rt_range: float) -> dict[str, str]:

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from xic_extractor.config import compute_config_hash, load_config
+from xic_extractor.configuration.hashing import _settings_csv_bytes_with_overrides
 
 
 def test_same_bytes_same_hash(tmp_path: Path) -> None:
@@ -100,3 +101,24 @@ def test_load_config_hash_reflects_new_override_key(tmp_path: Path) -> None:
 
     assert override_a.config_hash != base_config.config_hash
     assert override_a.config_hash == override_b.config_hash
+
+
+def test_settings_override_bytes_preserve_hash_input_contract(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.csv"
+    settings.write_text(
+        "\ufeffkey,value,description\n"
+        "existing,old,existing description\n",
+        encoding="utf-8",
+    )
+
+    rendered = _settings_csv_bytes_with_overrides(
+        settings,
+        {"existing": "new", "added": "42"},
+    )
+
+    assert rendered == (
+        b"\xef\xbb\xbf"
+        b"key,value,description\r\n"
+        b"existing,new,existing description\r\n"
+        b"added,42,added\r\n"
+    )

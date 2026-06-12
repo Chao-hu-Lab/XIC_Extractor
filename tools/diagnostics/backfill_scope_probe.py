@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, TypedDict
 
 from scripts.run_alignment import (
     _alignment_production_resolver_mode,
     _peak_config,
 )
+from tools.diagnostics.diagnostic_io import write_tsv
 from xic_extractor.alignment.backfill_scope import (
-    backfill_request_sample_stems,
     backfill_seed_centers,
     select_backfill_features,
     skipped_evidence_summary,
@@ -30,10 +29,15 @@ from xic_extractor.alignment.output_levels import (
     parse_alignment_output_level,
 )
 from xic_extractor.alignment.owner_backfill import _scan_window_aware_chunks
+from xic_extractor.alignment.owner_backfill_request_plan import (
+    build_owner_backfill_request_plan,
+)
 from xic_extractor.alignment.owner_clustering import (
-    OwnerAlignedFeature,
     cluster_sample_local_owners,
     review_only_features_from_ambiguous_records,
+)
+from xic_extractor.alignment.owner_group_delivery import (
+    OwnerGroupDeliveryFeatures,
 )
 from xic_extractor.alignment.pre_backfill_consolidation import (
     consolidate_pre_backfill_identity_families,
@@ -42,6 +46,17 @@ from xic_extractor.alignment.process_backend import run_owner_build_process
 from xic_extractor.alignment.raw_sources import existing_raw_paths
 from xic_extractor.raw_reader import open_raw
 from xic_extractor.xic_models import XICRequest
+
+
+class _RequestSummary(TypedDict):
+    totals: dict[str, object]
+    sample_rows: list[dict[str, object]]
+    feature_rows: list[dict[str, object]]
+
+
+class _LocalitySummary(TypedDict):
+    totals: dict[str, object]
+    sample_rows: list[dict[str, object]]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -155,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         **skipped_evidence_summary(scope_selection.skipped),
         **request_summary["totals"],
     )
-    locality_summary: dict[str, object] | None = None
+    locality_summary: _LocalitySummary | None = None
     if args.emit_locality:
         with _stage("backfill_locality", timings):
             locality_summary = _locality_summary(
@@ -289,32 +304,38 @@ class _stage:
 
 
 def _request_summary(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     raw_sample_stems: frozenset[str],
     alignment_config: AlignmentConfig,
-) -> dict[str, object]:
+) -> _RequestSummary:
+    request_plan = build_owner_backfill_request_plan(
+        features,
+        sample_order=sample_order,
+        raw_sample_stems=raw_sample_stems,
+        alignment_config=alignment_config,
+    )
     feature_rows: list[dict[str, object]] = []
+    feature_request_samples: dict[int, set[str]] = defaultdict(set)
+    feature_extract_counts: Counter[int] = Counter()
     sample_counts: Counter[str] = Counter()
     sample_seed_counts: Counter[str] = Counter()
-    total_request_targets = 0
-    total_extract_requests = 0
+    for sample_stem in sample_order:
+        sample_feature_ids: set[int] = set()
+        for item in request_plan.requests_for_sample(sample_stem):
+            feature_id = id(item.feature)
+            sample_feature_ids.add(feature_id)
+            feature_request_samples[feature_id].add(sample_stem)
+            feature_extract_counts[feature_id] += 1
+            sample_seed_counts[sample_stem] += 1
+        sample_counts[sample_stem] = len(sample_feature_ids)
+
     for feature in features:
-        request_samples = backfill_request_sample_stems(
-            feature,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        )
+        feature_id = id(feature)
         seed_count = len(backfill_seed_centers(feature))
-        request_target_count = len(request_samples)
-        extract_request_count = request_target_count * seed_count
-        total_request_targets += request_target_count
-        total_extract_requests += extract_request_count
-        for sample_stem in request_samples:
-            sample_counts[sample_stem] += 1
-            sample_seed_counts[sample_stem] += seed_count
+        request_target_count = len(feature_request_samples.get(feature_id, ()))
+        extract_request_count = feature_extract_counts[feature_id]
         feature_rows.append(
             {
                 "feature_family_id": feature.feature_family_id,
@@ -337,9 +358,9 @@ def _request_summary(
         }
         for sample in sample_order
     ]
-    totals = {
-        "request_target_count": total_request_targets,
-        "extract_request_count": total_extract_requests,
+    totals: dict[str, object] = {
+        "request_target_count": sum(sample_counts.values()),
+        "extract_request_count": sum(sample_seed_counts.values()),
         "max_sample_extract_request_count": (
             max(sample_seed_counts.values()) if sample_seed_counts else 0
         ),
@@ -350,16 +371,20 @@ def _request_summary(
         "sample_rows": sample_rows,
         "feature_rows": sorted(
             feature_rows,
-            key=lambda row: (
-                -int(row["extract_request_count"]),
-                str(row["feature_family_id"]),
-            ),
+            key=_feature_request_row_sort_key,
         ),
     }
 
 
+def _feature_request_row_sort_key(row: Mapping[str, object]) -> tuple[int, str]:
+    extract_request_count = row.get("extract_request_count", 0)
+    if not isinstance(extract_request_count, int):
+        extract_request_count = int(str(extract_request_count))
+    return -extract_request_count, str(row["feature_family_id"])
+
+
 def _locality_summary(
-    features: tuple[OwnerAlignedFeature, ...],
+    features: OwnerGroupDeliveryFeatures,
     *,
     sample_order: tuple[str, ...],
     raw_paths: Mapping[str, Path],
@@ -367,10 +392,16 @@ def _locality_summary(
     alignment_config: AlignmentConfig,
     raw_xic_batch_size: int,
     open_raw_func=open_raw,
-) -> dict[str, object]:
+) -> _LocalitySummary:
     if raw_xic_batch_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
     raw_sample_stems = frozenset(raw_paths)
+    request_plan = build_owner_backfill_request_plan(
+        features,
+        sample_order=sample_order,
+        raw_sample_stems=raw_sample_stems,
+        alignment_config=alignment_config,
+    )
     sample_rows: list[dict[str, object]] = []
     total_requests = 0
     total_chunks = 0
@@ -383,13 +414,7 @@ def _locality_summary(
     max_overlap_component_span = 0
     max_individual_span = 0
     for sample_stem in sample_order:
-        items = _request_items_for_sample(
-            features,
-            sample_stem=sample_stem,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        )
+        items = request_plan.requests_for_sample(sample_stem)
         raw_path = raw_paths.get(sample_stem)
         if raw_path is None or not items:
             row = _locality_sample_row(
@@ -407,9 +432,13 @@ def _locality_summary(
                 items,
                 raw_xic_batch_size,
             )
-            windows = tuple(_scan_window_for_request(source, item[2]) for item in items)
+            windows_by_request = {
+                item.request: _scan_window_for_request(source, item.request)
+                for item in items
+            }
+            windows = tuple(windows_by_request[item.request] for item in items)
             chunked_raw_call_count = sum(
-                len({_scan_window_for_request(source, item[2]) for item in chunk})
+                len({windows_by_request[item.request] for item in chunk})
                 for chunk in chunks
             )
         overlap = _overlap_window_summary(windows)
@@ -462,51 +491,18 @@ def _locality_summary(
     }
 
 
-def _request_items_for_sample(
-    features: tuple[OwnerAlignedFeature, ...],
-    *,
-    sample_stem: str,
-    sample_order: tuple[str, ...],
-    raw_sample_stems: frozenset[str],
-    alignment_config: AlignmentConfig,
-) -> tuple[tuple[OwnerAlignedFeature, str, XICRequest, float], ...]:
-    rt_window_min = alignment_config.max_rt_sec / 60.0
-    items: list[tuple[OwnerAlignedFeature, str, XICRequest, float]] = []
-    for feature in features:
-        request_samples = backfill_request_sample_stems(
-            feature,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        )
-        if sample_stem not in request_samples:
-            continue
-        for seed_mz, seed_rt in backfill_seed_centers(feature):
-            items.append(
-                (
-                    feature,
-                    sample_stem,
-                    XICRequest(
-                        mz=seed_mz,
-                        rt_min=seed_rt - rt_window_min,
-                        rt_max=seed_rt + rt_window_min,
-                        ppm_tol=alignment_config.preferred_ppm,
-                    ),
-                    seed_rt,
-                )
-            )
-    return tuple(items)
-
-
 def _scan_window_for_request(source: object, request: XICRequest) -> tuple[int, int]:
     resolver = getattr(source, "scan_window_for_request", None)
     if callable(resolver):
         start_scan, end_scan = resolver(request)
         return int(start_scan), int(end_scan)
     raw_file = getattr(source, "_raw_file", source)
+    scan_number_from_rt = getattr(raw_file, "ScanNumberFromRetentionTime", None)
+    if not callable(scan_number_from_rt):
+        raise AttributeError("RAW source cannot resolve scan number from RT")
     return (
-        int(raw_file.ScanNumberFromRetentionTime(request.rt_min)),
-        int(raw_file.ScanNumberFromRetentionTime(request.rt_max)),
+        int(scan_number_from_rt(request.rt_min)),
+        int(scan_number_from_rt(request.rt_max)),
     )
 
 
@@ -622,11 +618,19 @@ def _write_tsv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
         return
-    fieldnames = list(rows[0].keys())
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(
+        path,
+        rows,
+        tuple(rows[0]),
+        extrasaction="raise",
+        formatter=_format_tsv_value,
+    )
+
+
+def _format_tsv_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 if __name__ == "__main__":

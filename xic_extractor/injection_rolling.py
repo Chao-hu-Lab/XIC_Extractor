@@ -51,7 +51,7 @@ def _read_csv(path: Path) -> dict[str, int]:
         for row in reader:
             name = (row.get("Sample_Name") or "").strip()
             order = row.get("Injection_Order")
-            if not name or order in (None, ""):
+            if not name or order is None or order == "":
                 continue
             _add_sample_order(out, name, int(str(order).strip()))
     return out

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from tools.diagnostics.untargeted_alignment_guardrail_models import (
     COMPARISON_METRICS,
     CaseAssertion,
 )
+from xic_extractor.tabular_io import write_tsv
 
 
 def compare_guardrails(
@@ -39,15 +39,14 @@ def write_case_assertion_summary_tsv(
     cases: Mapping[str, CaseAssertion],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=CASE_SUMMARY_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for case_name, assertion in cases.items():
-            writer.writerow(_case_summary_row(case_name, assertion))
+    write_tsv(
+        path,
+        tuple(
+            _case_summary_row(case_name, assertion)
+            for case_name, assertion in cases.items()
+        ),
+        CASE_SUMMARY_COLUMNS,
+    )
     return path
 
 

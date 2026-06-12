@@ -3,6 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from tools.diagnostics.chrom_peak_segment_candidate_gate import (
+    _write_tsv as _write_gate_tsv,
+)
 from tools.diagnostics.chrom_peak_segment_candidate_gate import (
     build_gate_report,
     main,
@@ -595,6 +600,30 @@ def test_cli_writes_manifest_and_changed_rows(tmp_path: Path) -> None:
     assert manifest["selected_area_increased_count"] == 1
     assert "SampleA" in changed_rows
     assert "review_reason" in review_rows
+
+
+def test_gate_writer_preserves_value_projection_and_extra_key_failure(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "rows.tsv"
+
+    _write_gate_tsv(
+        path,
+        [{"flag": True, "empty": None, "count": 1}],
+        ("flag", "empty", "count"),
+    )
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "flag\tempty\tcount",
+        "True\t\t1",
+    ]
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        _write_gate_tsv(
+            tmp_path / "extra.tsv",
+            [{"flag": "TRUE", "unexpected": "value"}],
+            ("flag",),
+        )
 
 
 def _candidate_row(

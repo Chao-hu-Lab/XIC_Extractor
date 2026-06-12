@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.alignment.identity_coherence.output_fixtures import output_record
+from xic_extractor.alignment.identity_coherence import output_writers
 from xic_extractor.alignment.identity_coherence.output import (
     IdentityCoherenceOutputContext,
     IdentityCoherenceOutputPaths,
@@ -78,6 +79,25 @@ def test_controls_writer_writes_header_when_rows_are_empty(tmp_path):
     assert text.startswith("control_id\tcontrol_type\tcontrol_name")
     assert _read_header(path) == IDENTITY_COHERENCE_CONTROL_COLUMNS
     assert len(text.splitlines()) == 1
+
+
+def test_identity_coherence_private_tsv_writer_preserves_raw_contract(tmp_path):
+    path = tmp_path / "nested" / "identity.tsv"
+
+    returned = output_writers._write_tsv(
+        path,
+        ("id", "flag", "empty"),
+        [{"id": "REQ-1", "flag": True, "empty": None, "extra": "ignored"}],
+    )
+
+    assert returned == path
+    assert _read_tsv(path) == (
+        {"id": "REQ-1", "flag": "True", "empty": ""},
+    )
+
+    empty_path = tmp_path / "empty" / "identity.tsv"
+    output_writers._write_tsv(empty_path, ("id", "flag"), ())
+    assert empty_path.read_text(encoding="utf-8").splitlines() == ["id\tflag"]
 
 
 def test_cell_writer_rejects_seed_sample_cell(tmp_path):

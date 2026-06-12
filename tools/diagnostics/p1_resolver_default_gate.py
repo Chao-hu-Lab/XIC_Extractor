@@ -7,13 +7,15 @@ import csv
 import json
 import math
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from statistics import median, stdev
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
 
 
 ROW_FIELDS = (
@@ -339,21 +341,15 @@ def _write_markdown(path: Path, result: P1GateResult) -> None:
 def _write_tsv(
     path: Path,
     fieldnames: Sequence[str],
-    rows: Sequence[Mapping[str, object]],
+    rows: Iterable[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {field: _format_value(row.get(field)) for field in fieldnames}
-            )
+    write_tsv(
+        path,
+        tuple(rows),
+        fieldnames,
+        formatter=_format_value,
+        lineterminator="\n",
+    )
 
 
 def _require_columns(
@@ -389,7 +385,7 @@ def _parse_bool(value: object) -> bool:
     return str(value).strip().upper() in {"1", "TRUE", "YES", "Y"}
 
 
-def _max_present(values: Sequence[float | None]) -> float | None:
+def _max_present(values: Iterable[float | None]) -> float | None:
     present = [value for value in values if value is not None]
     return max(present) if present else None
 

@@ -135,27 +135,7 @@ def build_report(
             "cross_report_summary_tsv": str(cross_report_summary_tsv),
             "cross_report_rows_tsv": str(cross_report_rows_tsv or ""),
         },
-        "summary": {
-            "eligible_count": sum(
-                _int_value(row["benchmark_eligible_count"])
-                for row in reliability_summary.rows
-            ),
-            "review_positive_count": sum(
-                _int_value(row["targeted_review_positive_count"])
-                for row in reliability_summary.rows
-            ),
-            "review_count": sum(
-                _int_value(row["targeted_review_count"])
-                for row in reliability_summary.rows
-            ),
-            "negative_count": sum(
-                _int_value(row["targeted_negative_count"])
-                for row in reliability_summary.rows
-            ),
-            "root_cause_included_count": _int_value(
-                root_summary.get("included_count", "")
-            ),
-        },
+        "summary": _report_summary(reliability_targets, root_summary),
         "target_reliability": reliability_targets,
         "root_cause": root_cause,
         "consistency": consistency,
@@ -191,6 +171,28 @@ def _target_reliability(rows: tuple[dict[str, str], ...]) -> list[dict[str, Any]
         )
     )
     return targets
+
+
+def _report_summary(
+    reliability_targets: list[dict[str, Any]],
+    root_summary: dict[str, str],
+) -> dict[str, int]:
+    eligible_count = 0
+    review_positive_count = 0
+    review_count = 0
+    negative_count = 0
+    for target in reliability_targets:
+        eligible_count += int(target["benchmark_eligible_count"])
+        review_positive_count += int(target["targeted_review_positive_count"])
+        review_count += int(target["targeted_review_count"])
+        negative_count += int(target["targeted_negative_count"])
+    return {
+        "eligible_count": eligible_count,
+        "review_positive_count": review_positive_count,
+        "review_count": review_count,
+        "negative_count": negative_count,
+        "root_cause_included_count": _int_value(root_summary.get("included_count", "")),
+    }
 
 
 def _root_cause_summary(
@@ -269,13 +271,15 @@ def _review_queue(
     for row in root_rows:
         reliability = reliability_by_key.get((row["sample_name"], row["target_label"]))
         queue.append(_queue_from_root_row(row, reliability))
+    root_keys = {
+        (row["sample_name"], row["target_label"])
+        for row in root_rows
+    }
     for row in reliability_rows:
         reasons = _split_reasons(row.get("risk_reasons", ""))
         if "weak_area_rank" not in reasons:
             continue
-        if (row["sample_name"], row["target_label"]) in {
-            (root["sample_name"], root["target_label"]) for root in root_rows
-        }:
+        if (row["sample_name"], row["target_label"]) in root_keys:
             continue
         queue.append(_queue_from_weak_area_row(row))
     queue.sort(key=_queue_sort_key)

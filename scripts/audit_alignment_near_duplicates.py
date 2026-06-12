@@ -10,6 +10,18 @@ from xic_extractor.alignment.near_duplicate_audit import (
     count_near_duplicate_pairs,
 )
 
+_MATRIX_METADATA_COLUMNS = frozenset(
+    {
+        "feature_family_id",
+        "cluster_id",
+        "neutral_loss_tag",
+        "family_center_mz",
+        "cluster_center_mz",
+        "family_center_rt",
+        "cluster_center_rt",
+    }
+)
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
@@ -68,19 +80,12 @@ def _load_rows(
     for row in review_rows:
         row_id = row[_first_present(row, ("feature_family_id", "cluster_id"))]
         matrix_row = matrix_rows[row_id]
-        metadata = {
-            "feature_family_id",
-            "cluster_id",
-            "neutral_loss_tag",
-            "family_center_mz",
-            "cluster_center_mz",
-            "family_center_rt",
-            "cluster_center_rt",
-        }
         present_samples = frozenset(
             key
             for key, value in matrix_row.items()
-            if key not in metadata and value not in ("", None)
+            if key not in _MATRIX_METADATA_COLUMNS
+            and value is not None
+            and value != ""
         )
         output.append(
             AlignmentNearDuplicateInput(

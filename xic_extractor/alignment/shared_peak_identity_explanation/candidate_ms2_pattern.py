@@ -13,7 +13,6 @@ from xic_extractor.alignment.csv_io import (
     read_discovery_batch_index,
     read_discovery_candidates_csv,
 )
-from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, write_tsv
 from xic_extractor.discovery.models import DiscoveryCandidate
 from xic_extractor.neutral_loss import (
     CandidateMS2Evidence,
@@ -21,6 +20,7 @@ from xic_extractor.neutral_loss import (
 )
 from xic_extractor.raw_reader import Ms2ScanEvent
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
+from xic_extractor.tabular_io import read_tsv_required, write_tsv
 
 CANDIDATE_MS2_PATTERN_SCHEMA_VERSION = "shared_peak_identity_candidate_ms2_pattern_v2"
 CANDIDATE_MS2_PATTERN_COLUMNS = (

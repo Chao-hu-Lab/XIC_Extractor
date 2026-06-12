@@ -1,6 +1,5 @@
 """CSV writer for untargeted discovery review candidates."""
 
-import csv
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -10,6 +9,7 @@ from xic_extractor.discovery.models import (
     DISCOVERY_CANDIDATE_COLUMNS,
     DiscoveryCandidate,
 )
+from xic_extractor.tabular_io import write_delimited_rows
 
 _PRIORITY_RANK = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
@@ -18,31 +18,33 @@ def write_discovery_candidates_csv(
     path: Path, candidates: Iterable[DiscoveryCandidate]
 ) -> Path:
     """Write review-first discovery candidates to a stable CSV contract."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     sorted_candidates = sorted(candidates, key=_candidate_sort_key)
-
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=DISCOVERY_CANDIDATE_COLUMNS)
-        writer.writeheader()
-        for candidate in sorted_candidates:
-            writer.writerow(_candidate_row(candidate))
-
-    return path
+    return _write_csv(
+        path,
+        [_candidate_row(candidate) for candidate in sorted_candidates],
+        DISCOVERY_CANDIDATE_COLUMNS,
+    )
 
 
 def write_discovery_review_csv(
     path: Path, candidates: Iterable[DiscoveryCandidate]
 ) -> Path:
     """Write the compact human review index for discovery candidates."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     sorted_candidates = sorted(candidates, key=_candidate_sort_key)
+    return _write_csv(
+        path,
+        [_brief_candidate_row(candidate) for candidate in sorted_candidates],
+        DISCOVERY_BRIEF_COLUMNS,
+    )
 
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=DISCOVERY_BRIEF_COLUMNS)
-        writer.writeheader()
-        for candidate in sorted_candidates:
-            writer.writerow(_brief_candidate_row(candidate))
 
+def _write_csv(
+    path: Path,
+    rows: list[dict[str, str]],
+    columns: tuple[str, ...],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_delimited_rows(path, rows, columns)
     return path
 
 

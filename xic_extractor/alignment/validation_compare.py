@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from statistics import median
 from typing import Any
@@ -45,6 +46,8 @@ class SummaryMetric:
 
 @dataclass(frozen=True)
 class _EligiblePair:
+    xic_index: int
+    legacy_index: int
     xic: LoadedFeature
     legacy: LoadedFeature
     mz_delta_ppm: float
@@ -61,7 +64,8 @@ def match_legacy_source(
     sample_scope: str = "xic",
 ) -> tuple[FeatureMatch, ...]:
     scope = _sample_scope(xic, legacy, sample_scope)
-    shared_samples = tuple(sample for sample in scope if sample in legacy.sample_order)
+    legacy_sample_set = set(legacy.sample_order)
+    shared_samples = tuple(sample for sample in scope if sample in legacy_sample_set)
     eligible_pairs = sorted(
         _eligible_pairs(xic, legacy, match_ppm=match_ppm, match_rt_sec=match_rt_sec),
         key=lambda pair: (
@@ -70,6 +74,8 @@ def match_legacy_source(
             abs(pair.mz_delta_ppm),
             pair.xic.feature_id,
             pair.legacy.feature_id,
+            pair.xic_index,
+            pair.legacy_index,
         ),
     )
     used_xic: set[str] = set()
@@ -292,8 +298,19 @@ def _eligible_pairs(
     match_rt_sec: float,
 ) -> list[_EligiblePair]:
     pairs: list[_EligiblePair] = []
-    for xic_feature in xic.features:
-        for legacy_feature in legacy.features:
+    legacy_by_mz = sorted(
+        (legacy_feature.mz, legacy_index, legacy_feature)
+        for legacy_index, legacy_feature in enumerate(legacy.features)
+    )
+    legacy_mz_values = [entry[0] for entry in legacy_by_mz]
+    for xic_index, xic_feature in enumerate(xic.features):
+        start, stop = _mz_candidate_bounds(
+            legacy_mz_values,
+            reference_mz=xic_feature.mz,
+            match_ppm=match_ppm,
+        )
+        for position in range(start, stop):
+            _, legacy_index, legacy_feature = legacy_by_mz[position]
             mz_delta_ppm = _ppm_delta(legacy_feature.mz, xic_feature.mz)
             rt_delta_sec = (legacy_feature.rt_min - xic_feature.rt_min) * 60.0
             if abs(mz_delta_ppm) > match_ppm or abs(rt_delta_sec) > match_rt_sec:
@@ -304,6 +321,8 @@ def _eligible_pairs(
             )
             pairs.append(
                 _EligiblePair(
+                    xic_index=xic_index,
+                    legacy_index=legacy_index,
                     xic=xic_feature,
                     legacy=legacy_feature,
                     mz_delta_ppm=mz_delta_ppm,
@@ -312,6 +331,25 @@ def _eligible_pairs(
                 )
             )
     return pairs
+
+
+def _mz_candidate_bounds(
+    legacy_mz_values: list[float],
+    *,
+    reference_mz: float,
+    match_ppm: float,
+) -> tuple[int, int]:
+    if not math.isfinite(reference_mz) or math.isnan(match_ppm) or reference_mz == 0:
+        return 0, len(legacy_mz_values)
+    mz_window = abs(reference_mz) * match_ppm / 1_000_000.0
+    lower_mz = reference_mz - mz_window
+    upper_mz = reference_mz + mz_window
+    if lower_mz > upper_mz:
+        return 0, 0
+    return (
+        bisect_left(legacy_mz_values, lower_mz),
+        bisect_right(legacy_mz_values, upper_mz),
+    )
 
 
 def _build_match(

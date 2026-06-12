@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Literal
 
 import pytest
 
@@ -29,6 +30,8 @@ from xic_extractor.peak_detection.models import (
 from xic_extractor.peak_detection.selection_decision import (
     PeakHypothesisSelectionDecision,
 )
+
+_NLStatus = Literal["OK", "WARN", "NL_FAIL", "NO_MS2"]
 
 
 def test_run_level_area_ratio_support_can_count_nl_fail_paired_analyte() -> None:
@@ -219,7 +222,7 @@ def _file_result(
     sample_name: str,
     *,
     target_area: float,
-    nl_status: str,
+    nl_status: _NLStatus,
     selected_envelope_not_counted: bool = False,
 ) -> FileResult:
     target = _target()
@@ -249,7 +252,7 @@ def _result(
     *,
     sample_name: str,
     area: float,
-    nl_status: str,
+    nl_status: _NLStatus,
     selected_envelope_not_counted: bool = False,
 ):
     candidate = _candidate(area=area)
@@ -307,7 +310,7 @@ def _hypothesis(
     *,
     sample_name: str,
     area: float,
-    nl_status: str,
+    nl_status: _NLStatus,
 ) -> PeakHypothesis:
     support = ["ms1_coherent"]
     conflicts: tuple[str, ...] = ()
@@ -369,7 +372,7 @@ def _candidate(*, area: float) -> PeakCandidate:
     )
 
 
-def _ms2(nl_status: str) -> CandidateMS2Evidence:
+def _ms2(nl_status: _NLStatus) -> CandidateMS2Evidence:
     if nl_status not in {"OK", "NL_FAIL", "NO_MS2"}:
         raise ValueError(nl_status)
     return CandidateMS2Evidence(

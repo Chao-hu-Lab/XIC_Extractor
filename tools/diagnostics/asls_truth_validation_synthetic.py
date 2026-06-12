@@ -39,6 +39,13 @@ from xic_extractor.peak_detection.integration import integrate_area_counts_secon
 
 SYNTHETIC_FIXTURE_LOCK_VALID = BENCHMARK_STATUS_PASS
 FloatArray: TypeAlias = NDArray[np.float64]
+_RELATIVE_ERROR_IMPROVEMENT_CLASSES = frozenset(
+    {
+        "sloped_baseline_peak",
+        "tailing_peak",
+        "adjacent_shoulder",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -276,11 +283,7 @@ def classify_tier_b_blockers(
                 b1_blockers.add(f"{fixture_class}:median_asls_relative_error_gt_10pct")
         if p95_rel > 20.0:
             b1_cautions.add(f"{fixture_class}:p95_asls_relative_error_gt_20pct")
-        if fixture_class in {
-            "sloped_baseline_peak",
-            "tailing_peak",
-            "adjacent_shoulder",
-        }:
+        if fixture_class in _RELATIVE_ERROR_IMPROVEMENT_CLASSES:
             asls_median_abs = median(asls_abs)
             linear_median_abs = median(linear_abs)
             true_median = median(

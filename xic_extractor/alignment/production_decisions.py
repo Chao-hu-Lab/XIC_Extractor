@@ -94,6 +94,7 @@ def build_production_decisions(
         cluster_cells = grouped_cells.get(cluster_id, ())
         identity_row = identity_decisions.row(cluster_id)
 
+        decisions: list[ProductionCellDecision] = []
         for cell in cluster_cells:
             decision = _cell_decision(
                 cell,
@@ -101,15 +102,11 @@ def build_production_decisions(
                 identity_row=identity_row,
             )
             cell_decisions[(cell.cluster_id, cell.sample_stem)] = decision
-
-        decisions = tuple(
-            cell_decisions[(cell.cluster_id, cell.sample_stem)]
-            for cell in cluster_cells
-        )
+            decisions.append(decision)
         row_decisions[cluster_id] = _row_decision(
             cluster_id,
             cluster_cells,
-            decisions,
+            tuple(decisions),
             identity_row=identity_row,
         )
 

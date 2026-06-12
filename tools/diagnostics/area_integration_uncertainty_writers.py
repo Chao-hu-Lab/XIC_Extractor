@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 import math
 from collections.abc import Mapping, Sequence
@@ -13,6 +12,7 @@ from tools.diagnostics.area_integration_uncertainty_models import (
     AreaIntegrationUncertaintyOutputs,
     AreaIntegrationUncertaintyResult,
 )
+from tools.diagnostics.diagnostic_io import write_tsv
 
 
 def _write_outputs(
@@ -56,16 +56,7 @@ def _write_tsv(
     fields: Sequence[str],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=tuple(fields),
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: _format_value(row.get(field)) for field in fields})
+    write_tsv(path, rows, fields, formatter=_format_value, lineterminator="\n")
 
 
 def _format_value(value: object) -> str:

@@ -455,16 +455,16 @@ def _resolve_overlay_batch_summary_tsv(
             requested_limit=limit,
             effective_limit=limit,
         )
-    missing = [
-        name
-        for name, value in (
-            ("--review-queue-tsv", review_queue_tsv),
-            ("--raw-dir", raw_dir),
-            ("--dll-dir", dll_dir),
-        )
-        if value is None
-    ]
-    if missing:
+    if review_queue_tsv is None or raw_dir is None or dll_dir is None:
+        missing = [
+            name
+            for name, value in (
+                ("--review-queue-tsv", review_queue_tsv),
+                ("--raw-dir", raw_dir),
+                ("--dll-dir", dll_dir),
+            )
+            if value is None
+        ]
         raise ValueError(
             "Provide --overlay-batch-summary-tsv, or provide "
             f"{', '.join(missing)} so the pipeline can render overlays.",

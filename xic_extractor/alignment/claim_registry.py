@@ -67,6 +67,8 @@ def apply_ms1_peak_claim_registry(
 
     replacements: dict[int, AlignedCell] = {}
     for candidates in candidates_by_sample.values():
+        if len(candidates) < 2:
+            continue
         exact_replacements = _exact_peak_replacements(candidates)
         replacements.update(exact_replacements)
         fuzzy_candidates = [

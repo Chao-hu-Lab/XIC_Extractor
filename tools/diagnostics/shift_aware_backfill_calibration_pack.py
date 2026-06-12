@@ -6,6 +6,7 @@ import argparse
 import html
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -221,55 +222,62 @@ def build_calibration_rows_from_shift_rows(
 def collect_shift_aware_family_summary_rows(
     source_family_summary_paths: Sequence[Path],
 ) -> list[dict[str, str]]:
-    by_family: dict[str, list[Mapping[str, str]]] = {}
+    by_family: dict[str, _ShiftAwareFamilySummaryAccumulator] = {}
     for path in source_family_summary_paths:
         for row in read_tsv_required(path, _SHIFT_SOURCE_FAMILY_REQUIRED_COLUMNS):
             family = text_value(row.get("feature_family_id"))
-            if family:
-                by_family.setdefault(family, []).append(row)
+            if not family:
+                continue
+            if text_value(row.get("is_reference")).upper() == "TRUE":
+                continue
+            by_family.setdefault(
+                family,
+                _ShiftAwareFamilySummaryAccumulator(),
+            ).add(row)
 
     summaries: list[dict[str, str]] = []
-    for family, rows in sorted(by_family.items()):
-        nonref_rows = [
-            row
-            for row in rows
-            if text_value(row.get("is_reference")).upper() != "TRUE"
-        ]
-        shape_values = tuple(
-            value
-            for value in (
-                optional_float(
-                    row.get("shape_similarity_to_reference_after_group_shift"),
-                )
-                for row in nonref_rows
-            )
-            if value is not None
-        )
-        if not nonref_rows or not shape_values:
+    for family, summary in sorted(by_family.items()):
+        if not summary.shape_values:
             continue
-        shift_values = tuple(
-            abs(value)
-            for value in (
-                optional_float(row.get("shift_to_reference_sec"))
-                for row in nonref_rows
-            )
-            if value is not None
-        )
         summaries.append(
             {
                 "feature_family_id": family,
-                "nonref_source_families": ";".join(
-                    text_value(row.get("source_family")) for row in nonref_rows
+                "nonref_source_families": ";".join(summary.source_families),
+                "nonref_group_count": str(summary.nonref_count),
+                "min_shape_r_after_best_shift": (
+                    f"{min(summary.shape_values):.4f}"
                 ),
-                "nonref_group_count": str(len(nonref_rows)),
-                "min_shape_r_after_best_shift": f"{min(shape_values):.4f}",
-                "max_shape_r_after_best_shift": f"{max(shape_values):.4f}",
+                "max_shape_r_after_best_shift": (
+                    f"{max(summary.shape_values):.4f}"
+                ),
                 "max_abs_shift_sec": (
-                    f"{max(shift_values):.2f}" if shift_values else ""
+                    f"{max(summary.shift_values):.2f}"
+                    if summary.shift_values
+                    else ""
                 ),
             },
         )
     return summaries
+
+
+@dataclass
+class _ShiftAwareFamilySummaryAccumulator:
+    source_families: list[str] = field(default_factory=list)
+    nonref_count: int = 0
+    shape_values: list[float] = field(default_factory=list)
+    shift_values: list[float] = field(default_factory=list)
+
+    def add(self, row: Mapping[str, str]) -> None:
+        self.source_families.append(text_value(row.get("source_family")))
+        self.nonref_count += 1
+        shape_value = optional_float(
+            row.get("shape_similarity_to_reference_after_group_shift"),
+        )
+        if shape_value is not None:
+            self.shape_values.append(shape_value)
+        shift_value = optional_float(row.get("shift_to_reference_sec"))
+        if shift_value is not None:
+            self.shift_values.append(abs(shift_value))
 
 
 def _calibration_row(

@@ -20,6 +20,8 @@ from xic_extractor.alignment.promotion_policy import (
     STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
 )
 from xic_extractor.diagnostics.diagnostic_io import (
+    file_sha256,
+    has_semicolon_token,
     optional_float,
     read_tsv_required,
     text_value,
@@ -94,6 +96,20 @@ class StandardPeakAuthorityBundleOutputs:
     summary_json: Path
 
 
+@dataclass(frozen=True)
+class _TraceDataFile:
+    status: str
+    sha256: str = ""
+    data: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class _OverlayArtifacts:
+    trace_summary_rows: tuple[dict[str, str], ...]
+    relative_trace_path: str
+    trace_sha256: str
+
+
 def run_standard_peak_ms1_authority_bundle(
     *,
     standard_peak_gate_tsv: Path,
@@ -123,6 +139,7 @@ def run_standard_peak_ms1_authority_bundle(
     source_rows: list[dict[str, str]] = []
     allowlist_rows: list[dict[str, str]] = []
     skipped: Counter[str] = Counter()
+    overlay_artifact_cache: dict[tuple[str, Path, Path], _OverlayArtifacts] = {}
 
     for gate_row in gate_rows:
         family_id = text_value(gate_row.get("feature_family_id"))
@@ -150,18 +167,15 @@ def run_standard_peak_ms1_authority_bundle(
         if trace_summary_path is None or trace_data_path is None:
             skipped["overlay_artifact_missing"] += 1
             continue
-        trace_summary_rows = read_tsv_required(
-            trace_summary_path,
-            TRACE_SUMMARY_COLUMNS,
+        artifacts = _overlay_artifacts(
+            family_id=family_id,
+            trace_summary_path=trace_summary_path,
+            trace_data_path=trace_data_path,
+            trace_data_dir=trace_data_dir,
+            output_dir=output_dir,
+            cache=overlay_artifact_cache,
         )
-        copied_trace_path = _copy_trace_data(
-            family_id,
-            trace_data_path,
-            trace_data_dir,
-        )
-        relative_trace_path = copied_trace_path.relative_to(output_dir).as_posix()
-        trace_sha256 = _sha256_file(copied_trace_path)
-        for trace_row in trace_summary_rows:
+        for trace_row in artifacts.trace_summary_rows:
             if text_value(trace_row.get("status")) != "rescued":
                 continue
             sample_stem = text_value(trace_row.get("sample_stem"))
@@ -175,7 +189,7 @@ def run_standard_peak_ms1_authority_bundle(
                     trace_row=trace_row,
                     overlay_row=overlay_row,
                     gate_row=gate_row,
-                    relative_trace_path=relative_trace_path,
+                    relative_trace_path=artifacts.relative_trace_path,
                 )
             )
             allowlist_rows.append(
@@ -187,8 +201,8 @@ def run_standard_peak_ms1_authority_bundle(
                         gate_row,
                         authority_mode=authority_mode,
                     ),
-                    relative_trace_path=relative_trace_path,
-                    trace_sha256=trace_sha256,
+                    relative_trace_path=artifacts.relative_trace_path,
+                    trace_sha256=artifacts.trace_sha256,
                     min_shape_similarity=min_anchor_own_max_shape_similarity,
                 )
             )
@@ -233,9 +247,9 @@ def run_standard_peak_ms1_authority_bundle(
         "authority_mode": authority_mode,
         "authority_source": resolved_authority_source,
         "standard_peak_gate_tsv": str(standard_peak_gate_tsv),
-        "standard_peak_gate_sha256": _sha256_file(standard_peak_gate_tsv),
+        "standard_peak_gate_sha256": file_sha256(standard_peak_gate_tsv),
         "overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
-        "overlay_batch_summary_sha256": _sha256_file(overlay_batch_summary_tsv),
+        "overlay_batch_summary_sha256": file_sha256(overlay_batch_summary_tsv),
         "source_row_count": len(source_rows),
         "allowlist_row_count": len(allowlist_rows),
         "authorized_row_count": len(authorized_rows),
@@ -263,6 +277,36 @@ def run_standard_peak_ms1_authority_bundle(
         authority_audit_tsv=audit_tsv,
         summary_json=summary_json,
     )
+
+
+def _overlay_artifacts(
+    *,
+    family_id: str,
+    trace_summary_path: Path,
+    trace_data_path: Path,
+    trace_data_dir: Path,
+    output_dir: Path,
+    cache: dict[tuple[str, Path, Path], _OverlayArtifacts],
+) -> _OverlayArtifacts:
+    key = (family_id, trace_summary_path, trace_data_path)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    copied_trace_path = _copy_trace_data(
+        family_id,
+        trace_data_path,
+        trace_data_dir,
+    )
+    artifacts = _OverlayArtifacts(
+        trace_summary_rows=tuple(
+            read_tsv_required(trace_summary_path, TRACE_SUMMARY_COLUMNS),
+        ),
+        relative_trace_path=copied_trace_path.relative_to(output_dir).as_posix(),
+        trace_sha256=file_sha256(copied_trace_path),
+    )
+    cache[key] = artifacts
+    return artifacts
 
 
 def _gate_row_is_authorized_standard_peak(
@@ -348,6 +392,7 @@ def _authorize_standard_peak_rows(
         ): row
         for row in allowlist_rows
     }
+    trace_data_cache: dict[str, _TraceDataFile] = {}
     authorized_rows: list[dict[str, str]] = []
     audit_rows: list[dict[str, str]] = []
     for source_row in source_rows:
@@ -360,6 +405,7 @@ def _authorize_standard_peak_rows(
             source_row,
             allowlist_row,
             artifact_base_dir=artifact_base_dir,
+            trace_data_cache=trace_data_cache,
         )
         audit_rows.append(
             _standard_peak_audit_row(
@@ -387,6 +433,7 @@ def _standard_peak_authority_decision(
     allowlist_row: Mapping[str, str] | None,
     *,
     artifact_base_dir: Path,
+    trace_data_cache: dict[str, _TraceDataFile],
 ) -> tuple[str, str, str]:
     if allowlist_row is None:
         return "rejected", "allowlist_row_missing", ""
@@ -404,7 +451,7 @@ def _standard_peak_authority_decision(
         != "shift_aware_standard_peak_gate"
     ):
         return "rejected", "source_shape_metric_not_standard_peak_gate", ""
-    if not _has_reason_token(
+    if not has_semicolon_token(
         source_row.get("reason"),
         STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
     ):
@@ -412,6 +459,7 @@ def _standard_peak_authority_decision(
     trace_status, trace_sha256 = _validate_trace_data(
         source_row,
         artifact_base_dir=artifact_base_dir,
+        trace_data_cache=trace_data_cache,
     )
     if trace_status != "valid":
         return "rejected", trace_status, trace_sha256
@@ -544,27 +592,25 @@ def _validate_trace_data(
     source_row: Mapping[str, str],
     *,
     artifact_base_dir: Path,
+    trace_data_cache: dict[str, _TraceDataFile],
 ) -> tuple[str, str]:
     path = artifact_base_dir / text_value(
         source_row.get("family_ms1_overlay_trace_data_json")
     )
-    try:
-        payload = path.read_bytes()
-    except OSError:
-        return "source_overlay_trace_json_unreadable", ""
-    trace_sha256 = hashlib.sha256(payload).hexdigest().upper()
-    try:
-        data = json.loads(payload.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return "source_overlay_trace_json_invalid", trace_sha256
-    if not isinstance(data, dict):
-        return "source_overlay_trace_json_not_object", trace_sha256
+    cache_key = str(path.resolve())
+    trace_file = trace_data_cache.get(cache_key)
+    if trace_file is None:
+        trace_file = _read_trace_data_file(path)
+        trace_data_cache[cache_key] = trace_file
+    if trace_file.status != "valid" or trace_file.data is None:
+        return trace_file.status, trace_file.sha256
+    data = trace_file.data
     family_id = text_value(source_row.get("feature_family_id"))
     if text_value(data.get("family_id")) != family_id:
-        return "source_overlay_trace_family_mismatch", trace_sha256
+        return "source_overlay_trace_family_mismatch", trace_file.sha256
     traces = data.get("traces")
     if not isinstance(traces, list):
-        return "source_overlay_trace_json_missing_traces", trace_sha256
+        return "source_overlay_trace_json_missing_traces", trace_file.sha256
     sample_stem = text_value(source_row.get("sample_stem"))
     matching = [
         trace
@@ -573,15 +619,30 @@ def _validate_trace_data(
         and text_value(trace.get("sample_stem")) == sample_stem
     ]
     if not matching:
-        return "source_overlay_trace_sample_missing", trace_sha256
+        return "source_overlay_trace_sample_missing", trace_file.sha256
     if len(matching) > 1:
-        return "source_overlay_trace_sample_duplicate", trace_sha256
+        return "source_overlay_trace_sample_duplicate", trace_file.sha256
     trace = matching[0]
     rt = _numeric_sequence(trace.get("rt"))
     intensity = _numeric_sequence(trace.get("intensity"))
     if len(rt) < 3 or len(intensity) < 3 or len(rt) != len(intensity):
-        return "source_overlay_trace_vector_invalid", trace_sha256
-    return "valid", trace_sha256
+        return "source_overlay_trace_vector_invalid", trace_file.sha256
+    return "valid", trace_file.sha256
+
+
+def _read_trace_data_file(path: Path) -> _TraceDataFile:
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        return _TraceDataFile("source_overlay_trace_json_unreadable")
+    trace_sha256 = hashlib.sha256(payload).hexdigest().upper()
+    try:
+        data = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _TraceDataFile("source_overlay_trace_json_invalid", trace_sha256)
+    if not isinstance(data, dict):
+        return _TraceDataFile("source_overlay_trace_json_not_object", trace_sha256)
+    return _TraceDataFile("valid", trace_sha256, data)
 
 
 def _numeric_sequence(value: object) -> tuple[float, ...]:
@@ -594,14 +655,6 @@ def _numeric_sequence(value: object) -> tuple[float, ...]:
             return ()
         parsed.append(parsed_value)
     return tuple(parsed)
-
-
-def _has_reason_token(value: object, token: str) -> bool:
-    return token in {
-        part.strip()
-        for part in text_value(value).split(";")
-        if part.strip()
-    }
 
 
 def _resolve_input_path(value: object, *, base_dir: Path) -> Path | None:
@@ -627,14 +680,6 @@ def _safe_stem(value: str) -> str:
     return "".join(
         char if char.isalnum() or char in {"-", "_"} else "_" for char in value
     )
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()
 
 
 def _abs_min_to_sec(value: object) -> float | None:

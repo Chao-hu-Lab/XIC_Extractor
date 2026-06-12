@@ -15,6 +15,7 @@ from xic_extractor.alignment.primary_matrix_area import (
     MISSING_ASLS_PRIMARY_AREA,
     MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE,
 )
+from xic_extractor.tabular_io import write_tsv
 
 from .schema import (
     ACTIVATION_APPLICATION_SCHEMA_VERSION,
@@ -2121,13 +2122,4 @@ def _write_tsv(
     rows: Sequence[Mapping[str, str]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in fieldnames})
+    write_tsv(path, rows, fieldnames, lineterminator="\n")

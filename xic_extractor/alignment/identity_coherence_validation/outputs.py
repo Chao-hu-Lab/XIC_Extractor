@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from xic_extractor.alignment.identity_coherence_validation.acceptance import (
@@ -14,9 +13,12 @@ from xic_extractor.alignment.identity_coherence_validation.models import (
     ACCEPTANCE_SUMMARY_COLUMNS,
     VALIDATION_SUMMARY_COLUMNS,
     AcceptanceReport,
+    AcceptanceRow,
     RunMetadata,
     ValidationResult,
+    ValidationRow,
 )
+from xic_extractor.tabular_io import write_tsv
 
 
 def write_validation_outputs(
@@ -68,44 +70,48 @@ def _with_controls_manifest_row(
 
 
 def _write_summary_tsv(path: Path, result: ValidationResult) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=VALIDATION_SUMMARY_COLUMNS,
-            dialect="excel-tab",
-        )
-        writer.writeheader()
-        for row in result.rows:
-            writer.writerow(
-                {
-                    "check_name": row.check_name,
-                    "status": row.status,
-                    "serial_value": row.serial_value,
-                    "process_value": row.process_value,
-                    "details": row.details,
-                }
-            )
+    write_tsv(
+        path,
+        [_validation_summary_row(row) for row in result.rows],
+        VALIDATION_SUMMARY_COLUMNS,
+        formatter=_format_tsv_value,
+    )
 
 
 def _write_acceptance_tsv(path: Path, report: AcceptanceReport) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=ACCEPTANCE_SUMMARY_COLUMNS,
-            dialect="excel-tab",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in report.rows:
-            writer.writerow(
-                {
-                    "criterion": row.criterion,
-                    "status": row.status,
-                    "evidence": row.evidence,
-                    "details": row.details,
-                }
-            )
+    write_tsv(
+        path,
+        [_acceptance_summary_row(row) for row in report.rows],
+        ACCEPTANCE_SUMMARY_COLUMNS,
+        formatter=_format_tsv_value,
+        lineterminator="\n",
+    )
+
+
+def _validation_summary_row(row: ValidationRow) -> dict[str, str]:
+    return {
+        "check_name": row.check_name,
+        "status": row.status,
+        "serial_value": row.serial_value,
+        "process_value": row.process_value,
+        "details": row.details,
+    }
+
+
+def _acceptance_summary_row(row: AcceptanceRow) -> dict[str, str]:
+    return {
+        "criterion": row.criterion,
+        "status": row.status,
+        "evidence": row.evidence,
+        "details": row.details,
+    }
+
+
+def _format_tsv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _write_acceptance_md(

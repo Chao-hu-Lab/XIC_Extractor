@@ -7,7 +7,7 @@ from xic_extractor.settings_schema import CANONICAL_SETTINGS_DESCRIPTIONS
 
 if getattr(sys, "frozen", False):
     ROOT = Path(sys.executable).parent  # user-writable: config/, output/
-    _BUNDLE = Path(sys._MEIPASS)  # read-only bundle: example CSVs
+    _BUNDLE = Path(getattr(sys, "_MEIPASS"))  # read-only bundle: example CSVs
 else:
     ROOT = Path(__file__).resolve().parent.parent
     _BUNDLE = ROOT
@@ -70,8 +70,10 @@ def write_targets(targets: list[dict[str, str]]) -> None:
 
 def _target_write_fieldnames(targets: list[dict[str, str]]) -> list[str]:
     fieldnames = list(_TARGETS_FIELDS)
+    seen = set(fieldnames)
     for target in targets:
         for field in target:
-            if field not in fieldnames:
+            if field not in seen:
                 fieldnames.append(field)
+                seen.add(field)
     return fieldnames

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
@@ -11,6 +12,8 @@ from tools.diagnostics.evidence_spine_consistency_models import (
     TargetedCandidate,
     TargetedShadow,
 )
+
+SampleRtCellIndex = dict[str, tuple[tuple[float, ...], tuple[AlignmentCell, ...]]]
 
 
 def _build_rows(
@@ -25,11 +28,7 @@ def _build_rows(
     match_rt_min: float,
 ) -> list[ConsistencyRow]:
     focus = set(target_labels)
-    cells_by_sample: dict[str, list[AlignmentCell]] = {}
-    for cell in alignment_cells:
-        if cell.status not in {"detected", "rescued"}:
-            continue
-        cells_by_sample.setdefault(cell.sample, []).append(cell)
+    cells_by_sample = _sample_rt_cell_index(alignment_cells)
 
     rows: list[ConsistencyRow] = []
     for candidate in targeted:
@@ -44,12 +43,52 @@ def _build_rows(
         match = _best_alignment_match(
             candidate,
             target_mz=mz,
-            cells=cells_by_sample.get(candidate.sample, ()),
+            cells=_candidate_cells_for_rt_window(
+                cells_by_sample,
+                sample=candidate.sample,
+                rt=candidate.rt,
+                match_rt_min=match_rt_min,
+            ),
             match_ppm=match_ppm,
             match_rt_min=match_rt_min,
         )
         rows.append(_consistency_row(candidate, mz=mz, shadow=shadow, match=match))
     return rows
+
+
+def _sample_rt_cell_index(
+    alignment_cells: Sequence[AlignmentCell],
+) -> SampleRtCellIndex:
+    grouped: dict[str, list[AlignmentCell]] = {}
+    for cell in alignment_cells:
+        if cell.status not in {"detected", "rescued"}:
+            continue
+        if cell.mz is None or cell.rt is None:
+            continue
+        grouped.setdefault(cell.sample, []).append(cell)
+    index: SampleRtCellIndex = {}
+    for sample, cells in grouped.items():
+        ordered = tuple(sorted(cells, key=lambda cell: cell.rt or 0.0))
+        index[sample] = (
+            tuple(cell.rt or 0.0 for cell in ordered),
+            ordered,
+        )
+    return index
+
+
+def _candidate_cells_for_rt_window(
+    cells_by_sample: SampleRtCellIndex,
+    *,
+    sample: str,
+    rt: float | None,
+    match_rt_min: float,
+) -> tuple[AlignmentCell, ...]:
+    if rt is None:
+        return ()
+    rts, cells = cells_by_sample.get(sample, ((), ()))
+    left = bisect_left(rts, rt - match_rt_min)
+    right = bisect_right(rts, rt + match_rt_min)
+    return cells[left:right]
 
 
 def _best_alignment_match(
@@ -62,7 +101,7 @@ def _best_alignment_match(
 ) -> AlignmentCell | None:
     if target_mz is None or candidate.rt is None:
         return None
-    candidates: list[tuple[float, int, str, AlignmentCell]] = []
+    candidates: list[tuple[int, float, float, str, AlignmentCell]] = []
     for cell in cells:
         if cell.mz is None or cell.rt is None:
             continue

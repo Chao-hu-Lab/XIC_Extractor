@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 from typing import Iterable
@@ -10,6 +9,7 @@ from xic_extractor.instrument_qc.calibration import (
     CalibrationMetadataStatus,
     SDOLEKCalibrationResult,
 )
+from xic_extractor.tabular_io import write_tsv
 
 CALIBRATED_TREND_TSV_COLUMNS = [
     "sample_name",
@@ -43,15 +43,12 @@ def write_calibrated_trend_tsv(
 ) -> None:
     row_list = list(rows)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=CALIBRATED_TREND_TSV_COLUMNS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in row_list:
-            writer.writerow(_calibrated_row_to_dict(row))
+    write_tsv(
+        path,
+        tuple(_calibrated_row_to_dict(row) for row in row_list),
+        CALIBRATED_TREND_TSV_COLUMNS,
+        formatter=str,
+    )
 
 
 def write_calibration_summary_json(

@@ -3,10 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
+from xic_extractor.alignment._backfill_util import rows_by_family_sample_key
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     machine_evidence_support as evidence_support,
 )
-from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, text_value
+from xic_extractor.tabular_io import read_tsv_required, text_value
 
 BACKFILL_PROJECTION_COLUMNS = (
     "backfill_ms1_pattern_status",
@@ -226,19 +227,10 @@ def _rows_by_key(
     *,
     source_name: str,
 ) -> dict[tuple[str, str], Mapping[str, str]]:
-    by_key: dict[tuple[str, str], Mapping[str, str]] = {}
-    for row in rows:
-        family_id = text_value(row.get("feature_family_id"))
-        sample_stem = text_value(row.get("sample_stem") or row.get("sample_id"))
-        if family_id and sample_stem:
-            key = (family_id, sample_stem)
-            if key in by_key:
-                raise ValueError(
-                    f"duplicate {source_name} backfill evidence sidecar key: "
-                    f"{family_id}, {sample_stem}"
-                )
-            by_key[key] = row
-    return by_key
+    return rows_by_family_sample_key(
+        rows,
+        duplicate_label=f"{source_name} backfill evidence sidecar",
+    )
 
 
 def _dda_missing_nl_not_dispositive(row: Mapping[str, str] | None) -> bool:

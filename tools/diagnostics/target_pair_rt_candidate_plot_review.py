@@ -6,6 +6,7 @@ import argparse
 import csv
 import re
 import sys
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ from xic_extractor.peak_detection.selected_envelope import (
     gaussian15_morphology_trace,
 )
 from xic_extractor.raw_reader import open_raw
+from xic_extractor.tabular_io import write_tsv
 from xic_extractor.xic_models import XICRequest
 
 PLOT_INDEX_HEADERS = (
@@ -217,16 +219,20 @@ def select_target_pair_plot_requests(
         max_outside_area_ratio,
     )
 
-    target_labels = sorted({row.get("target_label", "") for row in candidate_rows})
-    for target_label in target_labels:
+    rows_by_target: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in candidate_rows:
+        target_label = row.get("target_label", "")
         if not target_label:
             continue
-        rows_for_target = [
-            row for row in candidate_rows if row.get("target_label", "") == target_label
-        ]
+        rows_by_target[target_label].append(row)
+    for target_label in sorted(rows_by_target):
         add(
             f"per_target_high_delta_{_safe_stem(target_label)}",
-            sorted(rows_for_target, key=_abs_pair_rt_delta_error, reverse=True),
+            sorted(
+                rows_by_target[target_label],
+                key=_abs_pair_rt_delta_error,
+                reverse=True,
+            ),
             per_target,
         )
     return tuple(requests)
@@ -809,10 +815,7 @@ def _write_tsv(
     rows: Sequence[Mapping[str, str]],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=headers, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, rows, headers, extrasaction="raise")
 
 
 def _plot_group_for_row(row: Mapping[str, str]) -> str:

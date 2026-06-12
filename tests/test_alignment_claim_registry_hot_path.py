@@ -39,7 +39,7 @@ def test_claim_registry_hot_path_many_samples_single_claim(
     assert result is matrix
     assert [cell.status for cell in result.cells] == ["detected"] * 12
     assert counts == ClaimRegistryOperationCounts(
-        exact_peak_key_calls=12,
+        exact_peak_key_calls=0,
         compatible_claim_calls=0,
         group_sort_key_calls=0,
         winner_sort_key_calls=0,

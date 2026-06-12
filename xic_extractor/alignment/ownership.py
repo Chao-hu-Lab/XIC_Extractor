@@ -478,10 +478,7 @@ def _owners_for_sample(
     for index, group in enumerate(groups, start=1):
         if _component_is_ambiguous(group, alignment_config):
             ambiguity_id = f"AMB-{sample_stem}-{len(ambiguous) + 1:06d}"
-            candidate_ids = tuple(
-                item.event.candidate_id
-                for item in sorted(group, key=_resolved_sort_key)
-            )
+            candidate_ids = tuple(item.event.candidate_id for item in group)
             ambiguous.append(
                 AmbiguousOwnerRecord(
                     ambiguity_id=ambiguity_id,
@@ -675,8 +672,7 @@ def _assignment_reason(
 def _primary_and_supporting(
     group: list[_ResolvedCandidate],
 ) -> tuple[_ResolvedCandidate, list[_ResolvedCandidate]]:
-    ordered = sorted(group, key=_resolved_sort_key)
-    return ordered[0], ordered[1:]
+    return group[0], group[1:]
 
 
 def _resolved_sort_key(item: _ResolvedCandidate) -> tuple[object, ...]:

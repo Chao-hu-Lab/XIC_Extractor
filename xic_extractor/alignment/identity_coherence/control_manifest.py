@@ -72,19 +72,22 @@ def _validate_required_fields(fieldnames: Sequence[str] | None) -> None:
         raise ValueError("identity controls manifest is missing a header row")
     seen: set[str] = set()
     duplicates: list[str] = []
+    duplicate_set: set[str] = set()
     for field_name in fieldnames:
-        if field_name in seen and field_name not in duplicates:
+        if field_name in seen and field_name not in duplicate_set:
             duplicates.append(field_name)
+            duplicate_set.add(field_name)
         seen.add(field_name)
     if duplicates:
         raise ValueError(
             "identity controls manifest duplicate fields: "
             + ", ".join(duplicates)
         )
+    fieldname_set = set(fieldnames)
     missing = [
         field_name
         for field_name in REQUIRED_MANIFEST_FIELDS
-        if field_name not in fieldnames
+        if field_name not in fieldname_set
     ]
     if missing:
         raise ValueError(

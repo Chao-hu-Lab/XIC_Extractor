@@ -15,6 +15,11 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
 def test_p2_asls_shadow_gate_passes_when_asls_rsd_is_close(tmp_path: Path) -> None:
     audit = tmp_path / "alignment_cell_integration_audit.tsv"
     summary = tmp_path / "targeted_istd_benchmark_summary.tsv"
@@ -64,6 +69,62 @@ def test_p2_asls_shadow_gate_passes_when_asls_rsd_is_close(tmp_path: Path) -> No
     assert result.failed_count == 0
     assert outputs.summary_tsv.exists()
     assert outputs.rows_tsv.exists()
+    assert b"\r\n" not in outputs.rows_tsv.read_bytes()
+    assert b"\r\n" not in outputs.summary_tsv.read_bytes()
+    assert outputs.rows_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "target_label",
+        "selected_feature_id",
+        "sample_count",
+        "linear_area_rsd_pct",
+        "asls_area_rsd_pct",
+        "area_rsd_delta_pct",
+        "median_abs_relative_diff_pct",
+        "diff_gt_5pct_count",
+        "asls_reduced_area_count",
+        "asls_exceeds_raw_area_count",
+        "status",
+        "failure_reasons",
+    ]
+    assert _read_tsv(outputs.rows_tsv) == [
+        {
+            "target_label": "ISTD-A",
+            "selected_feature_id": "FAM001",
+            "sample_count": "2",
+            "linear_area_rsd_pct": "6.73435",
+            "asls_area_rsd_pct": "6.8986",
+            "area_rsd_delta_pct": "0.164252",
+            "median_abs_relative_diff_pct": "2.38636",
+            "diff_gt_5pct_count": "0",
+            "asls_reduced_area_count": "2",
+            "asls_exceeds_raw_area_count": "0",
+            "status": "PASS",
+            "failure_reasons": "",
+        },
+    ]
+    assert outputs.summary_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "overall_status",
+        "failed_count",
+        "target_count",
+        "max_area_rsd_delta_pct",
+        "max_median_abs_relative_diff_pct",
+        "max_asls_exceeds_raw_area_count",
+        "max_rsd_regression_pct",
+    ]
+    assert _read_tsv(outputs.summary_tsv) == [
+        {
+            "overall_status": "PASS",
+            "failed_count": "0",
+            "target_count": "1",
+            "max_area_rsd_delta_pct": "0.164252",
+            "max_median_abs_relative_diff_pct": "2.38636",
+            "max_asls_exceeds_raw_area_count": "0",
+            "max_rsd_regression_pct": "0.3",
+        },
+    ]
 
 
 def test_p2_asls_shadow_gate_reads_promoted_asls_schema(

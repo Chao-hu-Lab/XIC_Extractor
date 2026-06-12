@@ -11,6 +11,8 @@ from typing import Sequence
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
+
 
 COMPARISON_FIELDS = (
     "sample_name",
@@ -337,11 +339,7 @@ def _summary_row(
 def _write_tsv(
     path: Path, fieldnames: Sequence[str], rows: Sequence[dict[str, str]]
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({field: row.get(field, "") for field in fieldnames})
+    write_tsv(path, rows, fieldnames)
 
 
 def _write_markdown(

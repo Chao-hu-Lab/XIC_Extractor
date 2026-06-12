@@ -27,8 +27,12 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     format_diagnostic_value,
+    numeric_equal,
     text_value,
     write_tsv,
+)
+from xic_extractor.diagnostics.matrix_identity_projection import (
+    matrix_values_by_identity,
 )
 
 SCHEMA_VERSION = "backfill_peakhypothesis_activation_bridge_v1"
@@ -366,7 +370,7 @@ def _matrix_preflight_row(
             "public_matrix_value_conflicts_with_"
             "projection_current_matrix_written_FALSE"
         )
-    elif public_written and not _numeric_equal(public_value, projected_value):
+    elif public_written and not numeric_equal(public_value, projected_value):
         status = "projection_public_matrix_conflict"
         action = "suppress_activation"
         reason = "public_matrix_value_conflicts_with_projected_matrix_value"
@@ -403,7 +407,7 @@ def _has_public_matrix_projection_conflict(
         _promotion_key(row) in public_matrix_values
         and (
             not _is_true(_value(row, "current_matrix_written"))
-            or not _numeric_equal(public_value, projected_value)
+            or not numeric_equal(public_value, projected_value)
         )
     )
 
@@ -414,34 +418,13 @@ def _public_matrix_written_values(
 ) -> dict[tuple[str, str], str]:
     if not public_matrix_rows:
         return {}
-    identity_by_index = {
-        _positive_int(_value(row, "matrix_row_index")): row
-        for row in matrix_identity_rows
-        if _positive_int(_value(row, "matrix_row_index")) > 0
-    }
-    if "feature_family_id" not in public_matrix_rows[0] and not identity_by_index:
-        raise ValueError(
-            "public Mz/RT matrix cross-check requires matrix_identity_rows",
-        )
-    written: dict[tuple[str, str], str] = {}
-    for index, matrix_row in enumerate(public_matrix_rows, start=1):
-        peak_hypothesis_id = _value(matrix_row, "feature_family_id")
-        if not peak_hypothesis_id:
-            peak_hypothesis_id = _value(
-                identity_by_index.get(index, {}),
-                "peak_hypothesis_id",
-            )
-        if not peak_hypothesis_id:
-            continue
-        for sample, value in matrix_row.items():
-            if sample in {"Mz", "RT", "feature_family_id", "neutral_loss_tag"}:
-                continue
-            if sample.startswith("_") or sample.startswith("family_center_"):
-                continue
-            written_value = text_value(value)
-            if written_value:
-                written[(peak_hypothesis_id, sample)] = written_value
-    return written
+    return matrix_values_by_identity(
+        matrix_rows=public_matrix_rows,
+        matrix_identity_rows=matrix_identity_rows,
+        key_mode="peak_hypothesis",
+        include_blank=False,
+        duplicate_policy="last",
+    )
 
 
 def _promotion_key(row: Mapping[str, Any]) -> tuple[str, str]:
@@ -500,14 +483,6 @@ def _acceptance_next_action(
     return _NEXT_ACTION
 
 
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError:
-        return -1
-    return parsed if parsed > 0 else -1
-
-
 def _fraction_text(numerator: int, denominator: int) -> str:
     if denominator <= 0:
         return "0"
@@ -524,15 +499,6 @@ def _positive_number(value: str) -> bool:
 
 def _is_true(value: str) -> bool:
     return value.strip().upper() == "TRUE"
-
-
-def _numeric_equal(left: str, right: str) -> bool:
-    try:
-        left_value = float(left)
-        right_value = float(right)
-    except ValueError:
-        return left == right
-    return math.isclose(left_value, right_value, rel_tol=1e-6, abs_tol=1e-9)
 
 
 def _value(row: Mapping[str, Any], column: str) -> str:

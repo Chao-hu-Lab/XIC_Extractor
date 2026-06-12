@@ -11,6 +11,7 @@ from xic_extractor.configuration.targets import (
     PAIRED_RT_RELATIONS,
 )
 from xic_extractor.rt_prior_library import LibraryEntry
+from xic_extractor.tabular_io import write_tsv
 
 TARGET_PAIR_RT_CALIBRATION_SCHEMA_VERSION = "target_pair_rt_calibration_v1"
 
@@ -133,15 +134,12 @@ def write_target_pair_rt_calibration_tsv(
     rows: Sequence[TargetPairRTCalibrationRow],
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=TARGET_PAIR_RT_CALIBRATION_FIELDS,
-            delimiter="\t",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(_calibration_row_to_dict(row))
+    write_tsv(
+        path,
+        tuple(_calibration_row_to_dict(row) for row in rows),
+        TARGET_PAIR_RT_CALIBRATION_FIELDS,
+        encoding="utf-8-sig",
+    )
 
 
 def calibration_rows_from_rt_prior_library(

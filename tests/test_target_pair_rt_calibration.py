@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -155,7 +156,21 @@ def test_rt_prior_library_adapter_writes_calibration_schema(
     assert read_back[0]["schema_version"] == TARGET_PAIR_RT_CALIBRATION_SCHEMA_VERSION
     assert read_back[0]["target_label"] == "Analyte"
     assert read_back[0]["paired_istd_label"] == "ISTD"
+    assert read_back[0]["pair_rt_delta_min"] == "0.250000"
     assert read_back[0]["rt_delta_direction"] == "target_later"
+
+
+def test_write_target_pair_rt_calibration_tsv_preserves_utf8_sig_header(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "nested" / "target_pair_rt_calibration.tsv"
+
+    write_target_pair_rt_calibration_tsv(path, [])
+
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert path.read_text(encoding="utf-8-sig").splitlines() == [
+        "\t".join(TARGET_PAIR_RT_CALIBRATION_FIELDS)
+    ]
 
 
 def test_rt_prior_library_from_calibration_uses_only_activated_rows() -> None:
@@ -180,8 +195,8 @@ def test_rt_prior_library_from_calibration_uses_only_activated_rows() -> None:
     assert active.sigma_delta_rt == pytest.approx(0.02)
 
 
-def _row(**overrides: object) -> TargetPairRTCalibrationRow:
-    values = {
+def _row(**overrides: Any) -> TargetPairRTCalibrationRow:
+    values: dict[str, Any] = {
         "schema_version": TARGET_PAIR_RT_CALIBRATION_SCHEMA_VERSION,
         "target_config_hash": "targethash",
         "source_artifact": "mixstds.tsv",

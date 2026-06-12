@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections import Counter
@@ -11,10 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from xic_extractor.diagnostics.backfill_overlay import (
+    selected_overlay_row as select_backfill_overlay_row,
+)
 from xic_extractor.diagnostics.diagnostic_io import (
     bool_value,
+    file_sha256,
     optional_int,
     read_tsv_required,
+    rows_by_text_field,
     split_semicolon_labels,
     text_value,
     write_tsv,
@@ -237,17 +241,17 @@ def source_context_for_artifacts(
 ) -> RetainedBackfillGateSourceContext:
     return RetainedBackfillGateSourceContext(
         review_path=review_path,
-        review_sha256=_sha256_file(review_path),
+        review_sha256=file_sha256(review_path),
         cell_path=cell_path,
-        cell_sha256=_sha256_file(cell_path),
+        cell_sha256=file_sha256(cell_path),
         matrix_path=matrix_path,
-        matrix_sha256=_sha256_file(matrix_path),
+        matrix_sha256=file_sha256(matrix_path),
         seed_audit_path=seed_audit_path,
         seed_audit_sha256=(
-            _sha256_file(seed_audit_path) if seed_audit_path is not None else ""
+            file_sha256(seed_audit_path) if seed_audit_path is not None else ""
         ),
         overlay_paths=tuple(overlay_paths),
-        overlay_sha256s=tuple(_sha256_file(path) for path in overlay_paths),
+        overlay_sha256s=tuple(file_sha256(path) for path in overlay_paths),
     )
 
 
@@ -365,14 +369,15 @@ def write_retained_backfill_gate_outputs(
         RETAINED_BACKFILL_EVIDENCE_GATE_COLUMNS,
         lineterminator="\n",
     )
-    queue_rows = _missing_overlay_queue_rows(index.rows)
+    queue_candidates = _missing_overlay_queue_candidates(index.rows)
+    queue_rows = _missing_overlay_queue_rows(queue_candidates)
     write_tsv(
         queue_path,
         queue_rows,
         MISSING_OVERLAY_QUEUE_COLUMNS,
         lineterminator="\n",
     )
-    review_queue_rows = _review_overlay_queue_rows(index.rows)
+    review_queue_rows = _review_overlay_queue_rows(queue_candidates)
     write_tsv(
         review_queue_path,
         review_queue_rows,
@@ -721,20 +726,12 @@ def _selected_overlay_row(
     *,
     seed_group_id: str,
 ) -> Mapping[str, str]:
-    if not rows:
-        return {}
-    seed_specific = [
-        row
-        for row in rows
-        if text_value(row.get("seed_group_id")) == seed_group_id
-    ]
-    legacy_family_rows = [
-        row for row in rows if not text_value(row.get("seed_group_id"))
-    ]
-    selected = seed_specific or legacy_family_rows
-    if not selected:
-        return {}
-    return sorted(selected, key=_overlay_sort_key)[0]
+    return select_backfill_overlay_row(
+        rows,
+        seed_group_id=seed_group_id,
+        support_verdict=SUPPORT_OVERLAY_VERDICT,
+        allow_legacy_family_row=True,
+    )
 
 
 def _is_seed_specific_overlay(
@@ -745,24 +742,10 @@ def _is_seed_specific_overlay(
     return bool(row) and text_value(row.get("seed_group_id")) == seed_group_id
 
 
-def _overlay_sort_key(row: Mapping[str, str]) -> tuple[int, str]:
-    verdict = text_value(row.get("family_verdict"))
-    if verdict and verdict != SUPPORT_OVERLAY_VERDICT:
-        return (0, verdict)
-    if verdict == SUPPORT_OVERLAY_VERDICT:
-        return (1, verdict)
-    return (2, verdict)
-
-
 def _group_by_family(
     rows: Iterable[Mapping[str, str]],
 ) -> dict[str, tuple[Mapping[str, str], ...]]:
-    grouped: dict[str, list[Mapping[str, str]]] = {}
-    for row in rows:
-        family_id = text_value(row.get("feature_family_id"))
-        if family_id:
-            grouped.setdefault(family_id, []).append(row)
-    return {family_id: tuple(items) for family_id, items in grouped.items()}
+    return rows_by_text_field(rows, "feature_family_id")
 
 
 def _summary(
@@ -855,20 +838,19 @@ def _row_as_mapping(row: RetainedBackfillGateRow) -> dict[str, object]:
 
 
 def _missing_overlay_queue_rows(
-    rows: Sequence[RetainedBackfillGateRow],
+    queue_candidates: Sequence[RetainedBackfillGateRow],
 ) -> list[dict[str, object]]:
-    queueable = _missing_overlay_queue_candidates(rows)
     return [
         _missing_overlay_queue_row(row, rank=rank)
-        for rank, row in enumerate(queueable, start=1)
+        for rank, row in enumerate(queue_candidates, start=1)
     ]
 
 
 def _review_overlay_queue_rows(
-    rows: Sequence[RetainedBackfillGateRow],
+    queue_candidates: Sequence[RetainedBackfillGateRow],
 ) -> list[dict[str, object]]:
     by_family: dict[str, RetainedBackfillGateRow] = {}
-    for row in _missing_overlay_queue_candidates(rows):
+    for row in queue_candidates:
         by_family.setdefault(row.feature_family_id, row)
     return [
         _missing_overlay_queue_row(row, rank=rank)
@@ -1006,7 +988,3 @@ def _read_required_tsv(
         return read_tsv_required(path, required_columns)
     except FileNotFoundError as exc:
         raise ValueError(f"Required TSV not found: {path}") from exc
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest().upper()

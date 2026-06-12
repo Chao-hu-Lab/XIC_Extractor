@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import csv
 import math
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
 
 from xic_extractor.alignment.validation_compare import FeatureMatch, SummaryMetric
+from xic_extractor.tabular_io import write_tsv
 
 SUMMARY_COLUMNS = ("source", "metric", "value", "threshold", "status", "note")
 
@@ -55,13 +55,7 @@ def _write_tsv(
     rows: list[dict[str, Any]],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {column: _format_value(row.get(column)) for column in columns}
-            )
+    write_tsv(path, rows, columns, formatter=_format_value)
     return path
 
 

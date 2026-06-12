@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from tools.diagnostics.ms1_peak_group_nl_scope_gate import (
+    _write_tsv as _write_gate_tsv,
+)
 from tools.diagnostics.ms1_peak_group_nl_scope_gate import (
     build_gate_report,
     main,
@@ -232,6 +237,34 @@ def test_gate_cli_writes_manifest_and_review_rows(tmp_path) -> None:
     assert manifest["gate_decision"] == "defer"
     assert (output_dir / "ms1_peak_group_nl_scope_review_rows.tsv").exists()
     assert (output_dir / "ms1_peak_group_nl_scope_context_rows.tsv").exists()
+
+
+def test_gate_writer_preserves_explicit_field_contract(tmp_path) -> None:
+    path = tmp_path / "rows.tsv"
+
+    _write_gate_tsv(
+        path,
+        [{"flag": True, "empty": None, "count": 1}],
+        ("flag", "empty", "count"),
+    )
+
+    assert path.read_text(encoding="utf-8").splitlines() == [
+        "flag\tempty\tcount",
+        "True\t\t1",
+    ]
+
+    empty_path = tmp_path / "empty.tsv"
+    _write_gate_tsv(empty_path, [], ("flag", "empty"))
+    assert empty_path.read_text(encoding="utf-8").splitlines() == [
+        "flag\tempty",
+    ]
+
+    with pytest.raises(ValueError, match="dict contains fields not in fieldnames"):
+        _write_gate_tsv(
+            tmp_path / "extra.tsv",
+            [{"flag": "TRUE", "unexpected": "value"}],
+            ("flag",),
+        )
 
 
 def _row(

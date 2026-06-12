@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import statistics
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -10,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from xic_extractor.alignment.config import AlignmentConfig
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     read_tsv_required,
     text_value,
     write_tsv,
@@ -21,6 +20,7 @@ from .machine_evidence_support import (
     MS1_PATTERN_COHERENCE_REQUIRED_COLUMNS,
 )
 from .ms1_peak_quality_vector import build_peak_quality_vector
+from .overlay_trace_data import load_overlay_trace_data
 
 MS1_PATTERN_COHERENCE_OPTIONAL_COLUMNS = (
     "shape_metric_source",
@@ -593,20 +593,13 @@ def _overlay_metrics_by_key(
 ) -> dict[tuple[str, str], _OverlayMetric]:
     metrics: dict[tuple[str, str], _OverlayMetric] = {}
     for path in paths:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        family_id = text_value(data.get("family_id"))
-        if not family_id:
-            raise ValueError(f"{path}: missing family_id")
-        evidence_summary = data.get("evidence_summary")
-        if not isinstance(evidence_summary, dict):
-            evidence_summary = {}
+        bundle = load_overlay_trace_data(path)
+        family_id = bundle.family_id
+        evidence_summary = bundle.evidence_summary
         family_verdict = text_value(evidence_summary.get("family_verdict"))
-        rt_min = _optional_float(data.get("rt_min"))
-        rt_max = _optional_float(data.get("rt_max"))
-        traces = data.get("traces")
-        if not isinstance(traces, list):
-            raise ValueError(f"{path}: missing traces array")
-        parsed_traces = [trace for trace in traces if isinstance(trace, dict)]
+        rt_min = bundle.rt_min
+        rt_max = bundle.rt_max
+        parsed_traces = bundle.trace_mappings
         family_consensus_apex_rt = _family_consensus_apex_rt(parsed_traces)
         anchor_assignments = _anchor_peak_assignments(parsed_traces)
         for trace in parsed_traces:

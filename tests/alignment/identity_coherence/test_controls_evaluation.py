@@ -493,6 +493,47 @@ def test_fragment_tag_shuffle_decoy_generates_default_unmatched_tag(monkeypatch)
     )
 
 
+def test_fragment_tag_shuffle_default_unmatched_tag_skips_collisions(monkeypatch):
+    captured = {}
+    source = _decoy_source()
+    source = replace(
+        source,
+        seed_evidence=replace(
+            source.seed_evidence,
+            fragment_tags=(
+                "identity_decoy_unmatched_tag",
+                "identity_decoy_unmatched_tag_2",
+            ),
+        ),
+    )
+
+    def capture_seed_gate(request, candidate_evidence, owner_like, **kwargs):
+        captured["request_fragment_tags"] = request.identity.fragment_tags
+        captured["evidence_fragment_tags"] = candidate_evidence.fragment_tags
+        return real_evaluate_seed_gate(
+            request,
+            candidate_evidence,
+            owner_like,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(controls_module, "evaluate_seed_gate", capture_seed_gate)
+
+    row = evaluate_identity_decoy(
+        _decoy_entry(DecoyGenerationMethod.FRAGMENT_TAG_SHUFFLE),
+        source,
+        IdentityControlsConfig(),
+    )
+
+    assert captured["request_fragment_tags"] == ("identity_decoy_unmatched_tag_3",)
+    assert captured["evidence_fragment_tags"] == (
+        "identity_decoy_unmatched_tag",
+        "identity_decoy_unmatched_tag_2",
+    )
+    assert row["control_pass"] is True
+    assert row["decoy_shift_value"] == "identity_decoy_unmatched_tag_3"
+
+
 def test_decoy_that_reaches_coherent_seed_is_control_failure():
     row = evaluate_identity_decoy(
         _decoy_entry(

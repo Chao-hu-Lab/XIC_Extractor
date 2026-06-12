@@ -326,3 +326,27 @@ extraction at about 15.7 s, with base owner RAW extraction and owner backfill
 now in the same range. Additional gains likely need RAW extraction locality in
 base alignment/owner-backfill or a broader preset orchestration pass; the
 highest-yield shift-aware algorithmic waste has been removed for 8RAW.
+
+## Overlay Scan-RT Cache Follow-Up
+
+Follow-up no-RAW cleanup on `family_ms1_overlay_batch.py` removed a remaining
+locality leak inside the overlay super-window path:
+
+- one per-RAW-handle scan-number to retention-time cache is now shared across
+  super-window grouping, union-window request construction, and crop-back to
+  the original scan window;
+- this does not change request grouping, extracted trace arrays, output schema,
+  or product activation artifacts;
+- the focused characterization shows the same two-request overlapping-window
+  sample now resolves each boundary scan once instead of 2-3 times.
+
+Focused verification:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -q tests\test_family_ms1_overlay_batch.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check tools\diagnostics\family_ms1_overlay_batch.py tests\test_family_ms1_overlay_batch.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy tools\diagnostics\family_ms1_overlay_batch.py
+```
+
+Observed results: `14 passed`; ruff passed; mypy passed for 1 source file.
+No new 8RAW or 85RAW validation was launched for this micro-optimization.

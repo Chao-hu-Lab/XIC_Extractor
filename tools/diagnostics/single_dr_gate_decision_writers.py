@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import csv
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
     ACTIVATION_DECISION_COLUMNS,
 )
@@ -136,15 +136,13 @@ def _write_tsv(
     *,
     fieldnames: tuple[str, ...],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            extrasaction="ignore",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, rows, fieldnames, formatter=_format_value)
+
+
+def _format_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _markdown(result: Mapping[str, Any]) -> str:

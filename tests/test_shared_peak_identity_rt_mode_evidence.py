@@ -124,6 +124,43 @@ def test_rt_mode_evidence_accepts_multi_family_assignment_artifact(
     assert by_family["FAM002"]["rt_mode_status"] == "mode_supported"
 
 
+def test_rt_mode_evidence_keeps_summary_overrides_scoped_by_family(
+    tmp_path: Path,
+) -> None:
+    assignments = tmp_path / "mode_assignments.tsv"
+    summary = tmp_path / "mode_summary.tsv"
+    _write_mode_assignments(
+        assignments,
+        [
+            _assignment("S1", "fam1_mode", "7.91", "7.95", family_id="FAM001"),
+            _assignment("S1", "fam2_mode", "14.10", "14.12", family_id="FAM002"),
+        ],
+    )
+    _write_tsv(
+        summary,
+        ("feature_family_id", "mode_id", "family_mode_class"),
+        [
+            {
+                "feature_family_id": "FAM002",
+                "mode_id": "fam2_mode",
+                "family_mode_class": "consolidation_no_go",
+            }
+        ],
+    )
+
+    rows = rt_mode_evidence.build_rt_mode_evidence_rows(
+        mode_assignment_tsv=assignments,
+        mode_summary_tsv=summary,
+        oracle_keys=(("FAM001", "S1"), ("FAM002", "S1")),
+    )
+
+    by_family = {row["feature_family_id"]: row for row in rows}
+    assert by_family["FAM001"]["family_mode_class"] == "rt_mode_pure"
+    assert by_family["FAM001"]["rt_mode_status"] == "mode_supported"
+    assert by_family["FAM002"]["family_mode_class"] == "consolidation_no_go"
+    assert by_family["FAM002"]["rt_mode_status"] == "consolidation_no_go"
+
+
 def test_rt_mode_evidence_ignores_raw_unknown_modes_in_family_count(
     tmp_path: Path,
 ) -> None:

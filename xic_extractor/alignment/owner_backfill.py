@@ -11,7 +11,6 @@ from numpy.typing import NDArray
 
 from xic_extractor.alignment.backfill_scope import (
     any_detected_owner_can_be_superseded,
-    backfill_request_sample_stems,
     backfill_seed_centers,
 )
 from xic_extractor.alignment.cell_region_audit import with_region_audit
@@ -19,6 +18,10 @@ from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.matrix_handoff import integration_from_peak_trace
 from xic_extractor.alignment.owner_area import median_owner_area, positive_finite
+from xic_extractor.alignment.owner_backfill_request_plan import (
+    OwnerBackfillRequestItem,
+    build_owner_backfill_request_plan,
+)
 from xic_extractor.alignment.owner_group_delivery import (
     OwnerGroupDeliveryFeature,
     OwnerGroupDeliveryFeatures,
@@ -31,7 +34,7 @@ from xic_extractor.peak_detection.region_audit import build_peak_region_audit_su
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace
 
-_RequestItem = tuple[OwnerGroupDeliveryFeature, str, XICRequest, float]
+_RequestItem = OwnerBackfillRequestItem
 _RequestGroupKey = tuple[str, int | float, int | float]
 _WindowedRequestItem = tuple[_RequestItem, tuple[int, int]]
 OwnerBackfillWindowStrategy = Literal["exact", "super-window"]
@@ -143,38 +146,21 @@ def build_owner_backfill_result(
     if owner_backfill_window_strategy not in OWNER_BACKFILL_WINDOW_STRATEGIES:
         raise ValueError(
             "owner_backfill_window_strategy must be exact or super-window",
-        )
+    )
     effective_emit_region_audit = emit_region_audit and audit_evidence_mode != "none"
     cells: list[AlignedCell] = []
     candidate_records: list[_OwnerBackfillCandidateRecord] = []
-    pending: dict[str, list[_RequestItem]] = defaultdict(list)
-    rt_window_min = alignment_config.max_rt_sec / 60.0
-    raw_sample_stems = frozenset(raw_sources)
-    for feature in features:
-        for sample_stem in backfill_request_sample_stems(
-            feature,
-            sample_order=sample_order,
-            raw_sample_stems=raw_sample_stems,
-            alignment_config=alignment_config,
-        ):
-            for seed_mz, seed_rt in backfill_seed_centers(feature):
-                pending[sample_stem].append(
-                    (
-                        feature,
-                        sample_stem,
-                        XICRequest(
-                            mz=seed_mz,
-                            rt_min=seed_rt - rt_window_min,
-                            rt_max=seed_rt + rt_window_min,
-                            ppm_tol=alignment_config.preferred_ppm,
-                        ),
-                        seed_rt,
-                    )
-                )
+    request_plan = build_owner_backfill_request_plan(
+        features,
+        sample_order=sample_order,
+        raw_sample_stems=frozenset(raw_sources),
+        alignment_config=alignment_config,
+    )
     backfill_by_feature_sample: dict[tuple[str, str], AlignedCell] = {}
     validation_pending: dict[str, list[_RequestItem]] = defaultdict(list)
+    validation_pending_keys: set[tuple[str, str]] = set()
     for sample_stem in sample_order:
-        sample_requests = pending.get(sample_stem, [])
+        sample_requests = request_plan.requests_for_sample(sample_stem)
         if not sample_requests:
             continue
         source = raw_sources[sample_stem]
@@ -220,13 +206,21 @@ def build_owner_backfill_result(
                         )
                     else:
                         validation_pending[requested_sample].append(
-                            (feature, requested_sample, request, preferred_rt)
+                            OwnerBackfillRequestItem(
+                                feature,
+                                requested_sample,
+                                request,
+                                preferred_rt,
+                            )
+                        )
+                        validation_pending_keys.add(
+                            (feature.feature_family_id, requested_sample)
                         )
         for feature, requested_sample, request, preferred_rt in sample_requests:
             key = (feature.feature_family_id, requested_sample)
             if (
                 key not in backfill_by_feature_sample
-                and not _has_pending_validation(validation_pending, key)
+                and key not in validation_pending_keys
             ):
                 cell = _backfill_unchecked_cell(
                     feature,
@@ -244,14 +238,19 @@ def build_owner_backfill_result(
                 _keep_best_backfill_outcome_cell(
                     backfill_by_feature_sample,
                     cell,
-                )
+    )
     if validation_raw_sources is not None:
         for sample_stem in sample_order:
-            sample_requests = validation_pending.get(sample_stem, [])
-            if not sample_requests:
+            validation_requests = validation_pending.get(sample_stem, [])
+            if not validation_requests:
                 continue
             if sample_stem not in validation_raw_sources:
-                for feature, requested_sample, request, preferred_rt in sample_requests:
+                for (
+                    feature,
+                    requested_sample,
+                    request,
+                    preferred_rt,
+                ) in validation_requests:
                     cell = _backfill_unchecked_cell(
                         feature,
                         requested_sample,
@@ -276,7 +275,7 @@ def build_owner_backfill_result(
             source = validation_raw_sources[sample_stem]
             for chunk, traces in _iter_extracted_request_traces(
                 source,
-                tuple(sample_requests),
+                tuple(validation_requests),
                 raw_xic_batch_size,
                 window_strategy="exact",
                 superwindow_span_factor=owner_backfill_superwindow_span_factor,
@@ -314,7 +313,12 @@ def build_owner_backfill_result(
                             backfill_by_feature_sample,
                             cell,
                         )
-            for feature, requested_sample, request, preferred_rt in sample_requests:
+            for (
+                feature,
+                requested_sample,
+                request,
+                preferred_rt,
+            ) in validation_requests:
                 key = (feature.feature_family_id, requested_sample)
                 if key not in backfill_by_feature_sample:
                     cell = _backfill_unchecked_cell(
@@ -385,19 +389,6 @@ def _iter_extracted_request_traces(
                     )
             return
     yield from _iter_exact_request_traces(source, items, chunk_size)
-
-
-def _has_pending_validation(
-    validation_pending: Mapping[str, list[_RequestItem]],
-    key: tuple[str, str],
-) -> bool:
-    family_id, sample_stem = key
-    pending_items = validation_pending.get(sample_stem, [])
-    return any(
-        feature.feature_family_id == family_id
-        and requested_sample == sample_stem
-        for feature, requested_sample, _request, _preferred_rt in pending_items
-    )
 
 
 def _append_candidate_record(
@@ -689,134 +680,6 @@ def _source_retention_time_for_scan(
         return float(resolver(scan_number))
     except (AttributeError, NotImplementedError):
         return None
-
-
-def _backfill_feature_sample(
-    feature: OwnerGroupDeliveryFeature,
-    sample_stem: str,
-    source: OwnerBackfillSource,
-    *,
-    alignment_config: AlignmentConfig,
-    peak_config: ExtractionConfig,
-    emit_region_audit: bool = False,
-) -> AlignedCell | None:
-    rt_window_min = alignment_config.max_rt_sec / 60.0
-    rt_min = feature.family_center_rt - rt_window_min
-    rt_max = feature.family_center_rt + rt_window_min
-    request = XICRequest(
-        mz=feature.family_center_mz,
-        rt_min=rt_min,
-        rt_max=rt_max,
-        ppm_tol=alignment_config.preferred_ppm,
-    )
-    try:
-        rt, intensity = source.extract_xic(
-            request.mz,
-            request.rt_min,
-            request.rt_max,
-            request.ppm_tol,
-        )
-        rt_array, intensity_array = _validated_trace_arrays(rt, intensity)
-    except (OSError, ValueError):
-        return _backfill_unchecked_cell(
-            feature,
-            sample_stem,
-            request=request,
-            preferred_rt=feature.family_center_rt,
-            trace_quality="owner_backfill_unassessable",
-            reason="owner-centered MS1 backfill query was not assessable",
-        )
-    result = find_peak_and_area(
-        rt_array,
-        intensity_array,
-        peak_config,
-        preferred_rt=feature.family_center_rt,
-        strict_preferred_rt=False,
-    )
-    if result.status != "OK" or result.peak is None:
-        return _backfill_unchecked_cell(
-            feature,
-            sample_stem,
-            request=request,
-            preferred_rt=feature.family_center_rt,
-            trace_quality="owner_backfill_not_detected",
-            reason="owner-centered MS1 backfill query found no accepted peak",
-        )
-    trace_group = (
-        alignment_trace_group(
-            sample_stem=sample_stem,
-            family_id=feature.feature_family_id,
-            mz=feature.family_center_mz,
-            rt_values=rt_array,
-            intensity_values=intensity_array,
-            rt_min=rt_min,
-            rt_max=rt_max,
-            ppm_tol=alignment_config.preferred_ppm,
-            expected_rt_min=feature.family_center_rt,
-            neutral_loss_tag=feature.neutral_loss_tag,
-            product_mz=feature.family_product_mz,
-            observed_neutral_loss_da=feature.family_observed_neutral_loss_da,
-            source="owner_backfill",
-        )
-        if emit_region_audit
-        else None
-    )
-    region_audit = (
-        build_peak_region_audit_summary(
-            rt_array,
-            intensity_array,
-            result,
-            peak_config,
-            trace_group=trace_group,
-        )
-        if emit_region_audit
-        else None
-    )
-    peak = result.peak
-    cell = AlignedCell(
-        sample_stem=sample_stem,
-        cluster_id=feature.feature_family_id,
-        status="rescued",
-        area=peak.area,
-        apex_rt=peak.rt,
-        height=peak.intensity,
-        peak_start_rt=peak.peak_start,
-        peak_end_rt=peak.peak_end,
-        rt_delta_sec=(peak.rt - feature.family_center_rt) * 60.0,
-        trace_quality="owner_backfill",
-        scan_support_score=_scan_support_score(
-            rt_array,
-            peak_start=peak.peak_start,
-            peak_end=peak.peak_end,
-            scans_target=peak_config.resolver_min_scans,
-        ),
-        source_candidate_id=None,
-        source_raw_file=None,
-        reason="owner-centered MS1 backfill",
-        selected_integration=integration_from_peak_trace(
-            peak,
-            rt_array,
-            intensity_array,
-            boundary_sources=("owner_backfill",),
-            baseline_integration_method=getattr(
-                peak_config,
-                "baseline_integration_method",
-                "asls",
-            ),
-        ),
-        backfill_seed_mz=feature.family_center_mz,
-        backfill_seed_rt=feature.family_center_rt,
-        backfill_request_rt_min=rt_min,
-        backfill_request_rt_max=rt_max,
-        backfill_request_ppm=alignment_config.preferred_ppm,
-        **delivery_cell_projection(
-            feature,
-            gap_fill_state="gap_fill_rescued",
-            gap_fill_reason="group_centered_query_detected",
-            missing_observation_state="queried_and_detected",
-        ),
-    )
-    return with_region_audit(cell, region_audit)
 
 
 def _backfill_feature_sample_trace(

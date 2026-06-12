@@ -208,6 +208,19 @@ def test_duplicate_candidate_ms2_source_keys_raise() -> None:
         )
 
 
+def test_duplicate_candidate_ms2_allowlist_keys_raise() -> None:
+    source = _candidate_ms2_row()
+
+    with pytest.raises(
+        ValueError,
+        match="duplicate backfill Candidate MS2 product authority allowlist key",
+    ):
+        authorize_candidate_ms2_pattern_rows(
+            candidate_ms2_pattern_rows=[source],
+            allowlist_rows=[_allowlist_row(source), _allowlist_row(source)],
+        )
+
+
 def test_authorized_candidate_ms2_projects_into_promotion_ms2_context() -> None:
     source = _candidate_ms2_row()
     authorized = authorize_candidate_ms2_pattern_rows(

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import csv
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from tools.diagnostics.targeted_nl_dropout_root_cause_models import (
     _ROW_COLUMNS,
     _SUMMARY_COLUMNS,
@@ -21,8 +21,18 @@ def _write_outputs(
     outputs: TargetedNLDropoutRootCauseOutputs,
     result: TargetedNLDropoutRootCauseResult,
 ) -> None:
-    _write_tsv(outputs.summary_tsv, _SUMMARY_COLUMNS, [asdict(result.summary)])
-    _write_tsv(outputs.rows_tsv, _ROW_COLUMNS, _row_dicts(result.rows))
+    write_tsv(
+        outputs.summary_tsv,
+        [asdict(result.summary)],
+        _SUMMARY_COLUMNS,
+        formatter=_format_value,
+    )
+    write_tsv(
+        outputs.rows_tsv,
+        _row_dicts(result.rows),
+        _ROW_COLUMNS,
+        formatter=_format_value,
+    )
     outputs.json_path.write_text(
         json.dumps(
             {
@@ -37,22 +47,16 @@ def _write_outputs(
     outputs.markdown_path.write_text(_markdown(result), encoding="utf-8")
 
 
-def _row_dicts(rows: Sequence[RootCauseRow]) -> list[dict[str, object]]:
-    return [asdict(row) for row in rows]
-
-
 def _write_tsv(
     path: Path,
     fieldnames: Sequence[str],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {key: _format_value(row.get(key, "")) for key in fieldnames}
-            )
+    write_tsv(path, rows, fieldnames, formatter=_format_value)
+
+
+def _row_dicts(rows: Sequence[RootCauseRow]) -> list[dict[str, object]]:
+    return [asdict(row) for row in rows]
 
 
 def _markdown(result: TargetedNLDropoutRootCauseResult) -> str:

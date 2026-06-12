@@ -110,6 +110,63 @@ def test_main_writes_outputs_and_returns_failure_code(tmp_path: Path) -> None:
     assert (output_dir / "p1_resolver_default_gate.json").is_file()
     assert (output_dir / "p1_resolver_default_gate.md").is_file()
 
+    rows_tsv = output_dir / "p1_resolver_default_gate_rows.tsv"
+    summary_tsv = output_dir / "p1_resolver_default_gate_summary.tsv"
+    assert b"\r\n" not in rows_tsv.read_bytes()
+    assert b"\r\n" not in summary_tsv.read_bytes()
+    assert rows_tsv.read_text(encoding="utf-8").splitlines()[0].split("\t") == [
+        "target_label",
+        "sample_count",
+        "baseline_area_rsd_pct",
+        "candidate_area_rsd_pct",
+        "area_rsd_delta_pct",
+        "rt_median_abs_delta_sec",
+        "status",
+        "failure_reasons",
+    ]
+    assert _read_tsv(rows_tsv) == [
+        {
+            "target_label": "ISTD_A",
+            "sample_count": "2",
+            "baseline_area_rsd_pct": "0",
+            "candidate_area_rsd_pct": "0",
+            "area_rsd_delta_pct": "0",
+            "rt_median_abs_delta_sec": "1.2",
+            "status": "FAIL",
+            "failure_reasons": "rt_median_shift_regression",
+        },
+        {
+            "target_label": "ISTD_B",
+            "sample_count": "2",
+            "baseline_area_rsd_pct": "0",
+            "candidate_area_rsd_pct": "0",
+            "area_rsd_delta_pct": "0",
+            "rt_median_abs_delta_sec": "0",
+            "status": "PASS",
+            "failure_reasons": "",
+        },
+    ]
+    assert summary_tsv.read_text(encoding="utf-8").splitlines()[0].split("\t") == [
+        "overall_status",
+        "failed_count",
+        "target_count",
+        "max_area_rsd_delta_pct",
+        "max_rt_median_abs_delta_sec",
+        "max_rsd_regression_pct",
+        "max_rt_median_shift_sec",
+    ]
+    assert _read_tsv(summary_tsv) == [
+        {
+            "overall_status": "FAIL",
+            "failed_count": "1",
+            "target_count": "2",
+            "max_area_rsd_delta_pct": "0",
+            "max_rt_median_abs_delta_sec": "1.2",
+            "max_rsd_regression_pct": "0.5",
+            "max_rt_median_shift_sec": "0.5",
+        },
+    ]
+
 
 def _write_targets(path: Path) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -153,3 +210,8 @@ def _write_results(
                     "Analyte_RT": "1.0",
                 }
             )
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

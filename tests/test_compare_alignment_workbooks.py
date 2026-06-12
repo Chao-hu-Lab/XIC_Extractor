@@ -57,7 +57,10 @@ def test_compare_alignment_workbooks_cli_writes_artifacts_on_failure(
     )
 
     assert code == 1
-    assert "FAIL" in output_tsv.read_text(encoding="utf-8")
+    assert b"\r\n" not in output_tsv.read_bytes()
+    tsv_lines = output_tsv.read_text(encoding="utf-8").splitlines()
+    assert tsv_lines[0] == "status\tdifference"
+    assert tsv_lines[1].startswith("FAIL\tMatrix!R2C2")
     assert "Matrix!R2C2" in output_report.read_text(encoding="utf-8")
 
 

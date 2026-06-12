@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import math
 import sys
 from collections.abc import Sequence
@@ -10,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+
+from xic_extractor.tabular_io import write_tsv
 
 DEFAULT_NUMERIC_TOLERANCE = 1e-9
 COMPARE_SHEET = "Matrix"
@@ -153,15 +154,7 @@ def write_compare_tsv(
             for difference in result.differences
         ]
     )
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=("status", "difference"),
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
+    write_tsv(path, rows, ("status", "difference"), lineterminator="\n")
     return path
 
 

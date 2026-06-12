@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from xic_extractor.alignment.ownership_models import (
     AmbiguousOwnerRecord,
     OwnerAssignment,
 )
+from xic_extractor.tabular_io import write_tsv
 
 
 def write_event_to_ms1_owner_tsv(
@@ -126,19 +126,11 @@ def _write_tsv(
     rows: list[dict[str, str]],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=fieldnames,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    column: escape_excel_formula(row.get(column, ""))
-                    for column in fieldnames
-                },
-            )
+    write_tsv(
+        path,
+        rows,
+        fieldnames,
+        formatter=escape_excel_formula,
+        lineterminator="\n",
+    )
     return path

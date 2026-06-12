@@ -4,6 +4,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import changed_row_mode_overlay_review as review
 
 
@@ -692,6 +694,143 @@ def test_mode_overlay_review_renders_drift_aware_mode_plot(tmp_path: Path) -> No
     assert aligned_plot.is_file()
 
 
+def test_sample_review_rows_reuses_family_alignment_mode_count(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    trace_data = [
+        review.TraceData(
+            family_id="FAM_COUNT",
+            path=tmp_path / "fam_count_trace_data.json",
+            overlay_row={
+                "rank": "1",
+                "family_verdict": "review_required_neighboring_ms1_interference",
+            },
+            payload={},
+            traces=tuple(
+                _trace(
+                    f"S{index}",
+                    cell_apex_rt=8.0 + index * 0.01,
+                    trace_apex_rt=8.0 + index * 0.01,
+                    status="detected",
+                )
+                for index in range(4)
+            ),
+        )
+    ]
+    alignment_modes = {
+        f"S{index}": {
+            "alignment_mode_id": "alignment_mode_1",
+            "alignment_mode_status": "alignment_cell_supported",
+            "alignment_mode_source": "alignment_cell_delta",
+        }
+        for index in range(4)
+    }
+    original_count = review._alignment_mode_count
+    calls = 0
+
+    def counting_alignment_mode_count(
+        rows: dict[str, dict[str, str]],
+    ) -> int:
+        nonlocal calls
+        calls += 1
+        return original_count(rows)
+
+    monkeypatch.setattr(
+        review,
+        "_alignment_mode_count",
+        counting_alignment_mode_count,
+    )
+
+    rows = review._sample_review_rows(
+        trace_data=trace_data,
+        rt_rows_by_key={},
+        hypothesis_rows_by_key={},
+        baseline_identity={},
+        active_identity=None,
+        global_mode_ids_by_family={
+            "FAM_COUNT": {f"S{index}": "raw_mode_1" for index in range(4)}
+        },
+        alignment_modes_by_family={"FAM_COUNT": alignment_modes},
+        gaussian15_modes_by_family={},
+        output_dir=tmp_path,
+    )
+
+    assert len(rows) == 4
+    assert calls == 1
+    assert {row["mode_review_basis"] for row in rows} == {"alignment_cell_delta"}
+
+
+def test_mode_trace_entries_by_mode_preserves_trace_order_and_membership(
+    tmp_path: Path,
+) -> None:
+    trace_data = review.TraceData(
+        family_id="FAM_MODE_BUCKET",
+        path=tmp_path / "fam_mode_bucket_trace_data.json",
+        overlay_row={},
+        payload={},
+        traces=(
+            _trace("S3", cell_apex_rt=8.3, trace_apex_rt=8.3),
+            _trace("S1", cell_apex_rt=8.1, trace_apex_rt=8.1),
+            _trace("S2", cell_apex_rt=8.2, trace_apex_rt=8.2),
+            _trace("not-in-sample-rows", cell_apex_rt=8.4, trace_apex_rt=8.4),
+        ),
+    )
+    sample_rows = [
+        {
+            "sample_stem": "S1",
+            "display_mode_id": "display-a",
+            "gaussian15_trace_mode_ids": "mode-a;mode-b",
+        },
+        {
+            "sample_stem": "S2",
+            "display_mode_id": "display-b",
+            "gaussian15_trace_mode_ids": "mode-b",
+        },
+        {
+            "sample_stem": "S3",
+            "display_mode_id": "display-a",
+            "gaussian15_trace_mode_ids": "mode-a",
+        },
+    ]
+    gaussian_modes = (
+        review.ms1_peak_modes.Gaussian15PeakModeWindow(
+            mode_id="mode-a",
+            start_rt=7.8,
+            end_rt=8.4,
+            apex_rt=8.1,
+            trace_peak_count=2,
+            detected_seed_count=1,
+        ),
+    )
+
+    entries = review._mode_trace_entries_by_mode(
+        trace_data=trace_data,
+        sample_rows=sample_rows,
+        gaussian15_modes=gaussian_modes,
+    )
+    fallback_entries = review._mode_trace_entries_by_mode(
+        trace_data=trace_data,
+        sample_rows=sample_rows,
+        gaussian15_modes=(),
+    )
+
+    assert [
+        trace["sample_stem"] for trace, _row in entries["mode-a"]
+    ] == ["S3", "S1"]
+    assert [
+        trace["sample_stem"] for trace, _row in entries["mode-b"]
+    ] == ["S1", "S2"]
+    assert "not-in-sample-rows" not in {
+        trace["sample_stem"]
+        for mode_entries in entries.values()
+        for trace, _row in mode_entries
+    }
+    assert [
+        trace["sample_stem"] for trace, _row in fallback_entries["display-a"]
+    ] == ["S3", "S1"]
+
+
 def test_gallery_has_triage_bar_lazy_images_and_meter_levels(tmp_path: Path) -> None:
     overlay_summary, changed_bundle = _multipeak_family(tmp_path)
     lookup = _DriftLookup(
@@ -719,7 +858,10 @@ def test_gallery_has_triage_bar_lazy_images_and_meter_levels(tmp_path: Path) -> 
     assert "meter meter-" in html
 
 
-def test_mode_overlay_review_flags_subthreshold_missed_peak(tmp_path: Path) -> None:
+def test_mode_overlay_review_flags_subthreshold_missed_peak(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     overlay_dir = tmp_path / "overlay"
     overlay_dir.mkdir()
     trace_json = overlay_dir / "fam_shoulder_trace_data.json"
@@ -766,16 +908,31 @@ def test_mode_overlay_review_flags_subthreshold_missed_peak(tmp_path: Path) -> N
         review.CHANGED_ROW_REQUIRED_COLUMNS,
     )
 
+    original_report = review.subthreshold_candidate_report
+    report_calls = 0
+
+    def counting_report(
+        trace_row,
+        *,
+        window_points=review.DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    ):
+        nonlocal report_calls
+        report_calls += 1
+        return original_report(trace_row, window_points=window_points)
+
+    monkeypatch.setattr(review, "subthreshold_candidate_report", counting_report)
+
     outputs = review.run_changed_row_mode_overlay_review(
         changed_row_bundle_tsv=changed_bundle,
         overlay_batch_summary_tsv=overlay_summary,
         output_dir=tmp_path / "review",
-        render_plots=False,
+        render_plots=True,
     )
 
     family_rows = _read_tsv(outputs.family_summary_tsv)
     assert family_rows[0]["subthreshold_present"] == "TRUE"
     assert int(family_rows[0]["subthreshold_candidate_count"]) >= 1
+    assert report_calls == 2
 
     html = outputs.review_gallery_html.read_text(encoding="utf-8")
     assert "sub_threshold_candidates_present" in html

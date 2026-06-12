@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +12,7 @@ from xic_extractor.settings_schema import (
     ARBITRATED_RESOLVER_RETIRED_MESSAGE,
     RESOLVER_MODES,
 )
+from xic_extractor.tabular_io import write_delimited_rows
 
 DEFAULT_MANUAL_DIR = Path(r"C:\Xcalibur\data\20251219_need process data\XIC test")
 DEFAULT_MANUAL_WORKBOOK = DEFAULT_MANUAL_DIR / "20260112 UPLC splitting_forXIC.xlsx"
@@ -383,7 +383,7 @@ def _harness_command(
     data_dir: Path,
     settings_overrides: tuple[tuple[str, str], ...] = (),
 ) -> tuple[str, ...]:
-    command = (
+    command: tuple[str, ...] = (
         "uv",
         "run",
         "python",
@@ -454,37 +454,34 @@ def _write_validation_summary(
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     specs_by_name = {spec.name: spec for spec in specs}
-    with path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "suite",
-                "kind",
-                "raw_count",
-                "output_path",
-                "compare_result",
-                "status",
-                "message",
-                "compare_differences",
-                "command",
-            ],
+    fieldnames = [
+        "suite",
+        "kind",
+        "raw_count",
+        "output_path",
+        "compare_result",
+        "status",
+        "message",
+        "compare_differences",
+        "command",
+    ]
+    rows = []
+    for result in results:
+        spec = specs_by_name[result.suite]
+        rows.append(
+            {
+                "suite": result.suite,
+                "kind": result.kind,
+                "raw_count": "" if result.raw_count is None else result.raw_count,
+                "output_path": str(result.output_path),
+                "compare_result": result.compare_result,
+                "status": result.status,
+                "message": result.message,
+                "compare_differences": " | ".join(result.compare_differences),
+                "command": command_to_powershell(spec.command),
+            }
         )
-        writer.writeheader()
-        for result in results:
-            spec = specs_by_name[result.suite]
-            writer.writerow(
-                {
-                    "suite": result.suite,
-                    "kind": result.kind,
-                    "raw_count": "" if result.raw_count is None else result.raw_count,
-                    "output_path": str(result.output_path),
-                    "compare_result": result.compare_result,
-                    "status": result.status,
-                    "message": result.message,
-                    "compare_differences": " | ".join(result.compare_differences),
-                    "command": command_to_powershell(spec.command),
-                }
-            )
+    write_delimited_rows(path, rows, fieldnames, delimiter=",", encoding="utf-8-sig")
     return path
 
 

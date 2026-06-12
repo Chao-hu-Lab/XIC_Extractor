@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from xic_extractor.diagnostics.diagnostic_io import (
+from xic_extractor.tabular_io import (
     read_tsv_required,
     split_semicolon_labels,
 )

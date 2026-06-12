@@ -84,6 +84,7 @@ def build_product_matrix_rows(
         cluster_id = row_id(cluster)
         row_decision = decisions.row(cluster_id)
         cluster_cells = grouped_cells.get(cluster_id, ())
+        cluster_sample_stems = {cell.sample_stem for cell in cluster_cells}
         explicit_hypotheses = _explicit_peak_hypotheses(cluster)
         if explicit_hypotheses:
             parent_product_cells = _product_cells(cluster_id, cluster_cells, decisions)
@@ -149,7 +150,7 @@ def build_product_matrix_rows(
         for sample_stem in matrix.sample_order:
             decision = (
                 decisions.cell(cluster_id, sample_stem)
-                if any(cell.sample_stem == sample_stem for cell in cluster_cells)
+                if sample_stem in cluster_sample_stems
                 else None
             )
             sample_values[sample_stem] = production_matrix_area(decision)

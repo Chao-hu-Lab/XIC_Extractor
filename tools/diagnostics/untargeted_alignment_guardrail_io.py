@@ -7,6 +7,8 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import write_delimited_rows
+
 
 def _read_required_tsv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
@@ -37,7 +39,16 @@ def _write_dict_csv(path: Path | None, rows: list[dict[str, str]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
         return
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    write_delimited_rows(
+        path,
+        rows,
+        tuple(rows[0]),
+        extrasaction="raise",
+        formatter=_format_csv_value,
+    )
+
+
+def _format_csv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)

@@ -8,6 +8,7 @@
 |------|--------|------|
 | [`README.md`](../README.md) | 使用者 | 下載、執行、Settings / Targets 欄位說明、輸出格式 |
 | [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 高頻開發 guardrails、canonical references、public contract 摘要 |
+| [`docs/agent/`](agent/) | 寫程式碼的人、reviewer、subagent | AGENTS 拆出的 nested contracts：communication、execution gates、planning、validation、architecture、Codex OS |
 | [`docs/architecture-contract.md`](architecture-contract.md) | 做程式結構調整的人 | 設計原則、所有權地圖、依賴規則、重構紀律、測試結構規則 |
 | **本檔** | 想知道「檔案放哪」的人 | 目錄地圖、外部約束、新檔決策樹、暫存目錄清理規則、命名慣例 |
 
@@ -46,6 +47,7 @@
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
 | `config/` | runtime 設定；**只 `*.example.csv` 與固定列表（如 `RNA.csv`）被追蹤** | 範本 CSV |
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
+| `.codex/` | Repo-local Codex skills, hooks, rules, and subagent profiles | 否 |
 
 ### 第一層子目錄（忽略）
 

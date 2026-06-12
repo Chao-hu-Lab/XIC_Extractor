@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 
 from tools.diagnostics.p2_baseline_truth_audit import (
+    BaselineTruthRow,
+    _build_summary_rows,
     build_baseline_truth_row,
     classify_baseline_truth_row,
     compute_area_metrics,
@@ -114,6 +116,63 @@ def test_build_baseline_truth_row_recomputes_trace_baselines() -> None:
     assert row.plot_path == "plots/istd.png"
 
 
+def test_build_summary_rows_accumulates_family_metrics_once() -> None:
+    rows = [
+        _baseline_truth_row(
+            sample="S1",
+            classification="methods_similar",
+            linear_subtracted=10.0,
+            asls_subtracted=2.0,
+            asls_vs_linear=8.0,
+            linear_edge_delta=1.0,
+            outside_background=2.0,
+            plot_path="plots/first.png",
+        ),
+        _baseline_truth_row(
+            sample="S2",
+            classification="asls_under_subtraction_plausible",
+            linear_subtracted=30.0,
+            asls_subtracted=4.0,
+            asls_vs_linear=18.0,
+            linear_edge_delta=3.0,
+            outside_background=16.0,
+            plot_path="plots/second.png",
+        ),
+        _baseline_truth_row(
+            sample="S3",
+            classification="methods_similar",
+            linear_subtracted=None,
+            asls_subtracted=None,
+            asls_vs_linear=12.0,
+            linear_edge_delta=2.0,
+            outside_background=None,
+            plot_path="plots/third.png",
+        ),
+    ]
+
+    summary = _build_summary_rows(rows)
+
+    assert summary == [
+        {
+            "target_label": "ISTD-A",
+            "feature_family_id": "FAM001",
+            "row_count": 3,
+            "dominant_classification": "methods_similar",
+            "classification_counts": (
+                "asls_under_subtraction_plausible:1;methods_similar:2"
+            ),
+            "median_linear_baseline_subtracted_pct": 20.0,
+            "median_asls_baseline_subtracted_pct": 3.0,
+            "median_asls_vs_linear_pct": 12.0,
+            "max_asls_vs_linear_pct": 18.0,
+            "median_linear_edge_delta_pct": 2.0,
+            "median_outside_background_pct": 9.0,
+            "review_status": "manual_review_required",
+            "plot_path": "plots/first.png",
+        }
+    ]
+
+
 def test_run_p2_baseline_truth_audit_writes_review_outputs(tmp_path: Path) -> None:
     gate_rows = tmp_path / "p2_gate_rows.tsv"
     audit = tmp_path / "alignment_cell_integration_audit.tsv"
@@ -171,6 +230,96 @@ def test_run_p2_baseline_truth_audit_writes_review_outputs(tmp_path: Path) -> No
     assert outputs.markdown_path.exists()
     assert outputs.json_path.exists()
     assert outputs.plot_dir.exists()
+    assert b"\r\n" not in outputs.rows_tsv.read_bytes()
+    assert b"\r\n" not in outputs.summary_tsv.read_bytes()
+    assert outputs.rows_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "target_label",
+        "feature_family_id",
+        "sample_stem",
+        "status",
+        "raw_area",
+        "linear_area",
+        "asls_area",
+        "linear_raw_pct",
+        "asls_raw_pct",
+        "asls_vs_linear_pct",
+        "linear_baseline_subtracted_pct",
+        "asls_baseline_subtracted_pct",
+        "linear_edge_delta_pct",
+        "outside_background_pct",
+        "peak_start_rt",
+        "apex_rt",
+        "peak_end_rt",
+        "trace_point_count",
+        "classification",
+        "review_reason",
+        "plot_path",
+    ]
+    assert _read_tsv(outputs.rows_tsv) == [
+        {
+            "target_label": "ISTD-A",
+            "feature_family_id": "FAM001",
+            "sample_stem": "S1",
+            "status": "detected",
+            "raw_area": "1000",
+            "linear_area": "800",
+            "asls_area": "980",
+            "linear_raw_pct": "80",
+            "asls_raw_pct": "98",
+            "asls_vs_linear_pct": "22.5",
+            "linear_baseline_subtracted_pct": "20",
+            "asls_baseline_subtracted_pct": "2",
+            "linear_edge_delta_pct": "36.25",
+            "outside_background_pct": "5",
+            "peak_start_rt": "10",
+            "apex_rt": "10.1",
+            "peak_end_rt": "10.3",
+            "trace_point_count": "4",
+            "classification": "linear_edge_over_subtraction_plausible",
+            "review_reason": (
+                "asls_near_raw;linear_subtracts_gt_5pct;"
+                "linear_subtracts_gt_10pct;linear_edge_elevated;"
+                "outside_background_low"
+            ),
+            "plot_path": "plots/ISTD-A__FAM001.png",
+        },
+    ]
+    assert outputs.summary_tsv.read_text(encoding="utf-8").splitlines()[0].split(
+        "\t"
+    ) == [
+        "target_label",
+        "feature_family_id",
+        "row_count",
+        "dominant_classification",
+        "classification_counts",
+        "median_linear_baseline_subtracted_pct",
+        "median_asls_baseline_subtracted_pct",
+        "median_asls_vs_linear_pct",
+        "max_asls_vs_linear_pct",
+        "median_linear_edge_delta_pct",
+        "median_outside_background_pct",
+        "review_status",
+        "plot_path",
+    ]
+    assert _read_tsv(outputs.summary_tsv) == [
+        {
+            "target_label": "ISTD-A",
+            "feature_family_id": "FAM001",
+            "row_count": "1",
+            "dominant_classification": "linear_edge_over_subtraction_plausible",
+            "classification_counts": "linear_edge_over_subtraction_plausible:1",
+            "median_linear_baseline_subtracted_pct": "20",
+            "median_asls_baseline_subtracted_pct": "2",
+            "median_asls_vs_linear_pct": "22.5",
+            "max_asls_vs_linear_pct": "22.5",
+            "median_linear_edge_delta_pct": "36.25",
+            "median_outside_background_pct": "5",
+            "review_status": "linear_edge_over_subtraction_plausible",
+            "plot_path": "plots/ISTD-A__FAM001.png",
+        },
+    ]
     payload = json.loads(outputs.json_path.read_text(encoding="utf-8"))
     assert payload["families"] == payload["summary_rows"]
     assert payload["families"][0]["target_label"] == "ISTD-A"
@@ -384,3 +533,44 @@ def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def _baseline_truth_row(
+    *,
+    sample: str,
+    classification: str,
+    linear_subtracted: float | None,
+    asls_subtracted: float | None,
+    asls_vs_linear: float | None,
+    linear_edge_delta: float | None,
+    outside_background: float | None,
+    plot_path: str,
+) -> BaselineTruthRow:
+    return BaselineTruthRow(
+        target_label="ISTD-A",
+        feature_family_id="FAM001",
+        sample_stem=sample,
+        status="detected",
+        raw_area=1000.0,
+        linear_area=800.0,
+        asls_area=980.0,
+        linear_raw_pct=80.0,
+        asls_raw_pct=98.0,
+        asls_vs_linear_pct=asls_vs_linear,
+        linear_baseline_subtracted_pct=linear_subtracted,
+        asls_baseline_subtracted_pct=asls_subtracted,
+        linear_edge_delta_pct=linear_edge_delta,
+        outside_background_pct=outside_background,
+        peak_start_rt=10.0,
+        apex_rt=10.1,
+        peak_end_rt=10.3,
+        trace_point_count=4,
+        classification=classification,
+        review_reason="reason",
+        plot_path=plot_path,
+    )

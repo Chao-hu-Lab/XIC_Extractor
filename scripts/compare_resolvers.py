@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
@@ -9,6 +8,7 @@ from typing import Sequence
 from xic_extractor import extractor
 from xic_extractor.config import load_config
 from xic_extractor.extractor import RunOutput
+from xic_extractor.tabular_io import write_delimited_rows
 
 _DEFAULT_FOCUS_TARGETS = ("d3-N6-medA", "d3-5-hmdC", "8-oxo-Guo", "8-oxodG")
 
@@ -157,46 +157,48 @@ def collect_rows(output: RunOutput) -> dict[tuple[str, str, str], ResolverRow]:
 
 def write_report_csv(output_path: Path, report: ResolverComparisonReport) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "SampleName",
-                "Target",
-                "Role",
-                "Issue",
-                "LegacyDetected",
-                "LocalDetected",
-                "LegacyRT",
-                "LocalRT",
-                "RTDelta",
-                "LegacyArea",
-                "LocalArea",
-                "AreaRatioDelta",
-                "LegacyConfidence",
-                "LocalConfidence",
-            ],
-        )
-        writer.writeheader()
-        for row in report.rows:
-            writer.writerow(
-                {
-                    "SampleName": row.sample_name,
-                    "Target": row.target,
-                    "Role": row.role,
-                    "Issue": row.issue,
-                    "LegacyDetected": str(row.legacy_detected),
-                    "LocalDetected": str(row.local_detected),
-                    "LegacyRT": _format_optional(row.legacy_rt),
-                    "LocalRT": _format_optional(row.local_rt),
-                    "RTDelta": _format_optional(row.rt_delta),
-                    "LegacyArea": _format_optional(row.legacy_area),
-                    "LocalArea": _format_optional(row.local_area),
-                    "AreaRatioDelta": _format_optional(row.area_ratio_delta),
-                    "LegacyConfidence": row.legacy_confidence,
-                    "LocalConfidence": row.local_confidence,
-                }
-            )
+    fieldnames = [
+        "SampleName",
+        "Target",
+        "Role",
+        "Issue",
+        "LegacyDetected",
+        "LocalDetected",
+        "LegacyRT",
+        "LocalRT",
+        "RTDelta",
+        "LegacyArea",
+        "LocalArea",
+        "AreaRatioDelta",
+        "LegacyConfidence",
+        "LocalConfidence",
+    ]
+    rows = [
+        {
+            "SampleName": row.sample_name,
+            "Target": row.target,
+            "Role": row.role,
+            "Issue": row.issue,
+            "LegacyDetected": str(row.legacy_detected),
+            "LocalDetected": str(row.local_detected),
+            "LegacyRT": _format_optional(row.legacy_rt),
+            "LocalRT": _format_optional(row.local_rt),
+            "RTDelta": _format_optional(row.rt_delta),
+            "LegacyArea": _format_optional(row.legacy_area),
+            "LocalArea": _format_optional(row.local_area),
+            "AreaRatioDelta": _format_optional(row.area_ratio_delta),
+            "LegacyConfidence": row.legacy_confidence,
+            "LocalConfidence": row.local_confidence,
+        }
+        for row in report.rows
+    ]
+    write_delimited_rows(
+        output_path,
+        rows,
+        fieldnames,
+        delimiter=",",
+        encoding="utf-8-sig",
+    )
     return output_path
 
 

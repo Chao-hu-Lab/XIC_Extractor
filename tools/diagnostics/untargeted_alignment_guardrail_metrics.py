@@ -344,7 +344,7 @@ def _float_in_range(value: str | None, minimum: float, maximum: float) -> bool:
 
 
 def _float_value(value: str | None) -> float | None:
-    if value in (None, ""):
+    if value is None or value == "":
         return None
     try:
         return float(value)
@@ -361,7 +361,7 @@ def _int_value(value: str | None) -> int:
 
 def _row_flags(row: Mapping[str, str | None]) -> set[str]:
     value = row.get("row_flags", "")
-    if value in (None, ""):
+    if value is None or value == "":
         return set()
     return {part.strip() for part in value.split(";") if part.strip()}
 

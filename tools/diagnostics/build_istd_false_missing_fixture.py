@@ -116,7 +116,7 @@ def _old_missing_samples(path: Path, sheet_name: str) -> dict[str, list[str]]:
             for column_name, value in zip(header[1:], row[1:]):
                 if column_name is None or str(column_name).startswith("Imputation"):
                     continue
-                if value in (None, ""):
+                if value is None or value == "":
                     missing.append(str(column_name))
             result[coordinate] = missing
         for coordinate in OLD_ROW_TO_TARGET:
@@ -145,10 +145,10 @@ def _targeted_rows(
         current_sample = ""
         for row in sheet.iter_rows(min_row=2, values_only=True):
             sample = row[indexes["SampleName"]]
-            if sample not in (None, ""):
+            if sample is not None and sample != "":
                 current_sample = str(sample)
             target = row[indexes["Target"]]
-            if target in (None, ""):
+            if target is None or target == "":
                 continue
             if current_sample == "":
                 continue

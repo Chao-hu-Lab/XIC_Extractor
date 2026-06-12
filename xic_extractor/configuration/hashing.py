@@ -1,7 +1,8 @@
 import csv
 import hashlib
-import io
 from pathlib import Path
+
+from xic_extractor.tabular_io import render_delimited_rows
 
 
 def compute_config_hash(targets_csv: Path, settings_csv: Path) -> str:
@@ -61,9 +62,15 @@ def _settings_csv_bytes_with_overrides(
             row["description"] = key
         rows.append(row)
 
-    output = io.StringIO(newline="")
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
-    return output.getvalue().encode("utf-8-sig")
+    return render_delimited_rows(
+        rows,
+        fieldnames,
+        formatter=_format_hash_csv_value,
+    ).encode("utf-8-sig")
+
+
+def _format_hash_csv_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 

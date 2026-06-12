@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import csv
 import json
 from pathlib import Path
 
+from tools.diagnostics.diagnostic_io import write_tsv
 from tools.diagnostics.peak_candidate_score_calibration_models import (
     _LABEL_COLUMNS,
     _RISK_COLUMNS,
@@ -40,24 +40,33 @@ def _write_summary(path: Path, payload: dict[str, object]) -> None:
     summary = payload["summary"]
     if not isinstance(summary, dict):
         raise TypeError("summary payload must be a dictionary")
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_SUMMARY_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerow(summary)
+    write_tsv(
+        path,
+        (summary,),
+        _SUMMARY_COLUMNS,
+        extrasaction="raise",
+        formatter=_format_value,
+    )
 
 
 def _write_risk_rows(path: Path, rows: tuple[ScoreRiskRow, ...]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_RISK_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(_format_risk_row(row) for row in rows)
+    write_tsv(
+        path,
+        tuple(_format_risk_row(row) for row in rows),
+        _RISK_COLUMNS,
+        extrasaction="raise",
+        formatter=_format_value,
+    )
 
 
 def _write_label_impact(path: Path, rows: tuple[ScoreLabelImpactRow, ...]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=_LABEL_COLUMNS, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(_format_label_impact_row(row) for row in rows)
+    write_tsv(
+        path,
+        tuple(_format_label_impact_row(row) for row in rows),
+        _LABEL_COLUMNS,
+        extrasaction="raise",
+        formatter=_format_value,
+    )
 
 
 def _format_risk_row(row: ScoreRiskRow) -> dict[str, str]:
@@ -119,6 +128,12 @@ def _markdown(payload: dict[str, object]) -> str:
     lines.extend(f"- {recommendation}" for recommendation in recommendations)
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _format_optional_float(value: float | None) -> str:

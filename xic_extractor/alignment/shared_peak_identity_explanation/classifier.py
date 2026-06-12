@@ -260,10 +260,12 @@ def _next_action(evidence_gap_class: str) -> str:
 
 def _join_unique(values: Iterable[str]) -> str:
     tokens: list[str] = []
+    seen: set[str] = set()
     for value in values:
         for token in str(value or "").split(";"):
-            if token and token not in tokens:
+            if token and token not in seen:
                 tokens.append(token)
+                seen.add(token)
     return ";".join(tokens)
 
 
