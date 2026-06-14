@@ -50,3 +50,65 @@ def test_gaussian15_positive_asls_residual_metrics_carry_provenance() -> None:
     assert metrics.trace_method == MS1_MORPHOLOGY_TRACE_METHOD
     assert metrics.trace_window_points == DEFAULT_GAUSSIAN15_WINDOW_POINTS
     assert metrics.trace_effective_points == DEFAULT_GAUSSIAN15_WINDOW_POINTS
+
+
+def _analytic_gaussian_area_counts_seconds(height: float, sigma_min: float) -> float:
+    """Closed-form area of a Gaussian peak in counts*seconds.
+
+    integral over RT(min) of height*exp(-0.5*((t-mu)/sigma)**2) is
+    height*sigma*sqrt(2*pi); the morphology area scales minutes to seconds (*60).
+    """
+    return height * sigma_min * float(np.sqrt(2.0 * np.pi)) * 60.0
+
+
+def test_gaussian15_morphology_area_matches_analytic_gaussian_integral() -> None:
+    # End-to-end oracle for the production primary area (area_ms1_morphology):
+    # a clean, well-contained Gaussian over a zero baseline must integrate to
+    # its closed-form area. Gaussian15 smoothing preserves integral and the
+    # positive clip removes nothing from a strictly positive peak, so the
+    # composed metric must not distort the quantitation of a clean peak.
+    height = 1000.0
+    sigma_min = 0.08
+    center_min = 1.0
+    rt = np.linspace(0.0, 2.0, 401)
+    intensity = height * np.exp(-0.5 * ((rt - center_min) / sigma_min) ** 2)
+    baseline = np.zeros_like(rt)
+
+    metrics = gaussian15_positive_asls_residual_metrics(
+        rt, intensity, baseline, 0, len(rt)
+    )
+
+    analytic_area = _analytic_gaussian_area_counts_seconds(height, sigma_min)
+    # This path is linear (residual subtract, area-preserving convolution,
+    # trapezoid), so the observed deviation is machine precision (~1e-15);
+    # rel=1e-3 still flags any real (>=0.1%) area drift.
+    assert metrics.area_positive_asls_residual == pytest.approx(
+        analytic_area, rel=1e-3
+    )
+
+
+def test_gaussian15_morphology_area_removes_sloped_baseline_before_integration() -> (
+    None
+):
+    # Pins the residual subtraction (intensity - baseline) on a NON-constant
+    # baseline, so it is not a bit-for-bit copy of the zero-baseline oracle: the
+    # same Gaussian riding on a sloped drift must yield the same analytic area.
+    # If the varying baseline is not fully removed, the drift would distort the
+    # integral and this assertion would fail loudly.
+    height = 1000.0
+    sigma_min = 0.08
+    center_min = 1.0
+    rt = np.linspace(0.0, 2.0, 401)
+    gaussian = height * np.exp(-0.5 * ((rt - center_min) / sigma_min) ** 2)
+    sloped_baseline = np.linspace(200.0, 600.0, rt.size)
+    intensity = gaussian + sloped_baseline
+    baseline = sloped_baseline.copy()
+
+    metrics = gaussian15_positive_asls_residual_metrics(
+        rt, intensity, baseline, 0, len(rt)
+    )
+
+    analytic_area = _analytic_gaussian_area_counts_seconds(height, sigma_min)
+    assert metrics.area_positive_asls_residual == pytest.approx(
+        analytic_area, rel=1e-3
+    )
