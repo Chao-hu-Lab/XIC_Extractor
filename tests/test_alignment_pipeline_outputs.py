@@ -561,7 +561,7 @@ def test_pipeline_backfill_candidate_audit_requires_own_flag(
     assert calls["emit_region_audit"] is False
 
 
-def test_run_alignment_production_level_writes_xlsx_and_html_only(
+def test_run_alignment_production_level_writes_user_artifacts_and_identity_tsv(
     tmp_path: Path,
     monkeypatch,
 ) -> None:

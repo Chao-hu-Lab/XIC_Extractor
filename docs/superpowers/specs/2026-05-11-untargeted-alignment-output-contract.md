@@ -12,8 +12,9 @@ diffs, validation, and root-cause analysis.
 The output contract is:
 
 ```text
-production delivery is XLSX + HTML
-machine TSV exports are opt-in or validation-level contracts
+production user-facing delivery is XLSX + HTML
+production-level identity TSV may be emitted as a machine identity handoff
+area-matrix TSV exports are opt-in or validation-level contracts
 debug evidence stays available but is not default delivery
 algorithm semantics must be clean before output is called production-ready
 ```
@@ -24,6 +25,7 @@ algorithm semantics must be clean before output is called production-ready
 |---|---:|---|---|
 | `alignment_results.xlsx` | yes | User, downstream pipeline | Production package: matrix first, review and metadata in the same workbook. |
 | `review_report.html` | yes | User, developer | Visual QC entry point using summarized debug evidence. |
+| `alignment_matrix_identity.tsv` | yes | Downstream identity/audit handoff | Machine-readable identity contract; does not duplicate area matrix values. |
 | `alignment_matrix.tsv` | no | Developer, validation, non-Excel downstream | Canonical machine export for diffable area matrix. |
 | `alignment_review.tsv` | no | Developer, validation | Machine-readable feature-family review table. |
 | `alignment_cells.tsv` | no | Developer | Per-cell provenance and debug evidence. |
@@ -31,7 +33,9 @@ algorithm semantics must be clean before output is called production-ready
 | legacy validation TSVs | no | Developer | Replacement-decision evidence against FH, metabCombiner, and combine-fix outputs. |
 
 Default production output should not emit duplicated representations of the same
-matrix unless a plan explicitly changes this contract.
+area matrix unless a plan explicitly changes this contract. The production-level
+`alignment_matrix_identity.tsv` exception is an identity/audit handoff, not a
+second area matrix.
 
 ## Production Workbook Contract
 
@@ -169,7 +173,7 @@ Future CLI and GUI work should use output levels instead of many unrelated flags
 
 | Level | Expected artifacts |
 |---|---|
-| `production` | `alignment_results.xlsx`, `review_report.html` |
+| `production` | `alignment_results.xlsx`, `alignment_matrix_identity.tsv`, `review_report.html` |
 | `machine` | production artifacts plus `alignment_matrix.tsv`, `alignment_review.tsv` |
 | `debug` | machine artifacts plus `alignment_cells.tsv`, `alignment_matrix_status.tsv`, detailed diagnostics |
 | `validation` | machine artifacts plus legacy comparison TSVs and validation summaries |
