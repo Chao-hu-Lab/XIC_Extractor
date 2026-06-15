@@ -1,6 +1,6 @@
 # XIC productization handoff
 
-更新日期: 2026-06-15
+更新日期: 2026-06-16
 分支: `cc/framework-improvements`
 用途: 給下一個 agent/session 快速接手，不需要重讀整段聊天。
 
@@ -8,13 +8,13 @@
 
 - Branch: `cc/framework-improvements`。
 - 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
-- 本輪產品化變更已依目的拆 commit；接手時先看 `git log --oneline -8` 和 `git status --short --branch`，不要只相信這份 handoff 的時間點描述。
+- 本輪產品化變更已依目的拆 commit；接手時先看 `git log --oneline -10` 和 `git status --short --branch`，不要只相信這份 handoff 的時間點描述。
 - Commit 後預期工作樹只剩一個明確排除的既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。
 - 目前 productization 權威不是這份 handoff: tier、active lane、WIP limit 以 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` 為準。
 - 這份 handoff 只回答「最近做了什麼、什麼真的可用、下一步怎麼接」，不能用「比較新」覆蓋 control plane 或 named spec。
 - 若後續還要 commit/stage，要整包檢查，不要只 stage 修改檔。
 - 本輪有一個不要誤 stage 的既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。
-- Hook/交接設計剛被 critical review 挑戰過；目前已補 repo-local hook guardrail，但 PR closeout 前仍要跑 hook fixture smoke。
+- Hook/交接設計剛被 critical review 挑戰過；目前已補 repo-local hook guardrail，且 2026-06-16 local closeout 已重跑 hook fixture smoke。
 
 本輪 commit scope 內新增 files:
 
@@ -289,7 +289,7 @@ git diff --check
 
 結果: 沒有 whitespace error，只有 CRLF warning。
 
-注意: 以上是 replay/schema/review/sample metadata/alignment 的 focused validation，不是 PR closeout gate。PR 前仍需照 `AGENTS.md` 跑 repo-local CI-equivalent commands。
+注意: 以上是 replay/schema/review/sample metadata/alignment 的 focused validation；完整 local PR closeout gate 見本節後面的 2026-06-16 紀錄。
 
 回到主線後另跑:
 
@@ -349,6 +349,32 @@ python .codex\hooks\fixtures\assert_hook_outputs.py
 
 結果: pass
 
+Local PR closeout gate 另跑（2026-06-16）:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+```
+
+結果: pass, `All checks passed!`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+```
+
+結果: pass, `Success: no issues found in 335 source files`。只剩 `annotation-unchecked` notes，沒有 type error。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
+
+結果: `3611 passed, 1 skipped in 67.41s (0:01:07)`
+
+```powershell
+python .codex\hooks\fixtures\assert_hook_outputs.py
+```
+
+結果: pass
+
 RAW-backed 驗證:
 
 - 8RAW 已跑。
@@ -372,10 +398,10 @@ RAW-backed 驗證:
 
 優先順序:
 
-1. 先整理 commit scope。
-   - 注意有一個既有 untracked file:
-     `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
-   - 這個不是本輪新增，不要誤 stage。
+1. 若要進 PR/merge，下一步是處理 remote/PR 層級。
+   - Local PR closeout gate 已在 2026-06-16 跑過。
+   - 尚未 push、尚未看 GitHub CI、尚未開或更新 PR。
+   - 注意有一個既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。這個不是本輪新增，不要誤 stage。
 
 2. 若繼續做產品化，下一個實作點應該是 ReviewAction audit/apply loop。
    - 目前有 dry-run application plan、expected-diff template、approval validator、apply-readiness plan、changeset plan。
