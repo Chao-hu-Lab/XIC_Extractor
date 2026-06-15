@@ -3,9 +3,23 @@ from xic_extractor.output.schema import (
     LONG_ADVANCED_HEADERS,
     LONG_HEADERS,
     SCORE_BREAKDOWN_HEADERS,
+    TARGETED_DIAGNOSTIC_CSV_SCHEMA_VERSION,
+    TARGETED_LONG_CSV_SCHEMA_VERSION,
+    TARGETED_OUTPUT_SCHEMA_VERSION,
     TARGETED_PRODUCT_PROJECTION_HEADERS,
     TARGETED_PRODUCT_VISIBLE_HEADERS,
+    TARGETED_SCORE_BREAKDOWN_CSV_SCHEMA_VERSION,
 )
+
+
+def test_targeted_output_schema_versions_are_explicit() -> None:
+    assert TARGETED_OUTPUT_SCHEMA_VERSION == "targeted_output_v1"
+    assert TARGETED_LONG_CSV_SCHEMA_VERSION == "targeted_long_csv_v1"
+    assert TARGETED_DIAGNOSTIC_CSV_SCHEMA_VERSION == "targeted_diagnostics_csv_v1"
+    assert (
+        TARGETED_SCORE_BREAKDOWN_CSV_SCHEMA_VERSION
+        == "targeted_score_breakdown_csv_v1"
+    )
 
 
 def test_long_schema_has_projection_columns() -> None:

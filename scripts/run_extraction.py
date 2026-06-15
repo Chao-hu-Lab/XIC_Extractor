@@ -9,6 +9,12 @@ from pathlib import Path
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, ExtractionConfig, load_config
 from xic_extractor.output.excel_pipeline import write_excel_from_run_output
+from xic_extractor.output.method_manifest import (
+    MethodManifestContext,
+    MethodManifestError,
+    load_method_manifest_for_replay,
+    write_method_manifest,
+)
 from xic_extractor.peak_detection.model_selection_approval_registry import (
     load_expected_diff_approval_registry,
 )
@@ -17,35 +23,59 @@ from xic_extractor.raw_reader import RawReaderError
 
 def main(argv: Sequence[str] | None = None) -> int:
     multiprocessing.freeze_support()
+    cli_argv = tuple(sys.argv[1:] if argv is None else argv)
     args = _parse_args(argv)
-    base_dir = args.base_dir.resolve()
     try:
-        settings_overrides = {}
-        if args.data_dir is not None:
-            data_dir = args.data_dir.resolve()
-            if not data_dir.is_dir():
-                raise ConfigError(f"{data_dir}: data_dir override must be a directory")
-            settings_overrides["data_dir"] = str(data_dir)
+        replay_request = None
+        if args.replay_manifest is not None:
+            _reject_replay_overrides(args)
+            replay_request = load_method_manifest_for_replay(args.replay_manifest)
+            base_dir = replay_request.base_dir
+            config_dir = replay_request.config_dir
+            settings_overrides = replay_request.settings_overrides
+            output_mode = replay_request.output_mode
+        else:
+            base_dir = (args.base_dir or Path.cwd()).resolve()
+            config_dir = base_dir / "config"
+            settings_overrides = {}
+            output_mode = "csv_only" if args.skip_excel else "excel"
+            if args.data_dir is not None:
+                data_dir = args.data_dir.resolve()
+                if not data_dir.is_dir():
+                    raise ConfigError(
+                        f"{data_dir}: data_dir override must be a directory"
+                    )
+                settings_overrides["data_dir"] = str(data_dir)
+            if args.model_selection_expected_diff_approvals is not None:
+                settings_overrides[
+                    "model_selection_expected_diff_approval_registry"
+                ] = str(args.model_selection_expected_diff_approvals.resolve())
+
         if settings_overrides:
             config, targets = load_config(
-                base_dir / "config",
+                config_dir,
                 settings_overrides=settings_overrides,
             )
         else:
-            config, targets = load_config(base_dir / "config")
-        if args.parallel_mode is not None:
+            config, targets = load_config(config_dir)
+        if replay_request is None and args.parallel_mode is not None:
             config = replace(config, parallel_mode=args.parallel_mode)
-        if args.parallel_workers is not None:
+        if replay_request is None and args.parallel_workers is not None:
             config = replace(config, parallel_workers=args.parallel_workers)
+        if replay_request is not None:
+            config = replace(
+                config,
+                parallel_mode=replay_request.parallel_mode,
+                parallel_workers=replay_request.parallel_workers,
+            )
+        skip_excel = output_mode == "csv_only"
         run_config = (
             replace(config, keep_intermediate_csv=True)
-            if args.skip_excel
+            if skip_excel
             else config
         )
         approval_registry_path = (
-            args.model_selection_expected_diff_approvals.resolve()
-            if args.model_selection_expected_diff_approvals is not None
-            else run_config.model_selection_expected_diff_approval_registry
+            run_config.model_selection_expected_diff_approval_registry
         )
         try:
             model_selection_expected_diff_approvals = (
@@ -64,14 +94,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                 model_selection_expected_diff_approvals
             ),
         )
-    except (ConfigError, RawReaderError) as exc:
+        write_method_manifest(
+            run_config,
+            targets,
+            context=MethodManifestContext(
+                entrypoint=(
+                    "xic-extractor-cli-replay"
+                    if replay_request is not None
+                    else "xic-extractor-cli"
+                ),
+                argv=cli_argv,
+                base_dir=base_dir,
+                config_dir=config_dir,
+                settings_overrides=settings_overrides,
+                output_mode=output_mode,
+            ),
+        )
+    except (ConfigError, MethodManifestError, RawReaderError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
     print(f"Processed files: {len(output.file_results)}")
     print(f"Diagnostics: {len(output.diagnostics)}")
 
-    if args.skip_excel:
+    if skip_excel:
         print("Excel skipped.")
         return 0
 
@@ -91,8 +137,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--base-dir",
         type=Path,
-        default=Path.cwd(),
+        default=None,
         help="Project/base directory containing config/ and output/.",
+    )
+    parser.add_argument(
+        "--replay-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Replay a previous xic-extractor-cli run from method_manifest.json. "
+            "Replay mode does not accept runtime override flags."
+        ),
     )
     parser.add_argument(
         "--data-dir",
@@ -132,6 +187,27 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         ),
     )
     return parser.parse_args(argv)
+
+
+def _reject_replay_overrides(args: argparse.Namespace) -> None:
+    conflicts = []
+    if args.base_dir is not None:
+        conflicts.append("--base-dir")
+    if args.data_dir is not None:
+        conflicts.append("--data-dir")
+    if args.skip_excel:
+        conflicts.append("--skip-excel")
+    if args.excel:
+        conflicts.append("--excel")
+    if args.parallel_mode is not None:
+        conflicts.append("--parallel-mode")
+    if args.parallel_workers is not None:
+        conflicts.append("--parallel-workers")
+    if args.model_selection_expected_diff_approvals is not None:
+        conflicts.append("--model-selection-expected-diff-approvals")
+    if conflicts:
+        joined = ", ".join(conflicts)
+        raise ConfigError(f"--replay-manifest cannot be combined with {joined}")
 
 
 def _positive_int(value: str) -> int:

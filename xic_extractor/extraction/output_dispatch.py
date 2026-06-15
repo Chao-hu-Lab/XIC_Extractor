@@ -5,6 +5,10 @@ from typing import TYPE_CHECKING
 from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.output import csv_writers
 from xic_extractor.output.messages import DiagnosticRecord
+from xic_extractor.output.method_manifest import (
+    MethodManifestContext,
+    write_method_manifest,
+)
 from xic_extractor.output.peak_candidate_boundaries import (
     write_peak_candidate_boundaries_for_file_results,
 )
@@ -30,6 +34,8 @@ def write_outputs(
     config: ExtractionConfig,
     targets: list[Target],
     output: RunOutput,
+    *,
+    method_manifest_context: MethodManifestContext | None = None,
 ) -> None:
     if config.target_pair_rt_calibration_path is not None and not (
         config.emit_peak_candidates
@@ -73,6 +79,7 @@ def write_outputs(
                 target_config_hash=config.target_config_hash or None,
             )
     if not config.keep_intermediate_csv:
+        write_method_manifest(config, targets, context=method_manifest_context)
         return
     csv_writers.write_all(
         config,
@@ -81,3 +88,4 @@ def write_outputs(
         output.diagnostics,
         emit_score_breakdown=config.emit_score_breakdown,
     )
+    write_method_manifest(config, targets, context=method_manifest_context)
