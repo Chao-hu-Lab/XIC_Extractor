@@ -276,7 +276,13 @@ def test_expected_diff_templates_only_for_blocked_mutations() -> None:
         actions,
         [
             _target_state("S1.raw", "5-mdC"),
-            _target_state("S2.raw", "5-hmdC"),
+            _target_state(
+                "S2.raw",
+                "5-hmdC",
+                product_state="review_required",
+                counted_detection="FALSE",
+                review_state="needs_boundary_review",
+            ),
         ],
     )
 
@@ -292,6 +298,9 @@ def test_expected_diff_templates_only_for_blocked_mutations() -> None:
         "targeted_long_csv;workbook;final_matrix"
     )
     assert rows[0]["expected_matrix_value_impact"] == "area_value_changed"
+    assert rows[0]["baseline_product_state"] == "review_required"
+    assert rows[0]["baseline_counted_detection"] == "FALSE"
+    assert rows[0]["baseline_review_state"] == "needs_boundary_review"
     assert rows[0]["validation_tier"] == "not_validated"
     assert rows[0]["reviewer_verdict"] == "inconclusive"
     assert rows[0]["final_label"] == "inconclusive"
@@ -524,6 +533,8 @@ def test_review_action_apply_readiness_consumes_approved_expected_diff(
                 "S1.raw",
                 "5-mdC-mutating",
                 product_state="review_required",
+                counted_detection="FALSE",
+                review_state="manual",
             ),
             _target_state("S1.raw", "5-hmdC", product_state="review_required"),
         ],
@@ -531,7 +542,18 @@ def test_review_action_apply_readiness_consumes_approved_expected_diff(
     approval_path = tmp_path / "review_action_expected_diff.tsv"
     _write_expected_diff_tsv(
         approval_path,
-        [_approved_expected_diff_row_for_action(actions[1])],
+        [
+            _approved_expected_diff_row_for_action(
+                actions[1],
+                _target_state(
+                    "S1.raw",
+                    "5-mdC-mutating",
+                    product_state="review_required",
+                    counted_detection="FALSE",
+                    review_state="manual",
+                ),
+            )
+        ],
     )
     approvals = load_review_action_expected_diff_approvals(approval_path)
 
@@ -558,6 +580,108 @@ def test_review_action_apply_readiness_consumes_approved_expected_diff(
             "ready_no_output_change": 1,
         },
     }
+
+
+def test_review_action_apply_readiness_blocks_stale_expected_diff_baseline(
+    tmp_path: Path,
+) -> None:
+    action = parse_review_actions(
+        [
+            _row(
+                sample_name="S1.raw",
+                target_label="5-mdC",
+                action_type="select_candidate",
+                candidate_id="S1.raw|5-mdC|candidate-a",
+                expected_diff_required="TRUE",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:00:00",
+            )
+        ]
+    )[0]
+    approval_application = build_review_action_application_plan(
+        [action],
+        [
+            _target_state(
+                "S1.raw",
+                "5-mdC",
+                product_state="review_required",
+                counted_detection="FALSE",
+                review_state="needs_review",
+            )
+        ],
+    )
+    approval_row = review_action_expected_diff_template_to_row(
+        plan_review_action_expected_diff_templates(approval_application)[0]
+    )
+    approval_row.update(
+        {
+            "evidence_sources": "manual_eic;8raw_parity",
+            "evidence_summary": "Manual EIC review supports this action.",
+            "validation_tier": "8raw",
+            "reviewer_verdict": "approved",
+            "final_label": "expected_diff",
+            "approval_notes": "approved before product apply",
+        }
+    )
+    approval_path = tmp_path / "review_action_expected_diff.tsv"
+    _write_expected_diff_tsv(approval_path, [approval_row])
+    approvals = load_review_action_expected_diff_approvals(approval_path)
+    current_applications = build_review_action_application_plan(
+        [action],
+        [
+            _target_state(
+                "S1.raw",
+                "5-mdC",
+                product_state="counted",
+                counted_detection="TRUE",
+                review_state="accepted",
+            )
+        ],
+    )
+
+    plan = build_review_action_apply_readiness(current_applications, approvals)
+    row = review_action_apply_readiness_to_row(plan.rows[0])
+
+    assert row["apply_readiness_status"] == "blocked_expected_diff_baseline_mismatch"
+    assert row["reason"] == "expected_diff_baseline_mismatch"
+    assert row["expected_diff_approval_status"] == "approved"
+    assert plan.unused_expected_diff_approvals == ()
+
+
+def test_review_action_apply_readiness_blocks_missing_expected_diff_baseline(
+    tmp_path: Path,
+) -> None:
+    action = parse_review_actions(
+        [
+            _row(
+                sample_name="S1.raw",
+                target_label="5-mdC",
+                action_type="select_candidate",
+                candidate_id="S1.raw|5-mdC|candidate-a",
+                expected_diff_required="TRUE",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:00:00",
+            )
+        ]
+    )[0]
+    approval_path = tmp_path / "review_action_expected_diff.tsv"
+    _write_expected_diff_tsv(
+        approval_path,
+        [_approved_expected_diff_row_for_action(action)],
+    )
+    approvals = load_review_action_expected_diff_approvals(approval_path)
+    current_applications = build_review_action_application_plan(
+        [action],
+        [_target_state("S1.raw", "5-mdC")],
+    )
+
+    plan = build_review_action_apply_readiness(current_applications, approvals)
+    row = review_action_apply_readiness_to_row(plan.rows[0])
+
+    assert row["apply_readiness_status"] == "blocked_expected_diff_baseline_missing"
+    assert row["reason"] == "expected_diff_baseline_missing"
+    assert row["expected_diff_approval_status"] == "approved"
+    assert plan.unused_expected_diff_approvals == ()
 
 
 def test_review_action_apply_readiness_blocks_missing_expected_diff() -> None:
@@ -613,7 +737,18 @@ def test_plan_review_action_apply_readiness_cli_writes_ready_plan(
     parsed_action = parse_review_actions([action])[0]
     _write_expected_diff_tsv(
         approval_path,
-        [_approved_expected_diff_row_for_action(parsed_action)],
+        [
+            _approved_expected_diff_row_for_action(
+                parsed_action,
+                _target_state(
+                    "S1.raw",
+                    "5-mdC",
+                    product_state="review_required",
+                    counted_detection="FALSE",
+                    review_state="manual",
+                ),
+            )
+        ],
     )
 
     assert (
@@ -747,12 +882,35 @@ def test_review_action_apply_changesets_describe_pending_operations(
     )
     applications = build_review_action_application_plan(
         actions,
-        [_target_state(action.sample_name, action.target_label) for action in actions],
+        [
+            _target_state(action.sample_name, action.target_label)
+            if not action.product_mutating
+            else _target_state(
+                action.sample_name,
+                action.target_label,
+                product_state="review_required",
+                counted_detection="FALSE",
+                review_state="manual",
+            )
+            for action in actions
+        ],
     )
+    expected_diff_states = {
+        (application.action.sample_name, application.action.target_label): (
+            application.target_state
+        )
+        for application in applications
+    }
     approval_path = tmp_path / "review_action_expected_diff.tsv"
     _write_expected_diff_tsv(
         approval_path,
-        [_approved_expected_diff_row_for_action(action) for action in actions[1:4]],
+        [
+            _approved_expected_diff_row_for_action(
+                action,
+                expected_diff_states[(action.sample_name, action.target_label)],
+            )
+            for action in actions[1:4]
+        ],
     )
     approvals = load_review_action_expected_diff_approvals(approval_path)
     readiness_plan = build_review_action_apply_readiness(applications, approvals)
@@ -820,7 +978,18 @@ def test_plan_review_action_apply_changesets_cli_writes_changeset(
     parsed_action = parse_review_actions([action])[0]
     _write_expected_diff_tsv(
         approval_path,
-        [_approved_expected_diff_row_for_action(parsed_action)],
+        [
+            _approved_expected_diff_row_for_action(
+                parsed_action,
+                _target_state(
+                    "S1.raw",
+                    "5-mdC",
+                    product_state="review_required",
+                    counted_detection="FALSE",
+                    review_state="manual",
+                ),
+            )
+        ],
     )
 
     assert (
@@ -1013,10 +1182,11 @@ def _approved_expected_diff_row(action: ReviewAction) -> dict[str, object]:
 
 def _approved_expected_diff_row_for_action(
     action: ReviewAction,
+    target_state: ReviewActionTargetState | None = None,
 ) -> dict[str, object]:
     applications = build_review_action_application_plan(
         [action],
-        [_target_state(action.sample_name, action.target_label)],
+        [target_state or _target_state(action.sample_name, action.target_label)],
     )
     row = review_action_expected_diff_template_to_row(
         plan_review_action_expected_diff_templates(applications)[0]

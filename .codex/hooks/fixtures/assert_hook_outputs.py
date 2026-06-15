@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,20 @@ sys.path.insert(0, str(HOOKS))
 from xic_hook_policy import PRODUCT_SURFACE_PATHS, mentions_any_path  # noqa: E402
 
 
-def run_hook(script: str, event: dict[str, object]) -> dict[str, object]:
+def run_hook(
+    script: str,
+    event: dict[str, object],
+    *,
+    env_extra: dict[str, str] | None = None,
+) -> dict[str, object]:
+    env = os.environ.copy()
+    if env_extra:
+        env.update(env_extra)
     result = subprocess.run(
         [sys.executable, str(HOOKS / script)],
         input=json.dumps(event),
         cwd=ROOT,
+        env=env,
         check=True,
         capture_output=True,
         text=True,
@@ -52,7 +62,10 @@ def main() -> int:
         "turn_id": "fixture",
         "cwd": ".",
         "permission_mode": "default",
-        "prompt": "準備收尾，請更新交接文件，避免下一個 session 因 context compaction 丟資訊。",
+        "prompt": (
+            "準備收尾，請更新交接文件，避免下一個 session "
+            "因 context compaction 丟資訊。"
+        ),
     }
     assert_contains(
         run_hook("xic_prompt_router.py", handoff_prompt_payload),
@@ -148,6 +161,36 @@ def main() -> int:
     if result.stdout.strip():
         raise AssertionError("non-product path emitted productization context")
 
+    unrelated_write_with_ambient_product_dirty_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "Set-Content docs\\scratch-note.md '# note'",
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(unrelated_write_with_ambient_product_dirty_payload),
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
+                ["xic_extractor/output/schema.py"]
+            ),
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError("unrelated write emitted ambient product dirty warning")
+
     product_with_control_plane_payload = {
         "hook_event_name": "PostToolUse",
         "turn_id": "fixture",
@@ -181,7 +224,8 @@ def main() -> int:
                 "*** Update File: xic_extractor/output/schema.py\n"
                 "*** Update File: docs/superpowers/plans/"
                 "2026-06-15-productization-control-plane.md\n"
-                "*** Update File: docs/superpowers/handoffs/current/cc-framework-improvements-productization.md\n"
+                "*** Update File: docs/superpowers/handoffs/current/"
+                "cc-framework-improvements-productization.md\n"
             ),
         },
         "tool_response": {"stdout": "", "stderr": ""},
@@ -196,7 +240,9 @@ def main() -> int:
         timeout=5,
     )
     if result.stdout.strip():
-        raise AssertionError("product/control-plane edit with handoff edit emitted warning")
+        raise AssertionError(
+            "product/control-plane edit with handoff edit emitted warning"
+        )
 
     for path in (
         "scripts/run_new_cli.py",

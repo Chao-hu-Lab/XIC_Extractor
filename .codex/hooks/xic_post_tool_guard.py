@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -91,6 +92,17 @@ def repo_root(cwd: str) -> str:
 
 
 def changed_paths(cwd: str) -> list[str]:
+    # Fixture-only override for deterministic hook tests.
+    override = os.environ.get("XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON")
+    if override is not None:
+        try:
+            value = json.loads(override)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(value, list):
+            return [str(item).replace("\\", "/") for item in value]
+        return []
+
     root = repo_root(cwd)
     try:
         result = subprocess.run(
@@ -109,6 +121,8 @@ def changed_paths(cwd: str) -> list[str]:
     paths: list[str] = []
     for line in result.stdout.splitlines():
         if len(line) < 4:
+            continue
+        if line.startswith("??"):
             continue
         path_text = line[3:].strip()
         if " -> " in path_text:
@@ -166,11 +180,20 @@ def main() -> int:
             tool_input_text,
             HANDOFF_PATH,
         )
-        paths = changed_paths(str(event.get("cwd", ".")))
+        tool_mentions_managed_surface = (
+            tool_mentions_product or tool_mentions_control_plane or tool_mentions_handoff
+        )
+        paths = (
+            changed_paths(str(event.get("cwd", ".")))
+            if tool_mentions_managed_surface
+            else []
+        )
         paths_touch_product = touches_product_surface(paths)
         paths_touch_control_plane = touches_control_plane(paths)
         paths_touch_handoff = touches_handoff(paths)
-        worktree_needs_control_plane = paths_touch_product and not paths_touch_control_plane
+        worktree_needs_control_plane = paths_touch_product and not (
+            paths_touch_control_plane or tool_mentions_control_plane
+        )
         tool_needs_control_plane = tool_mentions_product and not tool_mentions_control_plane
         if tool_needs_control_plane or worktree_needs_control_plane:
             contexts.append(
@@ -180,16 +203,12 @@ def main() -> int:
                 "state why this work does not change any maturity tier or active lane."
             )
 
-        handoff_relevant = (
-            tool_mentions_product
-            or tool_mentions_control_plane
-            or paths_touch_product
-            or paths_touch_control_plane
-        )
         handoff_missing_from_tool = (
             tool_mentions_product or tool_mentions_control_plane
         ) and not tool_mentions_handoff
-        handoff_missing_from_worktree = handoff_relevant and not paths_touch_handoff
+        handoff_missing_from_worktree = (
+            paths_touch_product or paths_touch_control_plane
+        ) and not (paths_touch_handoff or tool_mentions_handoff)
         if handoff_missing_from_tool or handoff_missing_from_worktree:
             contexts.append(
                 "Product/control-plane state may have changed, but the plain-language handoff "

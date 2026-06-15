@@ -71,6 +71,26 @@ def test_sample_metadata_rejects_duplicate_raw_stem() -> None:
         )
 
 
+def test_sample_metadata_rejects_sample_name_raw_stem_alias_collision() -> None:
+    with pytest.raises(SampleMetadataError, match="sample metadata alias collision"):
+        parse_sample_metadata(
+            [
+                _row(sample_name="S1", raw_stem="Raw1", injection_order="1"),
+                _row(sample_name="Raw1", raw_stem="Raw2", injection_order="1"),
+            ]
+        )
+
+
+def test_sample_metadata_rejects_raw_stem_sample_name_alias_collision() -> None:
+    with pytest.raises(SampleMetadataError, match="sample metadata alias collision"):
+        parse_sample_metadata(
+            [
+                _row(sample_name="Raw1", raw_stem="Raw2"),
+                _row(sample_name="S1", raw_stem="Raw1"),
+            ]
+        )
+
+
 def test_sample_metadata_rejects_excluded_without_reason() -> None:
     with pytest.raises(
         SampleMetadataError,

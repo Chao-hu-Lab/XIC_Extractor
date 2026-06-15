@@ -77,6 +77,7 @@ def parse_sample_metadata(
     parsed: list[SampleMetadata] = []
     seen_sample_names: set[str] = set()
     seen_raw_stems: set[str] = set()
+    seen_aliases: dict[str, tuple[int, str]] = {}
     for index, row in enumerate(rows, start=2):
         normalized = _normalize_row(row)
         if not any(normalized.values()):
@@ -85,6 +86,21 @@ def parse_sample_metadata(
         _check_unique(item.sample_name, seen_sample_names, "sample_name", source, index)
         if item.raw_stem:
             _check_unique(item.raw_stem, seen_raw_stems, "raw_stem", source, index)
+        _register_alias(
+            item.sample_name,
+            "sample_name",
+            seen_aliases,
+            source,
+            index,
+        )
+        if item.raw_stem:
+            _register_alias(
+                item.raw_stem,
+                "raw_stem",
+                seen_aliases,
+                source,
+                index,
+            )
         parsed.append(item)
     return tuple(parsed)
 
@@ -254,6 +270,23 @@ def _check_unique(
     if value in seen:
         raise SampleMetadataError(f"{source}:{row_number}: duplicate {key} {value!r}")
     seen.add(value)
+
+
+def _register_alias(
+    value: str,
+    alias_type: str,
+    seen: dict[str, tuple[int, str]],
+    source: str,
+    row_number: int,
+) -> None:
+    existing = seen.get(value)
+    if existing is not None and existing[0] != row_number:
+        existing_row, existing_type = existing
+        raise SampleMetadataError(
+            f"{source}:{row_number}: sample metadata alias collision {value!r}; "
+            f"already used as {existing_type} on row {existing_row}"
+        )
+    seen[value] = (row_number, alias_type)
 
 
 def _add_injection_order(out: dict[str, int], sample: str, order: int) -> None:

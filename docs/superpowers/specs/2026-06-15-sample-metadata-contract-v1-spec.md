@@ -55,6 +55,16 @@
 | `excluded` | `TRUE` or `FALSE`; defaults to false when blank. |
 | `exclusion_reason` | Required when `excluded=TRUE`. |
 
+Identity rules:
+
+- `sample_name` values must be unique.
+- `raw_stem` values must be unique when present.
+- `sample_name` and `raw_stem` share one alias namespace for injection-order
+  projection. A value used as one row's `sample_name` cannot be another row's
+  `raw_stem`, and a value used as one row's `raw_stem` cannot be another row's
+  `sample_name`.
+- A row may still use the same value for its own `sample_name` and `raw_stem`.
+
 ### Supported sample roles
 
 - `study_sample`
@@ -83,6 +93,9 @@
   - `python -m pytest tests\test_sample_metadata.py -q`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py tests\test_sample_metadata.py`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py`
+- Post-review hardening: validator now rejects cross-namespace
+  `sample_name`/`raw_stem` alias collisions before projection to
+  injection-order mapping.
 - Residual blocker before shared runtime adoption:
   - extraction still reads legacy `injection_order_source`
   - instrument-QC sequence manifest is not yet projected into `sample_metadata_v1`

@@ -263,6 +263,49 @@ def test_load_method_manifest_for_replay_rejects_drifted_config(
         load_method_manifest_for_replay(manifest_path)
 
 
+@pytest.mark.parametrize(
+    ("artifact_id", "file_name"),
+    [
+        ("settings_csv", "settings.csv"),
+        ("targets_csv", "targets.csv"),
+    ],
+)
+def test_load_method_manifest_for_replay_requires_config_artifact_path_binding(
+    tmp_path: Path,
+    artifact_id: str,
+    file_name: str,
+) -> None:
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    _write_config_inputs(tmp_path)
+    manifest_path = write_method_manifest(
+        config,
+        targets,
+        context=MethodManifestContext(
+            entrypoint="xic-extractor-cli",
+            base_dir=tmp_path,
+            config_dir=tmp_path / "config",
+            output_mode="excel",
+        ),
+    )
+    alternate_dir = tmp_path / "alternate_config"
+    alternate_dir.mkdir()
+    alternate_path = alternate_dir / file_name
+    alternate_path.write_text(
+        (tmp_path / "config" / file_name).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload["input_artifacts"][artifact_id]["path"] = str(alternate_path)
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        MethodManifestError,
+        match=rf"input_artifacts\.{artifact_id}\.path must match",
+    ):
+        load_method_manifest_for_replay(manifest_path)
+
+
 def test_load_method_manifest_for_replay_rejects_drifted_optional_artifact(
     tmp_path: Path,
 ) -> None:

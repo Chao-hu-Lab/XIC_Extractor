@@ -160,6 +160,7 @@ artifact needed before product-mutating ReviewActions can ever be applied.
 
 The template includes a stable row id, sample/target/action identity, candidate
 or boundary fields, expected public outputs touched, expected matrix impact,
+baseline target state (`Product State`, `Counted Detection`, `Review State`),
 evidence fields, reviewer verdict, final label, reviewer metadata, comment, and
 approval notes.
 
@@ -179,6 +180,8 @@ rows where:
 - matrix-affecting expected diffs assess matrix impact and are not approved
   from synthetic-only validation
 - the stable row id matches the ReviewAction identity
+- the baseline target-state columns stay attached to the approval row so the
+  apply-readiness gate can detect stale approvals
 
 ### Explicit non-goals
 
@@ -205,15 +208,25 @@ blocked.
 
 - `review_action_v1` TSV/CSV
 - current targeted long CSV/TSV with `SampleName` and `Target`
+- for product-mutating expected-diff readiness, current targeted rows must also
+  expose `Product State`, `Counted Detection`, and `Review State`; missing or
+  blank baseline state blocks readiness
 - optional approved `review_action_expected_diff_v1` TSV
 
 ### Current apply-readiness statuses
 
 - `ready_no_output_change`: `accept_current` has no product mutation.
 - `ready_expected_diff_approved`: a product-mutating action has a matching
-  approved expected-diff row.
+  approved expected-diff row whose baseline target state still matches the
+  current targeted row.
 - `blocked_expected_diff_missing`: a product-mutating action still lacks a
   matching approved expected-diff row.
+- `blocked_expected_diff_baseline_missing`: a matching approval exists, but the
+  approval row or current targeted row lacks `Product State`,
+  `Counted Detection`, or `Review State` baseline values.
+- `blocked_expected_diff_baseline_mismatch`: a matching approval exists, but it
+  was reviewed against a different `Product State`, `Counted Detection`, or
+  `Review State` than the current targeted row.
 - `blocked_review_state_apply_not_implemented`: `mark_unresolved` is recognized
   but still lacks a public review-state write/audit contract.
 - `blocked_application_plan`: the earlier application plan already blocked the

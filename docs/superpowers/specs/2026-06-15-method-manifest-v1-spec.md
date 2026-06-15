@@ -104,8 +104,9 @@ Replay semantics for v1:
 - `replay_status.capability` must be `manifest_driven_cli_replay`.
 - `replay_status.exact_replay_ready` remains `false` until timestamped workbook hash capture is recorded.
 - `replay_status.blockers` must explicitly list missing pieces when full exact replay verification is not possible.
-- `xic-extractor-cli --replay-manifest PATH` validates schema, run kind, config directory, output mode, required settings/targets hashes, and required raw/DLL directories before extraction.
+- `xic-extractor-cli --replay-manifest PATH` validates schema, run kind, config directory, output mode, required settings/targets hashes, required raw/DLL directories, and that `settings_csv` / `targets_csv` artifact paths are exactly the files under `invocation.config_dir` before extraction.
 - Replay mode rejects runtime override flags (`--base-dir`, `--data-dir`, `--skip-excel`, `--excel`, parallel overrides, and expected-diff approval override) so the manifest remains the replay authority.
+- The manifest must not validate one config artifact set and execute another. `input_artifacts.settings_csv.path` must resolve to `invocation.config_dir/settings.csv`; `input_artifacts.targets_csv.path` must resolve to `invocation.config_dir/targets.csv`.
 - Review roundtrip, alignment replay, sample metadata universe, and matrix activation remain out of scope.
 
 ### Implementation-ready contract appendix

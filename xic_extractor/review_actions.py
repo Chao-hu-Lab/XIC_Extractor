@@ -92,6 +92,9 @@ REVIEW_ACTION_EXPECTED_DIFF_COLUMNS: tuple[str, ...] = (
     "rt_right_min",
     "expected_public_outputs_touched",
     "expected_matrix_value_impact",
+    "baseline_product_state",
+    "baseline_counted_detection",
+    "baseline_review_state",
     "evidence_sources",
     "evidence_summary",
     "validation_tier",
@@ -256,6 +259,9 @@ class ReviewActionExpectedDiffApproval:
     rt_right_min: float | None
     expected_public_outputs_touched: tuple[str, ...]
     expected_matrix_value_impact: str
+    baseline_product_state: str
+    baseline_counted_detection: str
+    baseline_review_state: str
     evidence_sources: tuple[str, ...]
     evidence_summary: str
     validation_tier: str
@@ -459,6 +465,23 @@ def plan_review_action_apply_readiness(
             approval = expected_diff_approvals.get(stable_row_id)
             if approval is not None:
                 used_approval_ids.add(stable_row_id)
+                baseline_problem = _expected_diff_approval_baseline_problem(
+                    approval,
+                    application.target_state,
+                )
+                if baseline_problem is not None:
+                    rows.append(
+                        ReviewActionApplyReadiness(
+                            application=application,
+                            apply_readiness_status=(
+                                f"blocked_expected_diff_baseline_{baseline_problem}"
+                            ),
+                            reason=f"expected_diff_baseline_{baseline_problem}",
+                            expected_diff_stable_row_id=stable_row_id,
+                            expected_diff_approval=approval,
+                        )
+                    )
+                    continue
                 rows.append(
                     ReviewActionApplyReadiness(
                         application=application,
@@ -512,6 +535,30 @@ def plan_review_action_apply_readiness(
         rows=tuple(rows),
         unused_expected_diff_approvals=unused,
     )
+
+
+def _expected_diff_approval_baseline_problem(
+    approval: ReviewActionExpectedDiffApproval,
+    target_state: ReviewActionTargetState | None,
+) -> str | None:
+    if target_state is None:
+        return "missing"
+    if not (
+        approval.baseline_product_state
+        and approval.baseline_counted_detection
+        and approval.baseline_review_state
+        and target_state.product_state
+        and target_state.counted_detection
+        and target_state.review_state
+    ):
+        return "missing"
+    if (
+        approval.baseline_product_state != target_state.product_state
+        or approval.baseline_counted_detection != target_state.counted_detection
+        or approval.baseline_review_state != target_state.review_state
+    ):
+        return "mismatch"
+    return None
 
 
 def write_review_action_apply_readiness_plan(
@@ -781,6 +828,9 @@ def _parse_expected_diff_approval_row(
         source,
         row_number,
     )
+    baseline_product_state = row["baseline_product_state"]
+    baseline_counted_detection = row["baseline_counted_detection"]
+    baseline_review_state = row["baseline_review_state"]
     evidence_sources = _split_multi(
         _required_text(row, "evidence_sources", source, row_number)
     )
@@ -864,6 +914,9 @@ def _parse_expected_diff_approval_row(
         rt_right_min=rt_right_min,
         expected_public_outputs_touched=expected_public_outputs_touched,
         expected_matrix_value_impact=expected_matrix_value_impact,
+        baseline_product_state=baseline_product_state,
+        baseline_counted_detection=baseline_counted_detection,
+        baseline_review_state=baseline_review_state,
         evidence_sources=evidence_sources,
         evidence_summary=evidence_summary,
         validation_tier=validation_tier,
@@ -1379,6 +1432,7 @@ def review_action_expected_diff_template_to_row(
     template: ReviewActionExpectedDiffTemplate,
 ) -> dict[str, object]:
     action = template.application.action
+    target_state = template.application.target_state
     return {
         "schema_version": REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION,
         "stable_row_id": template.stable_row_id,
@@ -1394,6 +1448,11 @@ def review_action_expected_diff_template_to_row(
             template.expected_public_outputs_touched
         ),
         "expected_matrix_value_impact": template.expected_matrix_value_impact,
+        "baseline_product_state": target_state.product_state if target_state else "",
+        "baseline_counted_detection": (
+            target_state.counted_detection if target_state else ""
+        ),
+        "baseline_review_state": target_state.review_state if target_state else "",
         "evidence_sources": "",
         "evidence_summary": "",
         "validation_tier": "not_validated",

@@ -7,6 +7,7 @@
 ## 目前可接手狀態
 
 - Branch: `cc/framework-improvements`。
+- 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
 - 本輪產品化變更已依目的拆 commit；接手時先看 `git log --oneline -8` 和 `git status --short --branch`，不要只相信這份 handoff 的時間點描述。
 - Commit 後預期工作樹只剩一個明確排除的既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。
 - 目前 productization 權威不是這份 handoff: tier、active lane、WIP limit 以 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` 為準。
@@ -98,6 +99,7 @@
 - Manifest 會記錄設定檔、targets、RAW/DLL path、optional artifacts、runtime、parallel backend、CLI argv、output artifacts。
 - 新增 `xic-extractor-cli --replay-manifest <path>`。
 - Replay mode 會拒絕覆蓋 runtime 的 CLI flags，例如 `--skip-excel`、`--parallel-workers`。
+- Replay loader 會確認 manifest 驗證的 `settings.csv` / `targets.csv` 就是 `invocation.config_dir` 下面實際要執行的檔案；不能驗證 A config、執行 B config。
 - Workbook `Run Metadata` 會反查 manifest schema/path/hash。
 - `scripts.compare_workbooks` 已忽略 manifest path/hash 這種 replay 時會自然不同的 metadata，但仍比較 manifest schema。
 
@@ -154,7 +156,10 @@
 - `scripts/plan_review_action_applications.py` 可用 `--expected-diff-template-tsv` 輸出被擋住的 product-mutating action 審核模板。
 - 新增 `scripts/validate_review_action_expected_diffs.py`，讓 reviewer 改完 expected-diff TSV 後可以先驗證它是不是真的能授權後續 apply。
 - 新增 expected-diff approval loader，只接受 `approved + expected_diff + 已驗證 + evidence 完整 + stable id 對得上` 的 row。
+- expected-diff approval 會記住核准時 targeted row 的 `Product State`、`Counted Detection`、`Review State`。
 - `scripts/plan_review_action_apply_readiness.py` 會把 approved expected-diff row 對回 ReviewAction，輸出哪些 action 已經 ready、哪些仍 blocked。
+- Product-mutating action 要 ready 時，current targeted row 也必須有 `Product State`、`Counted Detection`、`Review State`；空 baseline 不算 approval。
+- 如果 current targeted row 缺少 baseline state，會變成 `blocked_expected_diff_baseline_missing`；如果已經和 approved baseline 不同，會變成 `blocked_expected_diff_baseline_mismatch`，不能偷用舊 approval。
 - apply-readiness CLI 預設會拒絕 unused approval row，避免舊核准檔被靜默混進新 action set。
 - `scripts/plan_review_action_apply_changesets.py` 會把 ready rows 轉成未來 product writer 需要執行的 operation 和 output scope，例如 `select_candidate`、`set_manual_boundary`、`reject_current`。
 - changeset 會明確標 `requires_area_recompute` 或 `requires_candidate_sidecar`，但不會真的重算或切換。
@@ -207,6 +212,7 @@
   - `system_suitability`
   - `unknown`
 - 可把 sample metadata 投影成 injection-order mapping。
+- `sample_name` 和 `raw_stem` 共用同一個 injection-order alias namespace；跨列撞名會在 parse 階段被拒絕。
 
 白話結論:
 
@@ -283,7 +289,7 @@ git diff --check
 
 結果: 沒有 whitespace error，只有 CRLF warning。
 
-注意: 以上是 replay/schema/review/sample metadata/alignment 的 focused validation，不是 PR closeout gate。Hook/handoff workflow 補強後仍需要跑 `.codex/hooks/fixtures/assert_hook_outputs.py` 和必要 docs smoke；PR 前仍需照 `AGENTS.md` 跑 repo-local CI-equivalent commands。
+注意: 以上是 replay/schema/review/sample metadata/alignment 的 focused validation，不是 PR closeout gate。PR 前仍需照 `AGENTS.md` 跑 repo-local CI-equivalent commands。
 
 回到主線後另跑:
 
@@ -301,6 +307,38 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\review_actions.py
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py scripts\validate_review_action_expected_diffs.py scripts\plan_review_action_apply_readiness.py scripts\plan_review_action_apply_changesets.py
+```
+
+結果: pass
+
+```powershell
+python .codex\hooks\fixtures\assert_hook_outputs.py
+```
+
+結果: pass
+
+Subagent review follow-up 另跑:
+
+```powershell
+python -m pytest tests\test_method_manifest.py tests\test_review_actions.py tests\test_sample_metadata.py -q
+```
+
+結果: `40 passed`
+
+```powershell
+python -m pytest tests\test_method_manifest.py tests\test_run_extraction.py tests\test_review_actions.py tests\test_sample_metadata.py -q
+```
+
+結果: `62 passed`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\output\method_manifest.py xic_extractor\review_actions.py xic_extractor\sample_metadata.py .codex\hooks\xic_post_tool_guard.py tests\test_method_manifest.py tests\test_review_actions.py tests\test_sample_metadata.py
+```
+
+結果: pass
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\output\method_manifest.py xic_extractor\review_actions.py xic_extractor\sample_metadata.py
 ```
 
 結果: pass

@@ -223,12 +223,28 @@ def load_method_manifest_for_replay(path: Path) -> MethodManifestReplayRequest:
         )
 
     input_artifacts = _required_mapping(payload, "input_artifacts", manifest_path)
-    _validate_required_file_artifact(
+    settings_artifact_path = _validate_required_file_artifact(
         input_artifacts,
         "settings_csv",
         manifest_path,
     )
-    _validate_required_file_artifact(input_artifacts, "targets_csv", manifest_path)
+    targets_artifact_path = _validate_required_file_artifact(
+        input_artifacts,
+        "targets_csv",
+        manifest_path,
+    )
+    _validate_config_artifact_path(
+        settings_artifact_path,
+        config_dir / "settings.csv",
+        "settings_csv",
+        manifest_path,
+    )
+    _validate_config_artifact_path(
+        targets_artifact_path,
+        config_dir / "targets.csv",
+        "targets_csv",
+        manifest_path,
+    )
     _validate_required_directory_artifact(input_artifacts, "raw_dir", manifest_path)
     _validate_required_directory_artifact(input_artifacts, "dll_dir", manifest_path)
     for artifact_id in (
@@ -356,7 +372,7 @@ def _validate_required_file_artifact(
     artifacts: Mapping[str, object],
     artifact_id: str,
     manifest_path: Path,
-) -> None:
+) -> Path:
     artifact = _artifact_descriptor(artifacts, artifact_id, manifest_path)
     path = _artifact_required_path(artifact, artifact_id, manifest_path)
     if not path.is_file():
@@ -372,6 +388,21 @@ def _validate_required_file_artifact(
     if actual_hash != expected_hash:
         raise MethodManifestError(
             f"{path}: replay artifact {artifact_id} sha256 mismatch"
+        )
+    return path
+
+
+def _validate_config_artifact_path(
+    artifact_path: Path,
+    expected_path: Path,
+    artifact_id: str,
+    manifest_path: Path,
+) -> None:
+    expected = expected_path.expanduser().resolve()
+    if artifact_path != expected:
+        raise MethodManifestError(
+            f"{manifest_path}: input_artifacts.{artifact_id}.path must match "
+            f"invocation.config_dir/{expected_path.name}"
         )
 
 
