@@ -13,6 +13,11 @@ from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.raw_reader import RawReaderError, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
+from xic_extractor.sample_metadata import (
+    is_sample_metadata_source,
+    load_sample_metadata,
+    sample_metadata_to_injection_order,
+)
 from xic_extractor.target_pair_rt_calibration import (
     load_target_pair_rt_calibration,
     rt_prior_library_from_target_pair_calibration,
@@ -30,8 +35,14 @@ def resolve_injection_order(
     if injection_order is not None:
         return injection_order
     if config.injection_order_source is not None:
-        return read_injection_order(config.injection_order_source)
+        return _read_injection_order_source(config.injection_order_source)
     return fallback_injection_order_from_mtime(raw_paths)
+
+
+def _read_injection_order_source(path: Path) -> dict[str, int]:
+    if is_sample_metadata_source(path):
+        return sample_metadata_to_injection_order(load_sample_metadata(path))
+    return read_injection_order(path)
 
 
 def resolve_rt_prior_library(

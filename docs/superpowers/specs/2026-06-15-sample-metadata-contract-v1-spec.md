@@ -1,8 +1,8 @@
 # Sample metadata contract v1 spec
 
 日期: 2026-06-15
-狀態: first_slice_schema_validator
-目標 tier: `partial_internal` -> `production_candidate` for shared schema/validator only
+狀態: runtime_parity_adapter
+目標 tier: `partial_internal` -> `production_surface` for injection-order parity; `production_candidate` for roles
 控制台: [productization control plane](../plans/2026-06-15-productization-control-plane.md)
 
 ## Productization intake
@@ -11,26 +11,35 @@
 - Current tier:
   - `injection_order_source`: `production_surface` for order only
   - sample metadata roles: `partial_internal`
-- Desired tier this slice: `production_candidate` for shared sample metadata schema and validator
+- Desired tier this slice:
+  - `production_surface` for using `sample_metadata_v1` as an
+    `injection_order_source` parity input.
+  - `production_candidate` for role/batch/matrix schema only.
 - Product surface touched:
   - `xic_extractor.sample_metadata`
   - `scripts/validate_sample_metadata.py`
+  - `xic_extractor.extraction.pipeline.resolve_injection_order`
   - future sample metadata TSV/CSV schema
 - Domain authority owner:
   - `xic_extractor.sample_metadata` owns the shared schema, role validation, exclusion guard, and injection-order projection.
-  - Existing extraction/QC/alignment code remains unchanged in this slice.
+  - Existing extraction uses sample metadata only to produce the same
+    injection-order mapping shape as legacy `Sample_Name,Injection_Order`.
 - Files/modules likely touched:
   - `xic_extractor/sample_metadata.py`
   - `scripts/validate_sample_metadata.py`
+  - `xic_extractor/extraction/pipeline.py`
   - `tests/test_sample_metadata.py`
 - Public contract affected:
   - Adds `sample_metadata_v1`.
   - Defines shared columns for sample identity, raw stem, injection order, role, batch, prep batch, matrix type, group, and exclusion.
-- Expected output change: none for extraction/QC/alignment outputs.
+- Expected output change: none for extraction/QC/alignment values. The only
+  runtime behavior change is that `injection_order_source` can now point to a
+  `sample_metadata_v1` CSV/TSV and produce the same order mapping.
 - Expected-diff needed: no for this slice.
 - Validation fixture: focused unit/CLI tests.
 - Stop rule:
-  - Stop before replacing `injection_order_source` behavior in extraction.
+  - Stop before using sample metadata roles to change extraction, QC,
+    alignment, normalization, or matrix values.
   - Stop before using sample roles to exclude rows or alter matrix values.
 - Rollback rule:
   - Remove the validator and `sample_metadata` module; existing `injection_order_source` behavior remains.
@@ -83,21 +92,30 @@ Identity rules:
   - `SAMPLE_METADATA_SCHEMA_VERSION = sample_metadata_v1`
   - `SAMPLE_METADATA_COLUMNS`
   - typed `SampleMetadata`
+  - `is_sample_metadata_source(...)`
   - `load_sample_metadata(...)`
   - `sample_metadata_to_injection_order(...)`
   - `summarize_sample_metadata(...)`
   - `scripts/validate_sample_metadata.py`
-- Tier after first slice: `production_candidate` for schema/validator only; runtime adoption remains pending.
+- Runtime adoption:
+  - `resolve_injection_order(...)` keeps legacy `Sample_Name,Injection_Order`
+    files on the old parser.
+  - If the configured `injection_order_source` is a `sample_metadata_v1`
+    CSV/TSV, extraction projects it into the existing injection-order mapping.
+- Tier after runtime parity slice:
+  - `production_surface` for injection-order parity through
+    `injection_order_source`.
+  - `production_candidate` for roles/batch/matrix/exclusion metadata; those
+    fields still do not affect product values.
 - Expected-diff: not required; this slice does not mutate extraction outputs.
 - Validation:
-  - `python -m pytest tests\test_sample_metadata.py -q`
+  - `python -m pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py -q`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py tests\test_sample_metadata.py`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py`
 - Post-review hardening: validator now rejects cross-namespace
   `sample_name`/`raw_stem` alias collisions before projection to
   injection-order mapping.
-- Residual blocker before shared runtime adoption:
-  - extraction still reads legacy `injection_order_source`
+- Residual blocker before full shared runtime adoption:
   - instrument-QC sequence manifest is not yet projected into `sample_metadata_v1`
   - alignment and normalization do not yet consume this resolver
   - no product behavior may use sample roles for exclusion or correction until expected-diff gates exist

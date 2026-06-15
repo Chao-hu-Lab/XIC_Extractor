@@ -69,6 +69,16 @@ def load_sample_metadata(path: Path) -> tuple[SampleMetadata, ...]:
     )
 
 
+def is_sample_metadata_source(path: Path) -> bool:
+    if path.suffix.lower() not in {".csv", ".tsv", ".txt"} or not path.is_file():
+        return False
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        fieldnames = set(reader.fieldnames or ())
+    return "schema_version" in fieldnames and "sample_name" in fieldnames
+
+
 def parse_sample_metadata(
     rows: Iterable[Mapping[str, object]],
     *,

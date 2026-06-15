@@ -8,6 +8,7 @@ from xic_extractor.sample_metadata import (
     SAMPLE_METADATA_COLUMNS,
     SAMPLE_METADATA_SCHEMA_VERSION,
     SampleMetadataError,
+    is_sample_metadata_source,
     load_sample_metadata,
     parse_sample_metadata,
     sample_metadata_to_injection_order,
@@ -122,6 +123,19 @@ def test_load_sample_metadata_rejects_wrong_schema_version(tmp_path: Path) -> No
 
     with pytest.raises(SampleMetadataError, match="unsupported schema_version"):
         load_sample_metadata(path)
+
+
+def test_is_sample_metadata_source_detects_schema_header(tmp_path: Path) -> None:
+    sample_metadata_path = tmp_path / "sample_metadata.tsv"
+    legacy_order_path = tmp_path / "SampleInfo.csv"
+    _write_tsv(sample_metadata_path, [_row(sample_name="S1")])
+    legacy_order_path.write_text(
+        "Sample_Name,Injection_Order\nS1,1\n",
+        encoding="utf-8",
+    )
+
+    assert is_sample_metadata_source(sample_metadata_path) is True
+    assert is_sample_metadata_source(legacy_order_path) is False
 
 
 def test_validate_sample_metadata_cli_prints_summary_json(

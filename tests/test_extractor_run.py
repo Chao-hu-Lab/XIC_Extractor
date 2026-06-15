@@ -155,6 +155,71 @@ def test_run_resolves_scoring_inputs_before_backend(
     assert output.file_results == []
 
 
+def test_run_resolves_sample_metadata_source_as_injection_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
+    from xic_extractor.sample_metadata import SAMPLE_METADATA_COLUMNS
+
+    config = _config(tmp_path, keep_intermediate_csv=False)
+    sample_metadata_path = tmp_path / "sample_metadata.tsv"
+    config = ExtractionConfig(
+        **{
+            **config.__dict__,
+            "injection_order_source": sample_metadata_path,
+        }
+    )
+    (config.data_dir / "RawA.raw").write_text("", encoding="utf-8")
+    sample_metadata_path.write_text(
+        "\t".join(SAMPLE_METADATA_COLUMNS)
+        + "\n"
+        + "\t".join(
+            [
+                "sample_metadata_v1",
+                "SampleA",
+                "RawA",
+                "7",
+                "study_sample",
+                "",
+                "",
+                "",
+                "",
+                "FALSE",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    targets = [_target("Analyte")]
+
+    def _fake_run_serial(
+        config_arg: ExtractionConfig,
+        targets_arg: list[Target],
+        *,
+        raw_paths: list[Path],
+        progress_callback=None,
+        should_stop=None,
+        injection_order=None,
+        rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
+    ) -> RunOutput:
+        assert config_arg is config
+        assert targets_arg is targets
+        assert [path.name for path in raw_paths] == ["RawA.raw"]
+        assert injection_order == {"SampleA": 7, "RawA": 7}
+        assert rt_prior_library == {}
+        return RunOutput(file_results=[], diagnostics=[])
+
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
+
+    output = extractor.run(config, targets)
+
+    assert output.file_results == []
+
+
 def test_target_pair_rt_calibration_fences_legacy_rt_prior_library(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
