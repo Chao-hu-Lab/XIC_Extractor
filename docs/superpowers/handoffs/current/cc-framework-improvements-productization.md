@@ -29,6 +29,7 @@
 - `scripts/validate_review_action_expected_diffs.py`
 - `scripts/plan_review_action_apply_readiness.py`
 - `scripts/plan_review_action_apply_changesets.py`
+- `scripts/apply_review_action_changesets.py`
 - `scripts/validate_sample_metadata.py`
 - `tests/test_method_manifest.py`
 - `tests/test_review_actions.py`
@@ -73,9 +74,10 @@
 - 這個分支正在補 XIC 的產品化地板，不是在重寫 peak picking 演算法。
 - 最近完成的主軸是 replay executor: `method_manifest.json` + `--replay-manifest`，已跑過 8RAW 和一次 85RAW replay parity。
 - 接著補了三個中期 contract: targeted output schema version、ReviewAction import/application plan/expected-diff/apply-readiness/changeset gate、SampleMetadata schema。
+- 2026-06-16 進一步把 ReviewAction changeset 接到 audited output copy，把 `sample_metadata_v1` 接成 extraction `injection_order_source` parity input，並在 manifest 寫清楚 artifact replay policy。
 - Alignment 這邊沒有重寫 runtime，只是把文件和 test name 改到符合現況: `alignment_matrix.tsv` 是 machine/validation，不是 production default。
-- 目前還不能誤會成完成的是 GUI replay、full exact artifact replay、ReviewAction product-writing apply/recompute、sample metadata runtime adoption。
-- 下一個最安全的實作點是 ReviewAction audit/apply loop，現在 expected-diff template、approval loader、apply-readiness plan、changeset plan 已有雛形；下一刀要讓 product-writing loop 消費 changeset rows，但不能直接大範圍改 selected peak/area。
+- 目前還不能誤會成完成的是 GUI replay、selected-candidate switch、manual-boundary area recompute、workbook rewrite、primary matrix rewrite、sample role 影響 quant output。
+- 下一個最安全的實作點若繼續往 ReviewAction 走，是 candidate sidecar writer 或 manual-boundary recompute writer；兩者都必須保留 expected-diff gate。
 
 ## 先講人話
 
@@ -84,10 +86,11 @@
 - 跑完一次後，要能知道當時用了什麼設定、什麼 targets、什麼 runtime，並能照 manifest 重跑。
 - 輸出要有 schema version，不然下游不知道自己吃的是哪一版欄位語意。
 - 人工 review 不能永遠只停在 Excel worklist，至少要先有正式的 review action import schema 和 dry-run apply plan。
-- sample metadata 不能每個模組各自猜 QC、blank、batch、matrix，要先有共同格式。
+- 人工 review 現在已經能從 changeset 寫成 audited targeted-long copy 和 `review_action_apply_audit_v1`，但還不會重算 area 或切 candidate。
+- sample metadata 不能每個模組各自猜 QC、blank、batch、matrix；目前 extraction 已能用 `sample_metadata_v1` 產生舊 injection-order mapping，但 role 還不能改矩陣。
 - alignment 的 production / machine output wording 要跟 runtime 一致，不然會一直誤會 `alignment_matrix.tsv` 是 production default。
 
-目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；其他中期項目先做到 schema/validator/dry-run plan/contract 層，沒有改 peak、area、counted detection 或 matrix value。
+目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；ReviewAction 已能安全寫 audited copy；sample metadata 已能接 extraction injection order；仍沒有改 peak area、selected candidate、workbook、或 primary matrix。
 
 ## 這輪已經做了什麼
 
@@ -102,6 +105,7 @@
 - Replay loader 會確認 manifest 驗證的 `settings.csv` / `targets.csv` 就是 `invocation.config_dir` 下面實際要執行的檔案；不能驗證 A config、執行 B config。
 - Workbook `Run Metadata` 會反查 manifest schema/path/hash。
 - `scripts.compare_workbooks` 已忽略 manifest path/hash 這種 replay 時會自然不同的 metadata，但仍比較 manifest schema。
+- Manifest 現在有 `artifact_replay_policy`: CSV 是 byte-exact replay artifact，timestamped workbook 走 normalized compare，manifest 本身是 provenance-only。
 
 已驗證:
 
@@ -111,12 +115,12 @@
 
 白話結論:
 
-可以說「targeted CLI replay parity 已經做到」。不能說「整個 GUI 或所有 artifact 都 exact replay-ready」。
+可以說「targeted CLI replay parity 已經做到，而且 artifact policy 已寫清楚」。不能說「GUI replay 已完成」或「timestamped workbook byte-exact replay 已完成」。
 
 還沒做:
 
 - GUI replay 尚未接回主線。
-- Timestamped workbook hash 還沒納入 manifest，所以還不是 full exact artifact replay。
+- Timestamped workbook 目前刻意走 normalized compare，不是 byte-exact workbook hash replay。
 
 ### 2. Targeted output schema versioning
 
@@ -161,8 +165,11 @@
 - Product-mutating action 要 ready 時，current targeted row 也必須有 `Product State`、`Counted Detection`、`Review State`；空 baseline 不算 approval。
 - 如果 current targeted row 缺少 baseline state，會變成 `blocked_expected_diff_baseline_missing`；如果已經和 approved baseline 不同，會變成 `blocked_expected_diff_baseline_mismatch`，不能偷用舊 approval。
 - apply-readiness CLI 預設會拒絕 unused approval row，避免舊核准檔被靜默混進新 action set。
-- `scripts/plan_review_action_apply_changesets.py` 會把 ready rows 轉成未來 product writer 需要執行的 operation 和 output scope，例如 `select_candidate`、`set_manual_boundary`、`reject_current`。
-- changeset 會明確標 `requires_area_recompute` 或 `requires_candidate_sidecar`，但不會真的重算或切換。
+- `scripts/plan_review_action_apply_changesets.py` 會把 ready rows 轉成 operation 和 output scope，例如 `select_candidate`、`set_manual_boundary`、`reject_current`。
+- 新增 `scripts/apply_review_action_changesets.py`，可以讀 changeset TSV 和 targeted long CSV，輸出 audited targeted-long copy 和 `review_action_apply_audit_v1` TSV。
+- `mark_unresolved` 現在可把 audited copy 的 `Review State` 改成 `unresolved_by_review`。
+- `reject_current` 在 approved expected-diff 後可把 audited copy 的 `Product State` / `Counted Detection` / `Review State` 改成 reject 狀態。
+- `select_candidate` 和 `set_manual_boundary` 仍只會寫 deferred audit，因為還缺 candidate sidecar writer 或 area recompute writer。
 - 支援 action:
   - `accept_current`
   - `mark_unresolved`
@@ -177,15 +184,13 @@
 
 白話結論:
 
-現在有正式「人工 review action 檔案長什麼樣」的入口，也能產生 dry-run apply plan，還能把需要人工核准的 expected-diff 模板吐出來。reviewer 改完模板後，有 CLI 可以驗證是否真的成為 approved expected-diff；再下一步可產生 apply-readiness plan，最後產生 changeset plan，告訴未來 writer 要做什麼 operation、會碰哪些 output、還缺 recompute 或 sidecar。這仍不是完整回寫。
+現在有正式「人工 review action 檔案長什麼樣」的入口，也能產生 apply-readiness/changeset，並把 changeset 寫成 audited targeted-long copy 和 audit TSV。這已經不是純 dry-run，但仍不是完整 reintegration: selected candidate switch 和 manual boundary area recompute 還沒做。
 
 還沒做:
 
-- 還不能把 action 寫回 extraction output。
 - 還不能因人工 boundary 重算 area。
 - 還不能切換 selected candidate。
-- 還沒有 applied action 的 audit trail export。
-- 還沒有 product-writing loop 消費 changeset row。
+- 還不能直接覆蓋原 extraction output、workbook、或 primary matrix。
 
 ### 4. `sample_metadata_v1`
 
@@ -213,14 +218,14 @@
   - `unknown`
 - 可把 sample metadata 投影成 injection-order mapping。
 - `sample_name` 和 `raw_stem` 共用同一個 injection-order alias namespace；跨列撞名會在 parse 階段被拒絕。
+- Extraction 的 `injection_order_source` 現在可以指向 `sample_metadata_v1` CSV/TSV；legacy `Sample_Name,Injection_Order` 仍走舊 parser。
 
 白話結論:
 
-現在有共同 sample metadata 語言了。QC、blank、batch、matrix 不必每個模組自己猜。
+現在有共同 sample metadata 語言了，而且 extraction 已經能用它產生既有 injection-order 行為。QC、blank、batch、matrix 欄位目前只是 contract，還不能改 quant output。
 
 還沒做:
 
-- Extraction 還是讀舊的 `injection_order_source`。
 - Instrument-QC sequence manifest 還沒轉成 `sample_metadata_v1`。
 - Alignment / normalization 還沒 consume 這個 resolver。
 - Sample role 還不能拿來改 matrix value 或排除 row。
@@ -251,15 +256,14 @@
 這些不要誤會成已完成:
 
 - GUI replay 沒接主線。
-- Full exact artifact replay 沒做完。
-- Review roundtrip 只做到 action import validation + dry-run application plan，還沒 product-writing apply/recompute。
-- Sample metadata 只做到 schema/validator，還沒接 runtime。
+- Timestamped workbook byte-exact replay 沒做；目前是 normalized workbook compare policy。
+- Review roundtrip 還沒做 selected candidate switch 或 manual boundary area recompute。
+- Sample metadata roles 還不能改 extraction/QC/alignment/normalization 或 matrix values。
 - Canonical detection contract 還沒正式寫完。
-- ReviewAction apply loop 還沒寫。
 - Manual boundary recompute 還沒寫。
 - Calibration/normalization 還不能寫回 main matrix。
 - Backfill product-authority sidecars 仍不能直接改 primary matrix。
-- 本輪變更應拆成目的 commits；接手時用 `git log --oneline -8` 確認實際 commit hash。
+- 本輪變更應拆成目的 commits；接手時用 `git log --oneline -10` 確認實際 commit hash。
 
 ## 驗證狀態
 
@@ -375,6 +379,58 @@ python .codex\hooks\fixtures\assert_hook_outputs.py
 
 結果: pass
 
+本輪 goal 中途另跑（2026-06-16）:
+
+```powershell
+python -m pytest tests\test_review_actions.py -q
+```
+
+結果: `27 passed`
+
+```powershell
+python -m pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py -q
+```
+
+結果: `33 passed`
+
+```powershell
+python -m pytest tests\test_method_manifest.py tests\test_workbook_compare.py -q
+```
+
+結果: `18 passed`
+
+本輪 goal 最終 gate 另跑（2026-06-16）:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+```
+
+結果: pass, `All checks passed!`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+```
+
+結果: pass, `Success: no issues found in 335 source files`。只剩既有 `annotation-unchecked` notes，沒有 type error。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
+
+結果: `3616 passed, 1 skipped in 62.85s (0:01:02)`
+
+```powershell
+python .codex\hooks\fixtures\assert_hook_outputs.py
+```
+
+結果: pass
+
+```powershell
+git diff --check
+```
+
+結果: 沒有 whitespace error，只有 LF/CRLF warning。
+
 RAW-backed 驗證:
 
 - 8RAW 已跑。
@@ -403,14 +459,15 @@ RAW-backed 驗證:
    - 尚未 push、尚未看 GitHub CI、尚未開或更新 PR。
    - 注意有一個既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。這個不是本輪新增，不要誤 stage。
 
-2. 若繼續做產品化，下一個實作點應該是 ReviewAction audit/apply loop。
-   - 目前有 dry-run application plan、expected-diff template、approval validator、apply-readiness plan、changeset plan。
-   - 下一刀必須讓 product-writing loop 消費 changeset rows。
-   - 不要直接大範圍改 selected peak/area。
+2. 若繼續做 ReviewAction，下一個實作點是 candidate sidecar writer 或 manual-boundary area recompute writer。
+   - 現在 audited apply copy 已能消費 changeset rows。
+   - `select_candidate` 和 `set_manual_boundary` 仍是 deferred，不能假裝已回寫 selected peak/area。
+   - 任何會改 selected peak/area/counting 的下一刀仍要 expected-diff。
 
-3. 第二順位是 sample metadata runtime adoption。
-   - 先把 `sample_metadata_v1` 投影成現有 `injection_order_source` 等價行為。
-   - 先證明 output 不變，再讓 QC/blank/batch role 參與別的 decision。
+3. 第二順位是 sample metadata cross-module parity。
+   - Extraction injection-order parity 已接好。
+   - Instrument-QC / alignment / normalization 還沒共用這個 resolver。
+   - 不要讓 QC/blank/batch role 直接改 quant output。
 
 4. GUI replay 等 GUI 接主線後再做。
    - 現在不要為了 GUI replay 去改未接主線的 GUI 測試。

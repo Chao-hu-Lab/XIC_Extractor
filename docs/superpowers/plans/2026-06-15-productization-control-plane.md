@@ -49,15 +49,16 @@ trust 或沒有載入，本文件和 handoff checklist 仍是人工 closeout gat
 ## Current medium-term active lanes
 
 這次 goal 已擴大到中期可收斂項目，但仍維持 WIP limit。已完成的
-`method_manifest_v1` 和 `targeted_schema_versioning_v1` 不再佔 active lane。
-下一個 primary lane 是 ReviewAction apply/reintegration；supporting lane 只
-允許做 sample metadata runtime parity，不可讓 sample role 直接改 main
-matrix。
+`method_manifest_v1`、`targeted_schema_versioning_v1`、ReviewAction audited
+apply copy、以及 sample metadata injection-order parity 不再佔 active lane。
+下一個 primary lane 若繼續做，只能是 candidate sidecar / manual boundary
+recompute writer；supporting lane 只能擴展 sample metadata 到 alignment 或
+instrument-QC parity，不可讓 sample role 直接改 main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `review_action_apply_v1` | active branch maintainer: `cc/framework-improvements` | dry-run application plan exists; next slice may add audit/apply only with expected-diff | stop if a manual action changes selected peak/area/counting without expected-diff |
-| Supporting | `sample_metadata_runtime_parity_v1` | active branch maintainer: `cc/framework-improvements` | project `sample_metadata_v1` into current injection-order behavior and prove output parity | stop if sample role changes extraction output, counted detection, or matrix value |
+| Primary | `review_action_reintegration_v1` | unassigned | candidate sidecar and manual boundary area recompute only after audited apply copy is accepted | stop if a manual action changes selected peak/area/counting without expected-diff |
+| Supporting | `sample_metadata_cross_module_parity_v1` | unassigned | project `sample_metadata_v1` into alignment/instrument-QC parity only | stop if sample role changes extraction output, counted detection, or matrix value |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes active lane acceptance |
 | Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
 
@@ -101,14 +102,14 @@ scope.
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
 | `Review Queue` | `production_surface` as worklist | workbook `Review Queue` sheet | 不能讀回 decision；不能 reintegrate | `review_roundtrip_v1` | unassigned |
-| ReviewAction import/application plan | `production_candidate` | `xic_extractor.review_actions`, `scripts/validate_review_actions.py`, `scripts/plan_review_action_applications.py`, `scripts/validate_review_action_expected_diffs.py`, `scripts/plan_review_action_apply_readiness.py`, `scripts/plan_review_action_apply_changesets.py` | 可驗證 action、產生 dry-run application plan、產生/驗證 expected-diff approval、產生 apply-readiness/changeset plan；尚未 product-writing apply/recompute/write audit | review action audit/apply loop writes audited outputs | active branch maintainer: `cc/framework-improvements` |
-| Manual boundary / reintegration | `missing` | candidate/boundary sidecars + action schema only | 沒有 import -> recompute -> audit loop | `review_action_apply_v1` | active branch maintainer: `cc/framework-improvements` |
+| ReviewAction audited apply copy | `production_surface` for audited targeted-long copy | `xic_extractor.review_actions`, `scripts/apply_review_action_changesets.py`, `review_action_apply_audit_v1` | accept/mark/reject 可寫 audited output copy；select candidate/manual boundary 仍 deferred | candidate sidecar + manual boundary recompute writer | none; audited apply slice done |
+| Manual boundary / reintegration | `production_candidate` for deferred changeset only | candidate/boundary sidecars + action schema + changeset rows | 沒有 area recompute writer；沒有 selected candidate switch writer | `review_action_reintegration_v1` | unassigned |
 | `Run Metadata` | `production_surface` as workbook metadata | workbook sheet + manifest/schema reverse reference | 不是 full replay manifest；只反向記錄 targeted output schema 與 manifest schema/path/hash | workbook hash capture / release metadata docs | unassigned |
-| `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + workbook replay parity passed；timestamped workbook hash intentionally excluded；包含 targeted output schema artifact | workbook hash capture for full exact artifact replay | unassigned |
+| `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + normalized workbook replay parity passed；artifact policy says CSV exact, workbook normalized compare, manifest provenance-only | full byte-exact workbook replay only if a future release needs it | unassigned |
 | Headless targeted CLI | `production_ready` for targeted CLI replay parity | `xic-extractor-cli`, `--replay-manifest`, method manifest invocation context | replay rejects runtime overrides；GUI replay 未接主線 | GUI parity after mainline wiring | unassigned |
 | GUI/CLI parity | `partial_internal` | shared `load_config` / `extractor.run` | 缺 fixture-level parity diff | narrow parity smoke | unassigned |
 | `injection_order_source` | `production_surface` | settings/config/extraction pipeline | 只處理 order，不是 sample metadata universe | `sample_metadata_contract_v1` | unassigned |
-| Sample metadata roles | `production_candidate` for schema/validator only | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py` | runtime 尚未接 extraction/QC/alignment；sample role 不可改 matrix | shared sample metadata resolver adoption | active branch maintainer: `cc/framework-improvements` |
+| Sample metadata roles | `production_surface` for extraction injection-order parity; `production_candidate` for roles | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py`, `resolve_injection_order` | extraction 可用 `sample_metadata_v1` 當 injection-order source；roles/batch/matrix 尚不改 product values；alignment/QC 尚未接 shared resolver | cross-module resolver parity | none; extraction parity slice done |
 | Instrument-QC trend sidecar | `production_surface` sidecar | `run_instrument_qc.py`, instrument_qc package | 不改 main matrix；未接 shared sample metadata | sample metadata resolver | unassigned |
 | Calibration preview | `shadow_ready` / `diagnostic_only` | instrument-QC calibration preview | 不可寫 main matrix；response transfer blocked | `normalization_calibration_activation_v1` | unassigned |
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
@@ -420,6 +421,36 @@ scope.
 - Product surface changed: additive `sample_metadata_v1` TSV/CSV schema and validator CLI; no extraction/QC/alignment runtime change
 - Validation: `python -m pytest tests\test_sample_metadata.py -q`; `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py tests\test_sample_metadata.py`; `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py`
 - Remaining blocker: extraction still reads legacy `injection_order_source`; instrument-QC sequence manifest is not yet projected into `sample_metadata_v1`; alignment and normalization do not consume this resolver; sample roles cannot alter matrix values without expected-diff gates
+
+### 2026-06-16 - review_action_audited_apply_copy_v1
+
+- Previous tier: `production_candidate` for import/apply-readiness/changeset planning only
+- New tier: `production_surface` for audited targeted-long output copy and `review_action_apply_audit_v1`
+- Evidence: `xic_extractor.review_actions`; `scripts/apply_review_action_changesets.py`; `tests/test_review_actions.py`
+- Product surface changed: additive CLI that consumes `review_action_apply_changeset_v1` and writes an audited targeted-long copy plus audit TSV. The command refuses input overwrite and rejects blocked changesets by default.
+- Safe behavior boundary: `accept_current` is audit-only; `mark_unresolved` writes only `Review State = unresolved_by_review`; `reject_current` may write `Product State = rejected_by_review`, `Counted Detection = FALSE`, and `Review State = rejected_by_review` only after approved expected-diff. `select_candidate` and `set_manual_boundary` remain deferred because they need candidate sidecar or area recompute.
+- Validation: `python -m pytest tests\test_review_actions.py -q`
+- Remaining blocker: no selected-candidate switch writer, no manual-boundary area recompute writer, no workbook or primary matrix rewrite.
+
+### 2026-06-16 - sample_metadata_runtime_parity_v1
+
+- Previous tier: `production_candidate` for schema/validator only
+- New tier: `production_surface` for extraction injection-order parity; `production_candidate` for roles/batch/matrix/exclusion semantics
+- Evidence: `xic_extractor.sample_metadata`; `xic_extractor.extraction.pipeline.resolve_injection_order`; `tests/test_sample_metadata.py`; `tests/test_extractor_run.py`
+- Product surface changed: existing `injection_order_source` can now point to a `sample_metadata_v1` CSV/TSV. Legacy `Sample_Name,Injection_Order` files still use the legacy parser.
+- Safe behavior boundary: only injection-order mapping is projected; `sample_role`, batch, matrix, group, and exclusion fields do not alter extraction output, counted detection, or matrix values.
+- Validation: `python -m pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py -q`
+- Remaining blocker: instrument-QC, alignment, and normalization do not yet consume the shared sample metadata resolver.
+
+### 2026-06-16 - method_manifest_artifact_replay_policy_v1
+
+- Previous tier: `production_ready` for targeted CLI replay parity, with ambiguous full-artifact wording
+- New tier: `production_ready` for targeted CLI replay parity with explicit artifact policy; not full byte-exact workbook replay
+- Evidence: `xic_extractor.output.method_manifest`; `tests/test_method_manifest.py`; `tests/test_workbook_compare.py`
+- Product surface changed: additive `artifact_replay_policy` block in `method_manifest.json`.
+- Safe behavior boundary: CSV artifacts are byte-exact replay artifacts; timestamped workbook parity is normalized through `scripts.compare_workbooks`; `method_manifest.json` is provenance-only because each run emits a new manifest.
+- Validation: `python -m pytest tests\test_method_manifest.py tests\test_workbook_compare.py -q`
+- Remaining blocker: full byte-exact workbook hash replay remains intentionally out of scope unless a future release needs stable workbook file identity.
 
 ### 2026-06-15 - alignment_output_contract_v1
 
