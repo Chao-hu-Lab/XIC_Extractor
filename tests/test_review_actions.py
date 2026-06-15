@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from scripts import (
+    apply_review_action_changesets,
     plan_review_action_applications,
     plan_review_action_apply_changesets,
     plan_review_action_apply_readiness,
@@ -12,6 +13,7 @@ from scripts import (
 )
 from xic_extractor.review_actions import (
     REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION,
+    REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
     REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
     REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION,
     REVIEW_ACTION_COLUMNS,
@@ -21,6 +23,7 @@ from xic_extractor.review_actions import (
     ReviewAction,
     ReviewActionError,
     ReviewActionTargetState,
+    apply_review_action_changeset_rows,
     load_review_action_expected_diff_approvals,
     load_review_actions,
     parse_review_actions,
@@ -564,20 +567,18 @@ def test_review_action_apply_readiness_consumes_approved_expected_diff(
     assert rows[1]["apply_readiness_status"] == "ready_expected_diff_approved"
     assert rows[1]["expected_diff_approval_status"] == "approved"
     assert rows[1]["expected_diff_validation_tier"] == "8raw"
-    assert rows[2]["apply_readiness_status"] == (
-        "blocked_review_state_apply_not_implemented"
-    )
+    assert rows[2]["apply_readiness_status"] == "ready_review_state_only"
     assert plan.unused_expected_diff_approvals == ()
     assert summarize_review_action_apply_readiness_plan(plan) == {
         "schema_version": REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION,
         "row_count": 3,
-        "ready_count": 2,
-        "blocked_count": 1,
+        "ready_count": 3,
+        "blocked_count": 0,
         "unused_expected_diff_approval_count": 0,
         "counts_by_status": {
-            "blocked_review_state_apply_not_implemented": 1,
             "ready_expected_diff_approved": 1,
             "ready_no_output_change": 1,
+            "ready_review_state_only": 1,
         },
     }
 
@@ -926,21 +927,23 @@ def test_review_action_apply_changesets_describe_pending_operations(
     assert rows[2]["requires_area_recompute"] is True
     assert rows[3]["operation"] == "reject_current"
     assert rows[3]["proposed_counted_detection"] == "FALSE"
-    assert rows[4]["changeset_status"] == "blocked"
-    assert rows[4]["operation"] == ""
+    assert rows[4]["changeset_status"] == "ready_review_state_only"
+    assert rows[4]["operation"] == "mark_unresolved"
+    assert rows[4]["proposed_review_state"] == "unresolved_by_review"
     assert summarize_review_action_apply_changeset_plan(changeset_plan) == {
         "schema_version": REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
         "row_count": 5,
-        "ready_count": 4,
-        "blocked_count": 1,
+        "ready_count": 5,
+        "blocked_count": 0,
         "requires_area_recompute_count": 1,
         "requires_candidate_sidecar_count": 1,
         "counts_by_status": {
-            "blocked": 1,
             "ready_audit_only": 1,
             "ready_pending_product_writer": 3,
+            "ready_review_state_only": 1,
         },
         "counts_by_operation": {
+            "mark_unresolved": 1,
             "record_accept_current": 1,
             "reject_current": 1,
             "select_candidate": 1,
@@ -1015,6 +1018,288 @@ def test_plan_review_action_apply_changesets_cli_writes_changeset(
     assert REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION in output
     assert "set_manual_boundary" in output
     assert "ready_pending_product_writer" in output
+
+
+def test_apply_review_action_changesets_writes_audited_output_copy(
+    tmp_path: Path,
+) -> None:
+    actions = parse_review_actions(
+        [
+            _row(
+                sample_name="S1.raw",
+                target_label="accept",
+                action_type="accept_current",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:00:00",
+            ),
+            _row(
+                sample_name="S1.raw",
+                target_label="unresolved",
+                action_type="mark_unresolved",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:01:00",
+                comment="needs manual science review",
+            ),
+            _row(
+                sample_name="S1.raw",
+                target_label="reject",
+                action_type="reject_current",
+                expected_diff_required="TRUE",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:02:00",
+                comment="bad integration",
+            ),
+            _row(
+                sample_name="S1.raw",
+                target_label="boundary",
+                action_type="set_manual_boundary",
+                rt_left_min="8.1",
+                rt_apex_min="8.4",
+                rt_right_min="8.8",
+                expected_diff_required="TRUE",
+                reviewer="analyst",
+                reviewed_at="2026-06-15T10:03:00",
+                comment="manual boundary",
+            ),
+        ]
+    )
+    target_states = [
+        _target_state(action.sample_name, action.target_label)
+        if not action.product_mutating
+        else _target_state(
+            action.sample_name,
+            action.target_label,
+            product_state="review_required",
+            counted_detection="FALSE",
+            review_state="manual",
+        )
+        for action in actions
+    ]
+    applications = build_review_action_application_plan(actions, target_states)
+    approval_path = tmp_path / "review_action_expected_diff.tsv"
+    _write_expected_diff_tsv(
+        approval_path,
+        [
+            _approved_expected_diff_row_for_action(
+                action,
+                applications[index].target_state,
+            )
+            for index, action in enumerate(actions)
+            if action.product_mutating
+        ],
+    )
+    readiness_plan = build_review_action_apply_readiness(
+        applications,
+        load_review_action_expected_diff_approvals(approval_path),
+    )
+    changeset_plan = build_review_action_apply_changesets(readiness_plan)
+    changeset_rows = [
+        review_action_apply_changeset_to_row(row)
+        for row in changeset_plan.rows
+    ]
+    targeted_rows = [
+        {
+            "SampleName": "S1.raw",
+            "Target": "accept",
+            "Product State": "accepted",
+            "Counted Detection": "TRUE",
+            "Review State": "auto",
+        },
+        {
+            "SampleName": "S1.raw",
+            "Target": "unresolved",
+            "Product State": "review_required",
+            "Counted Detection": "FALSE",
+            "Review State": "manual",
+        },
+        {
+            "SampleName": "S1.raw",
+            "Target": "reject",
+            "Product State": "review_required",
+            "Counted Detection": "FALSE",
+            "Review State": "manual",
+        },
+        {
+            "SampleName": "S1.raw",
+            "Target": "boundary",
+            "Product State": "review_required",
+            "Counted Detection": "FALSE",
+            "Review State": "manual",
+        },
+    ]
+
+    result = apply_review_action_changeset_rows(targeted_rows, changeset_rows)
+
+    by_target = {row["Target"]: row for row in result.targeted_rows}
+    assert by_target["accept"]["Review State"] == "auto"
+    assert by_target["accept"]["Review Action Apply Status"] == "audit_recorded"
+    assert by_target["unresolved"]["Review State"] == "unresolved_by_review"
+    assert by_target["unresolved"]["Review Action Apply Status"] == (
+        "applied_review_state"
+    )
+    assert by_target["reject"]["Product State"] == "rejected_by_review"
+    assert by_target["reject"]["Counted Detection"] == "FALSE"
+    assert by_target["reject"]["Review State"] == "rejected_by_review"
+    assert by_target["reject"]["Review Action Apply Status"] == "applied_product_state"
+    assert by_target["boundary"]["Review State"] == "manual"
+    assert by_target["boundary"]["Review Action Apply Status"] == (
+        "deferred_area_recompute"
+    )
+    assert result.summary == {
+        "schema_version": REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
+        "targeted_row_count": 4,
+        "audit_row_count": 4,
+        "applied_count": 2,
+        "audit_only_count": 1,
+        "deferred_count": 1,
+        "blocked_count": 0,
+        "counts_by_status": {
+            "applied_product_state": 1,
+            "applied_review_state": 1,
+            "audit_recorded": 1,
+            "deferred_area_recompute": 1,
+        },
+    }
+
+
+def test_apply_review_action_changesets_cli_writes_copy_and_audit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    changeset_path = tmp_path / "review_action_apply_changeset.tsv"
+    target_path = tmp_path / "xic_results_long.csv"
+    output_path = tmp_path / "xic_results_long.review_applied.csv"
+    audit_path = tmp_path / "review_action_apply_audit.tsv"
+    target_path.write_text(
+        "SampleName,Target,Product State,Counted Detection,Review State\n"
+        "S1.raw,5-mdC,review_required,FALSE,manual\n",
+        encoding="utf-8",
+    )
+    changeset_path.write_text(
+        "\t".join(
+            [
+                "schema_version",
+                "sample_name",
+                "target_label",
+                "action_type",
+                "changeset_status",
+                "apply_readiness_status",
+                "operation",
+                "product_mutating",
+                "output_scope",
+                "requires_expected_diff_approval",
+                "expected_diff_stable_row_id",
+                "expected_diff_validation_tier",
+                "expected_matrix_value_impact",
+                "expected_public_outputs_touched",
+                "evidence_sources",
+                "evidence_summary",
+                "candidate_id",
+                "boundary_id",
+                "rt_left_min",
+                "rt_apex_min",
+                "rt_right_min",
+                "proposed_product_state",
+                "proposed_counted_detection",
+                "proposed_review_state",
+                "requires_area_recompute",
+                "requires_candidate_sidecar",
+                "reason",
+                "reviewer",
+                "reviewed_at",
+                "comment",
+                "approval_notes",
+            ]
+        )
+        + "\n"
+        + "\t".join(
+            [
+                REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
+                "S1.raw",
+                "5-mdC",
+                "reject_current",
+                "ready_pending_product_writer",
+                "ready_expected_diff_approved",
+                "reject_current",
+                "TRUE",
+                "product_state;counted_detection;targeted_long_csv;audit_trail",
+                "TRUE",
+                "review_action_expected_diff:abc",
+                "8raw",
+                "presence_changed",
+                "targeted_long_csv;workbook;final_matrix",
+                "manual_review",
+                "reviewer confirmed bad peak",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "rejected_by_review",
+                "FALSE",
+                "rejected_by_review",
+                "FALSE",
+                "FALSE",
+                "approved_expected_diff_allows_future_reject_current",
+                "analyst",
+                "2026-06-15T10:00:00",
+                "bad integration",
+                "approved",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        apply_review_action_changesets.main(
+            [
+                "--targeted-long-csv",
+                str(target_path),
+                "--changeset-tsv",
+                str(changeset_path),
+                "--output-targeted-long-csv",
+                str(output_path),
+                "--output-audit-tsv",
+                str(audit_path),
+                "--summary-json",
+            ]
+        )
+        == 0
+    )
+
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["applied_count"] == 1
+    assert "rejected_by_review" in output_path.read_text(encoding="utf-8")
+    assert REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION in audit_path.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_apply_review_action_changesets_rejects_blocked_rows() -> None:
+    with pytest.raises(ReviewActionError, match="blocked changeset row"):
+        apply_review_action_changeset_rows(
+            [
+                {
+                    "SampleName": "S1.raw",
+                    "Target": "5-mdC",
+                    "Product State": "review_required",
+                    "Counted Detection": "FALSE",
+                    "Review State": "manual",
+                }
+            ],
+            [
+                {
+                    "schema_version": REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
+                    "sample_name": "S1.raw",
+                    "target_label": "5-mdC",
+                    "action_type": "reject_current",
+                    "changeset_status": "blocked",
+                    "operation": "",
+                    "reason": "expected_diff_missing",
+                }
+            ],
+        )
 
 
 def test_plan_review_action_applications_blocks_missing_or_duplicate_targets() -> None:

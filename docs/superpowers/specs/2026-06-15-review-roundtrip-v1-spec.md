@@ -185,7 +185,7 @@ rows where:
 
 ### Explicit non-goals
 
-- no product-writing apply loop
+- no product-writing apply loop in this expected-diff template slice
 - no approval consumption in extraction runtime
 - no manual boundary area recompute
 - no selected candidate switch
@@ -227,8 +227,9 @@ blocked.
 - `blocked_expected_diff_baseline_mismatch`: a matching approval exists, but it
   was reviewed against a different `Product State`, `Counted Detection`, or
   `Review State` than the current targeted row.
-- `blocked_review_state_apply_not_implemented`: `mark_unresolved` is recognized
-  but still lacks a public review-state write/audit contract.
+- `ready_review_state_only`: `mark_unresolved` can be written to an audited
+  targeted-long output copy as `Review State = unresolved_by_review` without
+  changing area, product state, counted detection, workbook, or final matrix.
 - `blocked_application_plan`: the earlier application plan already blocked the
   action because target rows were missing, duplicated, or ambiguous.
 
@@ -238,48 +239,71 @@ exists only for explicitly reviewed subset/registry workflows.
 
 ### Explicit non-goals
 
-- no product-writing apply loop
+- no product-writing apply loop in this apply-readiness slice
 - no manual boundary area recompute
 - no selected candidate switch
 - no counted detection/product-state mutation
 - no workbook or matrix rewrite
 
-## Fifth slice contract: apply changeset dry-run contract
+## Fifth slice contract: apply changeset contract
 
-This slice still does not modify extraction outputs. It converts
-apply-readiness rows into a field-scope changeset that a later product-writing
-loop can consume.
+This slice converts apply-readiness rows into a field-scope changeset. The
+changeset can now be consumed by a guarded writer that creates audited output
+copies. It still does not overwrite extraction outputs, workbook files, or
+primary matrices.
 
 ### Public surface
 
 - `scripts/plan_review_action_apply_changesets.py`
+- `scripts/apply_review_action_changesets.py`
 - `review_action_apply_changeset_v1` TSV
+- `review_action_apply_audit_v1` TSV
 - `plan_review_action_apply_changesets(...)`
+- `apply_review_action_changeset_rows(...)`
 
 ### Current changeset statuses
 
 - `ready_audit_only`: review intent can be recorded without product mutation.
-- `ready_pending_product_writer`: the action has enough approval to be handed
-  to a future writer, but this slice does not write product outputs.
+- `ready_review_state_only`: the action can update only `Review State` in an
+  audited targeted-long copy.
+- `ready_pending_product_writer`: the action has enough approval to be handed to
+  a guarded writer. `reject_current` can update product/count/review state in an
+  audited targeted-long copy; `select_candidate` and `set_manual_boundary`
+  remain deferred because they need candidate sidecars or area recompute.
 - `blocked`: the action is not ready for writing.
 
 ### Current operations
 
 - `record_accept_current`: audit-only operation for `accept_current`.
-- `reject_current`: future product writer should mark the detection rejected and
-  counted false.
-- `select_candidate`: future product writer should switch selected candidate;
-  currently requires candidate sidecar support.
-- `set_manual_boundary`: future product writer should use manual RT boundaries;
-  currently requires area recompute.
+- `mark_unresolved`: writes `Review State = unresolved_by_review` to the audited
+  targeted-long output copy.
+- `reject_current`: writes `Product State = rejected_by_review`,
+  `Counted Detection = FALSE`, and `Review State = rejected_by_review` to the
+  audited targeted-long output copy after approved expected-diff validation.
+- `select_candidate`: records a deferred candidate-sidecar operation; it does
+  not switch selected peak or area.
+- `set_manual_boundary`: records a deferred area-recompute operation; it does
+  not recompute area.
+
+### Apply output contract
+
+`scripts/apply_review_action_changesets.py` reads a current targeted long
+CSV/TSV and a `review_action_apply_changeset_v1` TSV, then writes:
+
+- an audited targeted long copy with additive `Review Action ...` audit columns;
+- a `review_action_apply_audit_v1` TSV describing old state, new state, action,
+  reviewer, expected-diff id, and deferred requirements.
+
+The command refuses to overwrite the input targeted long file and rejects
+blocked changeset rows by default.
 
 ### Explicit non-goals
 
 - no selected candidate switch
 - no manual boundary area recompute
-- no counted detection/product-state mutation
-- no workbook or matrix rewrite
-- no audit trail write; this only defines the planned audit/write operation
+- no workbook or primary matrix rewrite
+- no in-place overwrite of extraction outputs
+- no area or candidate change without the future recompute/sidecar writer
 
 ## Implementation closeout
 
@@ -293,6 +317,8 @@ loop can consume.
   - `REVIEW_ACTION_APPLY_READINESS_COLUMNS`
   - `REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION = review_action_apply_changeset_v1`
   - `REVIEW_ACTION_APPLY_CHANGESET_COLUMNS`
+  - `REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION = review_action_apply_audit_v1`
+  - `REVIEW_ACTION_APPLY_AUDIT_COLUMNS`
   - typed `ReviewAction`
   - `load_review_actions(...)`
   - `summarize_review_actions(...)`
@@ -301,6 +327,7 @@ loop can consume.
   - `plan_review_action_expected_diff_templates(...)`
   - `plan_review_action_apply_readiness(...)`
   - `plan_review_action_apply_changesets(...)`
+  - `apply_review_action_changeset_rows(...)`
   - `load_review_action_expected_diff_approvals(...)`
   - `summarize_review_action_applications(...)`
   - `write_review_action_application_plan(...)`

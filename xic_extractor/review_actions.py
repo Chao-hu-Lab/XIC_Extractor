@@ -7,13 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from xic_extractor.tabular_io import read_delimited_rows, write_tsv
+from xic_extractor.tabular_io import (
+    read_delimited_rows,
+    write_delimited_rows,
+    write_tsv,
+)
 
 REVIEW_ACTION_SCHEMA_VERSION = "review_action_v1"
 REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION = "review_action_application_plan_v1"
 REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION = "review_action_expected_diff_v1"
 REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION = "review_action_apply_readiness_v1"
 REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION = "review_action_apply_changeset_v1"
+REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION = "review_action_apply_audit_v1"
 REVIEW_ACTION_COLUMNS: tuple[str, ...] = (
     "schema_version",
     "sample_name",
@@ -166,6 +171,40 @@ REVIEW_ACTION_APPLY_CHANGESET_COLUMNS: tuple[str, ...] = (
     "comment",
     "approval_notes",
 )
+REVIEW_ACTION_TARGETED_APPLY_AUDIT_COLUMNS: tuple[str, ...] = (
+    "Review Action Apply Status",
+    "Review Action Operation",
+    "Review Action Reason",
+    "Review Action Reviewer",
+    "Review Action Reviewed At",
+    "Review Action Expected Diff Stable Row ID",
+    "Review Action Requires Area Recompute",
+    "Review Action Requires Candidate Sidecar",
+)
+REVIEW_ACTION_APPLY_AUDIT_COLUMNS: tuple[str, ...] = (
+    "schema_version",
+    "sample_name",
+    "target_label",
+    "action_type",
+    "operation",
+    "apply_status",
+    "changed_targeted_long",
+    "product_mutating",
+    "previous_product_state",
+    "previous_counted_detection",
+    "previous_review_state",
+    "new_product_state",
+    "new_counted_detection",
+    "new_review_state",
+    "requires_area_recompute",
+    "requires_candidate_sidecar",
+    "expected_diff_stable_row_id",
+    "expected_diff_validation_tier",
+    "reason",
+    "reviewer",
+    "reviewed_at",
+    "comment",
+)
 REVIEW_ACTION_EXPECTED_DIFF_FINAL_LABELS = frozenset(
     {"expected_diff", "blocked_diff", "inconclusive"}
 )
@@ -305,6 +344,17 @@ class ReviewActionApplyChangeset:
 @dataclass(frozen=True)
 class ReviewActionApplyChangesetPlan:
     rows: tuple[ReviewActionApplyChangeset, ...]
+
+
+@dataclass(frozen=True)
+class ReviewActionApplyOutput:
+    targeted_rows: tuple[dict[str, str], ...]
+    targeted_fieldnames: tuple[str, ...]
+    audit_rows: tuple[dict[str, object], ...]
+
+    @property
+    def summary(self) -> dict[str, object]:
+        return summarize_review_action_apply_output(self)
 
 
 class ReviewActionError(ValueError):
@@ -514,8 +564,8 @@ def plan_review_action_apply_readiness(
             rows.append(
                 ReviewActionApplyReadiness(
                     application=application,
-                    apply_readiness_status="blocked_review_state_apply_not_implemented",
-                    reason="review_state_write_contract_missing",
+                    apply_readiness_status="ready_review_state_only",
+                    reason="review_state_write_contract_available",
                 )
             )
             continue
@@ -596,6 +646,119 @@ def write_review_action_apply_changeset_plan(
     )
 
 
+def load_review_action_apply_changeset_rows(
+    path: Path,
+) -> tuple[dict[str, str], ...]:
+    if not path.is_file():
+        raise ReviewActionError(f"{path}: review action changeset file not found")
+    try:
+        rows = read_delimited_rows(
+            path,
+            required_columns=REVIEW_ACTION_APPLY_CHANGESET_COLUMNS,
+            delimiter="\t",
+            encoding="utf-8-sig",
+        )
+    except ValueError as exc:
+        raise ReviewActionError(str(exc)) from exc
+    return tuple(rows)
+
+
+def load_targeted_long_rows(
+    path: Path,
+) -> tuple[dict[str, str], ...]:
+    if not path.is_file():
+        raise ReviewActionError(f"{path}: targeted long file not found")
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
+    try:
+        rows = read_delimited_rows(
+            path,
+            required_columns=(
+                "SampleName",
+                "Target",
+                "Product State",
+                "Counted Detection",
+                "Review State",
+            ),
+            delimiter=delimiter,
+            encoding="utf-8-sig",
+        )
+    except ValueError as exc:
+        raise ReviewActionError(str(exc)) from exc
+    return tuple(rows)
+
+
+def apply_review_action_changeset_rows(
+    targeted_rows: Sequence[Mapping[str, object]],
+    changeset_rows: Sequence[Mapping[str, object]],
+    *,
+    allow_blocked: bool = False,
+) -> ReviewActionApplyOutput:
+    rows = [_string_row(row) for row in targeted_rows]
+    fieldnames = _applied_targeted_fieldnames(rows)
+    target_index = _index_targeted_rows(rows)
+    applied_keys: set[tuple[str, str]] = set()
+    audit_rows: list[dict[str, object]] = []
+
+    for row_number, changeset in enumerate(changeset_rows, start=2):
+        normalized = _normalize_changeset_row(changeset)
+        _validate_changeset_row(normalized, source="<changeset>", row_number=row_number)
+        key = (normalized["sample_name"], normalized["target_label"])
+        if normalized["changeset_status"] == "blocked" and not allow_blocked:
+            raise ReviewActionError(
+                "<changeset>:"
+                f"{row_number}: blocked changeset row cannot be applied"
+            )
+        target_row = target_index.get(key)
+        if target_row is None:
+            sample_name, target_label = key
+            raise ReviewActionError(
+                "<changeset>:"
+                f"{row_number}: target row missing for sample_name={sample_name!r}, "
+                f"target_label={target_label!r}"
+            )
+        if key in applied_keys:
+            sample_name, target_label = key
+            raise ReviewActionError(
+                "<changeset>:"
+                f"{row_number}: multiple apply changesets for sample_name="
+                f"{sample_name!r}, target_label={target_label!r}"
+            )
+        applied_keys.add(key)
+        audit_rows.append(_apply_single_changeset(target_row, normalized))
+
+    return ReviewActionApplyOutput(
+        targeted_rows=tuple(rows),
+        targeted_fieldnames=fieldnames,
+        audit_rows=tuple(audit_rows),
+    )
+
+
+def write_review_action_applied_targeted_long(
+    path: Path,
+    output: ReviewActionApplyOutput,
+) -> None:
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
+    write_delimited_rows(
+        path,
+        output.targeted_rows,
+        output.targeted_fieldnames,
+        delimiter=delimiter,
+        lineterminator="\n",
+    )
+
+
+def write_review_action_apply_audit(
+    path: Path,
+    output: ReviewActionApplyOutput,
+) -> None:
+    write_tsv(
+        path,
+        output.audit_rows,
+        REVIEW_ACTION_APPLY_AUDIT_COLUMNS,
+        lineterminator="\n",
+    )
+
+
 def parse_review_actions(
     rows: Iterable[Mapping[str, object]],
     *,
@@ -608,6 +771,175 @@ def parse_review_actions(
             continue
         parsed.append(_parse_action_row(normalized, source=source, row_number=index))
     return tuple(parsed)
+
+
+def _string_row(row: Mapping[str, object]) -> dict[str, str]:
+    return {str(key): _clean_text(value) for key, value in row.items()}
+
+
+def _applied_targeted_fieldnames(
+    rows: Sequence[Mapping[str, object]],
+) -> tuple[str, ...]:
+    fieldnames: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for key in row:
+            if key not in seen:
+                seen.add(str(key))
+                fieldnames.append(str(key))
+    for column in REVIEW_ACTION_TARGETED_APPLY_AUDIT_COLUMNS:
+        if column not in seen:
+            fieldnames.append(column)
+            seen.add(column)
+    return tuple(fieldnames)
+
+
+def _index_targeted_rows(
+    rows: Sequence[dict[str, str]],
+) -> dict[tuple[str, str], dict[str, str]]:
+    indexed: dict[tuple[str, str], dict[str, str]] = {}
+    for row_number, row in enumerate(rows, start=2):
+        sample_name = _clean_text(row.get("SampleName", ""))
+        target_label = _clean_text(row.get("Target", ""))
+        if not sample_name or not target_label:
+            raise ReviewActionError(
+                f"<targeted_long>:{row_number}: SampleName and Target are required"
+            )
+        for column in TARGETED_REVIEW_STATE_COLUMNS:
+            if column not in row:
+                raise ReviewActionError(
+                    f"<targeted_long>:{row_number}: missing required column "
+                    f"{column!r}"
+                )
+        key = (sample_name, target_label)
+        if key in indexed:
+            raise ReviewActionError(
+                "targeted output contains duplicate review target rows: "
+                f"sample_name={sample_name!r}, target_label={target_label!r}"
+            )
+        indexed[key] = row
+    return indexed
+
+
+def _normalize_changeset_row(row: Mapping[str, object]) -> dict[str, str]:
+    return {
+        header: _clean_text(row.get(header, ""))
+        for header in REVIEW_ACTION_APPLY_CHANGESET_COLUMNS
+    }
+
+
+def _validate_changeset_row(
+    row: Mapping[str, str],
+    *,
+    source: str,
+    row_number: int,
+) -> None:
+    if row["schema_version"] != REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION:
+        raise ReviewActionError(
+            f"{source}:{row_number}: unsupported schema_version "
+            f"{row['schema_version']!r}"
+        )
+    _required_text(row, "sample_name", source, row_number)
+    _required_text(row, "target_label", source, row_number)
+    operation = row["operation"]
+    if row["changeset_status"] != "blocked" and not operation:
+        raise ReviewActionError(f"{source}:{row_number}: operation is required")
+    if operation and operation not in {
+        "record_accept_current",
+        "mark_unresolved",
+        "reject_current",
+        "select_candidate",
+        "set_manual_boundary",
+    }:
+        raise ReviewActionError(
+            f"{source}:{row_number}: unsupported operation {operation!r}"
+        )
+
+
+def _apply_single_changeset(
+    target_row: dict[str, str],
+    changeset: Mapping[str, str],
+) -> dict[str, object]:
+    previous_product_state = target_row.get("Product State", "")
+    previous_counted_detection = target_row.get("Counted Detection", "")
+    previous_review_state = target_row.get("Review State", "")
+    operation = changeset["operation"]
+    apply_status = _apply_status_for_changeset(changeset)
+    changed_targeted_long = False
+
+    if apply_status == "applied_review_state":
+        target_row["Review State"] = changeset["proposed_review_state"]
+        changed_targeted_long = True
+    elif apply_status == "applied_product_state":
+        target_row["Product State"] = changeset["proposed_product_state"]
+        target_row["Counted Detection"] = changeset["proposed_counted_detection"]
+        if changeset["proposed_review_state"]:
+            target_row["Review State"] = changeset["proposed_review_state"]
+        changed_targeted_long = True
+
+    _write_apply_columns(target_row, changeset, apply_status)
+    return {
+        "schema_version": REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
+        "sample_name": changeset["sample_name"],
+        "target_label": changeset["target_label"],
+        "action_type": changeset["action_type"],
+        "operation": operation,
+        "apply_status": apply_status,
+        "changed_targeted_long": changed_targeted_long,
+        "product_mutating": changeset["product_mutating"],
+        "previous_product_state": previous_product_state,
+        "previous_counted_detection": previous_counted_detection,
+        "previous_review_state": previous_review_state,
+        "new_product_state": target_row.get("Product State", ""),
+        "new_counted_detection": target_row.get("Counted Detection", ""),
+        "new_review_state": target_row.get("Review State", ""),
+        "requires_area_recompute": changeset["requires_area_recompute"],
+        "requires_candidate_sidecar": changeset["requires_candidate_sidecar"],
+        "expected_diff_stable_row_id": changeset["expected_diff_stable_row_id"],
+        "expected_diff_validation_tier": changeset["expected_diff_validation_tier"],
+        "reason": changeset["reason"],
+        "reviewer": changeset["reviewer"],
+        "reviewed_at": changeset["reviewed_at"],
+        "comment": changeset["comment"],
+    }
+
+
+def _apply_status_for_changeset(row: Mapping[str, str]) -> str:
+    operation = row["operation"]
+    if row["changeset_status"] == "blocked":
+        return "blocked"
+    if operation == "record_accept_current":
+        return "audit_recorded"
+    if operation == "mark_unresolved":
+        return "applied_review_state"
+    if operation == "reject_current":
+        return "applied_product_state"
+    if operation == "select_candidate":
+        return "deferred_candidate_sidecar"
+    if operation == "set_manual_boundary":
+        return "deferred_area_recompute"
+    raise ReviewActionError(f"unsupported operation {operation!r}")
+
+
+def _write_apply_columns(
+    target_row: dict[str, str],
+    changeset: Mapping[str, str],
+    apply_status: str,
+) -> None:
+    target_row["Review Action Apply Status"] = apply_status
+    target_row["Review Action Operation"] = changeset["operation"]
+    target_row["Review Action Reason"] = changeset["reason"]
+    target_row["Review Action Reviewer"] = changeset["reviewer"]
+    target_row["Review Action Reviewed At"] = changeset["reviewed_at"]
+    target_row["Review Action Expected Diff Stable Row ID"] = changeset[
+        "expected_diff_stable_row_id"
+    ]
+    target_row["Review Action Requires Area Recompute"] = changeset[
+        "requires_area_recompute"
+    ]
+    target_row["Review Action Requires Candidate Sidecar"] = changeset[
+        "requires_candidate_sidecar"
+    ]
 
 
 def _target_state_from_row(row: Mapping[str, str]) -> ReviewActionTargetState:
@@ -1100,6 +1432,20 @@ def _changeset_from_readiness(
             proposed_review_state="accepted_current",
             reason="records_review_intent_without_product_mutation",
         )
+    if readiness.apply_readiness_status == "ready_review_state_only":
+        return ReviewActionApplyChangeset(
+            readiness=readiness,
+            changeset_status="ready_review_state_only",
+            operation="mark_unresolved",
+            output_scope=(
+                "review_state",
+                "targeted_long_csv",
+                "workbook",
+                "audit_trail",
+            ),
+            proposed_review_state="unresolved_by_review",
+            reason="records_unresolved_review_state_without_area_or_matrix_change",
+        )
     if readiness.apply_readiness_status != "ready_expected_diff_approved":
         return ReviewActionApplyChangeset(
             readiness=readiness,
@@ -1123,6 +1469,7 @@ def _changeset_from_readiness(
             ),
             proposed_product_state="rejected_by_review",
             proposed_counted_detection="FALSE",
+            proposed_review_state="rejected_by_review",
             reason="approved_expected_diff_allows_future_reject_current",
         )
     if action.action_type == "select_candidate":
@@ -1299,6 +1646,37 @@ def summarize_review_action_apply_changeset_plan(
         "requires_candidate_sidecar_count": candidate_sidecar_count,
         "counts_by_status": dict(sorted(counts_by_status.items())),
         "counts_by_operation": dict(sorted(counts_by_operation.items())),
+    }
+
+
+def summarize_review_action_apply_output(
+    output: ReviewActionApplyOutput,
+) -> dict[str, object]:
+    counts_by_status: dict[str, int] = {}
+    applied_count = 0
+    audit_only_count = 0
+    deferred_count = 0
+    blocked_count = 0
+    for row in output.audit_rows:
+        status = str(row["apply_status"])
+        counts_by_status[status] = counts_by_status.get(status, 0) + 1
+        if status.startswith("applied_"):
+            applied_count += 1
+        elif status == "audit_recorded":
+            audit_only_count += 1
+        elif status.startswith("deferred_"):
+            deferred_count += 1
+        elif status.startswith("blocked"):
+            blocked_count += 1
+    return {
+        "schema_version": REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
+        "targeted_row_count": len(output.targeted_rows),
+        "audit_row_count": len(output.audit_rows),
+        "applied_count": applied_count,
+        "audit_only_count": audit_only_count,
+        "deferred_count": deferred_count,
+        "blocked_count": blocked_count,
+        "counts_by_status": dict(sorted(counts_by_status.items())),
     }
 
 
