@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+HOOKS = ROOT / ".codex" / "hooks"
+sys.path.insert(0, str(HOOKS))
+
+from xic_hook_policy import PRODUCT_SURFACE_PATHS, mentions_any_path  # noqa: E402
+
+
+def run_hook(script: str, event: dict[str, object]) -> dict[str, object]:
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / script)],
+        input=json.dumps(event),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    output = result.stdout.strip()
+    if not output:
+        raise AssertionError(f"{script} emitted no output")
+    return json.loads(output)
+
+
+def assert_contains(value: object, expected: str) -> None:
+    text = json.dumps(value, ensure_ascii=False)
+    if expected not in text:
+        raise AssertionError(f"expected {expected!r} in {text}")
+
+
+def main() -> int:
+    prompt_payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "turn_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "prompt": "這個功能是不是已經正式產品化？我要確認 promotion tier。",
+    }
+    assert_contains(
+        run_hook("xic_prompt_router.py", prompt_payload),
+        "productization-control-plane.md",
+    )
+
+    pre_payload = {
+        "hook_event_name": "PreToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "Set-Content xic_extractor\\output\\schema.py '# edit'",
+        },
+    }
+    assert_contains(
+        run_hook("xic_pre_tool_guard.py", pre_payload),
+        "Product/public surface may be edited",
+    )
+
+    apply_patch_payload = {
+        "hook_event_name": "PreToolUse",
+        "turn_id": "fixture",
+        "tool_name": "apply_patch",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "patch": "*** Update File: xic_extractor/signal_processing.py\n",
+        },
+    }
+    assert_contains(
+        run_hook("xic_pre_tool_guard.py", apply_patch_payload),
+        "Product/public surface may be edited",
+    )
+
+    post_subdir_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": "docs",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "Set-Content ..\\xic_extractor\\output\\schema.py '# edit'",
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
+    assert_contains(
+        run_hook("xic_post_tool_guard.py", post_subdir_payload),
+        "productization control plane",
+    )
+
+    post_apply_patch_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "apply_patch",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "patch": "*** Update File: scripts/run_any_public_cli.py\n",
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
+    assert_contains(
+        run_hook("xic_post_tool_guard.py", post_apply_patch_payload),
+        "productization control plane",
+    )
+
+    non_product_payload = {
+        "hook_event_name": "PreToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "Set-Content docs\\scratch-note.md '# note'",
+        },
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_pre_tool_guard.py")],
+        input=json.dumps(non_product_payload),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError("non-product path emitted productization context")
+
+    product_with_control_plane_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "apply_patch",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "patch": (
+                "*** Update File: xic_extractor/output/schema.py\n"
+                "*** Update File: docs/superpowers/plans/"
+                "2026-06-15-productization-control-plane.md\n"
+            ),
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(product_with_control_plane_payload),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError("product edit with control-plane edit emitted warning")
+
+    for path in (
+        "scripts/run_new_cli.py",
+        "xic_extractor/extractor.py",
+        "xic_extractor/signal_processing.py",
+        "..\\xic_extractor\\output\\schema.py",
+    ):
+        if not mentions_any_path(path, PRODUCT_SURFACE_PATHS):
+            raise AssertionError(f"public surface path did not match: {path}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
