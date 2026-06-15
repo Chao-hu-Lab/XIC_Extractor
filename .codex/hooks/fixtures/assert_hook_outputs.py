@@ -47,6 +47,18 @@ def main() -> int:
         "productization-control-plane.md",
     )
 
+    handoff_prompt_payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "turn_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "prompt": "準備收尾，請更新交接文件，避免下一個 session 因 context compaction 丟資訊。",
+    }
+    assert_contains(
+        run_hook("xic_prompt_router.py", handoff_prompt_payload),
+        "cc-framework-improvements-productization.md",
+    )
+
     pre_payload = {
         "hook_event_name": "PreToolUse",
         "turn_id": "fixture",
@@ -152,9 +164,31 @@ def main() -> int:
         },
         "tool_response": {"stdout": "", "stderr": ""},
     }
+    assert_contains(
+        run_hook("xic_post_tool_guard.py", product_with_control_plane_payload),
+        "cc-framework-improvements-productization.md",
+    )
+
+    product_with_control_plane_and_handoff_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "apply_patch",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "patch": (
+                "*** Update File: xic_extractor/output/schema.py\n"
+                "*** Update File: docs/superpowers/plans/"
+                "2026-06-15-productization-control-plane.md\n"
+                "*** Update File: docs/superpowers/handoffs/current/cc-framework-improvements-productization.md\n"
+            ),
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
     result = subprocess.run(
         [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
-        input=json.dumps(product_with_control_plane_payload),
+        input=json.dumps(product_with_control_plane_and_handoff_payload),
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -162,7 +196,7 @@ def main() -> int:
         timeout=5,
     )
     if result.stdout.strip():
-        raise AssertionError("product edit with control-plane edit emitted warning")
+        raise AssertionError("product/control-plane edit with handoff edit emitted warning")
 
     for path in (
         "scripts/run_new_cli.py",

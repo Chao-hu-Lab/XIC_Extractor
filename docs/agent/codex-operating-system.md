@@ -18,6 +18,11 @@ high-cost mistakes early without turning every task into ceremony.
   current canonical productization tier board and maintenance checklist.
   Behavior specs for individual lanes still live in named `docs/superpowers/specs/`
   or implementation plans.
+- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`:
+  current
+  plain-language continuation summary for this productization branch. It
+  summarizes recent work and next action; it does not override the control
+  plane, named specs, validation notes, or git state.
 - `.codex/agents/*.toml`: opt-in reviewer/worker profiles, routed by
   `docs/agent-subagent-routing.md`.
 - Automations: only for recurring workspace jobs or heartbeat follow-ups that
@@ -32,6 +37,9 @@ The hook set is intentionally small:
   also blocks prompt text that looks like a pasted secret. Productization
   prompts inject the control-plane requirement so maturity tier claims point to
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
+  Handoff/closeout/compaction prompts inject the
+  `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` refresh
+  requirement.
 - `PreToolUse`: blocks clear destructive git commands and background RAW
   launches through `Start-Process`; adds context when edits touch
   execution-affecting config, root agent contracts, or product/public surfaces
@@ -40,10 +48,19 @@ The hook set is intentionally small:
   agent to fix the node id instead of treating the run as validation. It also
   reminds write-like product/public surface changes to update the
   productization control plane or explicitly state that no maturity tier changed.
+  If product/control-plane state may have changed without the handoff being part
+  of the update, it reminds closeout to refresh the handoff or state why it is
+  still current.
 
 Hooks are guardrails, not full enforcement. Keep them deterministic, fast, and
 rarely chatty. If a hook fires too often without changing behavior, remove or
 narrow it.
+
+Global skills such as `handoff` and `worktree-report` are convenience
+entrypoints, not pinned XIC authority. If a global skill differs from this
+version-controlled repo contract, follow this repo's `AGENTS.md`, this operating
+document, the control plane, and the hook fixtures. Update the global skill
+later only as an environment-maintenance follow-up.
 
 ## Current Repo-Local Rules
 

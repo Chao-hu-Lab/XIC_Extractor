@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 CONTROL_PLANE_PATH = "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
+HANDOFF_PATH = "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
 
 PRODUCT_SURFACE_PATHS = [
     "README.md",
@@ -62,3 +63,10 @@ def touches_product_surface(paths: list[str]) -> bool:
 
 def touches_control_plane(paths: list[str]) -> bool:
     return any(path_is_under(path, CONTROL_PLANE_PATH) for path in paths)
+
+
+def touches_handoff(paths: list[str]) -> bool:
+    return any(
+        path_is_under(path, HANDOFF_PATH) or path_is_under(HANDOFF_PATH, path)
+        for path in paths
+    )

@@ -4,6 +4,24 @@
 狀態: living plan / maintenance checklist
 目前 readiness: `diagnostic_only` for this control document
 主要依據: [current capability inventory](../reports/2026-06-15-current-capability-inventory-and-promotion-roadmap.md)
+白話交接: [current productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
+
+## Authority
+
+這份 control plane 擁有產品化 tier、active lane、WIP limit、promotion
+packet 的權威。白話 handoff 只負責讓下一個 agent/session 快速接手，不可
+用「比較新」覆蓋本文件的 tier 判斷。若文件衝突，先停止並同步:
+
+1. `git status` / `git diff` 決定目前工作樹實況。
+2. 本文件決定 maturity tier、active lane、WIP owner、promotion gate。
+3. named specs/plans 決定 schema、CLI/config/output 行為契約。
+4. validation notes 決定 RAW/benchmark evidence。
+5. handoff 只做白話摘要、接手順序、下一步建議。
+
+Global skills such as `handoff` / `worktree-report` can remind agents how to
+write this handoff, but they are local environment helpers. XIC's enforceable
+handoff contract is the version-controlled combination of this document,
+`docs/agent/codex-operating-system.md`, `.codex/hooks/*`, and hook fixtures.
 
 ## Purpose
 
@@ -21,20 +39,27 @@
 
 - `UserPromptSubmit`: prompt 提到產品化、promotion、正式功能、maturity tier、`method_manifest`、`review_roundtrip` 等詞時，自動把本文件拉回上下文。
 - `PreToolUse`: write-like 工具準備修改 product/public surface 時，提醒必須更新本文件，或明確說明沒有 maturity tier 變動。
-- `PostToolUse`: patch/write 類工具執行後，若工作樹已有 product/public surface diff 但本文件沒有變更，提醒 closeout 前補 board/log 或明確記錄 no-tier-change。
+- `PostToolUse`: patch/write 類工具執行後，若工作樹已有 product/public surface diff 但本文件沒有變更，提醒 closeout 前補 board/log 或明確記錄 no-tier-change；若 product/control-plane 狀態可能變了但白話 handoff 沒有同步，也提醒 closeout 前補 handoff 或明確記錄 handoff 仍有效。
 
-Hooks 是 guardrails，不是語意裁判。它們負責把你和 agent 拉回控制台；真正的 tier 判斷仍要寫在 promotion packet、spec closeout 或 maintenance log 裡。
+Hooks 是 guardrails，不是語意裁判。它們負責把你和 agent 拉回控制台；
+真正的 tier 判斷仍要寫在 promotion packet、spec closeout 或 maintenance
+log 裡。Project-local hooks 也需要 Codex runtime trust；如果 hooks 沒有被
+trust 或沒有載入，本文件和 handoff checklist 仍是人工 closeout gate。
 
-## Current 2-week active lanes
+## Current medium-term active lanes
 
-這是目前唯一可推進的 2 週產品化窗口。其他 lane 留在 inventory，不得開始 implementation。
+這次 goal 已擴大到中期可收斂項目，但仍維持 WIP limit。已完成的
+`method_manifest_v1` 和 `targeted_schema_versioning_v1` 不再佔 active lane。
+下一個 primary lane 是 ReviewAction apply/reintegration；supporting lane 只
+允許做 sample metadata runtime parity，不可讓 sample role 直接改 main
+matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `method_manifest_v1` | main agent until assigned otherwise | spec + promotion packet only; no product code before intake packet is reviewed | stop if manifest scope expands beyond targeted extraction provenance/replay |
-| Supporting | none | none | only schema/provenance support needed by `method_manifest_v1` after the primary packet names it | stop if it becomes a second product lane |
-| Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes `method_manifest_v1` |
-| Frozen queue | `review_roundtrip_v1`, `sample_metadata_contract_v1`, `alignment_output_contract_v1` | none | planning notes only; no implementation | unfreeze only after primary lane is promoted, killed, or explicitly parked |
+| Primary | `review_action_apply_v1` | active branch maintainer: `cc/framework-improvements` | dry-run application plan exists; next slice may add audit/apply only with expected-diff | stop if a manual action changes selected peak/area/counting without expected-diff |
+| Supporting | `sample_metadata_runtime_parity_v1` | active branch maintainer: `cc/framework-improvements` | project `sample_metadata_v1` into current injection-order behavior and prove output parity | stop if sample role changes extraction output, counted detection, or matrix value |
+| Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes active lane acceptance |
+| Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
 
 Hard gate: a lane without a `WIP owner`, productization intake packet, and stop
 rule must not enter implementation. Hooks only remind; this table decides active
@@ -71,21 +96,23 @@ scope.
 
 | Lane | Current tier | Current owner / artifact | Product gap | Next checkpoint | WIP owner |
 |---|---:|---|---|---|---|
-| Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | 缺 schema version 與 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
+| Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | schema version 已鎖；缺 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
+| Targeted output schema versioning | `production_surface` | `output/schema.py`, manifest `output_schema`, workbook `Run Metadata` | CSV 欄位形狀未改；version 目前透過 manifest/metadata 暴露，不是每列 CSV 欄位 | schema snapshot / downstream handoff profile | none; slice done |
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
 | `Review Queue` | `production_surface` as worklist | workbook `Review Queue` sheet | 不能讀回 decision；不能 reintegrate | `review_roundtrip_v1` | unassigned |
-| Manual boundary / reintegration | `missing` | candidate/boundary sidecars only | 沒有 import -> recompute -> audit loop | `review_roundtrip_v1` | frozen queue |
-| `Run Metadata` | `production_surface` as workbook metadata | workbook sheet | 不是 full replay manifest | `method_manifest_v1` | main agent (active spec only) |
-| `method_manifest.json` | `missing` | none | 缺 input hashes、sample metadata、CLI argv、schema versions | `method_manifest_v1` | main agent (active spec only) |
-| Headless targeted CLI | `production_surface` | `xic-extractor-cli` | 沒有 manifest-driven replay | `method_manifest_v1` then replay CLI | main agent (active spec only) |
+| ReviewAction import/application plan | `production_candidate` | `xic_extractor.review_actions`, `scripts/validate_review_actions.py`, `scripts/plan_review_action_applications.py`, `scripts/validate_review_action_expected_diffs.py`, `scripts/plan_review_action_apply_readiness.py`, `scripts/plan_review_action_apply_changesets.py` | 可驗證 action、產生 dry-run application plan、產生/驗證 expected-diff approval、產生 apply-readiness/changeset plan；尚未 product-writing apply/recompute/write audit | review action audit/apply loop writes audited outputs | active branch maintainer: `cc/framework-improvements` |
+| Manual boundary / reintegration | `missing` | candidate/boundary sidecars + action schema only | 沒有 import -> recompute -> audit loop | `review_action_apply_v1` | active branch maintainer: `cc/framework-improvements` |
+| `Run Metadata` | `production_surface` as workbook metadata | workbook sheet + manifest/schema reverse reference | 不是 full replay manifest；只反向記錄 targeted output schema 與 manifest schema/path/hash | workbook hash capture / release metadata docs | unassigned |
+| `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + workbook replay parity passed；timestamped workbook hash intentionally excluded；包含 targeted output schema artifact | workbook hash capture for full exact artifact replay | unassigned |
+| Headless targeted CLI | `production_ready` for targeted CLI replay parity | `xic-extractor-cli`, `--replay-manifest`, method manifest invocation context | replay rejects runtime overrides；GUI replay 未接主線 | GUI parity after mainline wiring | unassigned |
 | GUI/CLI parity | `partial_internal` | shared `load_config` / `extractor.run` | 缺 fixture-level parity diff | narrow parity smoke | unassigned |
 | `injection_order_source` | `production_surface` | settings/config/extraction pipeline | 只處理 order，不是 sample metadata universe | `sample_metadata_contract_v1` | unassigned |
-| Sample metadata roles | `partial_internal` | instrument-QC manifest, settings fragments | 缺 sample type/QC/blank/calibrator/batch schema | `sample_metadata_contract_v1` | frozen queue |
+| Sample metadata roles | `production_candidate` for schema/validator only | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py` | runtime 尚未接 extraction/QC/alignment；sample role 不可改 matrix | shared sample metadata resolver adoption | active branch maintainer: `cc/framework-improvements` |
 | Instrument-QC trend sidecar | `production_surface` sidecar | `run_instrument_qc.py`, instrument_qc package | 不改 main matrix；未接 shared sample metadata | sample metadata resolver | unassigned |
 | Calibration preview | `shadow_ready` / `diagnostic_only` | instrument-QC calibration preview | 不可寫 main matrix；response transfer blocked | `normalization_calibration_activation_v1` | unassigned |
-| Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py` | schema version / output-level wording | `alignment_output_contract_v1` | unassigned |
-| Alignment TSV outputs | `production_candidate` | output levels | spec/runtime 對 `alignment_matrix.tsv` primary status 不一致 | `alignment_output_contract_v1` | frozen queue |
+| Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
+| Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
 | Backfill product-authority sidecars | `shadow_ready` | allowlist/projection sidecars | `product_ready=False`；不可改 primary matrix | activation/export contract | unassigned |
 | Provisional production-candidate gate | `diagnostic_only` | production-candidate sidecar | 名稱容易誤導，不是 promotion | wording guard + no-promotion test | unassigned |
@@ -150,6 +177,8 @@ scope.
 - [ ] 有沒有命名造成誤會，例如 `production_candidate_gate` 被誤認為 production promotion。
 - [ ] 有沒有 legacy name 應保留為 compatibility，而不是立刻 rename。
 - [ ] 是否需要把本週結論回寫到這份 control plane。
+- [ ] 是否已同步更新白話交接文件 `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`。
+- [ ] `git status --short -- docs/superpowers/handoffs/current/cc-framework-improvements-productization.md docs/superpowers/plans/2026-06-15-productization-control-plane.md` 是否符合預期；若 handoff 是接手必需品，必須 tracked/ staged/ committed，或明確標成 local-only/non-authoritative。
 
 ## Pre-work checklist
 
@@ -295,23 +324,32 @@ scope.
 
 ## Immediate 2026-06 queue
 
-依照 current capability inventory，目前最有效的順序是:
+依照 current capability inventory 與本輪 replay executor closeout，目前順序改成:
 
-1. `method_manifest_v1`
-   - Reason: 解決 replay/provenance，讓 CLI、Run Metadata、validation harness 能串成成熟工作流。
-   - Target tier: `missing` -> `production_candidate`。
+1. `method_manifest_v1` - done
+   - Result: `production_ready` for targeted CLI replay parity.
+   - Evidence: focused tests, 8RAW CSV/workbook replay parity, and one targeted 85RAW initial+replay sequence.
+   - Residual: no timestamped workbook hash capture; GUI replay not wired to mainline.
 
-2. `review_roundtrip_v1`
+2. `targeted_schema_versioning_v1` - done
+   - Reason: mature-tool parity 需要 output schema version，不然下游與 replay 只能猜欄位語意。
+   - Result: `production_surface` for additive schema/version contract.
+   - Scope: `output/schema.py` constants, manifest `output_schema`, workbook `Run Metadata`; no CSV data-column changes.
+
+3. `review_action_apply_v1` - primary lane
    - Reason: 解決 Review Queue 不能回寫，這是 Skyline parity floor。
-   - Target tier: `missing` -> `production_candidate`。
+   - Current baseline: `production_candidate` for action schema/import validator and dry-run application plan only.
+   - Next target: audit/apply loop with expected-diff before touching selected outputs.
 
-3. `sample_metadata_contract_v1`
+4. `sample_metadata_runtime_parity_v1` - supporting lane
    - Reason: normalization/QC/alignment 都需要 sample type、QC、blank、batch、injection order。
-   - Target tier: `partial_internal` -> `production_candidate`。
+   - Current baseline: `production_candidate` for schema/validator only.
+   - Next target: project current legacy injection order behavior into the shared resolver with output parity; do not let sample role change matrix behavior in this slice.
 
-4. `alignment_output_contract_v1`
+5. `alignment_output_contract_v1` - done as contract/docs alignment
    - Reason: `alignment_results.xlsx` 已成熟，但 TSV production/machine wording 需要對齊。
-   - Target tier: `production_candidate` -> `production_surface` for selected output contract。
+   - Result: `production_surface` for output-level contract.
+   - Guard: `alignment_matrix.tsv` remains machine/validation, while `alignment_matrix_identity.tsv` is a production-level identity handoff.
 
 暫時不要優先做:
 
@@ -321,7 +359,7 @@ scope.
 - normalization/calibration main-matrix write。
 - backfill product-authority primary matrix activation。
 
-除非 `Current 2-week active lanes` 先把其中一個 lane 解凍，且該 lane 已經有 owner、spec、promotion packet，否則新增這些只會增加未收斂面積。
+除非 `Current medium-term active lanes` 先把其中一個 lane 解凍，且該 lane 已經有 owner、spec、promotion packet，否則新增這些只會增加未收斂面積。
 
 ## Maintenance log
 
@@ -346,3 +384,48 @@ scope.
 - Product surface changed: none
 - Validation: document smoke only
 - Remaining blocker: no active owner assigned to the first four June focus specs
+
+### 2026-06-15 - method_manifest_v1
+
+- Previous tier: `missing`
+- New tier: `production_ready` for targeted CLI replay parity; not full exact artifact replay
+- Evidence: `docs/superpowers/specs/2026-06-15-method-manifest-v1-spec.md`; `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`; `xic_extractor.output.method_manifest`; `xic-extractor-cli --replay-manifest`; focused manifest/output metadata/CLI replay tests; targeted 8RAW and 85RAW CSV/workbook replay parity
+- Product surface changed: additive `output/method_manifest.json`; additive workbook `Run Metadata` rows `method_manifest_schema`, `method_manifest_path`, `method_manifest_sha256`; additive `--replay-manifest` CLI mode
+- Validation: synthetic/focused unit, output contract, CLI replay tests, targeted 8RAW CSV-only replay byte parity, targeted 8RAW Excel-mode workbook compare, and one targeted 85RAW initial+replay sequence with CSV byte parity plus workbook compare
+- Remaining blocker: no timestamped workbook hash capture for full exact artifact replay; GUI parity intentionally skipped because GUI replay is not yet wired to mainline
+
+### 2026-06-15 - targeted_schema_versioning_v1
+
+- Previous tier: `missing` as an explicit targeted output schema contract
+- New tier: `production_surface` for additive schema/version metadata
+- Evidence: `xic_extractor.output.schema` version constants; `method_manifest.json` `output_schema`; workbook `Run Metadata` row `targeted_output_schema_version`
+- Product surface changed: additive `targeted_output_schema_version` metadata row and additive manifest `output_schema` block; no CSV data-column changes
+- Validation: `python -m pytest tests\test_output_schema_contract.py tests\test_output_metadata.py tests\test_method_manifest.py -q`
+- Remaining blocker: downstream export profiles still need a handoff profile; schema version is surfaced through manifest/metadata, not embedded as a row-level CSV column
+
+### 2026-06-15 - review_action_import_and_application_plan_v1
+
+- Previous tier: `missing`
+- New tier: `production_candidate` for ReviewAction import validation, dry-run application plan, expected-diff approval template/loader, apply-readiness planning, and changeset planning only
+- Evidence: `docs/superpowers/specs/2026-06-15-review-roundtrip-v1-spec.md`; `xic_extractor.review_actions`; `scripts/validate_review_actions.py`; `scripts/plan_review_action_applications.py`; `scripts/validate_review_action_expected_diffs.py`; `scripts/plan_review_action_apply_readiness.py`; `scripts/plan_review_action_apply_changesets.py`
+- Product surface changed: additive `review_action_v1` TSV/CSV schema, validator CLI, additive `review_action_application_plan_v1` dry-run TSV, optional `review_action_expected_diff_v1` template TSV, expected-diff approval loader, approval validator CLI, additive `review_action_apply_readiness_v1` TSV planner, and additive `review_action_apply_changeset_v1` TSV planner; no extraction output mutation
+- Validation: `python -m pytest tests\test_review_actions.py -q`; `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py scripts\validate_review_action_expected_diffs.py scripts\plan_review_action_apply_readiness.py scripts\plan_review_action_apply_changesets.py tests\test_review_actions.py`; `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py scripts\validate_review_action_expected_diffs.py scripts\plan_review_action_apply_readiness.py scripts\plan_review_action_apply_changesets.py`
+- Remaining blocker: no product-writing action application/reintegration loop, no manual boundary recompute, no selected candidate switch writer, no audited output writer that consumes changeset rows
+
+### 2026-06-15 - sample_metadata_contract_v1
+
+- Previous tier: `partial_internal`
+- New tier: `production_candidate` for shared schema/validator only
+- Evidence: `docs/superpowers/specs/2026-06-15-sample-metadata-contract-v1-spec.md`; `xic_extractor.sample_metadata`; `scripts/validate_sample_metadata.py`
+- Product surface changed: additive `sample_metadata_v1` TSV/CSV schema and validator CLI; no extraction/QC/alignment runtime change
+- Validation: `python -m pytest tests\test_sample_metadata.py -q`; `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py tests\test_sample_metadata.py`; `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py`
+- Remaining blocker: extraction still reads legacy `injection_order_source`; instrument-QC sequence manifest is not yet projected into `sample_metadata_v1`; alignment and normalization do not consume this resolver; sample roles cannot alter matrix values without expected-diff gates
+
+### 2026-06-15 - alignment_output_contract_v1
+
+- Previous tier: `production_candidate` / wording drift in control plane
+- New tier: `production_surface` for output-level contract
+- Evidence: `docs/superpowers/specs/2026-05-11-untargeted-alignment-output-contract.md`; `xic_extractor.alignment.output_levels`; `scripts/run_alignment.py --output-level`; focused output-level tests
+- Product surface changed: docs wording only; production level is `alignment_results.xlsx`, `alignment_matrix_identity.tsv`, and `review_report.html`; `alignment_matrix.tsv` remains machine/validation
+- Validation: `python -m pytest tests\test_alignment_output_levels.py tests\test_alignment_pipeline_outputs.py::test_run_alignment_production_level_writes_user_artifacts_and_identity_tsv tests\test_alignment_pipeline_outputs.py::test_run_alignment_default_stays_machine_until_owner_validation_acceptance tests\test_run_alignment.py::test_run_alignment_cli_accepts_output_level_debug tests\test_run_alignment.py::test_run_alignment_cli_accepts_validation_minimal_output_level -q`
+- Remaining blocker: release gate should continue guarding production/machine/debug/validation artifact separation; this does not claim full untargeted scientific production readiness

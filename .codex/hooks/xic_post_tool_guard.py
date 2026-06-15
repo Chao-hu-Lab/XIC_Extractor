@@ -8,10 +8,12 @@ import sys
 
 from xic_hook_policy import (
     CONTROL_PLANE_PATH,
+    HANDOFF_PATH,
     PRODUCT_SURFACE_PATHS,
     mentions_any_path,
     mentions_path,
     touches_control_plane,
+    touches_handoff,
     touches_product_surface,
 )
 
@@ -143,14 +145,11 @@ def main() -> int:
         )
         return 0
 
+    contexts: list[str] = []
+
     if any(pattern.search(combined) for pattern in LOCK_PATTERNS):
-        emit(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "additionalContext": "Git lock/ref-lock friction detected. Stop retrying the same shape; inspect the lock/ref state and use the documented Windows git recovery path.",
-                }
-            }
+        contexts.append(
+            "Git lock/ref-lock friction detected. Stop retrying the same shape; inspect the lock/ref state and use the documented Windows git recovery path."
         )
 
     if is_write_like(event, command):
@@ -163,23 +162,50 @@ def main() -> int:
             tool_input_text,
             CONTROL_PLANE_PATH,
         )
+        tool_mentions_handoff = mentions_path(
+            tool_input_text,
+            HANDOFF_PATH,
+        )
         paths = changed_paths(str(event.get("cwd", ".")))
-        worktree_needs_control_plane = touches_product_surface(paths) and not touches_control_plane(paths)
+        paths_touch_product = touches_product_surface(paths)
+        paths_touch_control_plane = touches_control_plane(paths)
+        paths_touch_handoff = touches_handoff(paths)
+        worktree_needs_control_plane = paths_touch_product and not paths_touch_control_plane
         tool_needs_control_plane = tool_mentions_product and not tool_mentions_control_plane
         if tool_needs_control_plane or worktree_needs_control_plane:
-            emit(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PostToolUse",
-                        "additionalContext": (
-                            "Product/public surface changes are present, but the productization control plane "
-                            "is not changed. Before closeout, update "
-                            "docs/superpowers/plans/2026-06-15-productization-control-plane.md or explicitly "
-                            "state why this work does not change any maturity tier or active lane."
-                        ),
-                    }
-                }
+            contexts.append(
+                "Product/public surface changes are present, but the productization control plane "
+                "is not changed. Before closeout, update "
+                f"{CONTROL_PLANE_PATH} or explicitly "
+                "state why this work does not change any maturity tier or active lane."
             )
+
+        handoff_relevant = (
+            tool_mentions_product
+            or tool_mentions_control_plane
+            or paths_touch_product
+            or paths_touch_control_plane
+        )
+        handoff_missing_from_tool = (
+            tool_mentions_product or tool_mentions_control_plane
+        ) and not tool_mentions_handoff
+        handoff_missing_from_worktree = handoff_relevant and not paths_touch_handoff
+        if handoff_missing_from_tool or handoff_missing_from_worktree:
+            contexts.append(
+                "Product/control-plane state may have changed, but the plain-language handoff "
+                "is not part of this update. Before closeout, refresh "
+                f"{HANDOFF_PATH} or explicitly state why the handoff remains current."
+            )
+
+    if contexts:
+        emit(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": "\n".join(contexts),
+                }
+            }
+        )
 
     return 0
 
