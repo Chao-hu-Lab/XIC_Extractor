@@ -8,6 +8,7 @@ from xic_extractor.config import ExtractionConfig, Target
 from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.extractor import RunOutput
 from xic_extractor.output.method_manifest import (
+    ARTIFACT_REPLAY_POLICY_SCHEMA_VERSION,
     METHOD_MANIFEST_SCHEMA_VERSION,
     MethodManifestContext,
     MethodManifestError,
@@ -152,11 +153,52 @@ def test_build_method_manifest_labels_hashes_as_fragments(tmp_path: Path) -> Non
             ],
         },
     }
+    assert payload["artifact_replay_policy"] == {
+        "schema_version": ARTIFACT_REPLAY_POLICY_SCHEMA_VERSION,
+        "exact_artifacts": [
+            "output_csv",
+            "long_csv",
+            "diagnostics_csv",
+            "score_breakdown_csv",
+        ],
+        "normalized_compare_artifacts": {
+            "timestamped_workbook": {
+                "comparison": "scripts.compare_workbooks",
+                "ignored_run_metadata_keys": [
+                    "elapsed",
+                    "elapsed_seconds",
+                    "generated_at",
+                    "method_manifest_path",
+                    "method_manifest_sha256",
+                    "output_dir",
+                    "output_path",
+                    "output_workbook",
+                    "runtime",
+                    "runtime_seconds",
+                    "workbook_path",
+                ],
+                "reason": (
+                    "CLI Excel output uses a timestamped workbook filename; "
+                    "workbook replay parity is verified by normalized sheet "
+                    "comparison, not byte hash."
+                ),
+            }
+        },
+        "provenance_only_artifacts": {
+            "method_manifest_json": {
+                "reason": (
+                    "The manifest records the run and naturally changes between "
+                    "initial and replay executions."
+                )
+            }
+        },
+        "full_byte_exact_replay_ready": False,
+    }
     assert payload["replay_status"] == {
         "capability": "manifest_driven_cli_replay",
         "exact_replay_ready": False,
         "blockers": [
-            "timestamped_workbook_hash_not_recorded",
+            "timestamped_workbook_uses_normalized_compare_policy",
         ],
     }
 

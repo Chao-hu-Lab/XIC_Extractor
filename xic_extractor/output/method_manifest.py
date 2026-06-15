@@ -24,6 +24,20 @@ from xic_extractor.output.schema import (
 
 METHOD_MANIFEST_SCHEMA_VERSION = "method_manifest_v1"
 METHOD_MANIFEST_FILENAME = "method_manifest.json"
+ARTIFACT_REPLAY_POLICY_SCHEMA_VERSION = "artifact_replay_policy_v1"
+WORKBOOK_NORMALIZED_METADATA_KEYS: tuple[str, ...] = (
+    "elapsed",
+    "elapsed_seconds",
+    "generated_at",
+    "method_manifest_path",
+    "method_manifest_sha256",
+    "output_dir",
+    "output_path",
+    "output_workbook",
+    "runtime",
+    "runtime_seconds",
+    "workbook_path",
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +152,7 @@ def build_method_manifest(
         "method_settings": _method_settings(config),
         "target_summary": _target_summary(targets),
         "output_schema": _output_schema(),
+        "artifact_replay_policy": _artifact_replay_policy(),
         "runtime": {
             "python_version": sys.version.split()[0],
             "platform": platform.platform(),
@@ -570,8 +585,40 @@ def _output_schema() -> dict[str, object]:
     }
 
 
+def _artifact_replay_policy() -> dict[str, object]:
+    return {
+        "schema_version": ARTIFACT_REPLAY_POLICY_SCHEMA_VERSION,
+        "exact_artifacts": [
+            "output_csv",
+            "long_csv",
+            "diagnostics_csv",
+            "score_breakdown_csv",
+        ],
+        "normalized_compare_artifacts": {
+            "timestamped_workbook": {
+                "comparison": "scripts.compare_workbooks",
+                "ignored_run_metadata_keys": list(WORKBOOK_NORMALIZED_METADATA_KEYS),
+                "reason": (
+                    "CLI Excel output uses a timestamped workbook filename; "
+                    "workbook replay parity is verified by normalized sheet "
+                    "comparison, not byte hash."
+                ),
+            }
+        },
+        "provenance_only_artifacts": {
+            "method_manifest_json": {
+                "reason": (
+                    "The manifest records the run and naturally changes between "
+                    "initial and replay executions."
+                )
+            }
+        },
+        "full_byte_exact_replay_ready": False,
+    }
+
+
 def _replay_blockers(context: MethodManifestContext) -> list[str]:
-    blockers = ["timestamped_workbook_hash_not_recorded"]
+    blockers = ["timestamped_workbook_uses_normalized_compare_policy"]
     if context.output_mode not in {"excel", "csv_only"}:
         blockers.insert(0, "output_mode_not_recorded")
     return blockers

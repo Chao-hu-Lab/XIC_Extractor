@@ -288,12 +288,46 @@ Minimal valid JSON shape:
       "scope": "output"
     }
   },
+  "artifact_replay_policy": {
+    "schema_version": "artifact_replay_policy_v1",
+    "exact_artifacts": [
+      "output_csv",
+      "long_csv",
+      "diagnostics_csv",
+      "score_breakdown_csv"
+    ],
+    "normalized_compare_artifacts": {
+      "timestamped_workbook": {
+        "comparison": "scripts.compare_workbooks",
+        "ignored_run_metadata_keys": [
+          "elapsed",
+          "elapsed_seconds",
+          "generated_at",
+          "method_manifest_path",
+          "method_manifest_sha256",
+          "output_dir",
+          "output_path",
+          "output_workbook",
+          "runtime",
+          "runtime_seconds",
+          "workbook_path"
+        ],
+        "reason": "CLI Excel output uses a timestamped workbook filename; workbook replay parity is verified by normalized sheet comparison, not byte hash."
+      }
+    },
+    "provenance_only_artifacts": {
+      "method_manifest_json": {
+        "reason": "The manifest records the run and naturally changes between initial and replay executions."
+      }
+    },
+    "full_byte_exact_replay_ready": false
+  },
   "replay_status": {
     "capability": "manifest_driven_cli_replay",
     "exact_replay_ready": false,
     "blockers": [
       "output_mode_not_recorded",
-      "timestamped_workbook_hash_not_recorded"
+      "timestamped_workbook_uses_normalized_compare_policy"
     ]
   }
 }
@@ -305,6 +339,10 @@ Minimal valid JSON shape:
 - This intentionally changes the output-directory contract from "no CSV sidecars when intermediate CSV is disabled" to "no CSV sidecars, but always a manifest JSON".
 - The manifest must not cause CSV result rows, workbook sheet order, selected peak, area, confidence, reason, counted detection, or matrix values to change.
 - `Run Metadata` may add `targeted_output_schema_version`, `method_manifest_schema`, `method_manifest_path`, and `method_manifest_sha256` rows, but existing metadata keys must stay in their current relative order.
+- `artifact_replay_policy` separates output parity:
+  - CSV artifacts are byte-exact replay artifacts.
+  - Timestamped workbooks use `scripts.compare_workbooks` normalized comparison.
+  - `method_manifest.json` is provenance-only because each run naturally emits a new manifest.
 - `xic_extractor.extractor.run` may receive an additive keyword-only manifest context only if needed. The preferred v1 path is to keep CLI-specific argv/base-dir context in `scripts.run_extraction` and pure output-context serialization in `xic_extractor.output.method_manifest`.
 
 ## Promotion packet
@@ -314,7 +352,7 @@ Minimal valid JSON shape:
 - Name: `method_manifest_v1`
 - Previous tier: `missing`
 - Proposed tier after initial manifest checkpoint: `production_candidate`
-- Replay checkpoint tier: `production_ready` for targeted CLI replay parity; not full exact artifact replay.
+- Replay checkpoint tier: `production_ready` for targeted CLI replay parity; not full byte-exact artifact replay.
 - Owner: `xic_extractor.output.method_manifest`
 
 ### Public surface
@@ -343,6 +381,7 @@ Minimal valid JSON shape:
 - What changes:
   - targeted extraction writes a stable JSON manifest sidecar.
   - `xic-extractor-cli --replay-manifest PATH` can rerun from the manifest after validating required input artifacts.
+  - manifest now states which artifacts are byte-exact, normalized-compare, or provenance-only.
   - workbook metadata can point to the manifest.
 - What must not change:
   - selected peak, area, confidence, reason, counted detection, CSV/workbook schema except additive metadata rows.
