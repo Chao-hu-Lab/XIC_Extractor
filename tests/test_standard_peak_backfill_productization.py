@@ -4,11 +4,16 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import standard_peak_backfill_productization as cli
 from xic_extractor.alignment.tsv_writer import (
     ALIGNMENT_CELLS_COLUMNS,
     ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS,
     ALIGNMENT_REVIEW_COLUMNS,
+)
+from xic_extractor.diagnostics import (
+    standard_peak_backfill_productization as productization_module,
 )
 from xic_extractor.diagnostics.shadow_production_projection import (
     SHADOW_PRODUCTION_PROJECTION_COLUMNS,
@@ -54,6 +59,7 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
         ).read_text(encoding="utf-8"),
     )
     assert summary["status"] == "pass"
+    assert summary["schema_version"] == productization_module.SCHEMA_VERSION
     assert summary["selected_activation_row_count"] == "1"
     assert summary["skipped_non_standard_reason_count"] == "1"
     assert summary["activation_application_status"] == "applied"
@@ -80,6 +86,27 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
     assert delta[0]["activation_reason"] == (
         "standard_peak_shift_aware_ms1_same_peak_product_authorized"
     )
+
+    seed_guard = _read_tsv(
+        output_dir
+        / "standard_peak_activation_inputs"
+        / "seed_guard_decisions.tsv",
+    )
+    by_seed_guard_family = {row["feature_family_id"]: row for row in seed_guard}
+    assert by_seed_guard_family["FAM_STD"]["seed_guard_status"] == (
+        "not_applicable_small_cohort"
+    )
+    assert by_seed_guard_family["FAM_STD"]["actual_written_cell_count"] == "1"
+    assert by_seed_guard_family["FAM_STD"]["actual_written_cell_keys"] == "FAM_STD/S2"
+    assert by_seed_guard_family["FAM_STD"][
+        "actual_cohort_scale_written_cell_count"
+    ] == "0"
+    assert by_seed_guard_family["FAM_STD"]["actual_per_cell_written_cell_count"] == "1"
+    assert by_seed_guard_family["FAM_STD"]["activation_value_delta_path"].endswith(
+        "activation_value_delta.tsv"
+    )
+    assert len(by_seed_guard_family["FAM_STD"]["activation_value_delta_sha256"]) == 64
+    assert "FAM_NON" not in by_seed_guard_family
 
     acceptance = _read_tsv(
         output_dir
@@ -111,6 +138,107 @@ def test_standard_peak_productization_applies_matrix_and_synced_gallery(
     assert by_family["FAM_NON"]["reconciliation_class"] == (
         "product_rejects_and_evidence_blocks"
     )
+
+
+def test_standard_peak_productization_can_limit_writer_to_high_signal_clean_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="a" * 64,
+            ),
+            _shadow_row(
+                "FAM_NON",
+                "S2",
+                "200",
+                standard=True,
+                row_sha="c" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_high_signal_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row("FAM_STD", "S2", "a" * 64, "eligible"),
+            _scope_audit_row("FAM_NON", "S2", "c" * 64, "ineligible"),
+        ],
+        productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-narrow-high-signal-clean-productization",
+                "--high-signal-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["schema_version"] == "standard_peak_backfill_productization_v1"
+    assert summary["activation_scope_filter_status"] == "applied"
+    assert summary["activation_scope_contract"] == (
+        "high_signal_clean_eligible_activation_rows"
+    )
+    assert summary["activation_scope_filter_selected_shadow_row_count"] == "1"
+    assert summary["activation_scope_filter_eligible_audit_row_count"] == "1"
+    assert summary["selected_activation_row_count"] == "1"
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["narrow_product_writer_expected_diff_acceptance_status"] == "pass"
+    assert summary["next_action"] == (
+        "narrow_high_signal_clean_backfill_production_ready"
+    )
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["readiness_tier"] == "production_ready"
+    assert acceptance["product_surface_changed"] == "TRUE"
+    assert acceptance["eligible_audit_row_count"] == "1"
+    assert acceptance["product_written_delta_row_count"] == "1"
+    assert acceptance["non_eligible_delta_row_count"] == "0"
+
+    matrix_rows = _read_tsv(output_dir / "activated_matrix" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        output_dir / "activated_matrix" / "alignment_matrix_identity.tsv",
+    )
+    matrix_index_by_hypothesis = {
+        row["peak_hypothesis_id"]: int(row["matrix_row_index"]) - 1
+        for row in identity_rows
+    }
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_NON"]]["S2"] == ""
 
 
 def test_standard_peak_productization_rejects_stale_current_projection(
@@ -225,6 +353,57 @@ def test_standard_peak_productization_writes_duplicate_warning_rescue(
     assert "audit_warning:same_peak_multi_claim" in values[0][
         "source_provenance_detail"
     ]
+
+
+def test_standard_peak_productization_fails_on_unattributed_seed_guard_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    output_dir = tmp_path / "out"
+
+    def _blocked_write(
+        rows: list[dict[str, str]] | tuple[dict[str, str], ...],
+        **_: object,
+    ) -> tuple[dict[str, str], ...]:
+        finalized = [dict(row) for row in rows]
+        finalized[0]["write_authority_status"] = "blocked_unattributed_write"
+        finalized[0]["blocking_reason"] = "blocked_seed_guard_row_was_written"
+        return tuple(finalized)
+
+    monkeypatch.setattr(
+        productization_module,
+        "seed_guard_decisions_with_actual_writes",
+        _blocked_write,
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-standard-peak-productization",
+            ],
+        )
+        == 1
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "fail"
+    assert summary["next_action"] == "review_seed_guard_write_attribution_failure"
 
 
 def _write_fixture(tmp_path: Path) -> dict[str, Path]:
@@ -437,6 +616,7 @@ def _shadow_row(
     value: str,
     *,
     standard: bool,
+    row_sha: str | None = None,
 ) -> dict[str, str]:
     row = _blank_row(SHADOW_PRODUCTION_PROJECTION_COLUMNS)
     reason = (
@@ -469,7 +649,7 @@ def _shadow_row(
             "projected_matrix_written": "TRUE",
             "projected_matrix_value": value,
             "product_authority_chain": reason,
-            "shadow_projection_row_sha256": "b" * 64,
+            "shadow_projection_row_sha256": row_sha or "b" * 64,
             "evidence_gate_status": "visual_support",
             "support_components": "seed_request_provenance",
             "hard_blockers": "",
@@ -479,6 +659,23 @@ def _shadow_row(
         },
     )
     return row
+
+
+def _scope_audit_row(
+    family: str,
+    sample: str,
+    row_sha: str,
+    status: str,
+) -> dict[str, str]:
+    return {
+        "schema_version": "standard_peak_activation_scope_audit_v1",
+        "feature_family_id": family,
+        "peak_hypothesis_id": family,
+        "sample_id": sample,
+        "matrix_value_effect": "written",
+        "matrix_value_source_row_sha256": row_sha,
+        "high_signal_clean_status": status,
+    }
 
 
 def _blank_row(columns: tuple[str, ...]) -> dict[str, str]:

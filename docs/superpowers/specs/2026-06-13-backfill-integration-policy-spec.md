@@ -2,20 +2,21 @@
 
 ## Status
 
-Design draft after critical review. No implementation is included in this
-document.
+Design draft after critical review, with first standard-path seed guard slice
+implemented on 2026-06-16.
 
 Validation labels are split by lane:
 
-- Standard-path cohort seed guard: `implementation_candidate`.
+- Standard-path cohort seed guard: `production_candidate` for the standard-path
+  pre-activation guard only.
 - Non-standard integration taxonomy: `diagnostic_only` / `design_input`.
 
 This spec captures the current owner discussion about standard-peak backfill
-seed support, non-standard peak integration, and area uncertainty. It does not
-itself change `run_alignment`, `alignment_matrix.tsv`, activation decisions,
-workbook schemas, or any production gate. The seed-support rule below is a
-product decision captured for a future standard-path implementation slice; it
-is not active until implemented and validated.
+seed support, non-standard peak integration, and area uncertainty. The
+standard-path seed-support rule is now active in the
+`standard_peak_backfill_productization.py` productization bridge as a
+pre-activation filter. It does not add fields to `alignment_review.tsv`,
+workbook schemas, public `area_policy`, or the primary matrix schema.
 
 The non-standard taxonomy is not an implementation contract for matrix writes.
 It is a classification and validation plan. Do not use it to add rows to an
@@ -87,7 +88,7 @@ Keep the lanes separate in code, tests, artifacts, and commit scope.
 
 | Lane | Status | May change product matrix? | First deliverable | Stop condition |
 | --- | --- | --- | --- | --- |
-| Standard seed guard | `implementation_candidate` | Yes, but only as a blocker on the current standard-peak path | Seed-guard decision artifact plus matrix-diff test on standard-path rows | Cannot prove `total_N`, `detected_count`, and expected diff from the same pre-backfill source |
+| Standard seed guard | `production_candidate` | Yes, but only as a blocker on the current standard-peak path | `seed_guard_decisions.tsv`, matrix-diff/write-attribution tests, heldout oracle result contract | Cannot prove `total_N`, `detected_count`, expected diff, and actual writes from the same pre-backfill source |
 | Non-standard taxonomy | `diagnostic_only` | No | Gallery/TSV classifying boundary and baseline pathology | Any consumer tries to use the taxonomy as promotion authority |
 | Baseline-sensitive audit | `diagnostic_only` | No | Baseline spread report over a named diagnostic-only baseline model set | Baseline set is missing, unstable, or not tied to row provenance |
 | Future non-standard promotion | Not approved | Only after a new contract | Schema/test proposal for non-standard matrix writes | Missing manual/EIC or held-out oracle, uncertainty threshold, or matrix-diff acceptance |
@@ -95,6 +96,233 @@ Keep the lanes separate in code, tests, artifacts, and commit scope.
 The first implementation slice should be the standard seed guard only. It must
 not introduce non-standard promotion, new public `area_policy` enums, or
 baseline-sensitive matrix writes.
+
+Implementation closeout, 2026-06-16:
+
+- Owner: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`
+  owns seed-guard context loading, N-band rule evaluation,
+  `seed_guard_decisions.tsv`, and heldout oracle result schema/evaluation.
+- Productization bridge:
+  `xic_extractor.diagnostics.standard_peak_backfill_productization` loads the
+  pre-backfill `alignment_matrix.tsv` and `alignment_review.tsv`, passes the
+  guard into activation-input construction, and then rewrites
+  `seed_guard_decisions.tsv` with actual write attribution from
+  `activation_value_delta.tsv`.
+- N-band behavior is covered for `N=19`, `20`, `79`, `80`, `85`, and `>85`.
+  `N<20` is `not_applicable_small_cohort`; `20<=N<80` can only be
+  `eligible_per_cell_only` when the floor passes; `N>=80` can continue toward
+  cohort-scale standard backfill only when the large-cohort floor passes.
+- Candidate coverage: the guard artifact contains one row per standard-path
+  promotion candidate after the existing standard-peak gate and before
+  activation decision writing. Non-standard/context rows are not seed-guard
+  candidates.
+- Write attribution: final productization output joins actual written cells
+  from `activation_value_delta.tsv` by `peak_hypothesis_id/sample_stem` and
+  records cohort-scale vs per-cell written counts.
+- Heldout oracle result contract: deterministic manifest/result evaluation is
+  implemented and tested, but no real/reviewed heldout oracle run was executed
+  in this slice.
+- Heldout oracle CLI closeout, 2026-06-17:
+  `tools/diagnostics/standard_peak_heldout_oracle_results.py` now exposes the
+  evaluator as an executable gate. It reads `heldout_oracle_manifest.tsv`, reads
+  observed boundary/area result rows, records the result source artifact SHA,
+  and writes `heldout_oracle_results.tsv` using
+  `standard_peak_seed_guard_heldout_oracle_results_v1`. This still does not
+  create reviewed oracle rows, run RAW, mutate matrices, or authorize
+  non-standard peaks.
+- Review hardening closeout, 2026-06-17:
+  after subagent review, both the heldout oracle CLI and package evaluator now
+  require the full manifest public schema listed below, including
+  `mask_strategy`, `target_shape_class`, `baseline_model_set`,
+  `baseline_epsilon`, `baseline_residual_threshold`, and
+  `expected_integration_pathology`, and lock
+  `schema_version=standard_peak_seed_guard_heldout_oracle_manifest_v1`.
+  Observed result rows are fail-closed when a duplicate `oracle_case_id`
+  appears or when an observed case is not present in the manifest.
+  After the 2026-06-17 product decision, manifest rows also fail closed when
+  `acceptable_boundary_delta_min` is looser than `0.1` or
+  `acceptable_area_relative_error` is looser than `0.10`; reviewed rows may be
+  stricter, but cannot widen the first production-readiness gate. Exact
+  threshold results use a tiny floating-point guard band so a mathematical
+  `0.1 min` boundary error or `0.10` area error is not rejected only because of
+  binary float representation.
+  Productization also treats any
+  `write_authority_status=blocked_unattributed_write` in rewritten
+  `seed_guard_decisions.tsv` as `status=fail` with
+  `next_action=review_seed_guard_write_attribution_failure`.
+- Heldout observed-result provenance closeout, 2026-06-17:
+  `heldout_observed_results.tsv` rows are now a public input contract rather
+  than loose numeric rows. The CLI and package evaluator require
+  `observed_result_source`, `observed_boundary_source`,
+  `observed_area_source`, and `observed_independence_basis`; allowed
+  independence bases are `product_writer_observed_result`,
+  `masked_rerun_observed_result`, and
+  `independent_boundary_reintegration_result`. Rows that identify the observed
+  source as an oracle/manual-review/review-queue copy fail closed, including
+  common whitespace and hyphen variants. The evaluator also requires the
+  `result_source_artifact_path` to point to an existing file so
+  `result_source_artifact_sha256` cannot be blank. This closes the contract gap
+  found by the source audit without fabricating reviewed observed boundaries
+  from existing artifacts.
+- Heldout observed-source cross-check closeout, 2026-06-17:
+  after reviewer `Ptolemy` found a neutral-label bypass, observed rows are also
+  validated against their matching manifest row. `observed_result_source`,
+  `observed_boundary_source`, and `observed_area_source` cannot canonicalize to
+  the same label as the manifest `oracle_source`; repeated whitespace and
+  punctuation separators collapse before comparison. This blocks a future
+  held-out gate from passing by relabeling the oracle row with a neutral source
+  name.
+- Heldout original-cell-status guard, 2026-06-17:
+  `heldout_oracle_manifest.tsv` now requires
+  `heldout_original_cell_status`, and the evaluator accepts only originally
+  detected quantifiable statuses: `detected`, `detected_seed`,
+  `quantifiable_detected`, or `accepted_detected`. `rescued` cells fail closed
+  and cannot count as held-out oracle product-readiness evidence. This matters
+  for the two current raw85 reviewed rows that match seed-guard candidates:
+  their existing trace artifacts identify the matched sample rows as `rescued`,
+  so they remain useful manual support but not valid production-ready held-out
+  oracle cases.
+- No-RAW 85RAW artifact bridge closeout, 2026-06-17:
+  `tools.diagnostics.standard_peak_backfill_productization` was run against the
+  existing 85RAW validation-minimal matrix/review and chunk `r1_120` shadow
+  projection under `output/standard_peak_backfill_preset_85raw_20260610/`.
+  The bridge emitted
+  `output/productization_realdata_seed_guard_85raw_20260617/r1_120_no_raw_productization/standard_peak_activation_inputs/seed_guard_decisions.tsv`
+  with 2540 standard-path candidates: 1160
+  `eligible_continue_existing_gates` rows and 1380
+  `blocked_low_seed_support` rows. The resulting
+  `activation_value_delta.tsv` has 1160 rows and the summary reports
+  `matrix_cells_written=1160`. This validates candidate coverage plus actual
+  write attribution on a real 85RAW-derived artifact without opening RAW files.
+  It does not replace reviewed heldout oracle cases or approve the 85RAW
+  expected diff as a production-ready product change.
+- Consolidated no-RAW 85RAW artifact bridge closeout, 2026-06-17:
+  the same current productization bridge was run against the existing
+  consolidated 85RAW shadow projection
+  `standard_peak_backfill_preset/consolidated/consolidated_shadow_projection_cells.tsv`
+  plus the pre-standard-backfill matrix/identity files from the same
+  validation-minimal output. The bridge emitted
+  `output/productization_realdata_seed_guard_85raw_20260617/consolidated_no_raw_productization/standard_peak_activation_inputs/seed_guard_decisions.tsv`
+  with 7307 standard-path candidates: 4613
+  `eligible_continue_existing_gates` rows and 2694
+  `blocked_low_seed_support` rows. The resulting
+  `activation_value_delta.tsv` has 4613 rows, the summary reports
+  `matrix_cells_written=4613`, and there are zero
+  `blocked_unattributed_write` rows. This strengthens the
+  `production_candidate` evidence across the full existing 85RAW consolidated
+  artifact without opening RAW files. It still does not replace reviewed
+  heldout oracle cases or approve the 85RAW expected diff as a production-ready
+  product change.
+- Heldout oracle source audit, 2026-06-17:
+  no ready `heldout_oracle_manifest.tsv`, observed oracle TSV, or
+  `heldout_oracle_results.tsv` was found under `output/`. The audit output is
+  under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_oracle_source_audit/`.
+  It crosswalks 11 raw85 manual verdict rows from
+  `backfill_peakhypothesis_raw85_manual_verdicts.tsv` against the current
+  consolidated seed-guard decisions. All 11 manual rows have source
+  boundary/area values that can seed an oracle manifest, but only 2 match
+  current seed-guard candidate keys. Those 2 have observed area through
+  `activation_value_delta.tsv`, but they still lack independent observed
+  start/end boundary values. The other 9 do not match current seed-guard
+  candidate keys. Therefore this lane remains `production_candidate`; the
+  `production_ready` checkpoint is blocked on independent observed
+  boundary/area result rows satisfying the provenance contract above, not
+  merely on running the existing evaluator.
+- Heldout trace reintegration oracle, 2026-06-17:
+  a bounded originally detected heldout oracle was generated without rerunning
+  RAW under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle/`.
+  The artifact selects 20 deterministic high-signal clean standard trace cases
+  across 20 families from the existing 85RAW validation-minimal trace/evidence
+  outputs: originally detected, sample-local MS1 owner with original MS2
+  evidence, primary matrix area source
+  `gaussian15_positive_asls_residual`, shape similarity >=0.95,
+  local/global max ratio >=0.95, cell height >=2e6, original boundary width
+  0.30-0.65 min, apex within 0.15 min of family center, and at least 10 scans.
+  The observed rows use the existing local-minimum `find_peak_and_area` plus
+  `integration_from_peak_trace` over stored trace arrays and are marked with
+  `observed_independence_basis=independent_boundary_reintegration_result`.
+  The formal heldout oracle CLI wrote `heldout_oracle_results.tsv` with 20/20
+  `pass`, 20/20 `included_in_product_acceptance=TRUE`, maximum boundary error
+  0.0820502 min, and maximum area relative error 0.0762325. This closes the
+  first high-signal clean standard trace oracle checkpoint under the accepted
+  `0.1 min / 10% area` ceiling. The same output directory now also contains
+  `heldout_trace_reintegration_full_eligible_pool.tsv`, which persists all 80
+  pre-observed eligible rows with quality rank, selected flag, and rejection
+  reason; unselected rows do not carry observed reintegration outcomes. This is
+  the anti-cherry-pick audit surface for the 20 selected cases.
+- Broad activation scope note, 2026-06-17:
+  the trace reintegration oracle above is positive evidence, not a blanket
+  promotion of every current standard-path activation write. The consolidated
+  no-RAW bridge still reports 4613 eligible activation writes, and the current
+  productization bridge is not limited to the high-signal clean trace
+  eligibility used by the oracle artifact. The activation scope audit under
+  `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/`
+  joins all 4613 written activation rows back to projection rows and available
+  trace JSON: 72 rows are high-signal clean eligible, 3454 are trace-matched but
+  outside the high-signal clean envelope, and 1087 are missing overlay/trace
+  evidence. The follow-up `narrow_activation_expected_diff_acceptance.json`
+  verifies that the 72-row eligible delta is a clean subset of the full
+  `activation_value_delta.tsv` with no duplicate, missing, unexpected,
+  non-eligible, unchanged, non-written, or blank-value rows. The next
+  `standard_peak_backfill_productization.py` slice implements the explicit
+  writer contract for this scope through
+  `--high-signal-clean-activation-scope-audit-tsv`; the real no-RAW 85RAW
+  consolidated run under
+  `output/productization_realdata_seed_guard_85raw_20260617/narrow_high_signal_clean_no_raw_productization/`
+  selected 72 eligible shadow rows, wrote 72 matrix cells, and emitted
+  `narrow_product_writer_expected_diff_acceptance.json` with
+  `acceptance_status=pass`, `readiness_tier=production_ready`, and zero
+  duplicate, missing, unexpected, non-eligible, non-written, unchanged, or
+  blank-value rows. Therefore the explicit 72-row high-signal-clean writer
+  slice is `production_ready`, while the broad 4613-row standard-path seed
+  guard lane remains `production_candidate` until it has a broader
+  masked/product-writer observed oracle for the full activation scope.
+- Validation:
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_cli_writes_contract_tsv tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_classify_boundary_and_area -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_cli_requires_full_manifest_schema tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_rejects_ambiguous_observed_rows tests\test_standard_peak_backfill_productization.py::test_standard_peak_productization_fails_on_unattributed_seed_guard_write -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_cli_rejects_wrong_manifest_version -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_rejects_incomplete_manifest_mapping -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_rejects_loose_tolerances tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_accepts_strict_tolerances -q`
+  - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_accepts_exact_boundary_tolerance tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_accepts_exact_area_tolerance -q`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization ... --source-run-id seed-guard-realdata-85raw-r1-120-20260617`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization ... --source-run-id seed-guard-realdata-85raw-consolidated-20260617`
+  - subagent reviewer `Popper` rechecked the consolidated no-RAW artifacts and
+    found no blocking overclaim; this remains `production_candidate` evidence,
+    not reviewed-oracle or `production_ready` evidence.
+  - no-RAW source audit wrote
+    `heldout_oracle_source_audit/raw85_manual_verdict_seed_guard_crosswalk.tsv`
+    and `heldout_oracle_source_audit/summary.json`.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q`
+    (`25 passed`) after the observed-result provenance contract hardening,
+    original-cell-status guard, and observed-source cross-check fixes.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q`
+    (`42 passed`) after the same fixes.
+  - touched-file ruff/mypy for the standard-peak modules and tests.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_heldout_oracle_results --heldout-oracle-manifest-tsv output\productization_realdata_seed_guard_85raw_20260617\heldout_trace_reintegration_oracle\heldout_oracle_manifest.tsv --observed-results-tsv output\productization_realdata_seed_guard_85raw_20260617\heldout_trace_reintegration_oracle\heldout_observed_results.tsv --result-source-artifact output\productization_realdata_seed_guard_85raw_20260617\heldout_trace_reintegration_oracle\heldout_observed_results.tsv --output-tsv output\productization_realdata_seed_guard_85raw_20260617\heldout_trace_reintegration_oracle\heldout_oracle_results.tsv`
+    (`20` heldout oracle cases; all pass/included).
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_activation_scope_audit.py -q`
+    (`5 passed`) for the activation scope audit builder/CLI.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+    (`10 passed`) for the activation scope audit and narrow product writer
+    contract.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_activation_scope_audit --activation-value-delta-tsv output\productization_realdata_seed_guard_85raw_20260617\consolidated_no_raw_productization\activated_matrix\activation_value_delta.tsv --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\high_signal_clean_activation_scope_audit --source-run-id seed-guard-realdata-85raw-consolidated-high-signal-scope-20260617`
+    (`broad_activation_scope_status=not_ready`; 72 high-signal clean eligible
+    writes out of 4613; `narrow_activation_expected_diff_acceptance.json`
+    reports `acceptance_status=pass` for those 72 rows and
+    `product_surface_changed=FALSE`).
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --alignment-matrix-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix.pre_standard_peak_backfill.tsv --alignment-matrix-identity-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix_identity.pre_standard_peak_backfill.tsv --alignment-review-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_review.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\narrow_high_signal_clean_no_raw_productization --source-run-id seed-guard-realdata-85raw-consolidated-narrow-high-signal-clean-20260617 --high-signal-clean-activation-scope-audit-tsv output\productization_realdata_seed_guard_85raw_20260617\high_signal_clean_activation_scope_audit\activation_high_signal_clean_scope_audit.tsv`
+    (`selected_activation_row_count=72`, `matrix_cells_written=72`,
+    `activation_value_delta_written_count=72`, and
+    `narrow_product_writer_expected_diff_acceptance.json` reports
+    `acceptance_status=pass`, `readiness_tier=production_ready`, and
+    `product_surface_changed=TRUE`).
+- Residual production-ready blocker: none for the explicit 72-row
+  high-signal-clean writer slice. Broad standard-path seed guard activation
+  still needs a broader masked/product-writer observed oracle covering the
+  current 4613-row activation scope before claiming broad `production_ready`.
 
 Implement the seed guard as a pre-activation filter in the existing standard
 peak activation/productization path, close to
@@ -730,6 +958,7 @@ Required fields:
 - `source_run_id`;
 - `mask_strategy`;
 - `masked_sample`;
+- `heldout_original_cell_status`;
 - `feature_family_id`;
 - `peak_hypothesis_id`;
 - `target_shape_class`;
@@ -760,6 +989,48 @@ any row exceeding boundary or area tolerance fails the lane unless the oracle
 manifest explicitly labels that row as diagnostic-only and excluded from the
 product seed-guard acceptance.
 
+`heldout_original_cell_status` must prove the masked cell was originally a
+detected quantifiable cell, not a backfilled/rescued cell. Allowed values are
+`detected`, `detected_seed`, `quantifiable_detected`, and `accepted_detected`.
+Rows with `rescued`, blank, or unknown status fail before result evaluation.
+
+#### `heldout_observed_results.tsv`
+
+One row per executed held-out oracle case. This is an input to the evaluator,
+not the oracle itself. It records what an implementation actually selected and
+integrated after the held-out mask, plus why that observation is independent
+from the oracle row.
+
+Required fields:
+
+- `oracle_case_id`;
+- `observed_start_rt`;
+- `observed_end_rt`;
+- `observed_area`;
+- `observed_result_source`;
+- `observed_boundary_source`;
+- `observed_area_source`;
+- `observed_independence_basis`.
+
+Allowed `observed_independence_basis` values:
+
+- `product_writer_observed_result`;
+- `masked_rerun_observed_result`;
+- `independent_boundary_reintegration_result`.
+
+The observed source fields must point to the implementation/result producer,
+not to the oracle source. Rows copied from `oracle_source`, manual oracle,
+manual review, manual verdict, or review-queue source rows fail closed. The
+observed row is also compared against the matching manifest row: if
+`observed_result_source`, `observed_boundary_source`, or `observed_area_source`
+canonicalizes to the same label as manifest `oracle_source`, the row fails even
+when the label is otherwise neutral. This is stricter than numeric tolerance on
+purpose: it prevents a held-out gate from passing by copying the same reviewed
+row into both oracle and observed inputs. The copy detector canonicalizes
+whitespace and punctuation before checking source labels, so variants such as
+`manual review`, `manual-review`, `review queue`, and `oracle-source` are
+treated the same as their underscore forms.
+
 #### `heldout_oracle_results.tsv`
 
 One row per `heldout_oracle_manifest.tsv` row executed. The manifest defines the
@@ -777,6 +1048,10 @@ Required fields:
 - `observed_start_rt`;
 - `observed_end_rt`;
 - `observed_area`;
+- `observed_result_source`;
+- `observed_boundary_source`;
+- `observed_area_source`;
+- `observed_independence_basis`;
 - `boundary_error_min`;
 - `area_relative_error`;
 - `oracle_case_status`;
@@ -795,11 +1070,216 @@ Allowed `oracle_case_status` values:
 Acceptance expectations:
 
 - Every manifest row must have exactly one result row.
+- Every observed row used for product acceptance must satisfy the observed
+  provenance contract above.
+- `result_source_artifact_path` must point to an existing file and
+  `result_source_artifact_sha256` must be non-empty.
 - `boundary_error_min` must use the manifest formula above.
 - `area_relative_error` must use the manifest area denominator rule above.
 - Any row included in product acceptance must have `oracle_case_status=pass`.
 - Any row with `oracle_case_status` other than `pass` must have
   `included_in_product_acceptance=FALSE`; otherwise the lane fails.
+
+#### `activation_high_signal_clean_scope_audit.tsv`
+
+One row per `activation_value_delta.tsv` row from the current standard-peak
+productization bridge. This is a readback gate that asks whether actual written
+activation cells are covered by the same high-signal clean evidence envelope
+used by the heldout trace oracle. It does not authorize writes by itself.
+
+Required fields:
+
+- `schema_version`;
+- `source_run_id`;
+- `feature_family_id`;
+- `peak_hypothesis_id`;
+- `sample_id`;
+- `matrix_value_effect`;
+- `source_cell_status`;
+- `activated_matrix_value`;
+- `matrix_value_source_row_sha256`;
+- `projection_match_status`;
+- `projection_cell_status`;
+- `projection_gap_fill_state`;
+- `projection_local_global_ratio`;
+- `projection_overlay_png_path`;
+- `trace_data_path`;
+- `trace_match_status`;
+- `trace_status`;
+- `cell_area`;
+- `cell_height`;
+- `cell_start_rt`;
+- `cell_end_rt`;
+- `cell_apex_rt`;
+- `family_center_rt`;
+- `boundary_width_min`;
+- `apex_delta_abs_min`;
+- `integration_scan_count`;
+- `apex_aligned_shape_similarity`;
+- `local_window_to_global_max_ratio`;
+- `high_signal_clean_status`;
+- `high_signal_clean_blockers`.
+
+The high-signal clean envelope for this audit is intentionally identical to the
+heldout trace oracle case selector: `trace_status` in `detected` or `rescued`,
+shape similarity `>=0.95`, local/global max ratio `>=0.95`, cell height
+`>=2e6`, boundary width `0.30-0.65 min`, apex within `0.15 min` of the family
+center, and at least `10` scans inside the integration boundary.
+
+`high_signal_clean_status=eligible` means the row is a candidate for a future
+explicit high-signal-clean product scope. `missing_evidence` means the write
+cannot be assessed from the current projection/trace artifacts. `ineligible`
+means available trace evidence exists but falls outside this oracle envelope.
+
+#### `activation_high_signal_clean_scope_summary.tsv/json`
+
+The summary records source artifact paths/hashes, written row counts, projection
+join counts, trace join counts, eligible/ineligible/missing-evidence counts, and
+two status fields:
+
+- `broad_activation_scope_status`: may be `ready` only when every written
+  activation row is high-signal clean eligible. Otherwise it must remain
+  `not_ready`.
+- `narrow_activation_scope_status`: may report
+  `ready_if_product_scope_is_limited_to_eligible_rows` only as a decision
+  candidate. It is not production behavior unless a product writer actually
+  limits output to those rows and an expected-diff gate accepts that matrix
+  change.
+
+`eligible_activation_value_delta.tsv` is a filtered convenience artifact for the
+eligible subset. It is not a replacement for `activation_value_delta.tsv` and
+must not be treated as product output unless the activation contract is
+explicitly narrowed to that scope.
+
+#### `narrow_activation_expected_diff_acceptance.tsv/json`
+
+One-row acceptance artifact for the explicit high-signal-clean activation subset.
+It is a delta-level expected-diff gate, not a matrix writer. The gate compares
+`eligible_activation_value_delta.tsv` against the full `activation_value_delta.tsv`
+and `activation_high_signal_clean_scope_audit.tsv`.
+
+Required fields:
+
+- `schema_version`;
+- `source_run_id`;
+- `acceptance_status`;
+- `expected_scope`;
+- `activation_value_delta_tsv`;
+- `activation_value_delta_sha256`;
+- `activation_scope_audit_tsv`;
+- `activation_scope_audit_sha256`;
+- `eligible_activation_value_delta_tsv`;
+- `eligible_activation_value_delta_sha256`;
+- `full_written_delta_row_count`;
+- `eligible_audit_row_count`;
+- `eligible_delta_row_count`;
+- `duplicate_delta_key_count`;
+- `missing_delta_row_count`;
+- `unexpected_delta_row_count`;
+- `non_eligible_delta_row_count`;
+- `not_written_delta_row_count`;
+- `unchanged_delta_row_count`;
+- `blank_activated_value_count`;
+- `blocking_reasons`;
+- `product_surface_changed`;
+- `next_action`.
+
+Acceptance expectations:
+
+- `expected_scope` must be `high_signal_clean_eligible_activation_rows`.
+- `acceptance_status=pass` requires no duplicate, missing, unexpected,
+  non-eligible, non-written, unchanged, or blank activated-value rows.
+- `product_surface_changed` must remain `FALSE` because the gate does not write a
+  formal matrix output.
+- Passing this gate is sufficient to say the 72-row subset has delta-level
+  expected-diff acceptance. It is not sufficient to say production behavior is
+  active. A formal product writer must explicitly limit output to this scope
+  before a `production_ready` claim can be made.
+
+#### `standard_peak_backfill_productization.py --high-signal-clean-activation-scope-audit-tsv`
+
+Explicit opt-in writer contract for the first high-signal-clean Backfill
+release slice. When this flag is supplied, the productization bridge reads
+`activation_high_signal_clean_scope_audit.tsv`, filters the input
+`shadow_production_projection_cells.tsv` to rows whose
+`shadow_projection_row_sha256` appears as
+`matrix_value_source_row_sha256` with
+`high_signal_clean_status=eligible` and `matrix_value_effect=written`, and
+then runs the existing standard-peak activation input builder plus existing
+matrix-only product activation writer on that filtered set.
+
+Fail-closed requirements:
+
+- The scope audit must contain at least one eligible written row.
+- Eligible scope-audit source-row hashes must be unique.
+- Every eligible scope-audit hash must map to exactly one shadow projection row
+  inside the productization input.
+- The writer may not broaden to trace-matched ineligible rows, missing-evidence
+  rows, non-standard rows, or rows outside the supplied scope audit.
+- The flag does not change default extraction, preset behavior, GUI behavior,
+  workbook schema, non-standard promotion policy, or the broad 4613-row
+  activation bridge.
+
+The productization summary records:
+
+- `schema_version=standard_peak_backfill_productization_v1`;
+- `activation_scope_contract`;
+- `activation_scope_filter_status`;
+- `activation_scope_audit_tsv`;
+- `activation_scope_audit_sha256`;
+- `activation_scope_filter_selected_shadow_row_count`;
+- `activation_scope_filter_excluded_shadow_row_count`;
+- `activation_scope_filter_eligible_audit_row_count`;
+- `narrow_product_writer_expected_diff_acceptance_status`;
+- `narrow_product_writer_expected_diff_acceptance_tsv`;
+- `narrow_product_writer_expected_diff_acceptance_json`.
+
+#### `narrow_product_writer_expected_diff_acceptance.tsv/json`
+
+One-row acceptance artifact emitted by the explicit high-signal-clean writer.
+Unlike `narrow_activation_expected_diff_acceptance.tsv/json`, this gate is tied
+to an actual matrix-only productization output and therefore records
+`product_surface_changed=TRUE`.
+
+Required fields:
+
+- `schema_version`;
+- `source_run_id`;
+- `acceptance_status`;
+- `readiness_tier`;
+- `expected_scope`;
+- `activation_scope_audit_tsv`;
+- `activation_scope_audit_sha256`;
+- `product_activation_value_delta_tsv`;
+- `product_activation_value_delta_sha256`;
+- `activation_application_status`;
+- `matrix_cells_written`;
+- `eligible_audit_row_count`;
+- `product_delta_row_count`;
+- `product_written_delta_row_count`;
+- `duplicate_delta_key_count`;
+- `missing_delta_row_count`;
+- `unexpected_delta_row_count`;
+- `non_eligible_delta_row_count`;
+- `not_written_delta_row_count`;
+- `unchanged_delta_row_count`;
+- `blank_activated_value_count`;
+- `blocking_reasons`;
+- `product_surface_changed`;
+- `next_action`.
+
+Acceptance expectations:
+
+- `expected_scope` must be `high_signal_clean_eligible_activation_rows`.
+- `acceptance_status=pass` requires the product activation delta rows to match
+  the eligible audit keys exactly, with no duplicate, missing, unexpected,
+  non-eligible, non-written, unchanged, or blank activated-value rows.
+- `activation_application_status` must be `applied`.
+- `matrix_cells_written` and `product_written_delta_row_count` must both equal
+  `eligible_audit_row_count`.
+- Passing this gate allows a `production_ready` claim only for the explicit
+  high-signal-clean scoped writer slice. It does not authorize broad 4613-row
+  standard-path activation or default extraction behavior.
 
 ### No-RAW / existing-artifact phase
 
@@ -865,6 +1345,15 @@ diagnostic's high-uncertainty fraction. These are not literature claims. If real
 RAW/EIC review shows a threshold is too loose or too strict, change the oracle
 manifest or diagnostic threshold first and rerun the matrix-diff acceptance; do
 not silently change promotion behavior.
+
+Product decision, 2026-06-17: the first production-readiness oracle gate uses
+the defaults above unless a reviewed oracle row specifies a stricter tolerance:
+boundary error `<= 0.1 min` and area relative error `<= 0.10`. This acceptance
+only fixes the validation gate for reviewed held-out cases. The implemented
+heldout oracle evaluator now rejects manifest tolerances looser than these
+accepted ceilings. It does not approve any current 85RAW matrix value changes,
+broad non-standard promotion, or default automatic backfill without the
+expected-diff acceptance packet.
 
 These thresholds are validation/classification oracle thresholds for the
 non-standard diagnostic lane. They are not automatic matrix-promotion thresholds

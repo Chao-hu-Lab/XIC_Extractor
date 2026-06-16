@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-16
-**Total entry-points:** 84
-**Total files (incl. helpers):** 163 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-17
+**Total entry-points:** 87
+**Total files (incl. helpers):** 166 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -26,9 +26,9 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 3 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 33 tools
+4. [Backfill Reviews](#backfill-reviews) — 35 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
-6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 10 tools
+6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 6 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
@@ -316,7 +316,8 @@ benchmark join behavior.
 Three overlapping review axes (seed-level / family-level /
 row-classifier-level), 2 owner-backfill economics tools, 1 reconciliation
 gallery/index surface, 1 MS1+RT shadow-policy report, 1 Tier 2 RAW trace
-producer, 1 `diagnostic_only` provisional candidate-gate sidecar, and 1
+producer, 1 high-signal clean activation scope audit, 1 `diagnostic_only`
+provisional candidate-gate sidecar, and 1
 `diagnostic_only` product-retained backfill evidence-gate sidecar. The sidecars
 are not economics axes; they emit source-hashed support/blocker/missing-evidence
 rows while the existing review/economics axes remain pending cleanup per
@@ -428,6 +429,24 @@ sample order, and output TSV/JSON/Markdown schemas.
 
 ---
 
+### `standard_peak_heldout_oracle_results.py`
+
+**Purpose**: Evaluate deterministic standard-peak held-out oracle manifest rows against observed boundary/area results and write `heldout_oracle_results.tsv`.
+**Topic group**: `standard_peak_shadow_activation_inputs.py` + `xic_extractor/diagnostics/standard_peak_shadow_activation_inputs.py`
+**Originating spec/goal/plan**: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
+**Status note**: Thin CLI wrapper around the package-level held-out oracle evaluator. It reads `heldout_oracle_manifest.tsv`, observed result rows with `oracle_case_id`, observed boundary/area fields, and observed-result provenance fields, records the source artifact SHA, and writes the existing `standard_peak_seed_guard_heldout_oracle_results_v1` schema. Manifest rows must declare `heldout_original_cell_status` proving the masked source cell was originally detected; `rescued`, blank, or unknown statuses fail before result evaluation. Observed rows must identify an independent product-writer, masked-rerun, or boundary-reintegration source; oracle/manual-review/review-queue source copies fail closed after punctuation/whitespace canonicalization, and neutral observed source labels also fail when they canonicalize to the same value as the matching manifest `oracle_source`. The result source artifact must exist so its SHA can be recorded. It does not run RAW, generate oracle rows, mutate matrices, authorize non-standard peaks, or upgrade the standard-path seed guard beyond `production_candidate`; real/reviewed held-out oracle rows plus 85RAW expected-diff evidence are still required for `production_ready`.
+
+---
+
+### `standard_peak_activation_scope_audit.py`
+
+**Purpose**: Audit whether actual standard-peak `activation_value_delta.tsv` writes fall inside the high-signal clean trace envelope used by the held-out oracle.
+**Topic group**: `standard_peak_activation_scope_audit.py` + `xic_extractor/diagnostics/standard_peak_activation_scope_audit.py`
+**Originating spec/goal/plan**: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
+**Status note**: Reads an existing matrix-only `activation_value_delta.tsv`, the matching `shadow_production_projection_cells.tsv`, and sibling `*_trace_data.json` artifacts derived from `overlay_png_path`. It writes `activation_high_signal_clean_scope_audit.tsv`, `activation_high_signal_clean_scope_summary.tsv/json`, `eligible_activation_value_delta.tsv`, and `narrow_activation_expected_diff_acceptance.tsv/json`. The audit joins actual writes to projection rows by `matrix_value_source_row_sha256`, classifies missing projection/trace evidence separately from trace-matched ineligible rows, and applies the heldout-oracle high-signal clean envelope: supported trace status, shape >=0.95, local/global >=0.95, height >=2e6, width 0.30-0.65 min, apex within 0.15 min of family center, and at least 10 boundary scans. The narrow expected-diff acceptance verifies that the filtered eligible delta rows are exactly the eligible audit rows and contain no duplicate, missing, unexpected, non-eligible, non-written, unchanged, or blank-value rows. It does not open RAW, generate evidence, mutate matrices, or authorize product activation. `eligible_activation_value_delta.tsv` is a filtered convenience artifact only; product output must come from a separate productization run such as `standard_peak_backfill_productization.py --high-signal-clean-activation-scope-audit-tsv`, whose writer acceptance must pass before claiming the narrow scoped product behavior.
+
+---
+
 ### `standard_peak_shadow_activation_inputs.py`
 
 **Purpose**: Convert product-authorized standard-peak `shadow_production_projection_cells.tsv` accepts into `product_activation --matrix-only` input TSVs.
@@ -436,7 +455,7 @@ sample order, and output TSV/JSON/Markdown schemas.
 **Load-bearing note**: This is part of the built-in `dna_dr` standard-peak
 publication path. Treat it as product-adjacent activation infrastructure, not a
 disposable research diagnostic.
-**Status note**: Writes `standard_peak_activation_decisions.tsv`, `standard_peak_activation_values.tsv`, `standard_peak_activation_acceptance.tsv`, `standard_peak_activation_inputs.tsv`, and `standard_peak_activation_inputs_summary.json`. It selects only rows with `shadow_decision=accept`, `current_matrix_written=FALSE`, `projected_matrix_written=TRUE`, a nonblank projected value, and `same_peak_reason:shift_aware_standard_peak_gate_supported` in the product-authority chain. Current-matrix rows are counted as already written and are not reactivated; nonstandard, context, blocked, or unprovenanced rows fail closed. Before writing acceptance, the converter runs a standard-peak row-level gate that checks PeakHypothesis scope, auto-activate decision shape, matching activation values, source schema, source row SHA, and the standard-peak same-peak reason. Passing rows generate an existing-contract `activation_acceptance.tsv` with `must_not_regress_status=pass`, a max product-affecting row allowance equal to the gated selected row count, and an activation scope derived from authority provenance: manual-oracle rows stay `manual_oracle_seed_rows`, while machine-gate rows are labeled `machine_gate_standard_peak_rows` with `must_not_regress_basis=machine_shift_aware_standard_peak_gate`. With `--apply-matrix-only`, the CLI immediately calls the existing matrix-only product activation writer and emits an activated matrix under `<output-dir>/activated_matrix` unless `--activated-output-dir` is supplied. If the standard-peak gate fails, acceptance stays fail and product application must stop for review. This converter does not generate upstream evidence, change source alignment artifacts, or bypass product activation; `apply_shared_peak_identity_activation.py --matrix-only` remains the matrix writer.
+**Status note**: Writes `standard_peak_activation_decisions.tsv`, `standard_peak_activation_values.tsv`, `standard_peak_activation_acceptance.tsv`, `standard_peak_activation_inputs.tsv`, `standard_peak_activation_inputs_summary.json`, and additive `seed_guard_decisions.tsv`. It selects only rows with `shadow_decision=accept`, `current_matrix_written=FALSE`, `projected_matrix_written=TRUE`, a nonblank projected value, and `same_peak_reason:shift_aware_standard_peak_gate_supported` in the product-authority chain. Current-matrix rows are counted as already written and are not reactivated; nonstandard, context, blocked, or unprovenanced rows fail closed. When a seed-guard context is supplied by the productization bridge, standard-path candidates are evaluated against the N-banded cohort seed-support rule before activation decisions are written; low-seed and inconclusive rows do not write activation decisions. Before writing acceptance, the converter runs a standard-peak row-level gate that checks PeakHypothesis scope, auto-activate decision shape, matching activation values, source schema, source row SHA, and the standard-peak same-peak reason. Passing rows generate an existing-contract `activation_acceptance.tsv` with `must_not_regress_status=pass`, a max product-affecting row allowance equal to the gated selected row count, and an activation scope derived from authority provenance: manual-oracle rows stay `manual_oracle_seed_rows`, while machine-gate rows are labeled `machine_gate_standard_peak_rows` with `must_not_regress_basis=machine_shift_aware_standard_peak_gate`. With `--apply-matrix-only`, the CLI immediately calls the existing matrix-only product activation writer and emits an activated matrix under `<output-dir>/activated_matrix` unless `--activated-output-dir` is supplied. If the standard-peak gate fails, acceptance stays fail and product application must stop for review. This converter does not generate upstream evidence, change source alignment artifacts, or bypass product activation; `apply_shared_peak_identity_activation.py --matrix-only` remains the matrix writer.
 
 ---
 
@@ -448,7 +467,7 @@ disposable research diagnostic.
 **Load-bearing note**: The `dna_dr` preset can reach this path after
 `scripts/run_alignment.py` finishes base alignment. It can publish accepted
 standard-peak values into the default alignment matrix outputs.
-**Status note**: Requires `shadow_production_projection_cells.tsv`, `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, and `alignment_review.tsv`. It writes `standard_peak_backfill_productization_summary.tsv/json`, nests the converter output under `standard_peak_activation_inputs/`, and writes matrix-only activation outputs under `activated_matrix/`. It uses the same fail-closed standard-peak row gate as `standard_peak_shadow_activation_inputs.py`; rows without `same_peak_reason:shift_aware_standard_peak_gate_supported`, rows already written in the current matrix, context/block rows, and rows without positive projected values are not activated. Before activation, the orchestrator checks `current_matrix_written=TRUE` claims against the actual public matrix via `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`; stale projection rows that claim an already-written current cell while the public matrix is blank fail fast and must be regenerated. With `--write-gallery`, it also consumes optional gallery artifacts and passes the generated `activation_application_summary.tsv` / `activation_value_delta.tsv` into `backfill_evidence_reconciliation_gallery.py`, so the HTML distinguishes existing accepted-rescue writes from newly activated matrix writes. This orchestrator does not generate upstream evidence, rerun RAW, loosen nonstandard-peak policy, or mutate source alignment artifacts.
+**Status note**: Requires `shadow_production_projection_cells.tsv`, `alignment_matrix.tsv`, `alignment_matrix_identity.tsv`, and `alignment_review.tsv`. It writes `standard_peak_backfill_productization_summary.tsv/json`, nests the converter output under `standard_peak_activation_inputs/`, and writes matrix-only activation outputs under `activated_matrix/`. It uses the same fail-closed standard-peak row gate as `standard_peak_shadow_activation_inputs.py`; rows without `same_peak_reason:shift_aware_standard_peak_gate_supported`, rows already written in the current matrix, context/block rows, rows without positive projected values, and standard-path rows failing the N-banded seed guard are not activated. The seed guard derives `total_N` from the pre-backfill matrix sample columns and `detected_count` from `alignment_review.tsv`, writes `seed_guard_decisions.tsv` for every standard-path candidate, and after matrix activation joins actual writes back from `activation_value_delta.tsv` by `peak_hypothesis_id/sample_stem`. Before activation, the orchestrator checks `current_matrix_written=TRUE` claims against the actual public matrix via `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`; stale projection rows that claim an already-written current cell while the public matrix is blank fail fast and must be regenerated. With `--high-signal-clean-activation-scope-audit-tsv`, it fail-closed filters the writer to audit rows with `high_signal_clean_status=eligible`, emits `narrow_product_writer_expected_diff_acceptance.tsv/json`, and may claim `production_ready` only for that explicit scoped writer when acceptance passes; it does not authorize the broad activation set. With `--write-gallery`, it also consumes optional gallery artifacts and passes the generated `activation_application_summary.tsv` / `activation_value_delta.tsv` into `backfill_evidence_reconciliation_gallery.py`, so the HTML distinguishes existing accepted-rescue writes from newly activated matrix writes. This orchestrator does not generate upstream evidence, rerun RAW, loosen nonstandard-peak policy, or mutate source alignment artifacts.
 
 ---
 
@@ -598,7 +617,10 @@ reported as `hypothesis_candidate_review`, not as absent. Hard missing cells,
 absent cells, duplicate-assigned cells, and missing Gaussian15 area still fail
 closed. This diagnostic does not read RAW, remap winners, apply activation,
 mutate alignment artifacts, change workbook schemas, or claim production
-readiness.
+readiness. This diagnostic's `rescued` eligibility is not a heldout-oracle
+contract: standard-path heldout oracle manifests separately require
+`heldout_original_cell_status` proving the masked source cell was originally
+detected, and `rescued` rows fail closed for product-readiness oracle evidence.
 
 ---
 
@@ -1075,6 +1097,22 @@ only consumes the TSV through explicit opt-in
 
 ---
 
+### `targeted_ms1_shape_identity_expected_diff_gate.py`
+
+**Purpose**: Gate targeted MS1 shape identity expected-diff artifacts for the
+limited `5-hmdC` / `5-medC` activation policy.
+**Topic group**: targeted NL dropout / MS1 shape identity; reuses
+`xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff`.
+**Status note**: Reads existing `expected_diff_summary.tsv` and
+`matrix_diff_summary.tsv` only. It fails closed unless every long-row mutation
+is an analyte `NL_FAIL` row moving from `not_counted/FALSE` to
+`detected_flagged/TRUE` with `own_max_same_peak_support`, and every wide-matrix
+cell mutation is an allowed `5-hmdC` or `5-medC` measurement moving from `ND` to
+a populated value. It does not open RAW, build support evidence, run
+extraction, or mutate product outputs.
+
+---
+
 ### `build_target_pair_expected_diff_approval_registry.py`
 
 **Purpose**: Convert explicitly user-approved `target_pair_rt_auto_reselection.tsv`
@@ -1107,6 +1145,7 @@ are not daily).
 
 **Purpose**: Build docs-derived instrument QC sequence manifest.
 **Originating spec**: `2026-05-20-instrument-qc-phases-3-6-consolidated-spec-plan.md`
+**Status note**: The `run_instrument_qc.py --method-doc` flow writes the sequence manifest, legacy `instrument_qc_injection_order.csv`, and additive `instrument_qc_sample_metadata.tsv` using `sample_metadata_v1`. The sample-metadata sidecar projects matched RAW rows and raw-dir-only instrument-QC rows as metadata only; roles do not alter instrument-QC trend values or matrix outputs.
 
 ---
 

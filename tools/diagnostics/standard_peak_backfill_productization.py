@@ -34,6 +34,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             retained_backfill_gate_tsv=args.retained_backfill_gate_tsv,
             gallery_output_dir=args.gallery_output_dir,
+            high_signal_clean_activation_scope_audit_tsv=(
+                args.high_signal_clean_activation_scope_audit_tsv
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -49,6 +52,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Activated matrix TSV: {outputs.activated_matrix_tsv}")
     if outputs.activation_value_delta_tsv is not None:
         print(f"Activation value delta TSV: {outputs.activation_value_delta_tsv}")
+    if outputs.narrow_product_writer_expected_diff_acceptance_json is not None:
+        print(
+            "Narrow product writer expected-diff acceptance JSON: "
+            f"{outputs.narrow_product_writer_expected_diff_acceptance_json}",
+        )
     if outputs.reconciliation_gallery_html is not None:
         print(
             "Activation-synced reconciliation gallery HTML: "
@@ -117,6 +125,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--gallery-output-dir",
         type=Path,
         help="Optional output directory for the synced gallery.",
+    )
+    parser.add_argument(
+        "--high-signal-clean-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation_high_signal_clean_scope_audit.tsv. When set, "
+            "matrix-only activation is limited to audit rows with "
+            "high_signal_clean_status=eligible and an explicit writer "
+            "expected-diff acceptance artifact is emitted."
+        ),
     )
     return parser.parse_args(argv)
 
