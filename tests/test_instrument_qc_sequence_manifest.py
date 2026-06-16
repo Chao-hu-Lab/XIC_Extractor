@@ -2,6 +2,7 @@ import csv
 import json
 from pathlib import Path
 
+from xic_extractor.instrument_qc import sequence_manifest_writers
 from xic_extractor.instrument_qc.classification import InstrumentQCClass
 from xic_extractor.instrument_qc.sequence_manifest import (
     ManifestMatchStatus,
@@ -18,6 +19,7 @@ from xic_extractor.instrument_qc.sequence_manifest_writers import (
     write_sequence_manifest_markdown,
     write_sequence_manifest_tsv,
 )
+from xic_extractor.sample_metadata import SAMPLE_METADATA_SCHEMA_VERSION
 
 
 def test_sequence_table_produces_manifest_rows_with_classes_and_matches() -> None:
@@ -321,6 +323,50 @@ def test_sequence_manifest_writers_emit_audit_and_injection_order(
         "unmatched": 1,
     }
     assert "SDOLEK-missing" in manifest_md.read_text(encoding="utf-8")
+
+
+def test_sequence_manifest_writes_sample_metadata_v1_for_actual_raw_rows(
+    tmp_path: Path,
+) -> None:
+    entries = parse_sequence_tables(
+        [
+            [
+                ["ID", "File Name", "Instrument Method", "Sample", "Inj"],
+                ["4", "SDOLEK-pretest", "20260105 SDOLEK", "50 ppb", "2"],
+                ["5", "SDOLEK-missing", "20260105 SDOLEK", "50 ppb", "2"],
+                ["6", "Blank_3", "20260105 SB Check", "DIW", "20"],
+            ],
+        ],
+        source_doc="method.docx",
+    )
+    rows = build_sequence_manifest_from_entries(
+        entries,
+        raw_stems=("SDOLEK-pretest", "SDOLEK-pretest-1", "Blank_3"),
+    )
+
+    sample_metadata_tsv = tmp_path / "instrument_qc_sample_metadata.tsv"
+    assert hasattr(sequence_manifest_writers, "write_sample_metadata_tsv")
+    sequence_manifest_writers.write_sample_metadata_tsv(sample_metadata_tsv, rows)
+
+    with sample_metadata_tsv.open(encoding="utf-8") as handle:
+        metadata_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert metadata_rows
+    assert hasattr(sequence_manifest_writers, "SAMPLE_METADATA_OUTPUT_COLUMNS")
+    assert list(metadata_rows[0].keys()) == list(
+        sequence_manifest_writers.SAMPLE_METADATA_OUTPUT_COLUMNS
+    )
+    by_sample = {row["sample_name"]: row for row in metadata_rows}
+    assert set(by_sample) == {"SDOLEK-pretest", "SDOLEK-pretest-1", "Blank_3"}
+    assert by_sample["SDOLEK-pretest"]["schema_version"] == (
+        SAMPLE_METADATA_SCHEMA_VERSION
+    )
+    assert by_sample["SDOLEK-pretest"]["injection_order"] == "4"
+    assert by_sample["SDOLEK-pretest"]["sample_role"] == "system_suitability"
+    assert by_sample["SDOLEK-pretest"]["matrix_type"] == "instrument_qc"
+    assert by_sample["SDOLEK-pretest"]["group"] == "SDOLEK"
+    assert by_sample["SDOLEK-pretest-1"]["injection_order"] == ""
+    assert by_sample["Blank_3"]["sample_role"] == "blank"
+    assert "SDOLEK-missing" not in by_sample
 
 
 def test_sequence_manifest_writers_emit_header_only_empty_outputs(

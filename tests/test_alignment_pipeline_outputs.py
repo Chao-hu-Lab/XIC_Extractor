@@ -248,6 +248,64 @@ def test_pipeline_orders_sample_columns_by_injection_order(
     ) == ["Sample_A", "Sample_B", "Sample_C", "Sample_X"]
 
 
+def test_pipeline_orders_sample_columns_by_sample_metadata_v1(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    samples = ("Sample_C", "Sample_A", "Sample_X", "Sample_B")
+    batch_index = _write_batch(tmp_path, samples)
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    for stem in samples:
+        (raw_dir / f"{stem}.raw").write_text("raw", encoding="utf-8")
+    sample_metadata_tsv = tmp_path / "sample_metadata.tsv"
+    sample_metadata_tsv.write_text(
+        "\t".join(
+            (
+                "schema_version",
+                "sample_name",
+                "raw_stem",
+                "injection_order",
+                "sample_role",
+                "batch_id",
+                "prep_batch_id",
+                "matrix_type",
+                "group",
+                "excluded",
+                "exclusion_reason",
+            )
+        )
+        + "\n"
+        + "\n".join(
+            (
+                "sample_metadata_v1\tAlpha\tSample_A\t1\tstudy_sample\tB1\t\tplasma\tcase\tFALSE\t",
+                "sample_metadata_v1\tBeta\tSample_B\t2\tqc\tB1\t\tplasma\tqc\tFALSE\t",
+                "sample_metadata_v1\tGamma\tSample_C\t3\tblank\tB1\t\tplasma\tblank\tFALSE\t",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _patch_owner_pipeline_to_matrix(monkeypatch)
+
+    outputs = pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        emit_alignment_status_matrix=True,
+        sample_column_injection_order=sample_metadata_tsv,
+        raw_opener=FakeRawOpener(),
+    )
+
+    assert _status_matrix_sample_columns(
+        outputs.status_matrix_tsv,
+        set(samples),
+    ) == ["Sample_A", "Sample_B", "Sample_C", "Sample_X"]
+
+
 def test_pipeline_keeps_input_sample_order_without_injection_source(
     tmp_path: Path,
     monkeypatch,

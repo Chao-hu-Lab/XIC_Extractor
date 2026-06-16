@@ -82,6 +82,11 @@ from xic_extractor.injection_rolling import (
     order_sample_columns_by_injection,
     read_injection_order,
 )
+from xic_extractor.sample_metadata import (
+    is_sample_metadata_source,
+    load_sample_metadata,
+    sample_metadata_to_injection_order,
+)
 
 _RawSourceTimingStats = RawSourceTimingStats
 _TimedRawSource = TimedRawSource
@@ -449,7 +454,9 @@ def run_alignment(
                 record_raw_source_timing_stats(timing_stats, recorder=recorder)
         matrix_sample_order = batch.sample_order
         if sample_column_injection_order is not None:
-            injection_order = read_injection_order(sample_column_injection_order)
+            injection_order, injection_order_source_schema = (
+                _read_sample_column_injection_order(sample_column_injection_order)
+            )
             matrix_sample_order = order_sample_columns_by_injection(
                 batch.sample_order,
                 injection_order,
@@ -467,6 +474,7 @@ def run_alignment(
                         if sample not in injection_order
                     ),
                     "source": str(sample_column_injection_order),
+                    "source_schema": injection_order_source_schema,
                 },
             )
         with recorder.stage("alignment.build_matrix"):
@@ -752,6 +760,15 @@ def _summarize_xic_timing_stats(
             else extract_xic_count / extract_xic_batch_count
         ),
     }
+
+
+def _read_sample_column_injection_order(path: Path) -> tuple[dict[str, int], str]:
+    if is_sample_metadata_source(path):
+        return (
+            sample_metadata_to_injection_order(load_sample_metadata(path)),
+            "sample_metadata_v1",
+        )
+    return read_injection_order(path), "legacy_injection_order"
 
 
 def _default_raw_opener(

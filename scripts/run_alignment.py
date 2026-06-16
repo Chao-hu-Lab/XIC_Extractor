@@ -675,8 +675,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--sample-column-injection-order",
         type=Path,
         help=(
-            "CSV/XLSX with Sample_Name,Injection_Order columns (e.g. the "
-            "instrument_qc_injection_order.csv derived from the method .docx). "
+            "CSV/XLSX with Sample_Name,Injection_Order columns, or a "
+            "sample_metadata_v1 CSV/TSV projected to injection order (e.g. "
+            "the instrument_qc_injection_order.csv or "
+            "instrument_qc_sample_metadata.tsv derived from the method .docx). "
             "When given, final matrix sample columns are ordered earliest- to "
             "latest-injected; samples not listed keep their order at the end. "
             "Reorders columns only; values are unchanged."

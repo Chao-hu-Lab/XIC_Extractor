@@ -8,6 +8,10 @@ from xic_extractor.instrument_qc.sequence_manifest import (
     ManifestMatchStatus,
     SequenceManifestRow,
 )
+from xic_extractor.sample_metadata import (
+    SAMPLE_METADATA_COLUMNS,
+    SAMPLE_METADATA_SCHEMA_VERSION,
+)
 from xic_extractor.tabular_io import write_delimited_rows, write_tsv
 
 MANIFEST_TSV_COLUMNS = [
@@ -25,6 +29,7 @@ MANIFEST_TSV_COLUMNS = [
 ]
 
 INJECTION_ORDER_COLUMNS = ["Sample_Name", "Injection_Order"]
+SAMPLE_METADATA_OUTPUT_COLUMNS = SAMPLE_METADATA_COLUMNS
 
 
 def write_sequence_manifest_tsv(
@@ -63,6 +68,27 @@ def write_injection_order_csv(
         output_rows,
         INJECTION_ORDER_COLUMNS,
         formatter=_format_tabular_value,
+    )
+
+
+def write_sample_metadata_tsv(
+    path: Path,
+    rows: Iterable[SequenceManifestRow],
+) -> None:
+    output_rows = []
+    for row in rows:
+        if row.match_status != ManifestMatchStatus.MATCHED and (
+            row.source_section != "raw_dir"
+        ):
+            continue
+        output_rows.append(_sample_metadata_row_to_dict(row))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_tsv(
+        path,
+        output_rows,
+        SAMPLE_METADATA_OUTPUT_COLUMNS,
+        formatter=_format_tabular_value,
+        lineterminator="\n",
     )
 
 
@@ -142,6 +168,34 @@ def _manifest_row_to_dict(row: SequenceManifestRow) -> dict[str, object]:
         "instrument_method": row.instrument_method,
         "activation_method": row.activation_method,
     }
+
+
+def _sample_metadata_row_to_dict(row: SequenceManifestRow) -> dict[str, object]:
+    return {
+        "schema_version": SAMPLE_METADATA_SCHEMA_VERSION,
+        "sample_name": row.raw_stem,
+        "raw_stem": row.raw_stem,
+        "injection_order": "" if row.injection_order is None else row.injection_order,
+        "sample_role": _sample_role(row),
+        "batch_id": "",
+        "prep_batch_id": "",
+        "matrix_type": "instrument_qc",
+        "group": row.instrument_qc_class.value,
+        "excluded": "FALSE",
+        "exclusion_reason": "",
+    }
+
+
+def _sample_role(row: SequenceManifestRow) -> str:
+    if row.instrument_qc_class.value == "SDOLEK":
+        return "system_suitability"
+    if row.instrument_qc_class.value == "MIX_STDS":
+        return "calibrator"
+    if row.instrument_qc_class.value == "BLANK":
+        return "blank"
+    if row.instrument_qc_class.value == "POOLED_QC":
+        return "pooled_qc"
+    return "unknown"
 
 
 def _format_tabular_value(value: object) -> str:

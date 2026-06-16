@@ -13,6 +13,7 @@ from xic_extractor.instrument_qc.pipeline import run_sdolek_pipeline
 from xic_extractor.instrument_qc.sequence_manifest import build_sequence_manifest
 from xic_extractor.instrument_qc.sequence_manifest_writers import (
     write_injection_order_csv,
+    write_sample_metadata_tsv,
     write_sequence_manifest_json,
     write_sequence_manifest_markdown,
     write_sequence_manifest_tsv,
@@ -217,7 +218,7 @@ def _build_method_doc_manifest(
     method_doc: Path,
     raw_dir: Path,
     output_dir: Path,
-) -> tuple[Path, Path, Path, Path] | str:
+) -> tuple[Path, Path, Path, Path, Path] | str:
     if method_doc.name.casefold().startswith("sampleinfo"):
         return "SampleInfo is downstream evidence, not an accepted method-doc input."
     if not method_doc.exists():
@@ -233,13 +234,21 @@ def _build_method_doc_manifest(
         return str(exc)
     manifest_tsv = output_dir / "instrument_qc_sequence_manifest.tsv"
     injection_order_csv = output_dir / "instrument_qc_injection_order.csv"
+    sample_metadata_tsv = output_dir / "instrument_qc_sample_metadata.tsv"
     manifest_json = output_dir / "instrument_qc_sequence_manifest.json"
     manifest_md = output_dir / "instrument_qc_sequence_manifest.md"
     write_sequence_manifest_tsv(manifest_tsv, rows)
     write_injection_order_csv(injection_order_csv, rows)
+    write_sample_metadata_tsv(sample_metadata_tsv, rows)
     write_sequence_manifest_json(manifest_json, rows)
     write_sequence_manifest_markdown(manifest_md, rows)
-    return manifest_tsv, injection_order_csv, manifest_json, manifest_md
+    return (
+        manifest_tsv,
+        injection_order_csv,
+        sample_metadata_tsv,
+        manifest_json,
+        manifest_md,
+    )
 
 
 if __name__ == "__main__":
