@@ -1,12 +1,343 @@
 # XIC productization handoff
 
-更新日期: 2026-06-16
+更新日期: 2026-06-17
 分支: `cc/framework-improvements`
 用途: 給下一個 agent/session 快速接手，不需要重讀整段聊天。
+
+## 2026-06-17 白話結論
+
+目前這個分支的非 GUI productization goal 又往前收斂一格：Backfill
+現在有一個可以白紙黑字宣稱的窄範圍 `production_ready` slice。具體來說，
+85RAW-derived、originally detected、high-signal clean standard trace
+heldout oracle 20/20 通過；activation scope audit 證明 broad 4613-row
+standard-path activation 裡只有 72 個 writes 落在同一個 high-signal clean
+envelope；新的 explicit opt-in writer 再用
+`--high-signal-clean-activation-scope-audit-tsv` 只寫這 72 rows，真實 no-RAW
+85RAW artifact 跑出 72/72 writes，writer expected-diff acceptance 也通過並
+標 `readiness_tier=production_ready`。
+
+重要邊界：這不是說 broad 4613-row Backfill 已 ready。4613 個 actual writes
+裡，3454 個 trace-matched writes 不符合 high-signal clean envelope，1087 個
+缺 overlay/trace evidence；所以 broad lane 仍是 `production_candidate`。
+真正可 release-claim 的是「explicit 72-row high-signal-clean scoped
+Backfill writer」，不是 default extraction，也不是 4613-row broad activation。
+
+接手狀態:
+
+- Worktree: `C:\Users\user\Desktop\XIC_Extractor`
+- Branch: `cc/framework-improvements`
+- HEAD: `3b10731`
+- Dirty scope: 多個 modified/new paths，沒有 staged file；請以
+  `git status --short` 為準；主要是本輪
+  productization 實作、tests、control plane、handoff/spec/index 更新。
+- 本地 gate 已跑完:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 343 source files`)
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3704 passed, 1 skipped`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py` -> `87 entry points, 166 total files`
+  - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
+- 2026-06-17 subagent review: reviewer `Maxwell` 驗收目前 dirty diff，
+  沒有發現 blocking issue。Reviewer 實際重跑 `git diff --check`，抽查
+  8RAW/85RAW opt-in artifact path 存在；ruff/mypy/full pytest/diagnostics
+  index 結果採主 agent 已跑過的 gate 紀錄，沒有重跑 RAW。
+- 2026-06-17 subagent review: reviewer `Peirce` 針對後續 seed-guard /
+  heldout-oracle delta 找到兩個 blocking contract issue 和一個 fail-closed
+  hardening issue：heldout oracle manifest schema 沒強制完整欄位、
+  duplicate/extra observed oracle rows 可被忽略、`blocked_unattributed_write`
+  沒升成 productization failure。這三點已修，並補了紅燈轉綠測試。
+- 2026-06-17 subagent review: reviewer `Euclid` 驗修後 diff，沒有 blocking
+  issue；它指出 heldout manifest 只鎖欄位、未鎖 schema version。已補
+  `standard_peak_seed_guard_heldout_oracle_manifest_v1` value guard 和測試。
+- 2026-06-17 subagent review: reviewer `Noether` 最後驗收 dirty diff，
+  沒有 P1/P2 blocking issue；它指出 direct package evaluator 只鎖
+  schema version，完整 manifest 欄位保護主要在 CLI 讀檔層。已補
+  package-level required-column guard 和 direct helper 測試。
+- 2026-06-17 繼續推進: alignment 的 `--sample-column-injection-order`
+  現在也可吃 `sample_metadata_v1` CSV/TSV，投影成相同 injection-order
+  mapping 來排序 final matrix/status sample columns。這是 no-output-value
+  slice：不讀 role/batch/matrix/exclusion 來改 matrix values、counted
+  detection、feature acceptance 或 backfill activation。
+- 2026-06-17 繼續推進: RT-normalization anchor diagnostic 的
+  `--sample-info` 現在也可吃 `sample_metadata_v1` CSV/TSV，用同一個 shared
+  resolver 投影 injection order 給 `injection-local-median` /
+  `injection-loess` reference lookup。這仍是 no-output-value slice：
+  role/batch/matrix/exclusion 不改 normalized values、matrix values、
+  counted detection 或 calibration/main-matrix writes。
+- 2026-06-17 subagent review: reviewer `Descartes` 驗收 RT-normalization
+  resolver slice，沒有 P1/P2 blocker；它指出 parity test 只覆蓋
+  `injection-local-median`，已補成同時覆蓋 `injection-loess`，focused suite
+  現在 `16 passed`。
+- 2026-06-17 繼續推進: 新增
+  `tools/diagnostics/standard_peak_heldout_oracle_results.py`，把已存在的
+  heldout oracle evaluator 變成可執行 CLI gate。它只讀 deterministic
+  manifest + observed boundary/area rows 並寫 `heldout_oracle_results.tsv`，
+  不跑 RAW、不產生 reviewed oracle、不改 matrix、不授權 non-standard peak。
+  Peirce/Euclid/Noether review 後，CLI 和 package evaluator 會強制 spec
+  要求的完整 manifest 欄位與 manifest schema version，且 observed result
+  rows 若 duplicate 或帶有 manifest 外的 stale case 會 fail-closed。
+- 2026-06-17 真實資料最小驗證: 沒有重跑 RAW，而是重用既有
+  `standard_peak_backfill_preset_85raw_20260610` 的 85RAW
+  validation-minimal matrix/review/shadow projection，跑新的
+  standard-path seed-guard productization bridge。輸出在
+  `output/productization_realdata_seed_guard_85raw_20260617/r1_120_no_raw_productization/`；
+  2540 個 standard-path candidates 中，1160 個通過
+  `eligible_continue_existing_gates` 並寫入 `activation_value_delta.tsv`，
+  1380 個被 `blocked_low_seed_support` 擋下。這補強
+  `production_candidate`，但不是 `production_ready`。
+- 2026-06-17 consolidated no-RAW 驗證: 同樣沒有開 RAW，重用既有 85RAW
+  consolidated shadow projection 和 pre-standard-backfill matrix/identity，
+  跑到
+  `output/productization_realdata_seed_guard_85raw_20260617/consolidated_no_raw_productization/`。
+  7307 個 standard-path candidates 中，4613 個通過
+  `eligible_continue_existing_gates` 並寫入 `activation_value_delta.tsv`，
+  2694 個被 `blocked_low_seed_support` 擋下；`write_authority_status`
+  只有 `cohort_scale_standard_backfill` 和 `no_write`，沒有
+  `blocked_unattributed_write`。這把 candidate evidence 從 chunk smoke 擴到
+  完整既有 85RAW consolidated artifact，但仍不是 reviewed oracle。
+- 2026-06-17 subagent review: reviewer `Popper` 驗收 consolidated no-RAW
+  Backfill evidence/docs，沒有 blocking issue；它重新檢查 summary/TSV counts，
+  確認 7307 candidates、4613 writes、2694 low-seed no-writes、
+  `blocked_unattributed_write=0`，且 docs 沒有把這段 overclaim 成
+  `production_ready` 或 reviewed oracle。
+- 2026-06-17 heldout oracle source audit: 沒找到現成
+  `heldout_oracle_manifest.tsv`、observed oracle TSV、或
+  `heldout_oracle_results.tsv`。我把 raw85 manual verdict 11 rows 對 current
+  consolidated seed-guard candidates 做 crosswalk，輸出在
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_oracle_source_audit/`：
+  11 rows 都有 oracle boundary/area source，但只有 2 rows 對得上 current
+  seed-guard candidate；那 2 rows 有 observed area，但缺 independent observed
+  start/end boundary。剩下 9 rows 沒有 current seed-guard key match。所以
+  Backfill 要升 `production_ready` 不是少跑一條命令，而是缺 observed
+  boundary/area result source；這個 source 必須符合下面的 observed-result
+  provenance contract。
+- 2026-06-17 繼續推進: Backfill 的 boundary-observation contract 已經收斂成
+  `heldout_observed_results.tsv` provenance schema。Observed rows 不能只放
+  start/end/area，還必須寫 `observed_result_source`、
+  `observed_boundary_source`、`observed_area_source`、
+  `observed_independence_basis`；允許的 independence basis 只有
+  `product_writer_observed_result`、`masked_rerun_observed_result`、
+  `independent_boundary_reintegration_result`。明顯來自 oracle/manual
+  review/review queue 的自抄 row 會 fail-closed。這把 contract gap 關掉，
+  但還沒有產生真正 reviewed observed rows，所以 Backfill 仍是
+  `production_candidate`。
+- 2026-06-17 subagent review: reviewer `Gibbs` 驗收 observed-result provenance
+  slice，找到兩個 blocker：source-copy detector 只抓 underscore token，
+  容易被 `manual review` / `manual-review` / `review queue` / `oracle-source`
+  這類字串繞過；另外 `result_source_artifact` 不存在時會寫空 SHA。已修：
+  source label 現在會 canonicalize whitespace/punctuation 後再判斷，且
+  `result_source_artifact_path` 必須存在且是檔案，否則 fail-closed。
+- 2026-06-17 繼續推進: 我又檢查了現有 trace artifact，發現目前能 match
+  current seed-guard candidate 的兩筆 raw85 reviewed rows
+  (`FAM002634 / Breast_Cancer_Tissue_pooled_QC3`、`FAM017068 /
+  Breast_Cancer_Tissue_pooled_QC5`) 在 trace data 裡是 `status=rescued`，
+  不是 originally detected quantifiable cells。已把這點鎖進
+  `heldout_oracle_manifest.tsv` schema：新增 required
+  `heldout_original_cell_status`，只接受 `detected`、`detected_seed`、
+  `quantifiable_detected`、`accepted_detected`；`rescued` 會 fail-closed。
+  所以這兩筆仍可作 manual same-peak support，但不能當
+  `production_ready` heldout oracle cases。
+- 2026-06-17 subagent review: reviewer `Ptolemy` 又找到 observed provenance
+  的 P2：如果 observed source 用中性 label 自抄 manifest `oracle_source`，
+  舊 token detector 可能看不出來。已修：observed row validation 會帶入
+  matching manifest，canonicalized source label 不能等於該 row 的
+  `oracle_source`；也補齊 original-cell-status allowlist、blank/unknown、
+  neutral source-copy tests。Focused heldout-oracle suite 現在 `25 passed`；
+  Backfill + shadow activation focused suite 現在 `42 passed`。
+- 2026-06-17 Backfill heldout trace oracle: 沒有重跑 RAW，而是重用既有
+  `standard_peak_backfill_preset_85raw_20260610` validation-minimal trace
+  arrays 和 `alignment_backfill_cell_evidence.tsv`，產生
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle/`。
+  這組 artifact 選 20 個 originally detected、sample-local、高訊號、
+  clean standard trace cases，跨 20 個 family；observed rows 用 current
+  `local_minimum` `find_peak_and_area` + `integration_from_peak_trace` 對
+  stored trace arrays 重新算 start/end/area，並標成
+  `independent_boundary_reintegration_result`。正式
+  `standard_peak_heldout_oracle_results.py` gate 結果是 20/20
+  `oracle_case_status=pass`、20/20 included，最大 boundary error
+  0.0820502 min、最大 area relative error 0.0762325，低於使用者接受的
+  `0.1 min / 10% area`。同目錄也有
+  `heldout_trace_reintegration_full_eligible_pool.tsv`，保存 80 個
+  pre-observed eligible rows、quality rank、selected flag、未選原因；未選 rows
+  不帶 observed reintegration outcome。這證明 high-signal clean standard
+  trace slice，但不等於目前 4613 個 eligible activation writes 全部都 broad
+  `production_ready`。
+- 2026-06-17 Backfill activation scope audit: 新增
+  `tools/diagnostics/standard_peak_activation_scope_audit.py` 和
+  `xic_extractor/diagnostics/standard_peak_activation_scope_audit.py`，用既有
+  consolidated no-RAW `activation_value_delta.tsv`、consolidated
+  `consolidated_shadow_projection_cells.tsv`、以及 sibling `*_trace_data.json`
+  產生
+  `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/`。
+  這不是 RAW rerun，也不改 matrix；它只是問 actual writes 是否落在剛通過
+  heldout oracle 的 high-signal clean envelope。結果：
+  `written_activation_row_count=4613`、`projection_matched_written_count=4613`、
+  `trace_matched_written_count=3526`、`missing_overlay_path_written_count=1087`、
+  `high_signal_clean_eligible_written_count=72`、
+  `high_signal_clean_ineligible_written_count=3454`、
+  `broad_activation_scope_status=not_ready`。因此 high-signal clean 72-row
+  subset 可以當下一個明確 product-scope decision，但不能把 broad 4613-row
+  bridge 直接升 `production_ready`。
+- 2026-06-17 Backfill narrow expected-diff acceptance: 同一個
+  `standard_peak_activation_scope_audit.py` 現在也寫
+  `narrow_activation_expected_diff_acceptance.tsv/json`。真實 no-RAW artifact
+  結果是 `acceptance_status=pass`、`full_written_delta_row_count=4613`、
+  `eligible_audit_row_count=72`、`eligible_delta_row_count=72`，且
+  duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是
+  0。這證明 72-row subset 是乾淨的 expected-diff candidate；但 summary
+  也寫 `product_surface_changed=FALSE` 和
+  `next_action=product_decision_required_before_writing_narrow_activation_output`，
+  所以還不能說 narrow product behavior 已啟用。
+- 2026-06-17 Backfill narrow product writer: 已把上一段的 72-row scope 接到
+  `tools/diagnostics/standard_peak_backfill_productization.py` 的 explicit opt-in
+  writer flag：`--high-signal-clean-activation-scope-audit-tsv`。新真實 no-RAW
+  85RAW consolidated run 寫在
+  `output/productization_realdata_seed_guard_85raw_20260617/narrow_high_signal_clean_no_raw_productization/`；
+  summary 是 `status=pass`、`activation_scope_filter_status=applied`、
+  `selected_activation_row_count=72`、`matrix_cells_written=72`、
+  `activation_value_delta_written_count=72`。新的
+  `narrow_product_writer_expected_diff_acceptance.json` 是
+  `acceptance_status=pass`、`readiness_tier=production_ready`、
+  `product_surface_changed=TRUE`，且 duplicate/missing/unexpected/non-eligible/
+  non-written/unchanged/blank 都是 0。這讓 Backfill 的「explicit 72-row
+  high-signal-clean scoped writer」升到 `production_ready`；broad 4613-row
+  activation 仍維持 `production_candidate`。
+- 2026-06-17 subagent review: reviewer `Russell` 驗收 Backfill activation
+  scope audit slice，沒有 P1/P2 blocker。它指出三個 P3：測試應鎖住
+  provenance SHA join、threshold blockers 覆蓋不足、handoff 底部下一步
+  framing 過期。已補 SHA-only join 測試、threshold blocker 測試；後續也
+  已補上 72-row narrow product writer，所以目前下一步不再是 72-row
+  scope decision，而是 broad 4613-row evidence decision。
+- 2026-06-17 subagent review: reviewer `Mill` 驗收 Backfill narrow product
+  writer slice，找到一個 P2：productization summary 新增 public 欄位但仍
+  報 `standard_peak_backfill_productization_v0`。已修成
+  `standard_peak_backfill_productization_v1`，補 focused schema assertion，
+  更新 spec，並重跑 narrow no-RAW artifact；summary JSON 現在是 v1，
+  72/72 writer acceptance 仍 pass。
+- 2026-06-17 產品決策: 使用者已接受 Backfill heldout oracle 第一版 gate
+  使用 boundary error `<=0.1 min`、area relative error `<=10%`；也接受
+  `NL_FAIL/NO_MS2` limited opt-in policy 的第一版範圍先限 `5-hmdC + 5-medC`，
+  且產品輸出只能寫 `detected_flagged`，不能寫乾淨 `detected`。這是
+  policy acceptance，還不是 runtime default 已啟用。
+- 2026-06-17 繼續推進: Backfill heldout oracle manifest 現在會 fail-closed
+  拒絕比 `0.1 min / 10% area` 更鬆的 tolerance；reviewed row 可以更嚴格，
+  但不能偷偷放寬 acceptance gate。這只鎖 oracle gate，不改 matrix writer。
+- 2026-06-17 subagent review: reviewer `Linnaeus` 找到 tolerance-ceiling slice
+  的 exact-threshold float compare P2：數學上剛好 `0.1 min` 或 `10% area`
+  可能被浮點誤差打成 fail。已補 exact-boundary tests 和 shared comparison
+  helper；focused backfill suite 現在 `27 passed`。
+- 2026-06-17 繼續推進: `NL_FAIL/NO_MS2` 的 accepted limited scope 已有
+  opt-in activation policy guard：新增 settings key
+  `targeted_ms1_shape_identity_activation_policy`，CLI flag
+  `--targeted-ms1-shape-identity-activation-policy`，以及
+  `limited_5hmdc_5medc_v1`。這個 policy 只允許 support TSV 內的 supported
+  rows 落在 `5-hmdC/5-medC`；default 仍是 `explicit_support_tsv`，所以沒有
+  啟用自動 rescue。
+- 2026-06-17 85RAW expected-diff gate: 新增
+  `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`，並重用
+  既有 `output/ms1_shape_identity_generic_support_85raw_20260616/` artifact
+  跑 gate。結果寫在
+  `output/ms1_shape_identity_generic_support_85raw_20260616/limited_default_expected_diff_gate_summary.tsv`：
+  `gate_status=pass`、11 個 long rows、66 個 matrix cells，全部只限
+  `5-hmdC/5-medC`，product output 全部是 `detected_flagged`，且 gate
+  現在會要求 long-row diff 與 matrix diff 的 sample/target key set 一致。
+- 2026-06-17 subagent review: reviewer `Ampere`
+  implementation-contract review 無 P1/P2 blocker；確認 default 仍是
+  `explicit_support_tsv`、沒有 support TSV 時不會消費 shape identity、
+  replay 會拒絕新 override、manifest 有記錄 activation policy。
+- 2026-06-17 subagent review: reviewer `Averroes`
+  validation-evidence review 無 blocker；接受目前 evidence 只支援
+  explicit/limited opt-in `production_candidate`，不支援
+  `production_ready` 或 default automatic rescue。它建議的 key-set equality
+  與 policy-alone no-output-change hardening 已補，focused tests `7 passed`，
+  既有 85RAW gate 重跑仍 `pass`。
+
+目前 tier 結論:
+
+- `method_manifest` / headless targeted CLI replay parity: `production_ready`
+  for targeted CLI replay parity only；不是 GUI replay，也不是 workbook
+  byte-exact replay。
+- `ReviewAction` audited apply copy: usable as audited output copy；selected
+  candidate switch 與 manual-boundary area recompute 已 `parked`，因為會改
+  selected peak/area/counting，需要產品決策和 expected-diff。
+- `sample_metadata_v1`: extraction injection-order parity 已可用；
+  instrument-QC method-doc workflow 會輸出 additive
+  `instrument_qc_sample_metadata.tsv`；alignment sample-column ordering 也可
+  consume `sample_metadata_v1`；RT-normalization anchor diagnostic 的
+  injection-based reference lookup 也可 consume `sample_metadata_v1`；
+  roles/batch/matrix/exclusion 不改 quant output 或 normalized values。
+- Targeted MS1 shape identity / `NL_FAIL` explicit support TSV workflow:
+  `production_candidate` only；limited opt-in policy
+  `limited_5hmdc_5medc_v1` 已有 settings/CLI guard、manifest provenance、
+  replay override rejection、以及 85RAW expected-diff gate。default
+  extraction/GUI rescue 仍沒有啟用，還缺把 support producer/consumer 接進
+  正式 default path 的產品決策與 evidence。
+- Standard-path backfill seed guard: broad lane 仍是 `production_candidate`；
+  high-signal clean standard trace heldout oracle slice 已有可重跑 passing
+  evidence。既有能力包含
+  `seed_guard_decisions.tsv`、N-band seed support、candidate coverage、
+  `activation_value_delta.tsv` write attribution、可執行 heldout oracle result
+  CLI gate，並已在既有 85RAW chunk `r1_120` artifact 上跑過 no-RAW bridge。
+  也已在既有 85RAW consolidated artifact 上跑過 no-RAW bridge：
+  7307 candidates、4613 writes、2694 low-seed no-writes、0 個
+  `blocked_unattributed_write`。
+  若 post-apply attribution 看到 `blocked_unattributed_write`，productization
+  summary 現在會 `status=fail` 並要求 review seed-guard write attribution。
+  使用者已接受 heldout oracle 第一版 tolerance: boundary error `<=0.1 min`
+  與 area relative error `<=10%`，且 code 現在拒絕更鬆的 manifest
+  tolerance；剛好等於門檻的 float 邊界會視為通過。新的 heldout trace
+  oracle 已補上 high-signal clean standard scope 的 originally detected
+  observed rows 並 20/20 pass。後續 activation scope audit 證明目前 4613
+  writes 中只有 72 個符合這個 envelope、1087 個 missing overlay/trace
+  evidence、3454 個不符合 high-signal clean 條件。72-row subset 的
+  delta-level expected-diff acceptance 已 pass，且新的 explicit writer 已
+  收窄到這 72 rows 並跑出 `readiness_tier=production_ready`。目前 blocker
+  只剩 broad 4613-row activation：若要承認整個 consolidated bridge，就需要
+  覆蓋目前 4613-row activation scope 的 broader masked/product-writer
+  observed oracle。
+
+下一個最安全動作:
+
+1. 若要收 PR，先檢查 diff scope、整理 commit/PR description，然後看遠端 CI。
+2. 若要繼續產品化，Backfill 下一步不是再找「有沒有 heldout case」：
+   high-signal clean trace 的 20-case oracle 已通過，且 activation scope
+   audit 已證明只有 72/4613 writes 符合同一 envelope。72-row high-signal
+   clean subset 的 writer 已收窄並通過 expected-diff；如果要承認目前
+   consolidated bridge 的 4613 writes，就需要
+   broader masked/product-writer observed oracle，而不是用這 20 筆代表全部。
+3. 若要推 `NL_FAIL` default 行為，先決定是否讓 normal extraction 自動產生
+   或自動消費 limited support；目前只能 claim opt-in
+   `production_candidate`，不能 claim default rescue。
+4. Sample metadata 的 no-output resolver parity 已接到
+   extraction、instrument-QC、alignment、RT-normalization anchor diagnostic；
+   下一步若碰 QC/blank/batch/matrix role，必須先有 expected-diff gate，
+   不能直接改 normalized values 或 matrix values。
 
 ## 目前可接手狀態
 
 - Branch: `cc/framework-improvements`。
+- 2026-06-16 本輪 `/goal` 收斂結果:
+  - `sample_metadata_v1` 已投射到 instrument-QC method-doc workflow:
+    `run_instrument_qc.py --method-doc` 會新增
+    `instrument_qc_sample_metadata.tsv`。這是 additive metadata sidecar，
+    pipeline 仍用 `instrument_qc_injection_order.csv` 做 order parity；
+    role/batch/matrix/exclusion 不改 trend、quant、counted detection 或矩陣。
+  - Standard-path backfill seed guard 已到 `production_candidate`:
+    `standard_peak_backfill_productization.py` 會在 activation 前用
+    pre-backfill matrix/review 計算 N-band seed support，並輸出
+    `seed_guard_decisions.tsv`。Productization apply 後會把
+    `activation_value_delta.tsv` 寫回同一 artifact，證明 actual writes 是
+    cohort-scale 或 per-cell attribution。這還不是 `production_ready`：
+    source audit 已證明現有 raw85 manual verdict 只有 2 筆對得上 current
+    seed-guard candidate，且那兩筆是 `rescued`、不能當 originally detected
+    heldout；後續已補 high-signal clean trace 20-case heldout oracle 並
+    20/20 pass。Broad activation 仍需 scope decision / expected-diff gate。
+  - Targeted MS1 shape identity 的 explicit support-TSV workflow 可標
+    `production_candidate`，沿用既有 8RAW/85RAW opt-in artifacts；本輪沒有重跑
+    85RAW，因既有 artifact 已足以回答 candidate-tier decision。Default
+    `NL_FAIL` rescue 和 GUI 仍未啟用。
+  - ReviewAction selected-candidate switch 與 manual-boundary area recompute
+    已明確 `parked`：它們會改 selected peak/area/workbook/matrix，需要人類產品
+    決策與 expected-diff gate，不能在本輪偷做。
 - 2026-06-16 修後驗收已針對 subagent 擋下的 productization blockers 收尾：support TSV 進 manifest hash/replay 驗證、support ingestion 改成 full evidence-bearing schema、strong competing peak fail-closed、support builder 需要 paired RT support、壞 support TSV 會回報 `ConfigError`、settings/example/docs/handoff 已同步。修後想再派 subagent 時工具回報 thread limit reached，所以這輪最後驗收由主 agent 本地完成。
 - 2026-06-16 正在追 `TumorBC2294_DNA / 5-hmdC` 這類 `NL_FAIL` 但 MS1 trace 有峰的 rescue/backfill activation policy。這不是 replay executor 主線；目前已有一個 fail-closed product projection gate 變更，但還沒有 RAW-backed evidence provider 會自動發補值 token。
 - 目前結論: 舊 top-level `output/xic_results_long.csv` 是 2026-05-22 舊 artifact，不能代表 current HEAD。current HEAD 單一 RAW repro 內部選到約 `9.11708 min` candidate，但產品輸出仍 `not_counted`，因為缺正式 activation policy。
@@ -23,7 +354,7 @@
 - `paired_area_ratio_projection.py` 不會自己產生 own-max token；它只補 run-level paired RT / area ratio。換句話說，正常 extraction 只有在上游 evidence/provider 已明確帶 `own_max_same_peak_support` 時才可能補值。
 - 已新增 explicit opt-in ingestion 入口: settings key `targeted_ms1_shape_identity_support_tsv` 和 CLI flag `--targeted-ms1-shape-identity-support-tsv`。預設空值，不會自動補值；只有使用者明確提供 reviewed `targeted_ms1_shape_identity_v0` TSV 時，normal extraction pipeline 才會把 `own_max_same_peak_support` 投進 projection。GUI 尚未接。
 - Synthetic expected-diff fixture: `docs/superpowers/fixtures/targeted_nl_fail_own_max_gate_expected_diff_v0.tsv`。這只負責 unit contract；8RAW/85RAW product diff 證據看下面的 explicit opt-in smoke artifacts。
-- 最新 no-RAW 驗證: focused productization tests `61 passed`，broader related suite `263 passed`，`uv run ruff check xic_extractor tests tools scripts` passed，`uv run mypy xic_extractor` passed，`python -m scripts.check_diagnostics_index` passed，`git diff --check` 只有 CRLF warnings、無 whitespace error。8RAW 和 85RAW explicit opt-in smoke 都已跑。
+- 2026-06-16 targeted MS1 no-RAW 驗證: focused productization tests `61 passed`，broader related suite `263 passed`，`uv run ruff check xic_extractor tests tools scripts` passed，`uv run mypy xic_extractor` passed，`python -m scripts.check_diagnostics_index` passed，`git diff --check` 只有 CRLF warnings、無 whitespace error。8RAW 和 85RAW explicit opt-in smoke 都已跑；2026-06-17 最新全 repo gate 見後面的驗證段落。
 - 8RAW explicit opt-in smoke artifact: `output/ms1_shape_identity_optin_8raw_20260616/expected_diff_summary.tsv`。baseline/opt-in 都用 validation 8RAW、CSV-only；只改到 `TumorBC2263_DNA / 5-hmdC` 一列，從 `not_counted / FALSE / RT=ND / Area=ND` 變 `detected_flagged / TRUE / RT=9.1705 / Area=145695.76`，support 多了 `own_max_same_peak_support`，`analyte_nl_fail_requires_policy` 被移除。
 - 第一輪 85RAW manual-support opt-in smoke artifact: `output/ms1_shape_identity_optin_85raw_20260616/expected_diff_summary.tsv` 和 `matrix_diff_summary.tsv`。baseline/opt-in 都用 full tissue 85RAW、CSV-only；只改到 reviewed support TSV 的 5 個 `5-hmdC` rows，全部從 `not_counted / FALSE` 變 `detected_flagged / TRUE`。unexpected changed rows = 0，support_not_changed = 0，wide matrix 只改 30 個 5-hmdC value cells。
 - 使用者指出「不應該只有 5 rows」。這個判斷是對的：5-row 是因為上游 support TSV 只餵了手動 review 的 5 cases，不是 product gate 只能吃 5 rows。
@@ -33,15 +364,17 @@
 - 已用 generic TSV 跑一次 85RAW opt-in（沒有重跑 baseline，baseline 沿用 `output/ms1_shape_identity_optin_85raw_20260616/baseline`）：`output/ms1_shape_identity_generic_support_85raw_20260616/optin/output/xic_results_long.csv`。diff summary 在 `output/ms1_shape_identity_generic_support_85raw_20260616/expected_diff_summary.tsv` 和 `matrix_diff_summary.tsv`。
 - Generic 85RAW opt-in 結果：剛好 11 rows 從 `not_counted / FALSE` 變 `detected_flagged / TRUE`，wide matrix 66 cells changed，`xic_diagnostics.csv` SHA256 與 baseline 完全相同。新增 rows 包含 `BenignfatBC0980_DNA / 5-hmdC`、`NormalBC2259_DNA / 5-hmdC`、`NormalBC2270_DNA / 5-hmdC`、`NormalBC2272_DNA / 5-hmdC`、`NormalBC2294_DNA / 5-hmdC`、`NormalBC2264_DNA / 5-medC`，所以不再只限原本 5 rows。
 - 給使用者 review 的整理包: `docs/superpowers/reports/2026-06-16-5hmdc-own-max-optin-review.md`。先看這份，不要直接從一堆 output CSV 開始翻。
-- 使用者已接受「backfill/rescue 只能算 `detected_flagged`，不能算乾淨 `detected`」，並授權跑 85RAW。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；下一個安全點是決定是否接受 generic producer 的候選篩選政策並把 explicit opt-in workflow 標成 `production_candidate`。還不能說整體 GUI/default product path production-ready。
+- 使用者已接受第一版 limited opt-in 政策：先限 `5-hmdC + 5-medC`，且 rescue 只能寫 `detected_flagged`，不能寫乾淨 `detected`。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；settings/CLI guard、replay override rejection、manifest provenance、expected-diff gate 也已補上。下一個安全點才是決定是否把 support producer/consumer 接到 default extraction。GUI/default product path 仍不是 production-ready。
 - Current debug note: `output/debug_tumorbc2294_5hmdc_current_code_20260616_110408/root_cause_note.md`。
 - 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
-- 本輪產品化變更已依目的拆 commit；接手時先看 `git log --oneline -10` 和 `git status --short --branch`，不要只相信這份 handoff 的時間點描述。
-- Commit 後預期工作樹只剩一個明確排除的既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。
-- 目前 productization 權威不是這份 handoff: tier、active lane、WIP limit 以 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` 為準。
+- 目前這批 productization 變更仍在工作樹 diff 中，尚未 commit；接手時先看 `git status --short --branch` 和這份 handoff 的最上方「最近變更」。
+- 目前 productization 權威不是這份 handoff: tier、active lane、WIP limit 以 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` 為準。本輪已同步 control plane maintenance log；若衝突，以 control plane 為準。
 - 這份 handoff 只回答「最近做了什麼、什麼真的可用、下一步怎麼接」，不能用「比較新」覆蓋 control plane 或 named spec。
 - 若後續還要 commit/stage，要整包檢查，不要只 stage 修改檔。
-- 本輪有一個不要誤 stage 的既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。
+- 目前有多個 untracked files，接手時以 `git status --short --branch` 為準；
+  已知包含本輪新增的 heldout oracle CLI、targeted MS1 expected-diff gate、
+  limited policy helper、以及相應 tests。若後續 commit 這批 productization
+  變更，不要只 stage modified files。
 - Hook/交接設計剛被 critical review 挑戰過；目前已補 repo-local hook guardrail，且 2026-06-16 local closeout 已重跑 hook fixture smoke。
 
 本輪 commit scope 內新增 files:
@@ -108,9 +441,10 @@
 - 最近完成的主軸是 replay executor: `method_manifest.json` + `--replay-manifest`，已跑過 8RAW 和一次 85RAW replay parity。
 - 接著補了三個中期 contract: targeted output schema version、ReviewAction import/application plan/expected-diff/apply-readiness/changeset gate、SampleMetadata schema。
 - 2026-06-16 進一步把 ReviewAction changeset 接到 audited output copy，把 `sample_metadata_v1` 接成 extraction `injection_order_source` parity input，並在 manifest 寫清楚 artifact replay policy。
+- 本輪再把 `sample_metadata_v1` 投射到 instrument-QC method-doc sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup，並把 standard-path backfill seed guard 接進 productization bridge。這些都沒有啟用 sample-role matrix behavior、non-standard peak promotion、或 default targeted `NL_FAIL` rescue。
 - Alignment 這邊沒有重寫 runtime，只是把文件和 test name 改到符合現況: `alignment_matrix.tsv` 是 machine/validation，不是 production default。
-- 目前還不能誤會成完成的是 GUI replay、selected-candidate switch、manual-boundary area recompute、workbook rewrite、primary matrix rewrite、sample role 影響 quant output。
-- 下一個最安全的實作點若繼續往 ReviewAction 走，是 candidate sidecar writer 或 manual-boundary recompute writer；兩者都必須保留 expected-diff gate。
+- 目前還不能誤會成完成的是 GUI replay、selected-candidate switch、manual-boundary area recompute、workbook rewrite、primary matrix rewrite、sample role 影響 quant output、default targeted `NL_FAIL` rescue、或 broad non-standard peak promotion。
+- 下一個最安全的實作點不是 ReviewAction selected/manual writer；那條已 parked。下一個 agent 應先補 Backfill heldout oracle 的 independent observed boundary/area source，或先定義 boundary-observation contract；sample metadata resolver parity 的 no-output slices 已接到 RT-normalization anchor diagnostic，後續 role-aware 行為必須先有 expected-diff gate。
 
 ## 先講人話
 
@@ -120,10 +454,10 @@
 - 輸出要有 schema version，不然下游不知道自己吃的是哪一版欄位語意。
 - 人工 review 不能永遠只停在 Excel worklist，至少要先有正式的 review action import schema 和 dry-run apply plan。
 - 人工 review 現在已經能從 changeset 寫成 audited targeted-long copy 和 `review_action_apply_audit_v1`，但還不會重算 area 或切 candidate。
-- sample metadata 不能每個模組各自猜 QC、blank、batch、matrix；目前 extraction 已能用 `sample_metadata_v1` 產生舊 injection-order mapping，但 role 還不能改矩陣。
+- sample metadata 不能每個模組各自猜 QC、blank、batch、matrix；目前 extraction、alignment、RT-normalization anchor diagnostic 已能用 `sample_metadata_v1` 產生既有 injection-order 行為，instrument-QC method-doc workflow 也會輸出 `sample_metadata_v1` sidecar，但 role 還不能改矩陣或 normalized values。
 - alignment 的 production / machine output wording 要跟 runtime 一致，不然會一直誤會 `alignment_matrix.tsv` 是 production default。
 
-目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；ReviewAction 已能安全寫 audited copy；sample metadata 已能接 extraction injection order；仍沒有改 peak area、selected candidate、workbook、或 primary matrix。
+目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；ReviewAction 已能安全寫 audited copy；sample metadata 已能接 extraction injection order、instrument-QC metadata sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup；standard-path backfill seed guard 已是 `production_candidate` 且 heldout oracle result gate 可執行；仍沒有改 peak area、selected candidate、workbook、default targeted rescue、normalized value 寫回、或 broad primary matrix semantics。
 
 ## 這輪已經做了什麼
 
@@ -257,11 +591,15 @@
 
 現在有共同 sample metadata 語言了，而且 extraction 已經能用它產生既有 injection-order 行為。QC、blank、batch、matrix 欄位目前只是 contract，還不能改 quant output。
 
-還沒做:
+後續已補:
 
-- Instrument-QC sequence manifest 還沒轉成 `sample_metadata_v1`。
-- Alignment / normalization 還沒 consume 這個 resolver。
-- Sample role 還不能拿來改 matrix value 或排除 row。
+- Instrument-QC method-doc workflow 現在會額外輸出
+  `instrument_qc_sample_metadata.tsv`，但只做 metadata sidecar。
+- Alignment `--sample-column-injection-order` 現在可 consume
+  `sample_metadata_v1` 來排序 sample columns，但只做 order projection。
+- RT-normalization anchor diagnostic `--sample-info` 現在可 consume
+  `sample_metadata_v1` 來投影 injection order，但只做 reference lookup。
+- Sample role 還不能拿來改 matrix value、normalized value 或排除 row。
 
 ### 5. Alignment output contract
 
@@ -444,13 +782,13 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
 ```
 
-結果: pass, `Success: no issues found in 335 source files`。只剩既有 `annotation-unchecked` notes，沒有 type error。
+結果: pass, `Success: no issues found in 340 source files`。只剩既有 `annotation-unchecked` notes，沒有 type error。
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
 ```
 
-結果: `3616 passed, 1 skipped in 62.85s (0:01:02)`
+結果: `3657 passed, 1 skipped in 55.03s`
 
 ```powershell
 python .codex\hooks\fixtures\assert_hook_outputs.py
@@ -464,10 +802,102 @@ git diff --check
 
 結果: 沒有 whitespace error，只有 LF/CRLF warning。
 
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
+```
+
+結果: pass, `INDEX.md in sync: 84 entry points, 163 total files.`
+
+2026-06-17 繼續推進後最新 gate:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts
+```
+
+結果: pass, `All checks passed!`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+```
+
+結果: pass, `Success: no issues found in 342 source files`。只剩既有 `annotation-unchecked` notes，沒有 type error。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+```
+
+結果: `3698 passed, 1 skipped in 64.04s`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py
+```
+
+結果: pass, `INDEX.md in sync: 86 entry points, 165 total files.`
+
+```powershell
+git diff --check
+```
+
+結果: 沒有 whitespace error，只有 LF/CRLF warning。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\chunks\r1_120\shadow_projection\shadow_production_projection_cells.tsv --alignment-matrix-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix.pre_standard_peak_backfill.tsv --alignment-matrix-identity-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix_identity.pre_standard_peak_backfill.tsv --alignment-review-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_review.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\r1_120_no_raw_productization --source-run-id seed-guard-realdata-85raw-r1-120-20260617
+```
+
+結果: pass。輸出 `standard_peak_backfill_productization_summary.json`、
+`standard_peak_activation_inputs/seed_guard_decisions.tsv`、
+`activated_matrix/activation_value_delta.tsv`。2540 candidates 中 1160 eligible
+writes、1380 low-seed no-writes；`activation_value_delta.tsv` 1160 rows。
+Peirce review hardening 後已重跑，仍是 `status=pass`，且
+`blocked_unattributed_write=0`。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --alignment-matrix-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix.pre_standard_peak_backfill.tsv --alignment-matrix-identity-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix_identity.pre_standard_peak_backfill.tsv --alignment-review-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_review.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\consolidated_no_raw_productization --source-run-id seed-guard-realdata-85raw-consolidated-20260617
+```
+
+結果: pass，約 6.93 秒。輸出同樣是
+`standard_peak_backfill_productization_summary.json`、
+`standard_peak_activation_inputs/seed_guard_decisions.tsv`、
+`activated_matrix/activation_value_delta.tsv`。7307 candidates 中 4613 eligible
+writes、2694 low-seed no-writes；`activation_value_delta.tsv` 4613 rows；
+`blocked_unattributed_write=0`。這沒有開 RAW，也不取代 reviewed oracle。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q
+```
+
+結果: `42 passed`。包含 Peirce/Euclid/Noether review 後新增的五個
+fail-closed cases: CLI full manifest schema enforcement、package evaluator
+manifest required-column enforcement、manifest schema-version enforcement、
+duplicate/extra observed oracle rows、以及 `blocked_unattributed_write`
+productization failure；另含使用者接受 tolerance 後新增的
+loose-tolerance rejection、strict-tolerance acceptance、以及 Linnaeus review
+後新增的 exact-boundary / exact-area tolerance tests；也包含 Gibbs review
+後新增的 observed provenance source-copy variants 與 missing
+`result_source_artifact` fail-closed tests；以及 current matched reviewed rows
+其實是 `rescued` cell 後新增的 `heldout_original_cell_status` required-column
+與 `rescued` fail-closed tests；另含 Ptolemy review 後新增的 neutral
+`oracle_source` self-copy cross-check、original-cell-status allowlist、blank、
+unknown status tests。
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check tools\diagnostics\standard_peak_heldout_oracle_results.py xic_extractor\diagnostics\standard_peak_shadow_activation_inputs.py xic_extractor\diagnostics\standard_peak_backfill_productization.py tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py
+```
+
+結果: pass, `All checks passed!`
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\diagnostics\standard_peak_shadow_activation_inputs.py xic_extractor\diagnostics\standard_peak_backfill_productization.py tools\diagnostics\standard_peak_heldout_oracle_results.py
+```
+
+結果: pass, `Success: no issues found in 3 source files`。
+
 RAW-backed 驗證:
 
 - 8RAW 已跑。
 - 85RAW 已集中跑一次。
+- 2026-06-17 沒有重跑 RAW；只用既有 85RAW artifact 做 no-RAW
+  productization bridge。
 - 不要在沒有新 production-readiness decision 的情況下再跑一次 85RAW。
 
 詳細 RAW 證據在:
@@ -490,19 +920,29 @@ RAW-backed 驗證:
 1. 若要進 PR/merge，下一步是處理 remote/PR 層級。
    - Local PR closeout gate 已在 2026-06-16 跑過。
    - 尚未 push、尚未看 GitHub CI、尚未開或更新 PR。
-   - 注意有一個既有 untracked file: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`。這個不是本輪新增，不要誤 stage。
 
-2. 若繼續做 ReviewAction，下一個實作點是 candidate sidecar writer 或 manual-boundary area recompute writer。
+2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做 72-row narrow writer。
+   - 目前 explicit 72-row high-signal-clean scoped writer 是 `production_ready`。
+   - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
+   - High-signal clean 20-case heldout oracle 已通過，activation scope audit
+     已證明目前 broad 4613 writes 只有 72 個落在同一 evidence envelope。
+   - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
+     observed oracle 和 full-scope expected-diff gate。
+   - 非標準 peak automatic promotion 仍不可啟用。
+
+3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。
+   - Extraction injection-order parity 已接好。
+   - Instrument-QC method-doc 已輸出 additive `instrument_qc_sample_metadata.tsv` sidecar。
+   - Alignment sample-column ordering 已可 consume `sample_metadata_v1`。
+   - RT-normalization anchor diagnostic `--sample-info` 已可 consume `sample_metadata_v1`。
+   - 不要讓 QC/blank/batch role 直接改 quant output、normalized values 或 matrix values。
+
+4. ReviewAction selected-candidate switch 和 manual-boundary area recompute 已 parked。
    - 現在 audited apply copy 已能消費 changeset rows。
    - `select_candidate` 和 `set_manual_boundary` 仍是 deferred，不能假裝已回寫 selected peak/area。
-   - 任何會改 selected peak/area/counting 的下一刀仍要 expected-diff。
+   - 任何會改 selected peak/area/counting 的下一刀仍要 expected-diff 和人類產品決策。
 
-3. 第二順位是 sample metadata cross-module parity。
-   - Extraction injection-order parity 已接好。
-   - Instrument-QC / alignment / normalization 還沒共用這個 resolver。
-   - 不要讓 QC/blank/batch role 直接改 quant output。
-
-4. GUI replay 等 GUI 接主線後再做。
+5. GUI replay 等 GUI 接主線後再做。
    - 現在不要為了 GUI replay 去改未接主線的 GUI 測試。
 
 ## 每次收尾要更新這份文件

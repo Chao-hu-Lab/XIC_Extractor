@@ -51,15 +51,25 @@ trust 或沒有載入，本文件和 handoff checklist 仍是人工 closeout gat
 這次 goal 已擴大到中期可收斂項目，但仍維持 WIP limit。已完成的
 `method_manifest_v1`、`targeted_schema_versioning_v1`、ReviewAction audited
 apply copy、以及 sample metadata injection-order parity 不再佔 active lane。
-下一個 primary lane 若繼續做，只能是 candidate sidecar / manual boundary
-recompute writer；supporting lane 只能擴展 sample metadata 到 alignment 或
-instrument-QC parity，不可讓 sample role 直接改 main matrix。
+Backfill standard-path activation 目前分成兩個 tier：72-row
+high-signal-clean scoped writer 已用 explicit opt-in scope audit filter 寫出
+product matrix-only output，`narrow_product_writer_expected_diff_acceptance.json`
+對 72/72 writes 通過並標 `readiness_tier=production_ready`；但 broad
+4613-row consolidated activation 仍只有 `production_candidate`，因為 1087 個
+缺 overlay/trace evidence、3454 個 trace-matched writes 不符合 high-signal
+clean envelope。若要把 broad scope 也推 ready，下一個 checkpoint 必須補
+broader masked/product-writer oracle，不能把 narrow ready 外推到 4613-row。
+ReviewAction selected candidate / manual boundary writer 已 parked；sample metadata cross-module
+parity 的 no-output resolver slices 已收斂到 extraction、instrument-QC、
+alignment、RT-normalization anchor diagnostic，不可讓 sample role 直接改
+main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `review_action_reintegration_v1` | unassigned | candidate sidecar and manual boundary area recompute only after audited apply copy is accepted | stop if a manual action changes selected peak/area/counting without expected-diff |
-| Supporting | `sample_metadata_cross_module_parity_v1` | unassigned | project `sample_metadata_v1` into alignment/instrument-QC parity only | stop if sample role changes extraction output, counted detection, or matrix value |
-| Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes active lane acceptance |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row narrow writer ready slice done | maintain the explicit 72-row high-signal-clean scoped activation writer contract; only pursue broad 4613-row readiness with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes beyond the approved 72-row scope, or if a RAW rerun would not change the broad-scope decision |
+| Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
+| Parked | `review_action_reintegration_v1` | parked | candidate sidecar and manual boundary area recompute remain product-decision blocked after audited apply copy | stop if a manual action changes selected peak/area/counting without expected-diff |
+| Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
 | Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
 
 Hard gate: a lane without a `WIP owner`, productization intake packet, and stop
@@ -98,24 +108,25 @@ scope.
 | Lane | Current tier | Current owner / artifact | Product gap | Next checkpoint | WIP owner |
 |---|---:|---|---|---|---|
 | Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | schema version 已鎖；缺 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
+| Targeted MS1 shape identity explicit/limited opt-in | `production_candidate` | `targeted_ms1_shape_identity_support_tsv`, `targeted_ms1_shape_identity_activation_policy`, `tools/diagnostics/build_targeted_ms1_shape_identity_supports.py`, `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`, 8RAW/85RAW opt-in artifacts | explicit support TSV workflow 有 generic producer + expected-diff smoke；limited policy `limited_5hmdc_5medc_v1` 已用 config/CLI guard 限 `5-hmdC + 5-medC` 且 expected-diff gate 證明只寫 `detected_flagged`；default automatic producer/extraction/GUI rescue 尚未啟用 | decide whether to wire a default producer/extraction path, or keep opt-in until broader targets have evidence | unassigned |
 | Targeted output schema versioning | `production_surface` | `output/schema.py`, manifest `output_schema`, workbook `Run Metadata` | CSV 欄位形狀未改；version 目前透過 manifest/metadata 暴露，不是每列 CSV 欄位 | schema snapshot / downstream handoff profile | none; slice done |
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
 | `Review Queue` | `production_surface` as worklist | workbook `Review Queue` sheet | 不能讀回 decision；不能 reintegrate | `review_roundtrip_v1` | unassigned |
 | ReviewAction audited apply copy | `production_surface` for audited targeted-long copy | `xic_extractor.review_actions`, `scripts/apply_review_action_changesets.py`, `review_action_apply_audit_v1` | accept/mark/reject 可寫 audited output copy；select candidate/manual boundary 仍 deferred | candidate sidecar + manual boundary recompute writer | none; audited apply slice done |
-| Manual boundary / reintegration | `production_candidate` for deferred changeset only | candidate/boundary sidecars + action schema + changeset rows | 沒有 area recompute writer；沒有 selected candidate switch writer | `review_action_reintegration_v1` | unassigned |
+| Manual boundary / reintegration | `parked`; `production_candidate` for deferred changeset only | candidate/boundary sidecars + action schema + changeset rows | 沒有 area recompute writer；沒有 selected candidate switch writer；需要產品決策確認是否可改 selected peak/area | `review_action_reintegration_v1` product decision | parked |
 | `Run Metadata` | `production_surface` as workbook metadata | workbook sheet + manifest/schema reverse reference | 不是 full replay manifest；只反向記錄 targeted output schema 與 manifest schema/path/hash | workbook hash capture / release metadata docs | unassigned |
 | `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + normalized workbook replay parity passed；artifact policy says CSV exact, workbook normalized compare, manifest provenance-only | full byte-exact workbook replay only if a future release needs it | unassigned |
 | Headless targeted CLI | `production_ready` for targeted CLI replay parity | `xic-extractor-cli`, `--replay-manifest`, method manifest invocation context | replay rejects runtime overrides；GUI replay 未接主線 | GUI parity after mainline wiring | unassigned |
 | GUI/CLI parity | `partial_internal` | shared `load_config` / `extractor.run` | 缺 fixture-level parity diff | narrow parity smoke | unassigned |
 | `injection_order_source` | `production_surface` | settings/config/extraction pipeline | 只處理 order，不是 sample metadata universe | `sample_metadata_contract_v1` | unassigned |
-| Sample metadata roles | `production_surface` for extraction injection-order parity; `production_candidate` for roles | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py`, `resolve_injection_order` | extraction 可用 `sample_metadata_v1` 當 injection-order source；roles/batch/matrix 尚不改 product values；alignment/QC 尚未接 shared resolver | cross-module resolver parity | none; extraction parity slice done |
-| Instrument-QC trend sidecar | `production_surface` sidecar | `run_instrument_qc.py`, instrument_qc package | 不改 main matrix；未接 shared sample metadata | sample metadata resolver | unassigned |
+| Sample metadata roles | `production_surface` for extraction/alignment/RT-normalization injection-order parity and instrument-QC manifest projection; `production_candidate` for roles | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py`, `resolve_injection_order`, `run_alignment --sample-column-injection-order`, `instrument_qc_sample_metadata.tsv`, `analyze_rt_normalization_anchors.py --sample-info` | extraction 可用 `sample_metadata_v1` 當 injection-order source；alignment 可用 `sample_metadata_v1` 排 final matrix sample columns；instrument-QC method-doc manifest 可輸出 `sample_metadata_v1` sidecar；RT-normalization anchor diagnostic 可用 `sample_metadata_v1` 投影 injection order；roles/batch/matrix/exclusion 尚不改 product values 或 normalized values | role-aware QC/blank/batch behavior only with expected-diff gate | none; cross-module projection slices done |
+| Instrument-QC trend sidecar | `production_surface` sidecar | `run_instrument_qc.py`, instrument_qc package, `instrument_qc_sample_metadata.tsv` | 不改 main matrix；sample metadata sidecar 只做 metadata projection | release smoke / downstream docs | none; projection slice done |
 | Calibration preview | `shadow_ready` / `diagnostic_only` | instrument-QC calibration preview | 不可寫 main matrix；response transfer blocked | `normalization_calibration_activation_v1` | unassigned |
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `shadow_ready` | allowlist/projection sidecars | `product_ready=False`；不可改 primary matrix | activation/export contract | unassigned |
+| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer; `production_candidate` for broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `seed_guard_decisions.tsv`, `standard_peak_heldout_oracle_results.py`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and narrow writer output under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；`heldout_trace_reintegration_oracle/heldout_oracle_results.tsv` 有 20 個 originally detected、sample-local、高訊號 clean standard trace cases，20/20 pass、20/20 included，最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；`high_signal_clean_activation_scope_audit/activation_high_signal_clean_scope_summary.json` 證明目前 4613 writes 只有 72 個符合同一 high-signal clean envelope，3454 個 trace-matched writes 不符合，1087 個 missing overlay path；`narrow_activation_expected_diff_acceptance.json` 對這 72 rows 通過 delta-level acceptance（duplicate/missing/unexpected/non-eligible/unchanged/blank 都是 0，`product_surface_changed=FALSE`）；`narrow_high_signal_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 證明 explicit writer 只寫這 72 rows，72/72 product delta rows 通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`product_surface_changed=TRUE`，`readiness_tier=production_ready`；`heldout_observed_results.tsv` provenance contract 已鎖 product-writer / masked-rerun / independent-reintegration sources，禁止 oracle/manual/review row 自抄，且 observed source 不能 canonical-match 同 case manifest `oracle_source`；manifest 也要求 originally detected cell status；非標準 peak 仍不可自動 promotion | keep 72-row scope explicit in release docs; broad 4613-row readiness still needs broader masked/product-writer observed oracle | none; narrow writer slice done |
 | Provisional production-candidate gate | `diagnostic_only` | production-candidate sidecar | 名稱容易誤導，不是 promotion | wording guard + no-promotion test | unassigned |
 
 ## WIP limits
@@ -441,6 +452,361 @@ scope.
 - Safe behavior boundary: only injection-order mapping is projected; `sample_role`, batch, matrix, group, and exclusion fields do not alter extraction output, counted detection, or matrix values.
 - Validation: `python -m pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py -q`
 - Remaining blocker: instrument-QC, alignment, and normalization do not yet consume the shared sample metadata resolver.
+
+### 2026-06-16 - review_action_reintegration_v1
+
+- Previous tier: `production_candidate` for deferred changeset rows; selected-candidate switch and manual-boundary area recompute deferred
+- New tier: `parked`; audited apply copy remains `production_surface`, deferred changesets remain `production_candidate`
+- Evidence: `docs/superpowers/specs/2026-06-15-review-roundtrip-v1-spec.md`; current `xic_extractor.review_actions` apply path records `select_candidate` and `set_manual_boundary` as deferred operations only
+- Product surface changed: none this round
+- Validation: no code path changed in this lane this round
+- Remaining blocker: human product decision and expected-diff acceptance are required before any writer may change selected peak, selected area, workbook, primary matrix, or counted detection for these actions
+
+### 2026-06-16 - sample_metadata_instrument_qc_projection_v1
+
+- Previous tier: `production_candidate` for roles/batch/matrix metadata outside extraction
+- New tier: `production_surface` for additive instrument-QC `sample_metadata_v1` sidecar; roles remain non-mutating metadata only
+- Evidence: `xic_extractor.instrument_qc.sequence_manifest_writers.write_sample_metadata_tsv`; `scripts/run_instrument_qc.py --method-doc`; `tests/test_instrument_qc_sequence_manifest.py`; `tests/test_run_instrument_qc.py`
+- Product surface changed: additive `instrument_qc_sample_metadata.tsv` written next to `instrument_qc_sequence_manifest.tsv` and `instrument_qc_injection_order.csv` when `--method-doc` is used. It includes actual matched RAW rows and raw-dir-only instrument-QC rows, maps instrument-QC class to `sample_role`, and does not feed role metadata into quant behavior.
+- Validation: `python -m pytest tests\test_instrument_qc_sequence_manifest.py tests\test_run_instrument_qc.py -q`; touched-file ruff/mypy passed
+- Remaining blocker: alignment and normalization still do not consume the shared resolver; sample roles/exclusions must not alter matrix values without a separate expected-diff gate
+
+### 2026-06-17 - sample_metadata_alignment_column_order_v1
+
+- Previous tier: `production_surface` for extraction injection-order parity and instrument-QC sidecar; alignment remained a resolver-parity blocker
+- New tier: `production_surface` for alignment sample-column injection-order parity; roles remain non-mutating metadata only
+- Evidence: `xic_extractor.alignment.pipeline.run_alignment`; `scripts/run_alignment.py --sample-column-injection-order`; `tests/test_alignment_pipeline_outputs.py`
+- Product surface changed: `--sample-column-injection-order` may now receive a `sample_metadata_v1` CSV/TSV in addition to legacy `Sample_Name,Injection_Order` CSV/XLSX. The shared metadata parser projects `sample_name`/`raw_stem` aliases into the same injection-order mapping used for final matrix/status sample-column ordering.
+- Safe behavior boundary: this reorders output sample columns only when the user explicitly supplies the input path. Sample roles, exclusions, batch, matrix type, and group still do not alter matrix values, counted detection, feature acceptance, or backfill activation.
+- Validation: `python -m pytest tests\test_alignment_pipeline_outputs.py::test_pipeline_orders_sample_columns_by_sample_metadata_v1 tests\test_alignment_pipeline_outputs.py::test_pipeline_orders_sample_columns_by_injection_order tests\test_alignment_pipeline_outputs.py::test_pipeline_keeps_input_sample_order_without_injection_source -q`; touched-file ruff passed
+- Remaining blocker: normalization still does not consume the shared resolver; sample roles/exclusions must not alter matrix values without a separate expected-diff gate
+
+### 2026-06-17 - sample_metadata_rt_normalization_anchor_resolver_v1
+
+- Previous tier: `production_surface` for extraction/alignment injection-order parity and instrument-QC sidecar; RT-normalization anchor diagnostic remained a resolver-parity blocker
+- New tier: `production_surface` for RT-normalization anchor diagnostic injection-order parity; roles remain non-mutating metadata only
+- Evidence: `tools/diagnostics/rt_normalization_anchor_loaders.py`; `tools/diagnostics/analyze_rt_normalization_anchors.py --sample-info`; `tests/test_rt_normalization_anchors.py`
+- Product surface changed: `--sample-info` for injection-based RT-normalization anchor references may now receive a `sample_metadata_v1` CSV/TSV in addition to legacy `Sample_Name,Injection_Order` input. The diagnostic projects `sample_name`/`raw_stem` aliases into the same injection-order mapping used by legacy rolling-anchor references.
+- Safe behavior boundary: this affects only injection-order lookup for `injection-local-median` and `injection-loess` RT-normalization anchor diagnostics. Sample roles, exclusions, batch, matrix type, and group do not alter normalized values, matrix values, counted detection, feature acceptance, or calibration/main-matrix writes.
+- Validation: `uv run pytest tests\test_rt_normalization_anchors.py -q` (`16 passed`); `uv run ruff check tools\diagnostics\rt_normalization_anchor_loaders.py tests\test_rt_normalization_anchors.py` (`All checks passed!`); `uv run mypy tools\diagnostics\rt_normalization_anchor_loaders.py` (`Success: no issues found in 1 source file`); subagent reviewer `Descartes` found no P1/P2 blocker and the P3 request to cover `injection-loess` parity was fixed.
+- Remaining blocker: role-aware QC/blank/batch/matrix behavior and calibration/normalization writes remain blocked until a separate expected-diff gate and product decision exist.
+
+### 2026-06-16 - targeted_ms1_shape_identity_explicit_optin_v1
+
+- Previous tier: `diagnostic_only` for shared MS1 shape evidence; explicit opt-in workflow pending tier decision
+- New tier: `production_candidate` for explicit support-TSV workflow only
+- Evidence: `docs/superpowers/specs/2026-06-16-shared-target-untarget-peak-identity-spine-spec.md`; 8RAW expected-diff artifact `output/ms1_shape_identity_optin_8raw_20260616/expected_diff_summary.tsv`; 85RAW manual-support and generic-support artifacts under `output/ms1_shape_identity_optin_85raw_20260616/` and `output/ms1_shape_identity_generic_support_85raw_20260616/`
+- Product surface changed: none this round; existing explicit config/CLI support path remains opt-in
+- Validation: reused existing 8RAW/85RAW artifacts; no new 85RAW run because the existing artifacts already answer the candidate-tier decision
+- Remaining blocker: default automatic support generation/consumption remains
+  off. Broader target expansion, default extraction, and GUI rescue remain not
+  production-ready.
+
+### 2026-06-16 - standard_peak_seed_guard_v1
+
+- Previous tier: `shadow_ready` for backfill product-authority sidecars; seed guard spec was `implementation_candidate`
+- New tier: `production_candidate` for standard-path seed guard slice only
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `xic_extractor.diagnostics.standard_peak_backfill_productization`; additive `seed_guard_decisions.tsv`; heldout oracle result schema/evaluator; `tests/test_standard_peak_shadow_activation_inputs.py`; `tests/test_standard_peak_backfill_productization.py`
+- Product surface changed: standard-peak matrix activation now evaluates standard-path promotion candidates against N-band seed support before writing activation decisions. The acceptance artifact proves candidate coverage, low-seed no-write expectations, and actual write attribution through `activation_value_delta.tsv`. No workbook schema, review-row enum, primary alignment schema, or non-standard peak policy changed.
+- Validation: `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q`; touched-file ruff/mypy passed
+- Remaining blocker: production-ready still needs heldout oracle result rows from real/reviewed cases plus an 85RAW expected-diff gate. Non-standard peak automatic promotion remains out of scope.
+
+### 2026-06-17 - standard_peak_heldout_oracle_results_cli_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with package-level heldout oracle evaluator
+- New tier: still `production_candidate`; heldout oracle result gate is now executable, but not satisfied by real/reviewed rows
+- Evidence: `tools/diagnostics/standard_peak_heldout_oracle_results.py`; `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs.build_heldout_oracle_results`; `tests/test_standard_peak_shadow_activation_inputs.py`
+- Product surface changed: additive diagnostic CLI that reads deterministic `heldout_oracle_manifest.tsv` plus observed boundary/area result rows and writes `heldout_oracle_results.tsv` with source artifact SHA. It does not run RAW, generate reviewed oracle rows, mutate matrices, or authorize non-standard peaks.
+- Validation: `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_cli_writes_contract_tsv tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_classify_boundary_and_area -q`; touched-file ruff passed
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows and a bounded 85RAW expected-diff gate.
+  Later `standard_peak_heldout_trace_reintegration_oracle_v1` supplies a
+  high-signal clean heldout slice; broad activation still needs scope/expected
+  diff acceptance.
+
+### 2026-06-17 - standard_peak_seed_guard_realdata_85raw_artifact_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with synthetic/focused coverage and executable heldout-oracle CLI
+- New tier: still `production_candidate`; real-data artifact evidence now covers seed guard/write attribution on one existing 85RAW chunk without rerunning RAW
+- Evidence: `output/productization_realdata_seed_guard_85raw_20260617/r1_120_no_raw_productization/standard_peak_backfill_productization_summary.json`; `standard_peak_activation_inputs/seed_guard_decisions.tsv`; `activated_matrix/activation_value_delta.tsv`
+- Product surface changed: none beyond the existing explicit productization bridge. The run reused `output/standard_peak_backfill_preset_85raw_20260610/alignment_preset_dna_dr_85raw_validation_minimal` pre-backfill matrix, identity, review, and chunk `r1_120` shadow projection; it did not open RAW files, rewrite workbook schema, or enable non-standard promotion.
+- Validation: `uv run python -m tools.diagnostics.standard_peak_backfill_productization ... --source-run-id seed-guard-realdata-85raw-r1-120-20260617`; status `pass`; 2540 seed-guard candidate rows; 1160 `eligible_continue_existing_gates` rows; 1380 `blocked_low_seed_support` rows; `activation_value_delta.tsv` has 1160 rows and summary reports `matrix_cells_written=1160`.
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows and a bounded expected-diff acceptance that
+  explicitly approves the 85RAW product value changes. Later high-signal clean
+  heldout trace evidence narrows, but does not remove, the broad activation
+  scope blocker.
+
+### 2026-06-17 - standard_peak_seed_guard_realdata_85raw_consolidated_no_raw_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with synthetic/focused coverage and one existing 85RAW chunk no-RAW bridge
+- New tier: still `production_candidate`; real-data artifact evidence now covers seed guard/write attribution on the existing 85RAW consolidated shadow projection without rerunning RAW
+- Evidence: `output/productization_realdata_seed_guard_85raw_20260617/consolidated_no_raw_productization/standard_peak_backfill_productization_summary.json`; `standard_peak_activation_inputs/seed_guard_decisions.tsv`; `activated_matrix/activation_value_delta.tsv`
+- Product surface changed: none beyond the existing explicit productization bridge. The run reused `output/standard_peak_backfill_preset_85raw_20260610/alignment_preset_dna_dr_85raw_validation_minimal/standard_peak_backfill_preset/consolidated/consolidated_shadow_projection_cells.tsv` plus pre-standard-backfill matrix/identity inputs; it did not open RAW files, rewrite workbook schema, or enable non-standard promotion.
+- Validation: `uv run python -m tools.diagnostics.standard_peak_backfill_productization ... --source-run-id seed-guard-realdata-85raw-consolidated-20260617`; elapsed about 6.93 s; status `pass`; 7307 seed-guard candidate rows; 4613 `eligible_continue_existing_gates` rows; 2694 `blocked_low_seed_support` rows; `activation_value_delta.tsv` has 4613 rows and summary reports `matrix_cells_written=4613`; `write_authority_status` counts are 4613 `cohort_scale_standard_backfill` and 2694 `no_write`, with zero `blocked_unattributed_write`. Subagent reviewer `Popper` found no blocking issue and confirmed the docs keep this as `production_candidate` evidence, not `production_ready` or reviewed-oracle evidence.
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows and a bounded expected-diff acceptance that
+  explicitly approves the 85RAW product value changes. Later high-signal clean
+  heldout trace evidence narrows, but does not remove, the broad activation
+  scope blocker.
+
+### 2026-06-17 - standard_peak_heldout_oracle_source_audit_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with no-RAW 85RAW consolidated evidence
+- New tier: still `production_candidate`; `production_ready` checkpoint is explicitly blocked on independent observed boundary evidence
+- Evidence: `output/productization_realdata_seed_guard_85raw_20260617/heldout_oracle_source_audit/summary.json`; `raw85_manual_verdict_seed_guard_crosswalk.tsv`; source manual verdicts under `output/backfill_peakhypothesis_promotion_8raw_20260608/raw85_hypothesis_manual_review_top14_user_standard/`
+- Product surface changed: none. This is a source audit only; it did not open RAW, generate heldout oracle manifest/results, mutate matrices, or promote non-standard peaks.
+- Validation: no existing `heldout_oracle_manifest.tsv`, observed oracle TSV, or `heldout_oracle_results.tsv` was found under `output/`. The audit reviewed 11 raw85 manual verdict rows and 11 matching review-queue rows: all 11 have oracle boundary/area source values, but only 2 match current consolidated seed-guard candidate keys; those 2 have observed area through `activation_value_delta.tsv` but lack an independent observed start/end boundary artifact. The remaining 9 rows do not match the current seed-guard candidate keys.
+- Remaining blocker: provide or generate `observed_start_rt`, `observed_end_rt`, and `observed_area` for matched reviewed cases from an independent implementation result source; the observed-result provenance contract is defined in the following log entry and must be satisfied before the oracle gate can count for production readiness.
+
+### 2026-06-17 - standard_peak_heldout_oracle_observed_provenance_contract_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with no-RAW 85RAW consolidated evidence and source-audit blocker
+- New tier: still `production_candidate`; observed-result contract gap is closed.
+  At this checkpoint no reviewed observed rows had been generated yet; later
+  `standard_peak_heldout_trace_reintegration_oracle_v1` supplies a high-signal
+  clean independent reintegration slice.
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tools/diagnostics/standard_peak_heldout_oracle_results.py`; `tests/test_standard_peak_shadow_activation_inputs.py`; `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
+- Product surface changed: `heldout_observed_results.tsv` now requires observed provenance columns: `observed_result_source`, `observed_boundary_source`, `observed_area_source`, and `observed_independence_basis`. Allowed independence bases are `product_writer_observed_result`, `masked_rerun_observed_result`, and `independent_boundary_reintegration_result`; oracle/manual/review-queue source copies fail closed after source-label canonicalization. `heldout_oracle_results.tsv` now carries those provenance columns forward for auditability, and `result_source_artifact_path` must exist so the output SHA cannot be blank. No RAW, matrix writer, workbook schema, default extraction, or non-standard peak policy changed.
+- Validation: red/green focused tests proved missing provenance, oracle/manual/review-queue source-copy variants, and missing result-source artifact rows failed after implementation; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q` (`20 passed` at that checkpoint; later `25 passed` after original-cell-status and source-cross-check guards); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`37 passed` at that checkpoint; later `42 passed` after the same guards); latest full local gate after the source-cross-check guard also passed: ruff, mypy, `pytest -v --tb=short -x` (`3698 passed, 1 skipped`), diagnostics index, and `git diff --check` with LF/CRLF warnings only. Subagent reviewer `Gibbs` found the source-label and missing-artifact gaps; both were fixed.
+- Remaining blocker: production-ready still needs observed start/end/area rows for reviewed heldout cases from an allowed independent source, plus bounded 85RAW expected-diff approval.
+
+### 2026-06-17 - standard_peak_heldout_original_detected_guard_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with observed-result provenance contract
+- New tier: still `production_candidate`; invalid reviewed/rescued rows are now blocked from serving as heldout oracle product-readiness evidence
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tests/test_standard_peak_shadow_activation_inputs.py`; `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`; exploratory read of existing trace artifacts for `FAM002634 / Breast_Cancer_Tissue_pooled_QC3` and `FAM017068 / Breast_Cancer_Tissue_pooled_QC5`
+- Product surface changed: `heldout_oracle_manifest.tsv` now requires `heldout_original_cell_status`. Accepted values are `detected`, `detected_seed`, `quantifiable_detected`, and `accepted_detected`; `rescued` and unknown statuses fail before result evaluation. No RAW, matrix writer, workbook schema, default extraction, or non-standard peak policy changed.
+- Validation: red/green focused test `test_standard_peak_heldout_oracle_results_requires_original_detected_cell_status`; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q` (`21 passed` at that checkpoint; later `25 passed` after the observed-source cross-check guard); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`38 passed` at that checkpoint; later `42 passed` after the observed-source cross-check guard)
+- Remaining blocker at this checkpoint: production-ready needed true originally
+  detected heldout cases, not the current two matched reviewed rows, plus
+  independent observed start/end/area rows and bounded 85RAW expected-diff
+  approval. Later high-signal clean heldout trace evidence supplies that slice;
+  broad activation still needs scope/expected-diff acceptance.
+
+### 2026-06-17 - standard_peak_heldout_observed_source_crosscheck_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with observed-result provenance and original-cell-status guard
+- New tier: still `production_candidate`; the heldout oracle gate is harder to
+  spoof. At this checkpoint the valid observed heldout artifact was still
+  pending; later `standard_peak_heldout_trace_reintegration_oracle_v1` supplies
+  a high-signal clean independent reintegration slice.
+- Evidence: subagent reviewer `Ptolemy` found that neutral observed source labels could still copy the manifest `oracle_source`; fix landed in `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs` plus tests
+- Product surface changed: fail-closed validation only. Observed provenance source labels are still additive TSV inputs, but now each observed row is validated against its matching manifest row and `observed_result_source`, `observed_boundary_source`, or `observed_area_source` cannot canonicalize to the same label as manifest `oracle_source`. Source-label canonicalization also collapses repeated punctuation/whitespace separators. No RAW, matrix writer, workbook schema, default extraction, or non-standard peak policy changed.
+- Validation: red/green neutral oracle-source self-copy test; original-cell-status allowlist/blank/unknown coverage; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q` (`25 passed`); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`42 passed`); touched-file ruff/mypy passed.
+- Remaining blocker at this checkpoint: production-ready still needed true
+  originally detected heldout cases with independent observed start/end/area
+  rows and bounded 85RAW expected-diff approval. Later high-signal clean
+  heldout trace evidence supplies that slice; broad activation still needs
+  scope/expected-diff acceptance.
+
+### 2026-06-17 - standard_peak_oracle_gate_review_hardening_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard with executable oracle gate and no-RAW 85RAW artifact bridge
+- New tier: still `production_candidate`; review blockers were fixed without expanding product authority
+- Evidence: subagent reviewer `Peirce` found heldout-oracle manifest schema enforcement gaps, duplicate/extra observed result ambiguity, and missing hard failure for `blocked_unattributed_write`; reviewer `Euclid` found a non-blocking schema-version value hardening gap; reviewer `Noether` found a package-evaluator direct-call required-column hardening gap. Fixes landed in `tools/diagnostics/standard_peak_heldout_oracle_results.py`, `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`, `xic_extractor.diagnostics.standard_peak_backfill_productization`, and focused tests.
+- Product surface changed: fail-closed behavior only. Heldout oracle CLI and package evaluator now require the full spec manifest schema and manifest schema-version value, reject duplicate/stale observed oracle rows, and productization now reports `status=fail` if post-apply seed-guard attribution marks `blocked_unattributed_write`.
+- Validation: new red/green tests plus `uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`27 passed` after tolerance-ceiling and exact-threshold tests); focused ruff/mypy passed; no-RAW 85RAW artifact bridge rerun still `pass` with 1160 writes and zero `blocked_unattributed_write`.
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows and a bounded expected-diff acceptance that
+  explicitly approves the 85RAW product value changes. Later high-signal clean
+  heldout trace evidence narrows, but does not remove, the broad activation
+  scope blocker.
+
+### 2026-06-17 - product_decision_backfill_oracle_and_nlfail_limited_optin_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard and targeted MS1 shape explicit opt-in
+- New tier: unchanged; product decisions accepted, runtime defaults not changed
+- Evidence: user accepted Backfill heldout oracle first-gate tolerance of boundary error `<=0.1 min` and area relative error `<=10%`; user also accepted `NL_FAIL/NO_MS2` limited opt-in first scope as `5-hmdC + 5-medC` only, with product output limited to `detected_flagged`
+- Product surface changed: docs/control-plane decision only. No default extraction, GUI rescue, matrix writer, workbook schema, or primary matrix behavior changed in this entry.
+- Validation: docs-only decision record; prior gates remain `ruff`, `mypy`, full `pytest`, diagnostics index, `git diff --check`, and no-RAW 85RAW bridge.
+- Remaining blocker: Backfill still needs real/reviewed heldout oracle rows generated under the accepted tolerance plus bounded 85RAW expected-diff approval. `NL_FAIL` limited opt-in still needs implementation evidence before it can be treated as default automatic rescue.
+
+### 2026-06-17 - standard_peak_oracle_tolerance_ceiling_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard and executable heldout oracle result gate
+- New tier: still `production_candidate`; oracle manifest guard now enforces the accepted first-gate tolerance ceiling
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tests/test_standard_peak_shadow_activation_inputs.py`
+- Product surface changed: fail-closed gate only. Heldout oracle manifest rows may specify stricter tolerance, but values looser than boundary error `0.1 min` or area relative error `0.10` now raise before result evaluation. No default extraction, matrix writer, workbook schema, or non-standard promotion changed.
+- Validation: `uv run pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_rejects_loose_tolerances tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_accepts_strict_tolerances -q` (`2 passed`); `uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`25 passed`)
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows under this ceiling and bounded 85RAW
+  expected-diff approval. Later high-signal clean heldout trace evidence
+  narrows, but does not remove, the broad activation scope blocker.
+
+### 2026-06-17 - standard_peak_oracle_exact_threshold_float_fix_v1
+
+- Previous tier: `production_candidate` for standard-path seed guard and heldout oracle tolerance ceiling
+- New tier: still `production_candidate`; subagent review blocker fixed
+- Evidence: reviewer `Linnaeus` identified exact-threshold float comparison risk; `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tests/test_standard_peak_shadow_activation_inputs.py`
+- Product surface changed: comparison helper only. Mathematically exact boundary error `0.1 min` and area relative error `0.10` are now accepted despite binary float representation; values meaningfully above the ceiling still fail. No runtime default, matrix writer, workbook schema, or non-standard promotion changed.
+- Validation: exact-boundary tests `2 passed`; `uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`27 passed`)
+- Remaining blocker at this checkpoint: production-ready still needed
+  real/reviewed heldout oracle rows under this ceiling and bounded 85RAW
+  expected-diff approval. Later high-signal clean heldout trace evidence
+  narrows, but does not remove, the broad activation scope blocker.
+
+### 2026-06-17 - standard_peak_heldout_trace_reintegration_oracle_v1
+
+- Previous tier: `production_candidate` for broad standard-path seed guard with
+  an executable heldout oracle gate but no valid originally detected observed
+  rows.
+- New tier: still `production_candidate` for broad standard-path activation;
+  bounded high-signal clean standard trace heldout oracle evidence now passes.
+- Evidence:
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle/summary.json`;
+  `heldout_oracle_manifest.tsv`; `heldout_observed_results.tsv`;
+  `heldout_oracle_results.tsv`;
+  `heldout_trace_reintegration_full_eligible_pool.tsv`; source 85RAW
+  validation-minimal trace/evidence artifacts under
+  `output/standard_peak_backfill_preset_85raw_20260610/alignment_preset_dna_dr_85raw_validation_minimal/`.
+- Product surface changed: none. The artifact reuses existing stored 85RAW trace
+  arrays and existing package helpers (`find_peak_and_area` with
+  `resolver_mode=local_minimum`, `integration_from_peak_trace` with AsLS /
+  gaussian15 morphology area). It does not open RAW, mutate matrices, rewrite
+  workbook schema, enable default rescue, or authorize non-standard promotion.
+- Validation: deterministic selection produced 20 originally detected,
+  sample-local, high-signal clean standard trace cases across 20 families
+  (`cell_height>=2e6`, width 0.30-0.65 min, shape similarity >=0.95,
+  local/global max ratio >=0.95, apex within 0.15 min of family center, at
+  least 10 scans, one case per family). The formal heldout oracle CLI wrote
+  20 rows; all 20 have `oracle_case_status=pass` and
+  `included_in_product_acceptance=TRUE`. Maximum boundary error is 0.0820502
+  min and maximum area relative error is 0.0762325, inside the accepted
+  `0.1 min / 10% area` ceiling. The full eligible pool artifact persists all
+  80 pre-observed eligible rows with quality rank, selected flag, and rejection
+  reason; unselected rows do not carry observed reintegration outcomes.
+- Remaining blocker: this evidence supports only the high-signal clean standard
+  trace slice. The existing consolidated productization bridge still emits
+  4613 eligible activation writes and is not scoped by those high-signal clean
+  eligibility thresholds. To claim broad `production_ready`, either narrow the
+  activation contract to this eligible scope and run an expected-diff
+  acceptance, or generate a broader masked/product-writer observed oracle that
+  covers the full activation scope.
+
+### 2026-06-17 - standard_peak_activation_scope_audit_v1
+
+- Previous tier: `production_candidate` for broad standard-path seed guard with
+  passing high-signal clean heldout trace oracle, but no quantified bridge from
+  that oracle envelope to the actual consolidated activation writes.
+- New tier: still `production_candidate` for broad 4613-row standard-path
+  activation; explicit high-signal clean scoped activation is now a bounded
+  product-decision candidate, not an implicit broad ready claim.
+- Evidence:
+  `tools/diagnostics/standard_peak_activation_scope_audit.py`;
+  `xic_extractor/diagnostics/standard_peak_activation_scope_audit.py`;
+  `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/activation_high_signal_clean_scope_summary.json`;
+  `activation_high_signal_clean_scope_audit.tsv`;
+  `eligible_activation_value_delta.tsv`.
+- Product surface changed: none. The audit reads existing
+  `activation_value_delta.tsv`, consolidated
+  `consolidated_shadow_projection_cells.tsv`, and sibling
+  `*_trace_data.json` artifacts. It does not open RAW, mutate matrices, rewrite
+  workbooks, change default extraction, or enable non-standard promotion.
+- Validation: focused TDD test
+  `uv run pytest tests\test_standard_peak_activation_scope_audit.py -q`
+  passed. The real no-RAW audit found 4613 written activation rows, all joined
+  to projection rows; 3526 joined to trace JSON, 1087 had missing overlay path,
+  72 were high-signal clean eligible, 3454 were trace-matched but outside the
+  high-signal clean envelope, and broad scope status is `not_ready`.
+- Remaining blocker: choosing the first release product scope. To claim
+  `production_ready`, either make the activation contract explicitly write only
+  the 72 high-signal-clean eligible rows and run expected-diff acceptance, or
+  produce a broader masked/product-writer observed oracle for the full 4613-row
+  activation scope.
+- Next checkpoint: ask the product-scope decision before changing matrix-writing
+  behavior; do not silently convert the 4613-row broad bridge into a 72-row
+  product output.
+
+### 2026-06-17 - standard_peak_narrow_expected_diff_acceptance_v1
+
+- Previous tier: `production_candidate` for broad standard-path seed guard;
+  high-signal-clean 72-row subset was quantified but did not yet have a
+  delta-level expected-diff acceptance gate.
+- New tier: still `production_candidate` for broad 4613-row standard-path
+  activation. The 72-row high-signal-clean subset now has passing narrow
+  expected-diff acceptance, but it is not product output until a writer contract
+  explicitly limits activation to that scope.
+- Evidence:
+  `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/narrow_activation_expected_diff_acceptance.json`;
+  `narrow_activation_expected_diff_acceptance.tsv`;
+  `eligible_activation_value_delta.tsv`.
+- Product surface changed: none. The gate reads existing activation delta,
+  scope audit, and filtered eligible delta. It writes only diagnostic acceptance
+  artifacts and records `product_surface_changed=FALSE`.
+- Validation: focused tests
+  `uv run pytest tests\test_standard_peak_activation_scope_audit.py -q` now
+  pass 5 tests, including provenance-SHA join and fail-closed non-eligible
+  delta coverage. Real no-RAW acceptance on the 85RAW consolidated artifact
+  reports `acceptance_status=pass`, `full_written_delta_row_count=4613`,
+  `eligible_audit_row_count=72`, `eligible_delta_row_count=72`,
+  `duplicate_delta_key_count=0`, `missing_delta_row_count=0`,
+  `unexpected_delta_row_count=0`, `non_eligible_delta_row_count=0`,
+  `not_written_delta_row_count=0`, `unchanged_delta_row_count=0`, and
+  `blank_activated_value_count=0`. Closeout gates also passed:
+  `uv run ruff check xic_extractor tests tools scripts`,
+  `uv run mypy xic_extractor` (`343 source files`),
+  `uv run pytest -v --tb=short -x` (`3704 passed, 1 skipped`),
+  `uv run python scripts\check_diagnostics_index.py` (`87 entry points, 166
+  total files`), and `git diff --check` with only LF/CRLF warnings.
+- Remaining blocker: product-scope decision and writer contract. If the first
+  release uses the 72-row scope, the writer must be explicitly narrowed and
+  gated before any formal matrix output is produced. If the release uses broad
+  4613-row scope, this acceptance is insufficient and a broader oracle is still
+  required.
+- Next checkpoint: choose narrow writer contract versus broad oracle. Do not
+  rerun RAW unless it will decide that checkpoint.
+
+### 2026-06-17 - standard_peak_narrow_product_writer_v1
+
+- Previous tier: 72-row high-signal-clean Backfill subset had passing
+  delta-level expected-diff acceptance, but no product writer was limited to
+  that scope. Broad 4613-row standard-path activation remained
+  `production_candidate`.
+- New tier: `production_ready` for the explicit 72-row high-signal-clean scoped
+  writer; broad 4613-row standard-path activation remains
+  `production_candidate`.
+- Evidence:
+  `output/productization_realdata_seed_guard_85raw_20260617/narrow_high_signal_clean_no_raw_productization/standard_peak_backfill_productization_summary.json`;
+  `narrow_product_writer_expected_diff_acceptance.json`;
+  `activated_matrix/activation_value_delta.tsv`.
+- Product surface changed: additive opt-in CLI surface
+  `standard_peak_backfill_productization.py --high-signal-clean-activation-scope-audit-tsv`.
+  It filters productization input to audit rows with
+  `high_signal_clean_status=eligible`, then writes the existing matrix-only
+  activated-matrix output under the task output directory. It does not change
+  default extraction, workbook schema, GUI behavior, non-standard promotion, or
+  the broad activation bridge. The additive summary fields bump the
+  productization summary schema to `standard_peak_backfill_productization_v1`;
+  reviewer `Mill` found the missing schema bump as P2, and the fix was verified
+  with a focused schema assertion plus a rerun of the narrow no-RAW artifact.
+- Validation: focused tests
+  `uv run pytest tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+  passed 10 tests at implementation checkpoint. Touched-file ruff and mypy
+  passed. The real no-RAW 85RAW consolidated artifact run selected 72 eligible
+  shadow rows, wrote 72 matrix cells and 72 activation-delta rows, and
+  `narrow_product_writer_expected_diff_acceptance.json` reports
+  `acceptance_status=pass`, `readiness_tier=production_ready`,
+  `eligible_audit_row_count=72`, `product_written_delta_row_count=72`,
+  `duplicate_delta_key_count=0`, `missing_delta_row_count=0`,
+  `unexpected_delta_row_count=0`, `non_eligible_delta_row_count=0`,
+  `not_written_delta_row_count=0`, `unchanged_delta_row_count=0`, and
+  `blank_activated_value_count=0`.
+- Remaining blocker: none for the 72-row narrow release slice. Broad 4613-row
+  activation still needs broader masked/product-writer observed oracle evidence
+  before it can claim `production_ready`.
+- Next checkpoint: preserve the 72-row scope as an explicit release claim; do
+  not broaden the writer without a new expected-diff/oracle packet.
+
+### 2026-06-17 - targeted_ms1_shape_identity_limited_policy_gate_v1
+
+- Previous tier: `production_candidate` for explicit support-TSV workflow only; limited opt-in policy was accepted by user but still missing implementation gate
+- New tier: `production_candidate` for explicit/limited opt-in support-TSV workflow; default automatic rescue remains off
+- Evidence: `targeted_ms1_shape_identity_activation_policy`; CLI flag `--targeted-ms1-shape-identity-activation-policy`; `xic_extractor.targeted_ms1_shape_identity_policy`; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff`; `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`; existing 85RAW gate summary `output/ms1_shape_identity_generic_support_85raw_20260616/limited_default_expected_diff_gate_summary.tsv`
+- Product surface changed: additive settings key, additive CLI override, manifest provenance field, and additive expected-diff gate. Replay mode rejects the new runtime override. Default settings stay `explicit_support_tsv`; no GUI, workbook schema, selected-candidate switch, manual boundary, or default automatic support producer changed.
+- Safe behavior boundary: limited policy accepts supported rows only for `5-hmdC` and `5-medC`; expected-diff gate requires analyte `NL_FAIL` rows to move from `not_counted/FALSE` to `detected_flagged/TRUE` with `own_max_same_peak_support`; matrix diffs are limited to those target measurement columns and must have the same sample/target key set as the long-row diff.
+- Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output -q` (`7 passed`); existing 85RAW generic artifact gate rerun `pass` with 11 long-row changes and 66 matrix cells; checkpoint full local gate `ruff`, `mypy`, `pytest -v --tb=short -x` (`3693 passed, 1 skipped`), diagnostics index, and `git diff --check` passed. Latest repo full gate after the later Backfill source-cross-check guard is recorded above.
+- Remaining blocker: production-ready/default behavior still needs a separate decision and evidence to auto-build or auto-consume supports during normal extraction; GUI remains out of scope; broader targets need their own expected-diff evidence.
 
 ### 2026-06-16 - method_manifest_artifact_replay_policy_v1
 
