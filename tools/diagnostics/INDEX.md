@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-12
-**Total entry-points:** 82
-**Total files (incl. helpers):** 161 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-16
+**Total entry-points:** 84
+**Total files (incl. helpers):** 163 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -28,7 +28,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
 4. [Backfill Reviews](#backfill-reviews) — 33 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
-6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 8 tools
+6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 10 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 6 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
@@ -1042,6 +1042,36 @@ schemas.
 **Purpose**: Render target-pair RT candidate review plots from RAW XIC traces for human adjudication of paired analyte/ISTD RT candidate selection.
 **Topic group**: target-pair RT review; reuses `gaussian15_morphology_trace`.
 **Status note**: Diagnostic-only RAW-backed review plots; does not change selection or matrix areas.
+
+---
+
+### `targeted_ms1_shape_identity_from_grid.py`
+
+**Purpose**: Convert an existing targeted own-max trace grid plus per-sample
+summary into `targeted_ms1_shape_identity_v0` evidence rows with the formal
+`own_max_same_peak_support` token.
+**Topic group**: targeted NL dropout / MS1 shape identity; reuses
+`xic_extractor.diagnostics.targeted_ms1_shape_identity`.
+**Status note**: Reads existing TSV artifacts only and writes a diagnostic TSV.
+It does not open RAW files, recompute extraction, inject support into normal
+runs, change selected RT/area, or mutate workbooks/matrices.
+
+---
+
+### `build_targeted_ms1_shape_identity_supports.py`
+
+**Purpose**: Build generic `targeted_ms1_shape_identity_v0` evidence rows from
+a baseline `xic_results_long.csv` plus RAW MS1 traces. It selects all eligible
+analyte NL-fail policy-blocked rows with paired RT/area-ratio support, finds a
+Gaussian-smoothed local apex near the paired-ISTD reference mode, and compares
+that trace against a counted reference trace using own-max same-peak identity.
+**Topic group**: targeted NL dropout / MS1 shape identity; reuses
+`xic_extractor.diagnostics.targeted_ms1_shape_identity` and
+`xic_extractor.diagnostics.targeted_ms1_shape_identity_support_builder`.
+**Status note**: Diagnostic-only support producer. It opens RAW files to build
+the support TSV, but does not directly write product output; normal extraction
+only consumes the TSV through explicit opt-in
+`targeted_ms1_shape_identity_support_tsv`.
 
 ---
 

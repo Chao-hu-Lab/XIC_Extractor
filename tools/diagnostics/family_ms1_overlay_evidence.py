@@ -22,6 +22,9 @@ from tools.diagnostics.family_ms1_overlay_models import (
     SHAPE_SUPPORT_MIN,
     TraceOverlayRow,
 )
+from xic_extractor.peak_detection.ms1_shape_identity import (
+    gaussian_smooth_values as _shared_gaussian_smooth_values,
+)
 
 
 def build_family_ms1_evidence_summary(
@@ -386,20 +389,13 @@ def _absolute_trace_apex_cluster(
 
 
 def _gaussian_smooth_values(values: np.ndarray, *, points: int) -> np.ndarray:
-    if points < 3 or values.size < 3:
-        return values.copy()
-    window = min(points, values.size)
-    if window % 2 == 0:
-        window -= 1
-    if window < 3:
-        return values.copy()
-    sigma = window / 6.0
-    offsets = np.arange(window, dtype=float) - (window - 1) / 2.0
-    kernel = np.exp(-0.5 * (offsets / sigma) ** 2)
-    kernel = kernel / float(np.sum(kernel))
-    pad = window // 2
-    padded = np.pad(values, pad_width=pad, mode="edge")
-    return np.convolve(padded, kernel, mode="valid")
+    return np.asarray(
+        _shared_gaussian_smooth_values(
+            tuple(float(value) for value in values),
+            points=points,
+        ),
+        dtype=float,
+    )
 
 
 def _pearson_similarity(
