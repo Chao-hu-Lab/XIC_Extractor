@@ -55,6 +55,7 @@ def test_build_method_manifest_labels_hashes_as_fragments(tmp_path: Path) -> Non
         "rt_prior_library",
         "target_pair_rt_calibration",
         "expected_diff_approval_registry",
+        "targeted_ms1_shape_identity_support_tsv",
     }
     assert set(payload["output_artifacts"]) == {
         "output_csv",
@@ -374,6 +375,36 @@ def test_load_method_manifest_for_replay_rejects_drifted_optional_artifact(
     with pytest.raises(
         MethodManifestError,
         match="expected_diff_approval_registry sha256 mismatch",
+    ):
+        load_method_manifest_for_replay(manifest_path)
+
+
+def test_load_method_manifest_for_replay_rejects_drifted_shape_identity_support(
+    tmp_path: Path,
+) -> None:
+    support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    support_path.write_text("stable\n", encoding="utf-8")
+    config = replace(
+        _config(tmp_path),
+        targeted_ms1_shape_identity_support_tsv=support_path,
+    )
+    targets = [_target("Analyte")]
+    _write_config_inputs(tmp_path)
+    manifest_path = write_method_manifest(
+        config,
+        targets,
+        context=MethodManifestContext(
+            entrypoint="xic-extractor-cli",
+            base_dir=tmp_path,
+            config_dir=tmp_path / "config",
+            output_mode="excel",
+        ),
+    )
+    support_path.write_text("drifted\n", encoding="utf-8")
+
+    with pytest.raises(
+        MethodManifestError,
+        match="targeted_ms1_shape_identity_support_tsv sha256 mismatch",
     ):
         load_method_manifest_for_replay(manifest_path)
 

@@ -136,6 +136,11 @@ def build_method_manifest(
                 "expected_diff",
                 output_dir,
             ),
+            "targeted_ms1_shape_identity_support_tsv": _artifact(
+                config.targeted_ms1_shape_identity_support_tsv,
+                "targeted_ms1_shape_identity_support",
+                output_dir,
+            ),
         },
         "config_fragments": {
             "config_hash": {
@@ -267,6 +272,7 @@ def load_method_manifest_for_replay(path: Path) -> MethodManifestReplayRequest:
         "rt_prior_library",
         "target_pair_rt_calibration",
         "expected_diff_approval_registry",
+        "targeted_ms1_shape_identity_support_tsv",
     ):
         _validate_optional_file_artifact(input_artifacts, artifact_id, manifest_path)
 

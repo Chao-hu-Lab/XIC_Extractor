@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extractor import RunOutput
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecord
 from xic_extractor.rt_prior_library import LibraryEntry
@@ -85,6 +85,118 @@ def test_run_uses_serial_backend_by_default(
 
     assert output is returned
     assert calls == [(config, targets, ["A.raw", "B.raw"])]
+
+
+def test_run_applies_targeted_ms1_shape_identity_support_tsv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
+
+    support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    config = ExtractionConfig(
+        **{
+            **_config(tmp_path, keep_intermediate_csv=False).__dict__,
+            "targeted_ms1_shape_identity_support_tsv": support_path,
+        }
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("Analyte")]
+    returned = RunOutput(file_results=[], diagnostics=[])
+    supports = (object(),)
+    calls: dict[str, object] = {}
+
+    def _fake_run_serial(
+        config_arg: ExtractionConfig,
+        targets_arg: list[Target],
+        *,
+        raw_paths: list[Path],
+        progress_callback=None,
+        should_stop=None,
+        injection_order=None,
+        rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
+    ) -> RunOutput:
+        calls["serial_output_written"] = False
+        return returned
+
+    def _fake_load_supports(path: Path):
+        calls["support_path"] = path
+        return supports
+
+    def _fake_apply_supports(output, *, targets, supports):
+        calls["projection_input"] = output
+        calls["projection_targets"] = targets
+        calls["projection_supports"] = supports
+        return output
+
+    def _fake_write_outputs(config_arg, targets_arg, output):
+        calls["written_output"] = output
+
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.load_targeted_ms1_shape_identity_supports",
+        _fake_load_supports,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.apply_targeted_ms1_shape_identity_projection",
+        _fake_apply_supports,
+    )
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.write_outputs",
+        _fake_write_outputs,
+    )
+
+    output = extractor.run(config, targets)
+
+    assert output is returned
+    assert calls["support_path"] == support_path
+    assert calls["projection_input"] is returned
+    assert calls["projection_targets"] == targets
+    assert calls["projection_supports"] == supports
+    assert calls["written_output"] is returned
+
+
+def test_run_reports_invalid_targeted_ms1_shape_identity_support_as_config_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from xic_extractor import extractor
+    from xic_extractor.extraction import serial_backend
+
+    support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    config = ExtractionConfig(
+        **{
+            **_config(tmp_path, keep_intermediate_csv=False).__dict__,
+            "targeted_ms1_shape_identity_support_tsv": support_path,
+        }
+    )
+    (config.data_dir / "SampleA.raw").write_text("", encoding="utf-8")
+    targets = [_target("Analyte")]
+    returned = RunOutput(file_results=[], diagnostics=[])
+
+    def _fake_run_serial(
+        config_arg: ExtractionConfig,
+        targets_arg: list[Target],
+        *,
+        raw_paths: list[Path],
+        progress_callback=None,
+        should_stop=None,
+        injection_order=None,
+        rt_prior_library=None,
+        model_selection_expected_diff_approvals=None,
+    ) -> RunOutput:
+        return returned
+
+    monkeypatch.setattr(serial_backend, "run_serial", _fake_run_serial)
+    monkeypatch.setattr(
+        "xic_extractor.extraction.pipeline.load_targeted_ms1_shape_identity_supports",
+        lambda _path: (_ for _ in ()).throw(ValueError("missing required columns")),
+    )
+
+    with pytest.raises(ConfigError, match="missing required columns"):
+        extractor.run(config, targets)
 
 
 def test_run_resolves_scoring_inputs_before_backend(

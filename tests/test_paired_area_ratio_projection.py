@@ -14,6 +14,14 @@ from xic_extractor.extraction.paired_area_ratio_projection import (
     assess_paired_area_ratio,
 )
 from xic_extractor.extraction.result_assembly import build_extraction_result
+from xic_extractor.extraction.targeted_ms1_shape_identity_projection import (
+    TargetedMs1ShapeIdentitySupport,
+    apply_targeted_ms1_shape_identity_projection,
+    result_with_targeted_ms1_shape_identity_support,
+)
+from xic_extractor.extraction.targeted_projection_reasons import (
+    OWN_MAX_SAME_PEAK_SUPPORT_REASON,
+)
 from xic_extractor.extractor import FileResult, RunOutput
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.hypotheses import (
@@ -34,7 +42,8 @@ from xic_extractor.peak_detection.selection_decision import (
 _NLStatus = Literal["OK", "WARN", "NL_FAIL", "NO_MS2"]
 
 
-def test_run_level_area_ratio_support_can_count_nl_fail_paired_analyte() -> None:
+def test_run_level_area_ratio_support_without_own_max_keeps_nl_fail_not_counted(
+) -> None:
     output = RunOutput(
         file_results=[
             _file_result("SampleA", target_area=50_000.0, nl_status="NL_FAIL"),
@@ -58,13 +67,107 @@ def test_run_level_area_ratio_support_can_count_nl_fail_paired_analyte() -> None
     decision = output.file_results[0].results["Analyte"].selection_decision
     assert projected is not None
     assert decision is not None
+    assert projected.product_state == "ambiguous"
+    assert projected.counted_detection is False
+    assert "paired_area_ratio_support" in projected.support_reasons
+    assert "paired_istd_rt_within_1min_support" in projected.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON not in projected.support_reasons
+    assert "analyte_nl_fail_requires_policy" in projected.not_counted_reasons
+    assert "run_level_paired_area_ratio" in decision.evidence_sources
+    assert "run_level_paired_istd_rt" in decision.evidence_sources
+
+
+def test_run_level_area_ratio_support_can_count_own_max_supported_nl_fail() -> None:
+    output = RunOutput(
+        file_results=[
+            _file_result(
+                "SampleA",
+                target_area=50_000.0,
+                nl_status="NL_FAIL",
+                support_reasons=(OWN_MAX_SAME_PEAK_SUPPORT_REASON,),
+            ),
+            _file_result("RefA", target_area=40_000.0, nl_status="OK"),
+            _file_result("RefB", target_area=50_000.0, nl_status="OK"),
+            _file_result("RefC", target_area=60_000.0, nl_status="OK"),
+        ],
+        diagnostics=[],
+    )
+
+    apply_paired_area_ratio_projection(output, targets=[_target(), _istd()])
+
+    projected = output.file_results[0].results["Analyte"].targeted_product_projection
+    decision = output.file_results[0].results["Analyte"].selection_decision
+    assert projected is not None
+    assert decision is not None
     assert projected.product_state == "detected_flagged"
     assert projected.counted_detection is True
     assert "paired_area_ratio_support" in projected.support_reasons
     assert "paired_istd_rt_within_1min_support" in projected.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON in projected.support_reasons
     assert "analyte_nl_fail_requires_policy" not in projected.not_counted_reasons
-    assert "run_level_paired_area_ratio" in decision.evidence_sources
-    assert "run_level_paired_istd_rt" in decision.evidence_sources
+
+
+def test_external_ms1_shape_identity_support_can_unlock_area_ratio_projection(
+) -> None:
+    output = RunOutput(
+        file_results=[
+            _file_result("SampleA", target_area=50_000.0, nl_status="NL_FAIL"),
+            _file_result("RefA", target_area=40_000.0, nl_status="OK"),
+            _file_result("RefB", target_area=50_000.0, nl_status="OK"),
+            _file_result("RefC", target_area=60_000.0, nl_status="OK"),
+        ],
+        diagnostics=[],
+    )
+
+    apply_paired_area_ratio_projection(output, targets=[_target(), _istd()])
+    before = output.file_results[0].results["Analyte"].targeted_product_projection
+    assert before is not None
+    assert before.counted_detection is False
+    assert "paired_area_ratio_support" in before.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON not in before.support_reasons
+    assert "analyte_nl_fail_requires_policy" in before.not_counted_reasons
+
+    apply_targeted_ms1_shape_identity_projection(
+        output,
+        targets=[_target(), _istd()],
+        supports=(
+            TargetedMs1ShapeIdentitySupport(
+                sample_name="SampleA",
+                target_name="Analyte",
+            ),
+        ),
+    )
+
+    after = output.file_results[0].results["Analyte"].targeted_product_projection
+    decision = output.file_results[0].results["Analyte"].selection_decision
+    assert after is not None
+    assert decision is not None
+    assert after.product_state == "detected_flagged"
+    assert after.counted_detection is True
+    assert "paired_area_ratio_support" in after.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON in after.support_reasons
+    assert "analyte_nl_fail_requires_policy" not in after.not_counted_reasons
+    assert "targeted_ms1_shape_identity_v0" in decision.evidence_sources
+
+
+def test_direct_ms1_shape_identity_support_requires_matching_sample() -> None:
+    result = _file_result(
+        "SampleA",
+        target_area=50_000.0,
+        nl_status="NL_FAIL",
+    ).results["Analyte"]
+
+    updated = result_with_targeted_ms1_shape_identity_support(
+        result,
+        target=_target(),
+        sample_name="SampleA",
+        support=TargetedMs1ShapeIdentitySupport(
+            sample_name="OtherSample",
+            target_name="Analyte",
+        ),
+    )
+
+    assert updated is result
 
 
 def test_run_level_area_ratio_outside_reference_stays_not_counted() -> None:
@@ -224,6 +327,7 @@ def _file_result(
     target_area: float,
     nl_status: _NLStatus,
     selected_envelope_not_counted: bool = False,
+    support_reasons: tuple[str, ...] = (),
 ) -> FileResult:
     target = _target()
     istd = _istd()
@@ -236,6 +340,7 @@ def _file_result(
                 area=target_area,
                 nl_status=nl_status,
                 selected_envelope_not_counted=selected_envelope_not_counted,
+                support_reasons=support_reasons,
             ),
             "ISTD": _result(
                 istd,
@@ -254,6 +359,7 @@ def _result(
     area: float,
     nl_status: _NLStatus,
     selected_envelope_not_counted: bool = False,
+    support_reasons: tuple[str, ...] = (),
 ):
     candidate = _candidate(area=area)
     peak_result = PeakDetectionResult(
@@ -270,6 +376,7 @@ def _result(
         sample_name=sample_name,
         area=area,
         nl_status=nl_status,
+        support_reasons=support_reasons,
     )
     selection_decision = None
     if selected_envelope_not_counted:
@@ -311,8 +418,10 @@ def _hypothesis(
     sample_name: str,
     area: float,
     nl_status: _NLStatus,
+    support_reasons: tuple[str, ...] = (),
 ) -> PeakHypothesis:
     support = ["ms1_coherent"]
+    support.extend(support_reasons)
     conflicts: tuple[str, ...] = ()
     if nl_status == "OK":
         support.append("candidate_aligned_ms2_nl")

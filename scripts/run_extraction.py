@@ -50,6 +50,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 settings_overrides[
                     "model_selection_expected_diff_approval_registry"
                 ] = str(args.model_selection_expected_diff_approvals.resolve())
+            if args.targeted_ms1_shape_identity_support_tsv is not None:
+                settings_overrides["targeted_ms1_shape_identity_support_tsv"] = str(
+                    args.targeted_ms1_shape_identity_support_tsv.resolve()
+                )
 
         if settings_overrides:
             config, targets = load_config(
@@ -186,6 +190,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "with a durable expected-diff approval TSV."
         ),
     )
+    parser.add_argument(
+        "--targeted-ms1-shape-identity-support-tsv",
+        type=Path,
+        default=None,
+        help=(
+            "Override settings.csv targeted_ms1_shape_identity_support_tsv with a "
+            "reviewed targeted_ms1_shape_identity_v0 support TSV."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -205,6 +218,8 @@ def _reject_replay_overrides(args: argparse.Namespace) -> None:
         conflicts.append("--parallel-workers")
     if args.model_selection_expected_diff_approvals is not None:
         conflicts.append("--model-selection-expected-diff-approvals")
+    if args.targeted_ms1_shape_identity_support_tsv is not None:
+        conflicts.append("--targeted-ms1-shape-identity-support-tsv")
     if conflicts:
         joined = ", ".join(conflicts)
         raise ConfigError(f"--replay-manifest cannot be combined with {joined}")

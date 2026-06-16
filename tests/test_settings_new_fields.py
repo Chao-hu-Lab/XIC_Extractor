@@ -43,6 +43,7 @@ def test_new_keys_present() -> None:
         "emit_peak_candidates": "false",
         "keep_intermediate_csv": "false",
         "model_selection_expected_diff_approval_registry": "",
+        "targeted_ms1_shape_identity_support_tsv": "",
         "ms1_morphology_smoothing_window_points": "15",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
@@ -60,6 +61,7 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
         "emit_peak_candidates",
         "keep_intermediate_csv",
         "model_selection_expected_diff_approval_registry",
+        "targeted_ms1_shape_identity_support_tsv",
         "ms1_morphology_smoothing_window_points",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
@@ -72,6 +74,9 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
     ]
     assert "expected-diff" in CANONICAL_SETTINGS_DESCRIPTIONS[
         "model_selection_expected_diff_approval_registry"
+    ]
+    assert "targeted_ms1_shape_identity_v0" in CANONICAL_SETTINGS_DESCRIPTIONS[
+        "targeted_ms1_shape_identity_support_tsv"
     ]
     assert "Gaussian15" in CANONICAL_SETTINGS_DESCRIPTIONS[
         "ms1_morphology_smoothing_window_points"
@@ -88,6 +93,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     rt_library = tmp_path / "rt_prior_library.csv"
     calibration = tmp_path / "target_pair_rt_calibration.tsv"
     approval_registry = tmp_path / "expected_diff_approvals.tsv"
+    shape_identity_support = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
     rows = {
         "data_dir": str(data_dir),
         "dll_dir": str(dll_dir),
@@ -105,6 +111,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "rt_prior_library_path": str(rt_library),
         "target_pair_rt_calibration_path": str(calibration),
         "model_selection_expected_diff_approval_registry": str(approval_registry),
+        "targeted_ms1_shape_identity_support_tsv": str(shape_identity_support),
         "emit_score_breakdown": "true",
         "emit_review_report": "true",
         "emit_peak_candidates": "true",
@@ -147,6 +154,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.rt_prior_library_path == rt_library
     assert config.target_pair_rt_calibration_path == calibration
     assert config.model_selection_expected_diff_approval_registry == approval_registry
+    assert config.targeted_ms1_shape_identity_support_tsv == shape_identity_support
     assert config.emit_score_breakdown is True
     assert config.emit_review_report is True
     assert config.emit_peak_candidates is True
@@ -213,6 +221,7 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.rt_prior_library_path is None
     assert config.target_pair_rt_calibration_path is None
     assert config.model_selection_expected_diff_approval_registry is None
+    assert config.targeted_ms1_shape_identity_support_tsv is None
     assert config.emit_score_breakdown is False
     assert config.emit_review_report is False
     assert config.emit_peak_candidates is False

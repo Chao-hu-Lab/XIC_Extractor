@@ -4,10 +4,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.extraction.paired_area_ratio_projection import (
     apply_paired_area_ratio_projection,
+)
+from xic_extractor.extraction.targeted_ms1_shape_identity_projection import (
+    apply_targeted_ms1_shape_identity_projection,
+    load_targeted_ms1_shape_identity_supports,
 )
 from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
@@ -124,5 +128,19 @@ def run_pipeline(
         )
 
     output = apply_paired_area_ratio_projection(output, targets=targets)
+    if config.targeted_ms1_shape_identity_support_tsv is not None:
+        try:
+            targeted_ms1_shape_identity_supports = (
+                load_targeted_ms1_shape_identity_supports(
+                    config.targeted_ms1_shape_identity_support_tsv
+                )
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise ConfigError(str(exc)) from exc
+        output = apply_targeted_ms1_shape_identity_projection(
+            output,
+            targets=targets,
+            supports=targeted_ms1_shape_identity_supports,
+        )
     write_outputs(config, targets, output)
     return output

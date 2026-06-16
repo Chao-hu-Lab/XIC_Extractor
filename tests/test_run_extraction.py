@@ -365,6 +365,57 @@ def test_cli_loads_model_selection_expected_diff_approval_registry(
     assert "Excel skipped" in capsys.readouterr().out
 
 
+def test_cli_passes_targeted_ms1_shape_identity_support_override(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    support_path.write_text("stub\n", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    def fake_load_config(_config_dir: Path, *, settings_overrides=None):
+        calls["settings_overrides"] = settings_overrides
+        loaded_config = replace(
+            config,
+            targeted_ms1_shape_identity_support_tsv=Path(
+                settings_overrides["targeted_ms1_shape_identity_support_tsv"]
+            ),
+        )
+        return loaded_config, targets
+
+    monkeypatch.setattr(module, "load_config", fake_load_config)
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--targeted-ms1-shape-identity-support-tsv",
+            str(support_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["settings_overrides"] == {
+        "targeted_ms1_shape_identity_support_tsv": str(support_path.resolve())
+    }
+    assert calls["run_config"].targeted_ms1_shape_identity_support_tsv == (
+        support_path.resolve()
+    )
+    assert "Excel skipped" in capsys.readouterr().out
+
+
 def test_cli_reports_missing_model_selection_expected_diff_approval_registry(
     tmp_path: Path,
     monkeypatch,
@@ -526,6 +577,37 @@ def test_cli_replay_rejects_runtime_overrides(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "--replay-manifest cannot be combined with --skip-excel" in captured.err
+    assert "run_config" not in calls
+
+
+def test_cli_replay_rejects_targeted_ms1_shape_identity_support_override(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    manifest_path = _write_replay_manifest(tmp_path)
+    support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    support_path.write_text("stub\n", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+
+    exit_code = module.main(
+        [
+            "--replay-manifest",
+            str(manifest_path),
+            "--targeted-ms1-shape-identity-support-tsv",
+            str(support_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert (
+        "--replay-manifest cannot be combined with "
+        "--targeted-ms1-shape-identity-support-tsv"
+    ) in captured.err
     assert "run_config" not in calls
 
 

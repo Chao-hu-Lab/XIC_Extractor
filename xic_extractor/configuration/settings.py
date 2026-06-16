@@ -55,6 +55,7 @@ class _ParsedSettings:
     rt_prior_library_path: Path | None
     target_pair_rt_calibration_path: Path | None
     model_selection_expected_diff_approval_registry: Path | None
+    targeted_ms1_shape_identity_support_tsv: Path | None
     emit_score_breakdown: bool
     emit_review_report: bool
     emit_peak_candidates: bool
@@ -259,6 +260,9 @@ def _parse_settings_values(
         ),
         model_selection_expected_diff_approval_registry=_parse_optional_path(
             settings.get("model_selection_expected_diff_approval_registry", "")
+        ),
+        targeted_ms1_shape_identity_support_tsv=_parse_optional_path(
+            settings.get("targeted_ms1_shape_identity_support_tsv", "")
         ),
         emit_score_breakdown=_parse_bool(
             settings_path,
@@ -559,6 +563,9 @@ def _build_config(
         target_pair_rt_calibration_path=parsed.target_pair_rt_calibration_path,
         model_selection_expected_diff_approval_registry=(
             parsed.model_selection_expected_diff_approval_registry
+        ),
+        targeted_ms1_shape_identity_support_tsv=(
+            parsed.targeted_ms1_shape_identity_support_tsv
         ),
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,

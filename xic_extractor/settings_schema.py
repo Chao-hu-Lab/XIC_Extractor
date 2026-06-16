@@ -44,6 +44,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "rt_prior_library_path": "",
     "target_pair_rt_calibration_path": "",
     "model_selection_expected_diff_approval_registry": "",
+    "targeted_ms1_shape_identity_support_tsv": "",
     "emit_score_breakdown": "false",
     "emit_review_report": "false",
     "emit_peak_candidates": "false",
@@ -113,6 +114,10 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "model_selection_expected_diff_approval_registry": (
         "Durable expected-diff approval registry TSV for selected-hypothesis "
         "model selection; leave empty unless approved real-data evidence exists"
+    ),
+    "targeted_ms1_shape_identity_support_tsv": (
+        "Reviewed targeted_ms1_shape_identity_v0 support TSV for explicit "
+        "own-max same-peak product projection support; leave empty for normal use"
     ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",
