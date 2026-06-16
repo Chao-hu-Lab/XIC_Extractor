@@ -284,6 +284,16 @@ Current state is split:
   extraction path remains off, and no RAW evidence provider emits
   `own_max_same_peak_support` during normal extraction by default.
 
+Product decision, 2026-06-17: the limited opt-in policy may be designed for
+`5-hmdC + 5-medC` only, and any future automatic rescue from this path must
+write `detected_flagged` rather than clean `detected`. This is a scope and
+product label decision. The repo now has an opt-in limited activation policy guard
+(`limited_5hmdc_5medc_v1`), config/CLI wiring, replay override rejection,
+method-manifest provenance, and an expected-diff gate over the existing 85RAW
+generic-support artifact. The default extraction path still remains off:
+normal extraction does not auto-build the support TSV, GUI is not connected, and
+the default activation policy remains `explicit_support_tsv`.
+
 Do not claim:
 
 - target/untarget peak identity is unified in product code;
@@ -299,8 +309,12 @@ Allowed claim:
 - The targeted projection gate now fails closed unless explicit
   `own_max_same_peak_support` is part of the support evidence.
 - The explicit opt-in support-TSV workflow has 8RAW and 85RAW smoke evidence
-  and can be described as `production_candidate`, pending final human acceptance
-  and GUI/default-path policy.
+  and can be described as `production_candidate`. The first limited opt-in
+  scope is now implemented as an activation policy for
+  `5-hmdC + 5-medC` with `detected_flagged` output only, and the existing 85RAW
+  generic-support expected-diff artifact passes that limited gate. It still
+  needs a separate default-producer/default-extraction activation decision
+  before it can become default behavior.
 
 ## Implementation note, 2026-06-16
 
@@ -392,6 +406,30 @@ Sixth explicit-opt-in pipeline slice added:
   affected sample/target results.
 - No GUI entry, workbook schema change, selected-candidate switch, area
   recompute, RAW-backed evidence provider, or default product behavior is added.
+
+Seventh limited-policy product-candidate slice added:
+
+- `targeted_ms1_shape_identity_activation_policy` is now a canonical settings
+  key with default `explicit_support_tsv`.
+- `limited_5hmdc_5medc_v1` is an explicit opt-in policy. When it is selected,
+  the support-TSV loader rejects supported rows outside `5-hmdC` / `5-medC`.
+- `xic-extractor-cli --targeted-ms1-shape-identity-activation-policy
+  limited_5hmdc_5medc_v1` can override the setting for validation runs, and
+  replay mode rejects this override.
+- `method_manifest.json` records the activation policy so replay/provenance can
+  distinguish the default explicit-support workflow from the limited policy.
+- `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py` gates
+  expected-diff artifacts for this limited policy. It verifies long rows only
+  move analyte `NL_FAIL` rows from `not_counted/FALSE` to
+  `detected_flagged/TRUE` with `own_max_same_peak_support`, and matrix diff
+  cells are limited to allowed `5-hmdC` / `5-medC` measurements.
+- Existing 85RAW generic-support artifact gate:
+  `output/ms1_shape_identity_generic_support_85raw_20260616/limited_default_expected_diff_gate_summary.tsv`
+  has `gate_status=pass`, `long_changed_rows=11`, `matrix_changed_cells=66`,
+  `target_counts=5-hmdC=10;5-medC=1`, and
+  `matrix_target_counts=5-hmdC=60;5-medC=6`.
+- This is still opt-in support-TSV behavior. It does not enable default
+  automatic rescue, connect GUI, or broaden beyond `5-hmdC` / `5-medC`.
 
 Verification:
 

@@ -19,6 +19,9 @@ from xic_extractor.peak_detection.model_selection_approval_registry import (
     load_expected_diff_approval_registry,
 )
 from xic_extractor.raw_reader import RawReaderError
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -54,6 +57,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 settings_overrides["targeted_ms1_shape_identity_support_tsv"] = str(
                     args.targeted_ms1_shape_identity_support_tsv.resolve()
                 )
+            if args.targeted_ms1_shape_identity_activation_policy is not None:
+                settings_overrides[
+                    "targeted_ms1_shape_identity_activation_policy"
+                ] = args.targeted_ms1_shape_identity_activation_policy
 
         if settings_overrides:
             config, targets = load_config(
@@ -199,6 +206,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "reviewed targeted_ms1_shape_identity_v0 support TSV."
         ),
     )
+    parser.add_argument(
+        "--targeted-ms1-shape-identity-activation-policy",
+        choices=TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
+        default=None,
+        help=(
+            "Override settings.csv targeted_ms1_shape_identity_activation_policy. "
+            "Use limited_5hmdc_5medc_v1 to restrict support TSV activation to "
+            "5-hmdC and 5-medC."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -220,6 +237,8 @@ def _reject_replay_overrides(args: argparse.Namespace) -> None:
         conflicts.append("--model-selection-expected-diff-approvals")
     if args.targeted_ms1_shape_identity_support_tsv is not None:
         conflicts.append("--targeted-ms1-shape-identity-support-tsv")
+    if args.targeted_ms1_shape_identity_activation_policy is not None:
+        conflicts.append("--targeted-ms1-shape-identity-activation-policy")
     if conflicts:
         joined = ", ".join(conflicts)
         raise ConfigError(f"--replay-manifest cannot be combined with {joined}")

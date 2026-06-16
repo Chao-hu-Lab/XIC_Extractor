@@ -548,6 +548,9 @@ def _method_settings(config: ExtractionConfig) -> dict[str, object]:
         "ms2_precursor_tol_da": config.ms2_precursor_tol_da,
         "nl_min_intensity_ratio": config.nl_min_intensity_ratio,
         "count_no_ms2_as_detected": config.count_no_ms2_as_detected,
+        "targeted_ms1_shape_identity_activation_policy": (
+            config.targeted_ms1_shape_identity_activation_policy
+        ),
         "parallel_mode": config.parallel_mode,
         "parallel_workers": config.parallel_workers,
         "emit_score_breakdown": config.emit_score_breakdown,

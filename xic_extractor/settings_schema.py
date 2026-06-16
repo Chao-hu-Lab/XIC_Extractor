@@ -1,5 +1,10 @@
 import os
 
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    EXPLICIT_SUPPORT_TSV_POLICY,
+    LIMITED_HMDC_MEDC_POLICY,
+)
+
 
 def default_parallel_workers() -> int:
     cpu_count = os.cpu_count() or 2
@@ -45,6 +50,7 @@ CANONICAL_SETTINGS_DEFAULTS: dict[str, str] = {
     "target_pair_rt_calibration_path": "",
     "model_selection_expected_diff_approval_registry": "",
     "targeted_ms1_shape_identity_support_tsv": "",
+    "targeted_ms1_shape_identity_activation_policy": EXPLICIT_SUPPORT_TSV_POLICY,
     "emit_score_breakdown": "false",
     "emit_review_report": "false",
     "emit_peak_candidates": "false",
@@ -118,6 +124,12 @@ CANONICAL_SETTINGS_DESCRIPTIONS: dict[str, str] = {
     "targeted_ms1_shape_identity_support_tsv": (
         "Reviewed targeted_ms1_shape_identity_v0 support TSV for explicit "
         "own-max same-peak product projection support; leave empty for normal use"
+    ),
+    "targeted_ms1_shape_identity_activation_policy": (
+        "Activation policy for targeted MS1 shape identity support. "
+        f"Use {EXPLICIT_SUPPORT_TSV_POLICY} to preserve explicit support TSV "
+        f"behavior, or {LIMITED_HMDC_MEDC_POLICY} to restrict accepted support "
+        "rows to 5-hmdC and 5-medC only."
     ),
     "emit_score_breakdown": "是否輸出 Score Breakdown sheet（預設關閉）",
     "emit_review_report": "是否輸出 Review Report HTML（預設關閉）",

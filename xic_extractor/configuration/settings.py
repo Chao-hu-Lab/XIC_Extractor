@@ -17,6 +17,9 @@ from xic_extractor.settings_schema import (
     CANONICAL_SETTINGS_DEFAULTS,
     RESOLVER_MODES,
 )
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +59,7 @@ class _ParsedSettings:
     target_pair_rt_calibration_path: Path | None
     model_selection_expected_diff_approval_registry: Path | None
     targeted_ms1_shape_identity_support_tsv: Path | None
+    targeted_ms1_shape_identity_activation_policy: str
     emit_score_breakdown: bool
     emit_review_report: bool
     emit_peak_candidates: bool
@@ -263,6 +267,11 @@ def _parse_settings_values(
         ),
         targeted_ms1_shape_identity_support_tsv=_parse_optional_path(
             settings.get("targeted_ms1_shape_identity_support_tsv", "")
+        ),
+        targeted_ms1_shape_identity_activation_policy=_setting_value(
+            settings,
+            settings_path,
+            "targeted_ms1_shape_identity_activation_policy",
         ),
         emit_score_breakdown=_parse_bool(
             settings_path,
@@ -524,6 +533,18 @@ def _validate_settings_ranges(
             settings["parallel_workers"],
             "must be >= 1",
         )
+    if (
+        parsed.targeted_ms1_shape_identity_activation_policy
+        not in TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES
+    ):
+        allowed = ", ".join(TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES)
+        raise _config_error(
+            settings_path,
+            None,
+            "targeted_ms1_shape_identity_activation_policy",
+            settings["targeted_ms1_shape_identity_activation_policy"],
+            f"must be {allowed}",
+        )
 
 
 def _build_config(
@@ -566,6 +587,9 @@ def _build_config(
         ),
         targeted_ms1_shape_identity_support_tsv=(
             parsed.targeted_ms1_shape_identity_support_tsv
+        ),
+        targeted_ms1_shape_identity_activation_policy=(
+            parsed.targeted_ms1_shape_identity_activation_policy
         ),
         emit_score_breakdown=parsed.emit_score_breakdown,
         emit_review_report=parsed.emit_review_report,

@@ -44,6 +44,7 @@ def test_new_keys_present() -> None:
         "keep_intermediate_csv": "false",
         "model_selection_expected_diff_approval_registry": "",
         "targeted_ms1_shape_identity_support_tsv": "",
+        "targeted_ms1_shape_identity_activation_policy": "explicit_support_tsv",
         "ms1_morphology_smoothing_window_points": "15",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
@@ -62,6 +63,7 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
         "keep_intermediate_csv",
         "model_selection_expected_diff_approval_registry",
         "targeted_ms1_shape_identity_support_tsv",
+        "targeted_ms1_shape_identity_activation_policy",
         "ms1_morphology_smoothing_window_points",
     ):
         assert CANONICAL_SETTINGS_DESCRIPTIONS[key]
@@ -77,6 +79,9 @@ def test_new_settings_are_in_canonical_defaults_and_descriptions() -> None:
     ]
     assert "targeted_ms1_shape_identity_v0" in CANONICAL_SETTINGS_DESCRIPTIONS[
         "targeted_ms1_shape_identity_support_tsv"
+    ]
+    assert "limited_5hmdc_5medc_v1" in CANONICAL_SETTINGS_DESCRIPTIONS[
+        "targeted_ms1_shape_identity_activation_policy"
     ]
     assert "Gaussian15" in CANONICAL_SETTINGS_DESCRIPTIONS[
         "ms1_morphology_smoothing_window_points"
@@ -112,6 +117,7 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
         "target_pair_rt_calibration_path": str(calibration),
         "model_selection_expected_diff_approval_registry": str(approval_registry),
         "targeted_ms1_shape_identity_support_tsv": str(shape_identity_support),
+        "targeted_ms1_shape_identity_activation_policy": "limited_5hmdc_5medc_v1",
         "emit_score_breakdown": "true",
         "emit_review_report": "true",
         "emit_peak_candidates": "true",
@@ -155,6 +161,9 @@ def test_load_config_parses_scoring_settings(tmp_path: Path) -> None:
     assert config.target_pair_rt_calibration_path == calibration
     assert config.model_selection_expected_diff_approval_registry == approval_registry
     assert config.targeted_ms1_shape_identity_support_tsv == shape_identity_support
+    assert config.targeted_ms1_shape_identity_activation_policy == (
+        "limited_5hmdc_5medc_v1"
+    )
     assert config.emit_score_breakdown is True
     assert config.emit_review_report is True
     assert config.emit_peak_candidates is True
@@ -222,10 +231,67 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.target_pair_rt_calibration_path is None
     assert config.model_selection_expected_diff_approval_registry is None
     assert config.targeted_ms1_shape_identity_support_tsv is None
+    assert config.targeted_ms1_shape_identity_activation_policy == (
+        "explicit_support_tsv"
+    )
     assert config.emit_score_breakdown is False
     assert config.emit_review_report is False
     assert config.emit_peak_candidates is False
     assert config.keep_intermediate_csv is False
+
+
+def test_load_config_rejects_unknown_shape_identity_activation_policy(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    data_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    data_dir.mkdir()
+    dll_dir.mkdir()
+    rows = {
+        **CANONICAL_SETTINGS_DEFAULTS,
+        "data_dir": str(data_dir),
+        "dll_dir": str(dll_dir),
+        "targeted_ms1_shape_identity_activation_policy": "broad_default",
+    }
+
+    config_dir.mkdir()
+    with (config_dir / "settings.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=SETTINGS_FIELDS)
+        writer.writeheader()
+        for key, value in rows.items():
+            writer.writerow({"key": key, "value": value, "description": key})
+
+    with (config_dir / "targets.csv").open(
+        "w", newline="", encoding="utf-8-sig"
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=TARGET_FIELDS)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "label": "Analyte",
+                "mz": "258.1085",
+                "rt_min": "8.0",
+                "rt_max": "10.0",
+                "ppm_tol": "20",
+                "neutral_loss_da": "116.0474",
+                "nl_ppm_warn": "20",
+                "nl_ppm_max": "50",
+                "is_istd": "false",
+                "istd_pair": "",
+            }
+        )
+
+    try:
+        load_config(config_dir)
+    except Exception as exc:
+        message = str(exc)
+        assert "targeted_ms1_shape_identity_activation_policy" in message
+        assert "explicit_support_tsv" in message
+    else:
+        raise AssertionError("unknown activation policy should fail config loading")
 
 
 def _write_calibration(path: Path, targets_path: Path) -> None:

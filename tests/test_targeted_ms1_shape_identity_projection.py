@@ -108,6 +108,48 @@ def test_shape_identity_support_loader_rejects_duplicate_supported_keys(
         load_targeted_ms1_shape_identity_supports(path)
 
 
+def test_limited_default_policy_accepts_hmdc_and_medc_supports() -> None:
+    supports = targeted_ms1_shape_identity_supports_from_rows(
+        [
+            _row(sample_name="S1", target_name="5-hmdC"),
+            _row(sample_name="S2", target_name="5-medC"),
+        ],
+        activation_policy="limited_5hmdc_5medc_v1",
+    )
+
+    assert [(support.sample_name, support.target_name) for support in supports] == [
+        ("S1", "5-hmdC"),
+        ("S2", "5-medC"),
+    ]
+
+
+def test_limited_default_policy_rejects_supported_rows_outside_scope() -> None:
+    with pytest.raises(ValueError, match="outside limited_5hmdc_5medc_v1 scope"):
+        targeted_ms1_shape_identity_supports_from_rows(
+            [_row(sample_name="S1", target_name="5-fC")],
+            activation_policy="limited_5hmdc_5medc_v1",
+        )
+
+
+def test_shape_identity_support_loader_rejects_unknown_activation_policy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
+    path.write_text(
+        "\t".join(_row().keys())
+        + "\n"
+        + "\t".join(_row(sample_name="S1", target_name="5-hmdC").values())
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unsupported targeted MS1 shape identity"):
+        load_targeted_ms1_shape_identity_supports(
+            path,
+            activation_policy="broad_default",
+        )
+
+
 def _row(
     *,
     sample_name: str = "S1",

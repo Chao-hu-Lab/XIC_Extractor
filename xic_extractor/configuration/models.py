@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from xic_extractor.settings_schema import CANONICAL_RESOLVER_MODE
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    EXPLICIT_SUPPORT_TSV_POLICY,
+)
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ class ExtractionConfig:
     target_pair_rt_calibration_path: Path | None = None
     model_selection_expected_diff_approval_registry: Path | None = None
     targeted_ms1_shape_identity_support_tsv: Path | None = None
+    targeted_ms1_shape_identity_activation_policy: str = EXPLICIT_SUPPORT_TSV_POLICY
     emit_score_breakdown: bool = False
     emit_review_report: bool = False
     emit_peak_candidates: bool = False

@@ -29,3 +29,4 @@ rt_prior_library_path,,developer/debug RT prior library CSV path; leave empty fo
 target_pair_rt_calibration_path,,target pair RT calibration TSV path for shadow auto-reselection diagnostics; leave empty to disable
 model_selection_expected_diff_approval_registry,,Durable expected-diff approval registry TSV for selected-hypothesis model selection; leave empty unless approved real-data evidence exists
 targeted_ms1_shape_identity_support_tsv,,Reviewed targeted_ms1_shape_identity_v0 support TSV for explicit own-max same-peak NL_FAIL support; leave empty to disable
+targeted_ms1_shape_identity_activation_policy,explicit_support_tsv,Targeted MS1 shape identity activation policy: explicit_support_tsv or limited_5hmdc_5medc_v1

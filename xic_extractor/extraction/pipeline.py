@@ -132,7 +132,10 @@ def run_pipeline(
         try:
             targeted_ms1_shape_identity_supports = (
                 load_targeted_ms1_shape_identity_supports(
-                    config.targeted_ms1_shape_identity_support_tsv
+                    config.targeted_ms1_shape_identity_support_tsv,
+                    activation_policy=(
+                        config.targeted_ms1_shape_identity_activation_policy
+                    ),
                 )
             )
         except (FileNotFoundError, ValueError) as exc:

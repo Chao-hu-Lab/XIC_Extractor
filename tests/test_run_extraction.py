@@ -416,6 +416,57 @@ def test_cli_passes_targeted_ms1_shape_identity_support_override(
     assert "Excel skipped" in capsys.readouterr().out
 
 
+def test_cli_passes_targeted_ms1_shape_identity_activation_policy_override(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    config = _config(tmp_path)
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    def fake_load_config(_config_dir: Path, *, settings_overrides=None):
+        calls["settings_overrides"] = settings_overrides
+        loaded_config = replace(
+            config,
+            targeted_ms1_shape_identity_activation_policy=settings_overrides[
+                "targeted_ms1_shape_identity_activation_policy"
+            ],
+        )
+        return loaded_config, targets
+
+    monkeypatch.setattr(module, "load_config", fake_load_config)
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+    monkeypatch.setattr(
+        module,
+        "write_excel_from_run_output",
+        lambda *_args, **_kwargs: calls.setdefault("excel", True),
+        raising=False,
+    )
+
+    exit_code = module.main(
+        [
+            "--base-dir",
+            str(tmp_path),
+            "--skip-excel",
+            "--targeted-ms1-shape-identity-activation-policy",
+            "limited_5hmdc_5medc_v1",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["settings_overrides"] == {
+        "targeted_ms1_shape_identity_activation_policy": (
+            "limited_5hmdc_5medc_v1"
+        )
+    }
+    assert calls["run_config"].targeted_ms1_shape_identity_activation_policy == (
+        "limited_5hmdc_5medc_v1"
+    )
+    assert "Excel skipped" in capsys.readouterr().out
+
+
 def test_cli_reports_missing_model_selection_expected_diff_approval_registry(
     tmp_path: Path,
     monkeypatch,
@@ -607,6 +658,35 @@ def test_cli_replay_rejects_targeted_ms1_shape_identity_support_override(
     assert (
         "--replay-manifest cannot be combined with "
         "--targeted-ms1-shape-identity-support-tsv"
+    ) in captured.err
+    assert "run_config" not in calls
+
+
+def test_cli_replay_rejects_targeted_ms1_shape_identity_activation_policy_override(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    manifest_path = _write_replay_manifest(tmp_path)
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module.extractor, "run", _fake_run(calls))
+
+    exit_code = module.main(
+        [
+            "--replay-manifest",
+            str(manifest_path),
+            "--targeted-ms1-shape-identity-activation-policy",
+            "limited_5hmdc_5medc_v1",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert (
+        "--replay-manifest cannot be combined with "
+        "--targeted-ms1-shape-identity-activation-policy"
     ) in captured.err
     assert "run_config" not in calls
 
