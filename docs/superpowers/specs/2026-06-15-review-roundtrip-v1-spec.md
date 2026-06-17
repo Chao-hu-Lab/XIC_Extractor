@@ -59,6 +59,14 @@ application/expected-diff/apply-readiness/changeset planning only
 - Downstream consumer:
   - next review reintegration slice.
 
+Product direction update, 2026-06-17: the long-term target is low-manual
+intervention. The system should generate bounded candidate switches, manual
+boundary recompute proposals, expected-diff packets, and audit outputs so the
+user reviews only a small number of obvious or representative cases. This does
+not relax the current stop rule: selected peak, selected area, counted
+detection, workbook values, or matrix values still must not change without
+stable IDs, sidecar contracts, and approved expected-diff evidence.
+
 ## First slice contract
 
 This slice intentionally does not implement full review roundtrip. It only

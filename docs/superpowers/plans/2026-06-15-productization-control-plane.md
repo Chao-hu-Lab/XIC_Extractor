@@ -59,21 +59,27 @@ product matrix-only output，`narrow_product_writer_expected_diff_acceptance.jso
 缺 overlay/trace evidence、3454 個 trace-matched writes 不符合 high-signal
 clean envelope。若要把 broad scope 也推 ready，下一個 checkpoint 必須補
 broader masked/product-writer oracle，不能把 narrow ready 外推到 4613-row。
-Targeted MS1 shape identity limited opt-in 也已收斂成窄範圍
-`production_ready`：只限 headless explicit support-TSV workflow、
-`limited_5hmdc_5medc_v1`、`5-hmdC + 5-medC`、且產品輸出只能變成
-`detected_flagged`。Default automatic rescue、GUI wiring、以及其他 target
-仍是 blocked，不在這個 ready claim 內。
-ReviewAction selected candidate / manual boundary writer 已 parked；sample metadata cross-module
+This is a release-safety boundary, not a product north-star limit: the product
+direction is to backfill automatically whenever evidence is sufficient, using
+the 72-row slice as the first demonstrator before broadening evidence.
+Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
+`production_ready`：headless explicit support-TSV workflow 和 headless
+auto-limited CLI 都可用，但都只限 `limited_5hmdc_5medc_v1`、
+`5-hmdC + 5-medC`、且產品輸出只能變成 `detected_flagged`。Unflagged
+normal extraction、GUI wiring、以及其他 target 仍不在這個 ready claim 內。
+ReviewAction selected candidate / manual boundary writer 已 parked for current
+release claim；產品方向仍是減少人工審查，之後要用 stable IDs、
+expected-diff、audit gate 重新開 lane，而不是要求使用者審完所有案例。
+sample metadata cross-module
 parity 的 no-output resolver slices 已收斂到 extraction、instrument-QC、
 alignment、RT-normalization anchor diagnostic，不可讓 sample role 直接改
 main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row narrow writer ready slice done | maintain the explicit 72-row high-signal-clean scoped activation writer contract; only pursue broad 4613-row readiness with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes beyond the approved 72-row scope, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row narrow writer ready slice done | maintain the explicit 72-row high-signal-clean scoped activation writer contract while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, or if a RAW rerun would not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
-| Parked | `review_action_reintegration_v1` | parked | candidate sidecar and manual boundary area recompute remain product-decision blocked after audited apply copy | stop if a manual action changes selected peak/area/counting without expected-diff |
+| Parked | `review_action_reintegration_v1` | parked for this release claim | candidate sidecar and manual boundary area recompute remain blocked until stable IDs, sidecar contract, and expected-diff gate exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
 | Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
 
@@ -113,7 +119,7 @@ scope.
 | Lane | Current tier | Current owner / artifact | Product gap | Next checkpoint | WIP owner |
 |---|---:|---|---|---|---|
 | Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | schema version 已鎖；缺 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
-| Targeted MS1 shape identity explicit/limited opt-in | `production_ready` for headless explicit limited support-TSV workflow; default automatic rescue `blocked` | `targeted_ms1_shape_identity_support_tsv`, `targeted_ms1_shape_identity_activation_policy`, `tools/diagnostics/build_targeted_ms1_shape_identity_supports.py`, `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`, 8RAW/85RAW opt-in artifacts | explicit support TSV workflow 有 generic RAW-backed producer、config/CLI consumer、manifest provenance、replay override rejection、support-TSV key-set expected-diff gate；limited policy `limited_5hmdc_5medc_v1` 限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`；default automatic producer/extraction/GUI rescue 尚未啟用 | keep the ready claim scoped to explicit headless support-TSV activation; default rescue requires a separate activation/call-cost contract and broader target evidence | none; explicit limited slice done |
+| Targeted MS1 shape identity limited rescue | `production_ready` for headless explicit support-TSV workflow and headless auto-limited CLI; unflagged normal extraction/GUI still off | `--targeted-ms1-shape-identity-support-tsv`, `--targeted-ms1-shape-identity-auto-limited-default`, `xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer`, `targeted_ms1_shape_identity_auto_diff`, expected-diff gate, 8RAW/85RAW auto artifacts | explicit support TSV workflow 和 auto-limited CLI 都有 support-TSV key-set expected-diff gate；limited policy `limited_5hmdc_5medc_v1` 限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`；無 flag 的 normal extraction 不會自動救，GUI 仍 out of scope | broaden beyond `5-hmdC + 5-medC` only with new expected-diff/RAW evidence; decide later whether unflagged normal extraction should call the auto workflow by default | none for headless limited workflows |
 | Targeted output schema versioning | `production_surface` | `output/schema.py`, manifest `output_schema`, workbook `Run Metadata` | CSV 欄位形狀未改；version 目前透過 manifest/metadata 暴露，不是每列 CSV 欄位 | schema snapshot / downstream handoff profile | none; slice done |
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
@@ -131,7 +137,7 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer; `production_candidate` for broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `seed_guard_decisions.tsv`, `standard_peak_heldout_oracle_results.py`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and narrow writer output under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；`heldout_trace_reintegration_oracle/heldout_oracle_results.tsv` 有 20 個 originally detected、sample-local、高訊號 clean standard trace cases，20/20 pass、20/20 included，最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；`high_signal_clean_activation_scope_audit/activation_high_signal_clean_scope_summary.json` 證明目前 4613 writes 只有 72 個符合同一 high-signal clean envelope，3454 個 trace-matched writes 不符合，1087 個 missing overlay path；`narrow_activation_expected_diff_acceptance.json` 對這 72 rows 通過 delta-level acceptance（duplicate/missing/unexpected/non-eligible/unchanged/blank 都是 0，`product_surface_changed=FALSE`）；`narrow_high_signal_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 證明 explicit writer 只寫這 72 rows，72/72 product delta rows 通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`product_surface_changed=TRUE`，`readiness_tier=production_ready`；`heldout_observed_results.tsv` provenance contract 已鎖 product-writer / masked-rerun / independent-reintegration sources，禁止 oracle/manual/review row 自抄，且 observed source 不能 canonical-match 同 case manifest `oracle_source`；manifest 也要求 originally detected cell status；非標準 peak 仍不可自動 promotion | keep 72-row scope explicit in release docs; broad 4613-row readiness still needs broader masked/product-writer observed oracle | none; narrow writer slice done |
+| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer; `production_candidate` for broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `seed_guard_decisions.tsv`, `standard_peak_heldout_oracle_results.py`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and narrow writer output under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；`heldout_trace_reintegration_oracle/heldout_oracle_results.tsv` 有 20 個 originally detected、sample-local、高訊號 clean standard trace cases，20/20 pass、20/20 included，最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；`high_signal_clean_activation_scope_audit/activation_high_signal_clean_scope_summary.json` 證明目前 4613 writes 只有 72 個符合同一 high-signal clean envelope，3454 個 trace-matched writes 不符合，1087 個 missing overlay path；`narrow_activation_expected_diff_acceptance.json` 對這 72 rows 通過 delta-level acceptance（duplicate/missing/unexpected/non-eligible/unchanged/blank 都是 0，`product_surface_changed=FALSE`）；`narrow_high_signal_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 證明 explicit writer 只寫這 72 rows，72/72 product delta rows 通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`product_surface_changed=TRUE`，`readiness_tier=production_ready`；`heldout_observed_results.tsv` provenance contract 已鎖 product-writer / masked-rerun / independent-reintegration sources，禁止 oracle/manual/review row 自抄，且 observed source 不能 canonical-match 同 case manifest `oracle_source`；manifest 也要求 originally detected cell status；非標準 peak 仍不可自動 promotion | release docs must say 72-row scope is the current safe slice, not the product ceiling; next broadening step needs broader masked/product-writer observed oracle and expected-diff approval for any additional writes | none; narrow writer slice done |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
 
 ## WIP limits
@@ -625,7 +631,7 @@ scope.
 - Evidence: user accepted Backfill heldout oracle first-gate tolerance of boundary error `<=0.1 min` and area relative error `<=10%`; user also accepted `NL_FAIL/NO_MS2` limited opt-in first scope as `5-hmdC + 5-medC` only, with product output limited to `detected_flagged`
 - Product surface changed: docs/control-plane decision only. No default extraction, GUI rescue, matrix writer, workbook schema, or primary matrix behavior changed in this entry.
 - Validation: docs-only decision record; prior gates remain `ruff`, `mypy`, full `pytest`, diagnostics index, `git diff --check`, and no-RAW 85RAW bridge.
-- Remaining blocker: Backfill still needs real/reviewed heldout oracle rows generated under the accepted tolerance plus bounded 85RAW expected-diff approval. `NL_FAIL` limited opt-in still needs implementation evidence before it can be treated as default automatic rescue.
+- Remaining blocker: Backfill still needs real/reviewed heldout oracle rows generated under the accepted tolerance plus bounded 85RAW expected-diff approval. `NL_FAIL` limited opt-in still needs implementation evidence before it can be treated as no-flag default rescue.
 
 ### 2026-06-17 - standard_peak_oracle_tolerance_ceiling_v1
 
@@ -806,7 +812,7 @@ scope.
 ### 2026-06-17 - targeted_ms1_shape_identity_limited_policy_gate_v1
 
 - Previous tier: `production_candidate` for explicit support-TSV workflow only; limited opt-in policy was accepted by user but still missing implementation gate
-- New tier: `production_candidate` for explicit/limited opt-in support-TSV workflow; default automatic rescue remains off
+- New tier: `production_candidate` for explicit/limited opt-in support-TSV workflow; no-flag default rescue remains off
 - Evidence: `targeted_ms1_shape_identity_activation_policy`; CLI flag `--targeted-ms1-shape-identity-activation-policy`; `xic_extractor.targeted_ms1_shape_identity_policy`; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff`; `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`; existing 85RAW gate summary `output/ms1_shape_identity_generic_support_85raw_20260616/limited_default_expected_diff_gate_summary.tsv`
 - Product surface changed: additive settings key, additive CLI override, manifest provenance field, and additive expected-diff gate. Replay mode rejects the new runtime override. Default settings stay `explicit_support_tsv`; no GUI, workbook schema, selected-candidate switch, manual boundary, or default automatic support producer changed.
 - Safe behavior boundary: limited policy accepts supported rows only for `5-hmdC` and `5-medC`; expected-diff gate requires analyte `NL_FAIL` rows to move from `not_counted/FALSE` to `detected_flagged/TRUE` with `own_max_same_peak_support`; matrix diffs are limited to those target measurement columns and must have the same sample/target key set as the long-row diff.
@@ -816,31 +822,31 @@ scope.
 ### 2026-06-17 - targeted_ms1_shape_identity_support_keyset_gate_v1
 
 - Previous tier: `production_candidate` for explicit/limited opt-in support-TSV workflow.
-- New tier: `production_ready` for the headless explicit limited support-TSV workflow only; default automatic rescue remains `blocked`.
+- New tier: `production_ready` for the headless explicit limited support-TSV workflow only; unflagged normal-extraction rescue remained `blocked` at this checkpoint.
 - Evidence: `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py` now requires `--support-tsv`; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff` validates that accepted support TSV sample/target keys exactly match the long-row expected diff; the existing 85RAW generic support artifact still gates at 11 long rows and 66 matrix cells, with 11 supported support-TSV rows and target counts `5-hmdC=10;5-medC=1`.
 - Product surface changed: additive CLI gate input and additive summary metrics (`support_tsv_supported_rows`, `support_tsv_target_counts`). No default settings, normal extraction behavior, GUI, workbook schema, selected candidate, area recompute, or target scope changed.
 - Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed` after the later support-required hardening); no-RAW 85RAW artifact gate rerun with `--support-tsv output\ms1_shape_identity_generic_support_85raw_20260616\targeted_ms1_shape_identity_v0.tsv`, status `pass`, `long_changed_rows=11`, `matrix_changed_cells=66`, `support_tsv_supported_rows=11`; latest full local gate after support-required hardening passed with `ruff`, `mypy`, `pytest -v --tb=short -x` (`3707 passed, 1 skipped`), diagnostics index, and `git diff --check`.
-- Remaining blocker: default automatic rescue still needs a separate activation/call-cost/product contract before support generation can run inside normal extraction. Broader targets beyond `5-hmdC + 5-medC` need separate expected-diff evidence.
-- Next checkpoint: keep release wording to "headless explicit limited support-TSV workflow"; do not call default extraction, GUI, or broader target rescue production-ready.
+- Remaining blocker: unflagged normal-extraction rescue still needed a separate activation/call-cost/product contract before support generation could run without an explicit auto/support flag. Broader targets beyond `5-hmdC + 5-medC` need separate expected-diff evidence.
+- Next checkpoint: keep release wording to "headless explicit limited support-TSV workflow" for this entry; do not call no-flag default extraction, GUI, or broader target rescue production-ready.
 
 ### 2026-06-17 - targeted_ms1_shape_identity_default_rescue_blocker_audit_v1
 
-- Previous tier: `blocked` for default automatic `NL_FAIL` rescue; `production_ready` only for the headless explicit limited support-TSV workflow.
-- New tier: still `blocked` for default automatic rescue; explicit limited support-TSV workflow remains `production_ready`.
-- Evidence: user accepted the limited default product direction (`5-hmdC + 5-medC`, `detected_flagged` only), but the current implementation has no automatic support producer or default support input contract. Normal extraction only consumes `targeted_ms1_shape_identity_support_tsv` when explicitly configured, and default settings remain `explicit_support_tsv` with an empty support TSV.
+- Previous tier: `blocked` for unflagged default `NL_FAIL` rescue; `production_ready` only for the headless explicit limited support-TSV workflow.
+- New tier: still `blocked` for unflagged default rescue at this checkpoint; explicit limited support-TSV workflow remains `production_ready`.
+- Evidence: user accepted the limited default product direction (`5-hmdC + 5-medC`, `detected_flagged` only), but at this checkpoint the implementation had no automatic support producer or default support input contract. Normal extraction consumed `targeted_ms1_shape_identity_support_tsv` only when explicitly configured, and default settings remained `explicit_support_tsv` with an empty support TSV. A later entry adds an explicit headless auto CLI, but no-flag default behavior remains separate.
 - Product surface changed: docs/control-plane wording only. No default settings, normal extraction behavior, GUI, workbook schema, matrix identity, counted detection, selected candidate, or manual boundary behavior changed.
 - Validation: focused gates rerun after the audit: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed` after the later support-required hardening); `uv run pytest tests\test_standard_peak_backfill_productization.py -q` (`5 passed`); `uv run pytest tests\test_provisional_backfill_candidate_gate_cli.py -q` (`8 passed`); `uv run pytest tests\test_settings_new_fields.py tests\test_extractor_run.py::test_run_applies_targeted_ms1_shape_identity_support_tsv tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_activation_policy_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_activation_policy_override tests\test_targeted_ms1_shape_identity_projection.py -q` (`18 passed`); existing 85RAW generic support expected-diff gate rerun with `--support-tsv` still `pass`, 11 long rows, 66 matrix cells, 11 supported support rows.
-- Remaining blocker: to promote default automatic rescue, implement and review an activation/call-cost contract for automatically producing or selecting support rows during normal extraction, then provide expected-diff evidence for the default path. Do not promote by merely changing the default activation policy.
-- Next checkpoint: design the automatic support producer/default input contract only if it can be bounded by foreground RAW cost, expected-diff evidence, and a user-readable activation packet.
+- Remaining blocker: to promote no-flag default rescue, implement and review an activation/call-cost/default-UX contract for automatically producing or selecting support rows during normal extraction, then provide expected-diff evidence for that default path. Do not promote by merely changing the default activation policy.
+- Next checkpoint: design no-flag default activation only if it can be bounded by foreground RAW cost, expected-diff evidence, and a user-readable activation packet.
 
 ### 2026-06-17 - targeted_ms1_shape_identity_support_tsv_required_gate_review_fix_v1
 
 - Previous tier: `production_ready` for the headless explicit limited support-TSV workflow, but subagent reviewer `Cicero` found the CLI/package gate still allowed an output-only pass when `--support-tsv` was omitted.
-- New tier: still `production_ready` for the same narrow workflow after fail-closed gate hardening; default automatic rescue remains `blocked`.
+- New tier: still `production_ready` for the same narrow workflow after fail-closed gate hardening; unflagged normal-extraction rescue remained `blocked` at this checkpoint.
 - Evidence: `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py --support-tsv` is now required; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff` raises when support rows are missing, so the release gate cannot pass without proving support TSV key-set equality.
 - Product surface changed: diagnostic gate contract tightened. No default settings, normal extraction behavior, GUI, workbook schema, matrix identity, counted detection, selected candidate, or manual boundary behavior changed.
 - Validation: focused tests added for missing support rows and missing CLI `--support-tsv`; `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed`); focused `ruff` and `mypy` passed; existing 85RAW generic support expected-diff gate rerun with required `--support-tsv` still `pass`; full local gate passed with `ruff`, `mypy`, `pytest -v --tb=short -x` (`3707 passed, 1 skipped`), diagnostics index, and `git diff --check`.
-- Remaining blocker: none for the explicit limited release gate. Default automatic rescue still needs a separate activation/call-cost/default-support contract.
+- Remaining blocker: none for the explicit limited release gate. Unflagged normal-extraction rescue still needed a separate activation/call-cost/default-support contract at this checkpoint.
 - Next checkpoint: keep any future output-only diff check under a separate `diagnostic_only` name if it is ever needed; do not share the production-ready gate pass wording.
 
 ### 2026-06-17 - targeted_ms1_shape_identity_support_tsv_required_spec_drift_fix_v1
@@ -850,8 +856,73 @@ scope.
 - Evidence: subagent reviewer `Dirac` found one P3 docs drift in `docs/superpowers/specs/2026-06-16-shared-target-untarget-peak-identity-spine-spec.md` where the gate still used old output-only support-gate wording.
 - Product surface changed: docs wording only; the spec now says the gate requires the actual support TSV.
 - Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed`); support-optional wording grep no longer finds Targeted MS1 support-TSV contract drift; `git diff --check` has only LF/CRLF warnings.
-- Remaining blocker: none for this docs drift. Default automatic rescue remains blocked separately.
+- Remaining blocker: none for this docs drift. Unflagged normal-extraction rescue remained blocked separately at this checkpoint.
 - Next checkpoint: commit this checkpoint after staging only the reviewed 9-file productization diff.
+
+### 2026-06-17 - targeted_ms1_shape_identity_auto_limited_cli_v1
+
+- Previous tier: `blocked` for automatic `NL_FAIL/NO_MS2` rescue beyond explicit support TSV; `production_ready` only for headless explicit limited support-TSV workflow.
+- New tier: `production_ready` for the headless auto-limited CLI workflow; unflagged normal extraction and GUI rescue remain off.
+- Evidence: new CLI flag `--targeted-ms1-shape-identity-auto-limited-default`; package support producer `xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer`; auto diff/gate helper `xic_extractor.diagnostics.targeted_ms1_shape_identity_auto_diff`; 8RAW auto smoke at `output/ms1_shape_identity_auto_limited_8raw_20260617/`; 85RAW auto smoke at `output/ms1_shape_identity_auto_limited_85raw_20260617/`; existing 85RAW no-RAW gate mirror at `output/ms1_shape_identity_auto_limited_existing_85raw_gate_20260617/`.
+- Product surface changed: additive CLI flag and additive auto output artifact layout (`baseline/output`, `support/targeted_ms1_shape_identity_v0.tsv`, `final_unverified/output` staging before the gate, `final/output` only after the expected-diff gate passes, expected-diff summaries). Default settings, no-flag extraction behavior, GUI, workbook schema, selected candidate, manual boundary, and broader target scope did not change.
+- Safe behavior boundary: auto workflow always builds support only for `5-hmdC + 5-medC`, applies `limited_5hmdc_5medc_v1`, and fails closed through the same support-TSV key-set expected-diff gate. Accepted changes remain `not_counted/FALSE` to `detected_flagged/TRUE`; clean `detected` is not allowed.
+- Validation: focused lint passed for changed files; focused tests passed (`tests/test_targeted_ms1_shape_identity_auto_diff.py`, support builder, projection, expected-diff gate, and new CLI auto tests; latest focused command reported `29 passed`). 8RAW auto real run passed with `1` support row, `1` long-row change, `6` matrix cells. Existing 85RAW artifact no-RAW auto diff gate passed with `11`/`66`. One foreground 85RAW auto run passed with `11` support rows, `11` long-row changes, `66` matrix cells, diagnostics SHA256 unchanged between baseline/final, and wall-clock `369.2 s`.
+- Remaining blocker: none for headless limited auto CLI. Broader targets need their own evidence; making auto rescue run when the user provides no flag remains a separate product/default UX decision. GUI remains out of scope.
+- Next checkpoint: after subagent review and full local gate, commit this slice. Do not rerun 85RAW again for this lane unless support production/projection/matrix semantics change.
+
+### 2026-06-17 - targeted_ms1_shape_identity_auto_limited_review_fix_v1
+
+- Previous tier: `production_ready` for headless auto-limited CLI, pending
+  subagent review fixes.
+- New tier: unchanged; review blockers fixed.
+- Evidence: subagent reviewers found stale handoff wording and a CLI
+  fail-closed gap where support/gate failures could traceback and leave
+  product-shaped `final/output` CSVs before the expected-diff gate passed.
+- Product surface changed: fail-closed CLI behavior only. The auto workflow now
+  writes the second extraction to `final_unverified/output`, runs the support
+  TSV expected-diff gate there, publishes to `final/output` only after pass, and
+  writes the final method manifest after publish. Support/gate/schema failures
+  return CLI exit code `2` with a concise stderr message and do not publish
+  verified final output.
+- Validation: focused auto CLI tests now include gate-failure clean error and
+  unpublished-final assertions; targeted auto/support focused suite reports
+  `30 passed`. Full local gate is recorded in the handoff after this entry.
+- Remaining blocker: none for explicit headless auto-limited CLI. No-flag
+  default extraction, GUI, and broader target rescue remain separate decisions.
+- Next checkpoint: commit after final subagent acceptance and full local gate.
+
+### 2026-06-17 - product_direction_low_manual_intervention_v1
+
+- Previous tier: unchanged. Backfill narrow 72-row writer is
+  `production_ready`; broad 4613-row standard-path activation remains
+  `production_candidate`; headless Targeted MS1 auto-limited CLI is
+  `production_ready`; ReviewAction selected-candidate/manual-boundary apply
+  remains parked for this release claim.
+- New tier: unchanged; this entry records product direction, not a new behavior
+  promotion.
+- Evidence: user decision on 2026-06-17: Backfill north star is to fill whenever
+  evidence is sufficient, with the 72-row writer as a demonstrator rather than
+  a permanent scope cap; `NL_FAIL` limited rescue should move toward automatic
+  low-manual operation, initially `5-hmdC + 5-medC` and `detected_flagged`
+  only; ReviewAction/reintegration should eventually minimize manual review,
+  with the system responsible for alertness and auditability while the user
+  reviews only a small number of obvious/representative cases.
+- Product surface changed: docs/control-plane wording only. No unflagged
+  default extraction behavior, GUI wiring, workbook schema, matrix schema,
+  selected-candidate switch, manual boundary area recompute, or broad Backfill
+  write scope changed in this entry.
+- Remaining blocker: broad Backfill still needs broader masked/product-writer
+  oracle and expected-diff evidence for any added writes beyond the 72-row
+  high-signal-clean scope. No-flag `NL_FAIL` rescue still needs a separate
+  default/UX activation decision and guard if it is to run without the explicit
+  auto flag. ReviewAction mutation still needs stable IDs, sidecar contracts,
+  expected-diff approval, and audited apply output before it can write selected
+  peak/area/counting changes.
+- Next checkpoint: prioritize bounded automation packets that reduce manual
+  review without broad silent writes: broaden Backfill evidence by evidence
+  class, evaluate whether the targeted auto CLI can later become a no-flag
+  default, and reopen ReviewAction mutation only after the ID/expected-diff
+  contract is concrete.
 
 ### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
 

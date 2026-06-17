@@ -279,6 +279,13 @@ Implementation closeout, 2026-06-16:
   slice is `production_ready`, while the broad 4613-row standard-path seed
   guard lane remains `production_candidate` until it has a broader
   masked/product-writer observed oracle for the full activation scope.
+- Product direction update, 2026-06-17:
+  the 72-row scope is the first safe demonstrator, not the intended ceiling.
+  The product north star is to backfill automatically whenever evidence is
+  sufficient. Future slices should broaden the evidence class or observed-oracle
+  coverage and then approve the additional matrix writes through their own
+  expected-diff packet; they must not silently treat the existing 72-row
+  acceptance as approval for all 4613 broad writes.
 - Validation:
   - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q`
   - `python -m pytest tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_cli_writes_contract_tsv tests\test_standard_peak_shadow_activation_inputs.py::test_standard_peak_heldout_oracle_results_classify_boundary_and_area -q`

@@ -1089,11 +1089,18 @@ Gaussian-smoothed local apex near the paired-ISTD reference mode, and compares
 that trace against a counted reference trace using own-max same-peak identity.
 **Topic group**: targeted NL dropout / MS1 shape identity; reuses
 `xic_extractor.diagnostics.targeted_ms1_shape_identity` and
-`xic_extractor.diagnostics.targeted_ms1_shape_identity_support_builder`.
-**Status note**: Diagnostic-only support producer. It opens RAW files to build
-the support TSV, but does not directly write product output; normal extraction
-only consumes the TSV through explicit opt-in
-`targeted_ms1_shape_identity_support_tsv`.
+`xic_extractor.diagnostics.targeted_ms1_shape_identity_support_builder`; the
+reusable runner lives in
+`xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer` so the
+formal extraction CLI can reuse the same support-producing path.
+**Status note**: Diagnostic-only support producer when run directly. It opens
+RAW files to build the support TSV, but does not directly write product output.
+Normal extraction consumes the TSV only through explicit opt-in
+`targeted_ms1_shape_identity_support_tsv`, while
+`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default` wraps the
+same producer in a bounded headless auto workflow and then requires the
+support-TSV expected-diff gate before claiming the limited `5-hmdC + 5-medC` /
+`detected_flagged` product behavior.
 
 ---
 

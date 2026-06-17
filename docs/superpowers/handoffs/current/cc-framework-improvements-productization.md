@@ -6,31 +6,34 @@
 
 ## 2026-06-17 白話結論
 
-目前這個分支的非 GUI productization goal 又往前收斂一格：Backfill
-現在有一個可以白紙黑字宣稱的窄範圍 `production_ready` slice。具體來說，
-85RAW-derived、originally detected、high-signal clean standard trace
-heldout oracle 20/20 通過；activation scope audit 證明 broad 4613-row
-standard-path activation 裡只有 72 個 writes 落在同一個 high-signal clean
-envelope；新的 explicit opt-in writer 再用
-`--high-signal-clean-activation-scope-audit-tsv` 只寫這 72 rows，真實 no-RAW
-85RAW artifact 跑出 72/72 writes，writer expected-diff acceptance 也通過並
-標 `readiness_tier=production_ready`。
+目前這個分支的非 GUI productization goal 有兩個真正往前推的結論。
 
-重要邊界：這不是說 broad 4613-row Backfill 已 ready。4613 個 actual writes
-裡，3454 個 trace-matched writes 不符合 high-signal clean envelope，1087 個
-缺 overlay/trace evidence；所以 broad lane 仍是 `production_candidate`。
-真正可 release-claim 的是「explicit 72-row high-signal-clean scoped
-Backfill writer」，不是 default extraction，也不是 4613-row broad activation。
+第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
+broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
+現在我們還不能說這 4613 格全部 ready，因為其中只有 72 格落在已被獨立
+oracle 驗過的 high-signal clean 範圍。這 72 格已經有 explicit writer、
+expected-diff acceptance、真實 no-RAW 85RAW artifact，並標
+`readiness_tier=production_ready`。但是你的產品方向已記下來：72 格只是第一個
+示範/放行 slice，不是天花板。北極星是「只要證據足夠就補」，下一步應該擴大
+oracle / expected-diff 證據，把 broad 4613 類似格子逐步推上去，而不是永遠停在
+72 格。
 
-本輪繼續推進後，Targeted MS1 shape identity 也有一個很窄但可講清楚的
-`production_ready` slice：headless explicit support-TSV workflow，且必須使用
-`limited_5hmdc_5medc_v1`，只允許 `5-hmdC + 5-medC`，產品輸出只能從
-`not_counted/FALSE` 變成 `detected_flagged/TRUE`。新的 gate 會把實際
-`targeted_ms1_shape_identity_v0.tsv` support rows 和產品 expected-diff keys
-做 key-set equality；既有 85RAW generic artifact 重跑通過，11 個 support
-rows 對 11 個 changed long rows、66 個 matrix cells。這不是 default
-automatic rescue；normal extraction 不會自動產 support TSV，GUI 也仍 out of
+第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
+support-TSV workflow ready；本輪新增 headless auto-limited CLI：
+`--targeted-ms1-shape-identity-auto-limited-default`。它會自己跑 baseline、
+產生 limited support TSV、再跑 final extraction，最後用同一個 expected-diff
+gate 確認只把 `5-hmdC + 5-medC` 的 `NL_FAIL/NO_MS2` rows 從
+`not_counted/FALSE` 變成 `detected_flagged/TRUE`。8RAW 真跑通過 1 row / 6
+matrix cells；85RAW 真跑一次通過 11 rows / 66 matrix cells，且 support TSV
+key set 和既有 generic artifact 完全一致。這個 headless auto CLI 現在可以講
+`production_ready`。但無旗標 normal extraction 還不會自動救，GUI 仍 out of
 scope。
+
+你最新的決策也已寫進接手語境：未來應該減少人工介入。也就是 Backfill 不應
+要求你人工看完 4613 格，`NL_FAIL` rescue 不應永遠靠手動 support TSV，
+ReviewAction 也不應要求你審所有案例。正確推進方式是：系統自動提出 bounded
+候選、自動寫 expected-diff / audit evidence、只把少量高風險或代表性案例交給你
+抽查。
 
 Subagent reviewer `Cicero` 找到一個 P2：同一個 production-ready gate 原本
 仍允許省略 `--support-tsv`，會退化成 output-only pass。這已修成
@@ -39,14 +42,12 @@ rows 也會直接 raise；focused test 新增缺 support 的紅燈案例，Targe
 gate suite 變成 `9 passed`。所以 ready claim 現在真的綁在 actual support TSV
 key-set equality 上。
 
-本輪後續自我判斷：使用者已接受 `NL_FAIL` limited default 的產品方向，但目前
-可安全宣稱的仍只有 explicit support-TSV workflow。原因是 default automatic
-rescue 不是把 default policy 改成 `limited_5hmdc_5medc_v1` 就結束；normal
-extraction 需要有自動 support TSV producer 或等價的 default input contract，
-而那會新增 RAW/call-cost 行為和 activation expected-diff gate。這輪重跑
-focused settings/extractor/projection tests 與既有 85RAW expected-diff gate，
-結論是 explicit limited slice 仍可保持 `production_ready`，default automatic
-rescue 繼續 `blocked`，直到自動 producer/call-cost/expected-diff packet 完整。
+本輪後續自我判斷：使用者已接受 `NL_FAIL` limited default 的產品方向，而且
+headless auto-limited CLI 已經把這個方向往前推一格。現在可安全宣稱的是兩個
+headless workflows：explicit support-TSV workflow，以及必須明確加
+`--targeted-ms1-shape-identity-auto-limited-default` 的 auto CLI。兩者都只限
+`5-hmdC + 5-medC` / `detected_flagged`。仍不能宣稱的是「無旗標 normal
+extraction 自動 rescue」和 GUI；那需要另外的 default/UX activation contract。
 
 另外盤點了 `Provisional production-candidate gate`：沒有新 code change；現有
 CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
@@ -58,11 +59,11 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD: `4058734`
-- Dirty scope: 沒有 staged file；請以 `git status --short` 為準。本輪目前
-  主要是 Targeted MS1 expected-diff support key-set gate、focused tests、
-  control plane、handoff/spec/index/report 更新。
-- 本地 gate 已跑完:
+- HEAD before current uncommitted slice: `f0c0ca8`
+- Dirty scope: 沒有 staged file；請以 `git status --short` 為準。目前主要是
+  Targeted MS1 auto-limited CLI、support producer package refactor、auto
+  expected-diff gate、README/index/handoff/spec/control-plane 更新。
+- 上一個 checkpoint 的 full local gate 已跑完:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 343 source files`)
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3707 passed, 1 skipped`
@@ -76,6 +77,29 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   - existing 85RAW generic support expected-diff gate rerun with `--support-tsv` -> `pass`, 11 long rows, 66 matrix cells, 11 supported support rows
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\diagnostics\targeted_ms1_shape_identity_expected_diff.py tools\diagnostics\targeted_ms1_shape_identity_expected_diff_gate.py tests\test_targeted_ms1_shape_identity_expected_diff_gate.py` -> pass
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\diagnostics\targeted_ms1_shape_identity_expected_diff.py` -> pass
+- 本輪 auto-limited CLI focused / RAW gate:
+  - changed-file ruff -> pass
+  - targeted auto suite before review fixes -> `29 passed`; after fail-closed
+    staging/error fix -> `30 passed`
+  - existing 85RAW no-RAW auto gate mirror -> `pass`, 11 long rows, 66 matrix cells
+  - 8RAW auto CLI real run -> pass, 1 support row, 1 long row, 6 matrix cells
+  - 85RAW auto CLI real run -> pass, 11 support rows, 11 long rows, 66 matrix cells, wall-clock `369.2 s`
+  - final full local gate after subagent fixes:
+    - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
+    - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 345 source files`)
+    - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3712 passed, 1 skipped`
+    - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py` -> `87 entry points, 166 total files`
+    - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
+- 2026-06-17 subagent review: reviewers `Faraday`, `Raman`, and `Euler`
+  checked the current auto-limited CLI/docs slice. Blocking issues found:
+  stale handoff wording could imply auto CLI was still blocked; support/gate
+  failures could traceback instead of a clean CLI error; final CSVs could be
+  left under product-shaped `final/output` before the gate passed. Fixes:
+  handoff wording now separates explicit auto CLI ready from no-flag default
+  still-off; auto workflow writes second extraction to
+  `final_unverified/output`, runs expected-diff gate there, publishes to
+  `final/output` only after pass, writes final manifest after publish, and
+  returns exit code `2` with concise stderr if support/gate/schema errors occur.
 - 2026-06-17 subagent review: reviewer `Cicero` found the Targeted MS1
   expected-diff CLI/package gate could still pass without `--support-tsv`.
   Fixed by making `--support-tsv` required and by making the package evaluator
@@ -280,6 +304,14 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   `limited_5hmdc_5medc_v1`。這個 policy 只允許 support TSV 內的 supported
   rows 落在 `5-hmdC/5-medC`；default 仍是 `explicit_support_tsv`，所以沒有
   啟用自動 rescue。
+- 2026-06-17 繼續推進: 新增 headless auto-limited CLI
+  `--targeted-ms1-shape-identity-auto-limited-default`。它不是無旗標 default；
+  使用者必須明確加這個 flag。加 flag 後 workflow 會先跑 baseline CSV、
+  自動產 limited support TSV、再跑 final extraction，並輸出
+  `expected_diff_summary.tsv`、`matrix_diff_summary.tsv`、以及
+  `limited_default_expected_diff_gate_summary.tsv`。8RAW real run 通過 1 row，
+  85RAW real run 通過 11 rows / 66 matrix cells，所以這個 headless auto CLI
+  也可列為 `production_ready` for `5-hmdC + 5-medC` / `detected_flagged`。
 - 2026-06-17 85RAW expected-diff gate: 新增
   `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`，並重用
   既有 `output/ms1_shape_identity_generic_support_85raw_20260616/` artifact
@@ -295,7 +327,7 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - 2026-06-17 subagent review: reviewer `Averroes`
   validation-evidence review 無 blocker；接受目前 evidence 只支援
   explicit/limited opt-in `production_candidate`，不支援
-  `production_ready` 或 default automatic rescue。它建議的 key-set equality
+  `production_ready` 或 no-flag default rescue。它建議的 key-set equality
   與 policy-alone no-output-change hardening 已補，focused tests `7 passed`，
   既有 85RAW gate 重跑仍 `pass`。
 - 2026-06-17 繼續推進: Targeted MS1 limited expected-diff gate 現在必須帶
@@ -305,8 +337,9 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   `long_changed_rows=11`、`matrix_changed_cells=66`、
   `support_tsv_supported_rows=11`、target split
   `5-hmdC=10;5-medC=1`。這把 headless explicit limited support-TSV
-  workflow 從 `production_candidate` 推到 `production_ready`；default
-  automatic rescue 仍 `blocked`。本輪 full local gate 也已重跑通過：
+  workflow 從 `production_candidate` 推到 `production_ready`；當時無旗標
+  normal-extraction rescue 仍 `blocked`，後續已新增 explicit auto CLI。
+  本輪 full local gate 也已重跑通過：
   ruff、mypy、full pytest `3705 passed, 1 skipped`、diagnostics index、
   `git diff --check`。
 
@@ -428,7 +461,12 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - 已用 generic TSV 跑一次 85RAW opt-in（沒有重跑 baseline，baseline 沿用 `output/ms1_shape_identity_optin_85raw_20260616/baseline`）：`output/ms1_shape_identity_generic_support_85raw_20260616/optin/output/xic_results_long.csv`。diff summary 在 `output/ms1_shape_identity_generic_support_85raw_20260616/expected_diff_summary.tsv` 和 `matrix_diff_summary.tsv`。
 - Generic 85RAW opt-in 結果：剛好 11 rows 從 `not_counted / FALSE` 變 `detected_flagged / TRUE`，wide matrix 66 cells changed，`xic_diagnostics.csv` SHA256 與 baseline 完全相同。新增 rows 包含 `BenignfatBC0980_DNA / 5-hmdC`、`NormalBC2259_DNA / 5-hmdC`、`NormalBC2270_DNA / 5-hmdC`、`NormalBC2272_DNA / 5-hmdC`、`NormalBC2294_DNA / 5-hmdC`、`NormalBC2264_DNA / 5-medC`，所以不再只限原本 5 rows。
 - 給使用者 review 的整理包: `docs/superpowers/reports/2026-06-16-5hmdc-own-max-optin-review.md`。先看這份，不要直接從一堆 output CSV 開始翻。
-- 使用者已接受第一版 limited opt-in 政策：先限 `5-hmdC + 5-medC`，且 rescue 只能寫 `detected_flagged`，不能寫乾淨 `detected`。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；settings/CLI guard、replay override rejection、manifest provenance、expected-diff gate 也已補上。下一個安全點才是決定是否把 support producer/consumer 接到 default extraction。GUI/default product path 仍不是 production-ready。
+- 使用者已接受第一版 limited opt-in 政策：先限 `5-hmdC + 5-medC`，且 rescue 只能寫 `detected_flagged`，不能寫乾淨 `detected`。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；settings/CLI guard、replay override rejection、manifest provenance、expected-diff gate 也已補上。當時的下一個安全點是決定是否把 support producer/consumer 接到自動 workflow。GUI/no-flag default product path 仍不是 production-ready。
+- 2026-06-17 後續更新: 上面的「下一個安全點」已完成到 headless auto CLI：
+  `--targeted-ms1-shape-identity-auto-limited-default` 會在同一個 run 裡建立
+  support TSV、rerun final extraction、並跑 expected-diff gate。它仍不是無旗標
+  default，也沒有 GUI wiring；但它已經把「手動餵 support TSV」往「少人工
+  自動化」推進一格。
 - Current debug note: `output/debug_tumorbc2294_5hmdc_current_code_20260616_110408/root_cause_note.md`。
 - 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
 - 目前這批 productization 變更仍在工作樹 diff 中，尚未 commit；接手時先看 `git status --short --branch` 和這份 handoff 的最上方「最近變更」。
@@ -960,8 +998,11 @@ RAW-backed 驗證:
 
 - 8RAW 已跑。
 - 85RAW 已集中跑一次。
-- 2026-06-17 沒有重跑 RAW；只用既有 85RAW artifact 做 no-RAW
+- Backfill 2026-06-17 沒有重跑 RAW；只用既有 85RAW artifact 做 no-RAW
   productization bridge。
+- Targeted MS1 auto-limited CLI 2026-06-17 已為新的 readiness decision 跑過
+  一次 8RAW 和一次 foreground 85RAW；85RAW 結果是 11 support rows、11 long
+  rows、66 matrix cells、wall-clock `369.2 s`。
 - 不要在沒有新 production-readiness decision 的情況下再跑一次 85RAW。
 
 詳細 RAW 證據在:

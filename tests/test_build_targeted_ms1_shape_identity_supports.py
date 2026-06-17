@@ -7,6 +7,9 @@ import numpy as np
 
 from tools.diagnostics import build_targeted_ms1_shape_identity_supports as tool
 from xic_extractor.config import Target
+from xic_extractor.diagnostics import (
+    targeted_ms1_shape_identity_support_producer as support_producer,
+)
 from xic_extractor.xic_models import XICTrace
 
 
@@ -29,13 +32,15 @@ def test_run_build_targeted_ms1_shape_identity_supports_writes_generic_rows(
     )
 
     monkeypatch.setattr(
-        tool,
+        support_producer,
         "load_config",
         lambda *_args, **_kwargs: (object(), targets),
     )
     rt = np.linspace(8.7, 9.6, 181)
 
-    def trace_loader(request: tool.TargetedMs1ShapeTraceRequest) -> XICTrace:
+    def trace_loader(
+        request: support_producer.TargetedMs1ShapeTraceRequest,
+    ) -> XICTrace:
         centers = {
             ("RefB", "5-hmdC"): 9.12,
             ("CandidateA", "5-hmdC"): 9.11,

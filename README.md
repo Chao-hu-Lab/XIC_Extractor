@@ -222,9 +222,14 @@ uv run xic-extractor-cli --base-dir .
 | `--parallel-workers` | 覆寫本次 run 的 process worker 數量；只在 `--parallel-mode process` 時用於平行處理 `.raw` |
 | `--skip-excel` | 只輸出 CSV，跳過 Excel workbook；等同本次 run 保留 `keep_intermediate_csv` debug outputs |
 | `--excel` | 保留作相容旗標；Excel conversion 是預設行為 |
+| `--targeted-ms1-shape-identity-auto-limited-default` | 明確啟用 headless limited `NL_FAIL/NO_MS2` rescue：先跑 baseline、建立 `targeted_ms1_shape_identity_v0.tsv` support TSV、再跑 final extraction，並用 expected-diff gate 檢查結果；目前只限 `5-hmdC + 5-medC`，且只能寫 `detected_flagged` |
+| `--targeted-ms1-shape-identity-auto-output-dir` | 搭配上一個 flag 指定 auto workflow artifacts 目錄；gate 通過後會包含 `baseline/output`、`support/`、`final/output`、`expected_diff_summary.tsv`、`matrix_diff_summary.tsv`、和 gate summary；gate 失敗時未驗證輸出只留在 `final_unverified/output`，不可當產品輸出 |
 
 GUI 可在 Settings 的 Advanced 區塊調整 `parallel_mode` 與 `parallel_workers`。
 process mode 目前是 opt-in；預設設定仍保留 serial，確保既有 workflow 不會自動改變。
+Targeted MS1 shape identity auto-limited rescue 也是 opt-in；沒有加
+`--targeted-ms1-shape-identity-auto-limited-default` 時，一般 extraction 不會
+自動 rescue `NL_FAIL/NO_MS2` rows。
 
 `scripts/01_extract_xic.ps1` 已不再是支援的 extraction entry point。
 

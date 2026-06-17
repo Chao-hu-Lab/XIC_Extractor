@@ -4,7 +4,7 @@ Status: design input for implementation.
 
 Validation label: `design_input` / `diagnostic_only`.
 
-Updated: 2026-06-16
+Updated: 2026-06-17
 
 ## Plain-language decision
 
@@ -229,6 +229,9 @@ Do not migrate first:
       reasons without wiring it into normal extraction.
 - [x] Wire an explicit opt-in settings/CLI entry that consumes the support TSV
       during normal extraction while keeping the default path unchanged.
+- [x] Wire a headless auto-limited CLI workflow that builds the support TSV,
+      reruns final extraction, and gates the expected diff for the accepted
+      `5-hmdC + 5-medC` / `detected_flagged` scope.
 
 ## Current evidence from 5-hmdC diagnostic
 
@@ -279,30 +282,35 @@ Current state is split:
   It changed exactly 11 eligible rows from not-counted to detected-flagged:
   10 `5-hmdC` rows plus 1 `5-medC` row. This is the current evidence that the
   rule is not hard-coded to the original five manual review cases.
-- The explicit limited headless support-TSV workflow is now
-  `production_ready` for the named scope only: `limited_5hmdc_5medc_v1`,
-  `5-hmdC + 5-medC`, explicit support TSV consumption, and
-  `detected_flagged` output only. GUI is not connected, the default extraction
-  path remains off, and no RAW evidence provider emits
-  `own_max_same_peak_support` during normal extraction by default.
+- The explicit limited headless support-TSV workflow and the headless
+  auto-limited CLI workflow are now `production_ready` for the named scope only:
+  `limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and `detected_flagged` output
+  only. GUI is not connected, and no-flag normal extraction remains off.
 
-Product decision, 2026-06-17: the limited opt-in policy may be designed for
-`5-hmdC + 5-medC` only, and any future automatic rescue from this path must
-write `detected_flagged` rather than clean `detected`. This is a scope and
-product label decision. The repo now has an opt-in limited activation policy guard
-(`limited_5hmdc_5medc_v1`), config/CLI wiring, replay override rejection,
-method-manifest provenance, and an expected-diff gate over the existing 85RAW
-generic-support artifact. On 2026-06-17 that gate was hardened to require the
-actual `targeted_ms1_shape_identity_v0` support TSV and require the
-accepted support keys to exactly match the long-row product diff keys. The
-default extraction path still remains off: normal extraction does not auto-build
-the support TSV, GUI is not connected, and the default activation policy remains
-`explicit_support_tsv`.
+Product decision, 2026-06-17: the limited policy may be designed for
+`5-hmdC + 5-medC` only, and automatic rescue from this path must write
+`detected_flagged` rather than clean `detected`. This is a scope and product
+label decision. The repo now has an opt-in limited activation policy guard
+(`limited_5hmdc_5medc_v1`), explicit support-TSV config/CLI wiring, replay
+override rejection, method-manifest provenance, and an expected-diff gate over
+the existing 85RAW generic-support artifact. The gate was hardened to require
+the actual `targeted_ms1_shape_identity_v0` support TSV and require the accepted
+support keys to exactly match the long-row product diff keys. A later
+`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default` workflow
+now auto-builds the support TSV and reruns final extraction under the same gate.
+The no-flag extraction path still remains off: normal extraction does not
+auto-build the support TSV unless this explicit auto flag is used, GUI is not
+connected, and the default activation policy remains `explicit_support_tsv`.
+Product direction update, 2026-06-17: the accepted direction is to reduce manual
+intervention. The headless auto-limited CLI is the first bounded automation
+step; a future no-flag default can be considered only with a default/UX
+activation contract, the same expected-diff gate, and evidence that the broader
+workflow remains limited to approved targets and `detected_flagged` output.
 
 Do not claim:
 
 - target/untarget peak identity is unified in product code;
-- default 5-hmdC NL-fail rescue is production-ready;
+- no-flag/default 5-hmdC NL-fail rescue is production-ready;
 - own-max similarity alone can write targeted matrix values;
 - untargeted backfill authority can be reused as targeted authority unchanged.
 
@@ -313,13 +321,13 @@ Allowed claim:
   product activation policies on top.
 - The targeted projection gate now fails closed unless explicit
   `own_max_same_peak_support` is part of the support evidence.
-- The explicit opt-in support-TSV workflow has 8RAW and 85RAW smoke evidence.
-  The first limited headless scope is `production_ready` for
-  `limited_5hmdc_5medc_v1`: `5-hmdC + 5-medC`, explicit support TSV only, and
-  `detected_flagged` output only. The existing 85RAW generic-support
-  expected-diff artifact passes the limited gate with support TSV key-set
-  equality. It still needs a separate default-producer/default-extraction
-  activation decision before it can become default behavior.
+- The explicit opt-in support-TSV workflow and the auto-limited headless CLI
+  workflow have 8RAW and 85RAW smoke evidence. The first limited headless scope
+  is `production_ready` for `limited_5hmdc_5medc_v1`: `5-hmdC + 5-medC` and
+  `detected_flagged` output only. The 85RAW auto workflow changed 11 long rows
+  and 66 matrix cells, with support TSV key-set equality and unchanged
+  diagnostics CSV. It still needs a separate no-flag default/GUI decision before
+  it can become unflagged default behavior.
 
 ## Implementation note, 2026-06-16
 
