@@ -1104,12 +1104,14 @@ reusable runner lives in
 formal extraction CLI can reuse the same support-producing path.
 **Status note**: Diagnostic-only support producer when run directly. It opens
 RAW files to build the support TSV, but does not directly write product output.
-Normal extraction consumes the TSV only through explicit opt-in
-`targeted_ms1_shape_identity_support_tsv`, while
-`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default` wraps the
-same producer in a bounded headless auto workflow and then requires the
-support-TSV expected-diff gate before claiming the limited `5-hmdC + 5-medC` /
-`detected_flagged` product behavior.
+Normal extraction can consume a reviewed TSV through
+`targeted_ms1_shape_identity_support_tsv`. The headless CLI also wraps the same
+producer in a bounded auto workflow, either with
+`--targeted-ms1-shape-identity-auto-limited-default` or by default when the
+effective config policy is `limited_5hmdc_5medc_v1` and no support TSV is
+configured. In both auto paths, product output is published only after the
+support-TSV expected-diff gate passes for the limited `5-hmdC + 5-medC` /
+`detected_flagged` behavior.
 
 ---
 

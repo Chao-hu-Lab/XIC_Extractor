@@ -44,7 +44,7 @@ def test_new_keys_present() -> None:
         "keep_intermediate_csv": "false",
         "model_selection_expected_diff_approval_registry": "",
         "targeted_ms1_shape_identity_support_tsv": "",
-        "targeted_ms1_shape_identity_activation_policy": "explicit_support_tsv",
+        "targeted_ms1_shape_identity_activation_policy": "limited_5hmdc_5medc_v1",
         "ms1_morphology_smoothing_window_points": "15",
     }.items():
         assert CANONICAL_SETTINGS_DEFAULTS[key] == default
@@ -232,7 +232,7 @@ def test_load_config_defaults_scoring_settings_for_legacy_settings_csv(
     assert config.model_selection_expected_diff_approval_registry is None
     assert config.targeted_ms1_shape_identity_support_tsv is None
     assert config.targeted_ms1_shape_identity_activation_policy == (
-        "explicit_support_tsv"
+        "limited_5hmdc_5medc_v1"
     )
     assert config.emit_score_breakdown is False
     assert config.emit_review_report is False

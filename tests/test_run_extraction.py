@@ -371,7 +371,10 @@ def test_cli_passes_targeted_ms1_shape_identity_support_override(
     capsys,
 ) -> None:
     module = _module()
-    config = _config(tmp_path)
+    config = replace(
+        _config(tmp_path),
+        targeted_ms1_shape_identity_activation_policy="limited_5hmdc_5medc_v1",
+    )
     targets = [_target("Analyte")]
     support_path = tmp_path / "targeted_ms1_shape_identity_v0.tsv"
     support_path.write_text("stub\n", encoding="utf-8")
@@ -384,6 +387,9 @@ def test_cli_passes_targeted_ms1_shape_identity_support_override(
             targeted_ms1_shape_identity_support_tsv=Path(
                 settings_overrides["targeted_ms1_shape_identity_support_tsv"]
             ),
+            targeted_ms1_shape_identity_activation_policy=settings_overrides[
+                "targeted_ms1_shape_identity_activation_policy"
+            ],
         )
         return loaded_config, targets
 
@@ -408,15 +414,19 @@ def test_cli_passes_targeted_ms1_shape_identity_support_override(
 
     assert exit_code == 0
     assert calls["settings_overrides"] == {
-        "targeted_ms1_shape_identity_support_tsv": str(support_path.resolve())
+        "targeted_ms1_shape_identity_support_tsv": str(support_path.resolve()),
+        "targeted_ms1_shape_identity_activation_policy": "explicit_support_tsv",
     }
     assert calls["run_config"].targeted_ms1_shape_identity_support_tsv == (
         support_path.resolve()
     )
+    assert calls["run_config"].targeted_ms1_shape_identity_activation_policy == (
+        "explicit_support_tsv"
+    )
     assert "Excel skipped" in capsys.readouterr().out
 
 
-def test_cli_passes_targeted_ms1_shape_identity_activation_policy_override(
+def test_cli_explicit_shape_identity_activation_policy_override_keeps_normal_path(
     tmp_path: Path,
     monkeypatch,
     capsys,
@@ -451,20 +461,66 @@ def test_cli_passes_targeted_ms1_shape_identity_activation_policy_override(
             str(tmp_path),
             "--skip-excel",
             "--targeted-ms1-shape-identity-activation-policy",
-            "limited_5hmdc_5medc_v1",
+            "explicit_support_tsv",
         ]
     )
 
     assert exit_code == 0
     assert calls["settings_overrides"] == {
         "targeted_ms1_shape_identity_activation_policy": (
-            "limited_5hmdc_5medc_v1"
+            "explicit_support_tsv"
         )
     }
     assert calls["run_config"].targeted_ms1_shape_identity_activation_policy == (
-        "limited_5hmdc_5medc_v1"
+        "explicit_support_tsv"
     )
     assert "Excel skipped" in capsys.readouterr().out
+
+
+def test_cli_limited_policy_without_support_tsv_dispatches_auto_limited_default(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    module = _module()
+    config = replace(
+        _config(tmp_path),
+        targeted_ms1_shape_identity_activation_policy="limited_5hmdc_5medc_v1",
+    )
+    targets = [_target("Analyte")]
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(module, "load_config", lambda _config_dir: (config, targets))
+
+    def fake_auto_workflow(run_config, run_targets, **kwargs):
+        calls["auto_config"] = run_config
+        calls["auto_targets"] = run_targets
+        calls["auto_kwargs"] = kwargs
+        return RunOutput(file_results=[], diagnostics=[]), run_config
+
+    def fake_normal_run(*_args, **_kwargs):
+        calls["normal_run_called"] = True
+        return RunOutput(file_results=[], diagnostics=[])
+
+    monkeypatch.setattr(
+        module,
+        "_run_targeted_ms1_shape_identity_auto_limited_default",
+        fake_auto_workflow,
+    )
+    monkeypatch.setattr(module.extractor, "run", fake_normal_run)
+
+    exit_code = module.main(["--base-dir", str(tmp_path), "--skip-excel"])
+
+    assert exit_code == 0
+    assert calls["auto_config"].targeted_ms1_shape_identity_support_tsv is None
+    assert calls["auto_config"].targeted_ms1_shape_identity_activation_policy == (
+        "limited_5hmdc_5medc_v1"
+    )
+    assert calls["auto_targets"] == targets
+    assert calls["auto_kwargs"]["auto_output_dir"] is None
+    assert calls["auto_kwargs"]["settings_overrides"] == {}
+    assert "normal_run_called" not in calls
+    assert "Excel skipped." in capsys.readouterr().out
 
 
 def test_cli_auto_limited_default_runs_baseline_support_final(
@@ -1200,6 +1256,7 @@ def _write_cli_config(config_dir: Path, *, data_dir: Path, dll_dir: Path) -> Non
         "ms2_precursor_tol_da": "0.5",
         "nl_min_intensity_ratio": "0.01",
         "count_no_ms2_as_detected": "false",
+        "targeted_ms1_shape_identity_activation_policy": "explicit_support_tsv",
     }
     with (config_dir / "settings.csv").open(
         "w", newline="", encoding="utf-8-sig"

@@ -57,15 +57,19 @@ predicate contract test，focused oracle suite 現在是 `5 passed`，full local
 是 `3727 passed, 1 skipped`。
 
 第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
-support-TSV workflow ready；本輪新增 headless auto-limited CLI：
-`--targeted-ms1-shape-identity-auto-limited-default`。它會自己跑 baseline、
-產生 limited support TSV、再跑 final extraction，最後用同一個 expected-diff
-gate 確認只把 `5-hmdC + 5-medC` 的 `NL_FAIL/NO_MS2` rows 從
-`not_counted/FALSE` 變成 `detected_flagged/TRUE`。8RAW 真跑通過 1 row / 6
-matrix cells；85RAW 真跑一次通過 11 rows / 66 matrix cells，且 support TSV
-key set 和既有 generic artifact 完全一致。這個 headless auto CLI 現在可以講
-`production_ready`。但無旗標 normal extraction 還不會自動救，GUI 仍 out of
-scope。
+support-TSV workflow ready；後來新增 headless auto-limited CLI：
+`--targeted-ms1-shape-identity-auto-limited-default`。這輪再往前推一格：
+canonical settings default / `settings.example.csv` 的
+`targeted_ms1_shape_identity_activation_policy` 預設已改成
+`limited_5hmdc_5medc_v1`。也就是 headless normal CLI 不加 flag 時，只要沒有
+手動 support TSV，就會自動走同一條 baseline -> support TSV -> final_unverified
+-> expected-diff gate -> final publish workflow。它仍只限 `5-hmdC + 5-medC`，
+且只允許 `NL_FAIL/NO_MS2` rows 從 `not_counted/FALSE` 變成
+`detected_flagged/TRUE`。既有 8RAW 真跑通過 1 row / 6 matrix cells；既有
+85RAW 真跑通過 11 rows / 66 matrix cells；本輪重用既有 85RAW auto artifact
+跑 no-RAW gate 仍通過 11/66，且 support TSV key set 完全一致。這個
+headless no-flag limited default 現在也可以講 `production_ready`。GUI 仍 out
+of scope，其他 target 也沒有被放行。
 
 你最新的決策也已寫進接手語境：未來應該減少人工介入。也就是 Backfill 不應
 要求你人工看完 4613 格，`NL_FAIL` rescue 不應永遠靠手動 support TSV，
@@ -81,11 +85,21 @@ gate suite 變成 `9 passed`。所以 ready claim 現在真的綁在 actual supp
 key-set equality 上。
 
 本輪後續自我判斷：使用者已接受 `NL_FAIL` limited default 的產品方向，而且
-headless auto-limited CLI 已經把這個方向往前推一格。現在可安全宣稱的是兩個
-headless workflows：explicit support-TSV workflow，以及必須明確加
-`--targeted-ms1-shape-identity-auto-limited-default` 的 auto CLI。兩者都只限
-`5-hmdC + 5-medC` / `detected_flagged`。仍不能宣稱的是「無旗標 normal
-extraction 自動 rescue」和 GUI；那需要另外的 default/UX activation contract。
+headless auto-limited workflow 已經有 8RAW/85RAW expected-diff evidence。
+現在可安全宣稱的是三個 headless workflows：explicit support-TSV workflow、
+明確加 `--targeted-ms1-shape-identity-auto-limited-default` 的 auto CLI，以及
+canonical no-flag normal CLI default。三者都只限 `5-hmdC + 5-medC` /
+`detected_flagged`，且 default path 仍走同一個 support TSV key-set
+expected-diff gate。仍不能宣稱的是 GUI 或 broader target rescue。
+
+Subagent review 不是直接 rubber-stamp。`Kant` 擋下一個 P1：manual
+`--targeted-ms1-shape-identity-support-tsv` 會繼承新的 limited default，導致
+手動 TSV 不是原本 explicit path；已修成只要 CLI 明確給 support TSV 且沒有
+另指定 policy，就把本次 run 鎖回 `explicit_support_tsv`。`Socrates` 擋下
+docs drift：ledger/handoff 有幾段仍把 no-flag default 說成 blocked；已改成
+GUI/broader targets 才是 blocked。修後 focused default shard 是 `65 passed`，
+focused ruff 也 passed；full local gate 也已通過：ruff、mypy、diagnostics
+index 都 passed，`pytest -v --tb=short -x` 是 `3728 passed, 1 skipped`。
 
 另外盤點了 `Provisional production-candidate gate`：沒有新 code change；現有
 CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
@@ -97,12 +111,13 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD before current uncommitted width-only slice: `e190553`
-- Current checkpoint scope: Backfill low-height, apex-delta, and width-only
-  heldout oracle support; activation scope audit low-height diagnostic
-  expected-diff columns; focused tests; tools index, handoff, spec, and
-  control-plane updates. There is no low-height, apex-delta, or width-only
-  product writer and no default matrix-writing behavior change.
+- HEAD before current uncommitted Targeted MS1 no-flag default slice:
+  `f6e7298 feat: record width-only backfill probe`
+- Current checkpoint scope: Targeted MS1 no-flag limited default, manual
+  support-TSV explicit-path preservation, settings/example/docs updates, and
+  related tests. There is no GUI wiring, broader target rescue, clean
+  `detected` promotion, selected-candidate switch, manual boundary area
+  recompute, or Backfill broad writer change in this slice.
 - 本輪 Backfill low-scan gate:
   - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
     low-scan clean 真實 no-RAW 85RAW artifact 在
@@ -461,16 +476,18 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   `targeted_ms1_shape_identity_activation_policy`，CLI flag
   `--targeted-ms1-shape-identity-activation-policy`，以及
   `limited_5hmdc_5medc_v1`。這個 policy 只允許 support TSV 內的 supported
-  rows 落在 `5-hmdC/5-medC`；default 仍是 `explicit_support_tsv`，所以沒有
-  啟用自動 rescue。
+  rows 落在 `5-hmdC/5-medC`；當時 default 仍是 `explicit_support_tsv`，
+  所以沒有啟用自動 rescue。後續本輪已把 canonical no-flag CLI default 接到
+  同一個 auto gate。
 - 2026-06-17 繼續推進: 新增 headless auto-limited CLI
-  `--targeted-ms1-shape-identity-auto-limited-default`。它不是無旗標 default；
+  `--targeted-ms1-shape-identity-auto-limited-default`。當時它不是無旗標 default；
   使用者必須明確加這個 flag。加 flag 後 workflow 會先跑 baseline CSV、
   自動產 limited support TSV、再跑 final extraction，並輸出
   `expected_diff_summary.tsv`、`matrix_diff_summary.tsv`、以及
   `limited_default_expected_diff_gate_summary.tsv`。8RAW real run 通過 1 row，
   85RAW real run 通過 11 rows / 66 matrix cells，所以這個 headless auto CLI
   也可列為 `production_ready` for `5-hmdC + 5-medC` / `detected_flagged`。
+  後續本輪已把 canonical no-flag CLI default 改成重用這個 workflow。
 - 2026-06-17 85RAW expected-diff gate: 新增
   `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`，並重用
   既有 `output/ms1_shape_identity_generic_support_85raw_20260616/` artifact
@@ -480,7 +497,7 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   `5-hmdC/5-medC`，product output 全部是 `detected_flagged`，且 gate
   現在會要求 long-row diff 與 matrix diff 的 sample/target key set 一致。
 - 2026-06-17 subagent review: reviewer `Ampere`
-  implementation-contract review 無 P1/P2 blocker；確認 default 仍是
+  implementation-contract review 無 P1/P2 blocker；當時確認 default 仍是
   `explicit_support_tsv`、沒有 support TSV 時不會消費 shape identity、
   replay 會拒絕新 override、manifest 有記錄 activation policy。
 - 2026-06-17 subagent review: reviewer `Averroes`
@@ -497,7 +514,8 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   `support_tsv_supported_rows=11`、target split
   `5-hmdC=10;5-medC=1`。這把 headless explicit limited support-TSV
   workflow 從 `production_candidate` 推到 `production_ready`；當時無旗標
-  normal-extraction rescue 仍 `blocked`，後續已新增 explicit auto CLI。
+  normal-extraction rescue 仍 `blocked`，後續已新增 explicit auto CLI，且本輪
+  已把 canonical no-flag CLI default 接到同一個 auto gate。
   本輪 full local gate 也已重跑通過：
   ruff、mypy、full pytest `3705 passed, 1 skipped`、diagnostics index、
   `git diff --check`。
@@ -517,12 +535,13 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   injection-based reference lookup 也可 consume `sample_metadata_v1`；
   roles/batch/matrix/exclusion 不改 quant output 或 normalized values。
 - Targeted MS1 shape identity / `NL_FAIL` explicit support TSV workflow:
-  `production_ready` for headless explicit limited support-TSV workflow only。
+  `production_ready` for headless explicit limited support-TSV workflow、
+  explicit auto-limited CLI、以及 canonical no-flag normal CLI default。
   `limited_5hmdc_5medc_v1` 已有 settings/CLI guard、manifest provenance、
   replay override rejection、85RAW expected-diff gate，以及 support TSV
   key-set equality gate；範圍只限 `5-hmdC + 5-medC` 且只能寫
-  `detected_flagged`。Default extraction/GUI automatic rescue 仍沒有啟用，
-  broader targets 也還沒有 expected-diff evidence。
+  `detected_flagged`。GUI automatic rescue 仍沒有啟用，broader targets 也還沒有
+  expected-diff evidence。
 - Standard-path backfill seed guard: broad lane 仍是 `production_candidate`；
   high-signal clean standard trace heldout oracle slice 已有可重跑 passing
   evidence。既有能力包含
@@ -620,12 +639,12 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - 已用 generic TSV 跑一次 85RAW opt-in（沒有重跑 baseline，baseline 沿用 `output/ms1_shape_identity_optin_85raw_20260616/baseline`）：`output/ms1_shape_identity_generic_support_85raw_20260616/optin/output/xic_results_long.csv`。diff summary 在 `output/ms1_shape_identity_generic_support_85raw_20260616/expected_diff_summary.tsv` 和 `matrix_diff_summary.tsv`。
 - Generic 85RAW opt-in 結果：剛好 11 rows 從 `not_counted / FALSE` 變 `detected_flagged / TRUE`，wide matrix 66 cells changed，`xic_diagnostics.csv` SHA256 與 baseline 完全相同。新增 rows 包含 `BenignfatBC0980_DNA / 5-hmdC`、`NormalBC2259_DNA / 5-hmdC`、`NormalBC2270_DNA / 5-hmdC`、`NormalBC2272_DNA / 5-hmdC`、`NormalBC2294_DNA / 5-hmdC`、`NormalBC2264_DNA / 5-medC`，所以不再只限原本 5 rows。
 - 給使用者 review 的整理包: `docs/superpowers/reports/2026-06-16-5hmdc-own-max-optin-review.md`。先看這份，不要直接從一堆 output CSV 開始翻。
-- 使用者已接受第一版 limited opt-in 政策：先限 `5-hmdC + 5-medC`，且 rescue 只能寫 `detected_flagged`，不能寫乾淨 `detected`。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；settings/CLI guard、replay override rejection、manifest provenance、expected-diff gate 也已補上。當時的下一個安全點是決定是否把 support producer/consumer 接到自動 workflow。GUI/no-flag default product path 仍不是 production-ready。
+- 使用者已接受第一版 limited opt-in 政策：先限 `5-hmdC + 5-medC`，且 rescue 只能寫 `detected_flagged`，不能寫乾淨 `detected`。五列手動 TSV smoke 和 11-row generic TSV smoke 都已跑完；settings/CLI guard、replay override rejection、manifest provenance、expected-diff gate 也已補上。當時的下一個安全點是決定是否把 support producer/consumer 接到自動 workflow；後續本輪已完成 explicit auto CLI 和 canonical no-flag headless CLI default。GUI 仍不是 production-ready。
 - 2026-06-17 後續更新: 上面的「下一個安全點」已完成到 headless auto CLI：
   `--targeted-ms1-shape-identity-auto-limited-default` 會在同一個 run 裡建立
-  support TSV、rerun final extraction、並跑 expected-diff gate。它仍不是無旗標
-  default，也沒有 GUI wiring；但它已經把「手動餵 support TSV」往「少人工
-  自動化」推進一格。
+  support TSV、rerun final extraction、並跑 expected-diff gate。後續本輪又把
+  canonical no-flag headless CLI default 接到同一 workflow；目前仍沒有 GUI
+  wiring，也沒有 broader target default。
 - Current debug note: `output/debug_tumorbc2294_5hmdc_current_code_20260616_110408/root_cause_note.md`。
 - 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
 - 目前這批 productization 變更仍在工作樹 diff 中，尚未 commit；接手時先看 `git status --short --branch` 和這份 handoff 的最上方「最近變更」。
@@ -697,7 +716,7 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - 共享 own-max evidence 目前仍是 `diagnostic_only`；product projection 端已先 fail-closed。意思是 own-max normalized same-peak similarity 必須和 paired ISTD / area-ratio / boundary policy 一起過，才有資格補進產品矩陣。5-case own-max diagnostic 只證明這五個 NL_FAIL analyte traces 彼此像同一組峰，還不等於 accepted analyte anchor authority。
 - 2026-06-16 已把 owner framing 釘成 shared target/untarget peak identity spine: shared 層只產生峰身份 evidence，targeted/untargeted 各自決定產品輸出；不要把 untargeted backfill authority 原封不動搬成 targeted counted detection。
 - 同日已補第一個 shared helper + no-RAW tests，讓一個既有 overlay diagnostic 使用 shared smoothing helper，並新增 targeted diagnostic adapter 輸出 same-peak evidence rows；接著把 product projection 改成 fail-closed，需要 `own_max_same_peak_support` 才能讓 area-ratio/paired-RT 解除 `NL_FAIL` not-counted policy。現在有 explicit opt-in settings/CLI 入口能把已審閱 TSV support row 投進 projection，但預設仍關閉，所以這還沒有讓 `5-hmdC` 在一般 run 裡自動補值。
-- 8RAW 和 85RAW explicit opt-in smoke 都已跑過，不是只停在 unit test。第一輪 85RAW 5-row 手動 support TSV 只改到 5 個 reviewed rows；後續 generic RAW-backed producer 產出 11 個 support rows，85RAW opt-in 也剛好改到 11 rows。這原本支持 explicit opt-in workflow 進 `production_candidate`；2026-06-17 補上 support TSV key-set gate 後，headless explicit limited support-TSV workflow 已可標 `production_ready`。Default extraction/GUI 仍未 production-ready。
+- 8RAW 和 85RAW explicit opt-in smoke 都已跑過，不是只停在 unit test。第一輪 85RAW 5-row 手動 support TSV 只改到 5 個 reviewed rows；後續 generic RAW-backed producer 產出 11 個 support rows，85RAW opt-in 也剛好改到 11 rows。這原本支持 explicit opt-in workflow 進 `production_candidate`；2026-06-17 補上 support TSV key-set gate 後，headless explicit limited support-TSV workflow 已可標 `production_ready`。後續本輪又把 explicit auto CLI 和 canonical no-flag headless CLI default 推到 `production_ready`；GUI 仍未 production-ready。
 - 這個分支正在補 XIC 的產品化地板，不是在重寫 peak picking 演算法。
 - 最近完成的主軸是 replay executor: `method_manifest.json` + `--replay-manifest`，已跑過 8RAW 和一次 85RAW replay parity。
 - 接著補了三個中期 contract: targeted output schema version、ReviewAction import/application plan/expected-diff/apply-readiness/changeset gate、SampleMetadata schema。

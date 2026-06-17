@@ -78,10 +78,10 @@ direction is to backfill automatically whenever evidence is sufficient, using
 the 72-row high-signal and 42-row low-scan slices as demonstrators before
 broadening evidence.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
-`production_ready`：headless explicit support-TSV workflow 和 headless
-auto-limited CLI 都可用，但都只限 `limited_5hmdc_5medc_v1`、
-`5-hmdC + 5-medC`、且產品輸出只能變成 `detected_flagged`。Unflagged
-normal extraction、GUI wiring、以及其他 target 仍不在這個 ready claim 內。
+`production_ready`：headless explicit support-TSV workflow、headless
+auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
+`limited_5hmdc_5medc_v1`、`5-hmdC + 5-medC`、且產品輸出只能變成
+`detected_flagged`。GUI wiring、以及其他 target 仍不在這個 ready claim 內。
 ReviewAction selected candidate / manual boundary writer 已 parked for current
 release claim；產品方向仍是減少人工審查，之後要用 stable IDs、
 expected-diff、audit gate 重新開 lane，而不是要求使用者審完所有案例。
@@ -134,7 +134,7 @@ scope.
 | Lane | Current tier | Current owner / artifact | Product gap | Next checkpoint | WIP owner |
 |---|---:|---|---|---|---|
 | Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | schema version 已鎖；缺 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
-| Targeted MS1 shape identity limited rescue | `production_ready` for headless explicit support-TSV workflow and headless auto-limited CLI; unflagged normal extraction/GUI still off | `--targeted-ms1-shape-identity-support-tsv`, `--targeted-ms1-shape-identity-auto-limited-default`, `xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer`, `targeted_ms1_shape_identity_auto_diff`, expected-diff gate, 8RAW/85RAW auto artifacts | explicit support TSV workflow 和 auto-limited CLI 都有 support-TSV key-set expected-diff gate；limited policy `limited_5hmdc_5medc_v1` 限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`；無 flag 的 normal extraction 不會自動救，GUI 仍 out of scope | broaden beyond `5-hmdC + 5-medC` only with new expected-diff/RAW evidence; decide later whether unflagged normal extraction should call the auto workflow by default | none for headless limited workflows |
+| Targeted MS1 shape identity limited rescue | `production_ready` for headless explicit support-TSV workflow, headless auto-limited CLI, and canonical no-flag normal CLI default; GUI still off | `targeted_ms1_shape_identity_activation_policy=limited_5hmdc_5medc_v1`, `--targeted-ms1-shape-identity-support-tsv`, `--targeted-ms1-shape-identity-auto-limited-default`, `xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer`, `targeted_ms1_shape_identity_auto_diff`, expected-diff gate, 8RAW/85RAW auto artifacts | default no-flag CLI now runs the same support-TSV key-set expected-diff gate when no support TSV is configured；limited policy `limited_5hmdc_5medc_v1` 限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`；explicit support TSV mode remains available with `explicit_support_tsv`; GUI 仍 out of scope | broaden beyond `5-hmdC + 5-medC` only with new expected-diff/RAW evidence; GUI wiring waits for main GUI reconnect | none for headless limited workflows |
 | Targeted output schema versioning | `production_surface` | `output/schema.py`, manifest `output_schema`, workbook `Run Metadata` | CSV 欄位形狀未改；version 目前透過 manifest/metadata 暴露，不是每列 CSV 欄位 | schema snapshot / downstream handoff profile | none; slice done |
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
@@ -1122,12 +1122,17 @@ scope.
 ### 2026-06-17 - targeted_ms1_shape_identity_auto_limited_cli_v1
 
 - Previous tier: `blocked` for automatic `NL_FAIL/NO_MS2` rescue beyond explicit support TSV; `production_ready` only for headless explicit limited support-TSV workflow.
-- New tier: `production_ready` for the headless auto-limited CLI workflow; unflagged normal extraction and GUI rescue remain off.
+- New tier: `production_ready` for the headless auto-limited CLI workflow; at
+  that checkpoint unflagged normal extraction and GUI rescue remained off.
 - Evidence: new CLI flag `--targeted-ms1-shape-identity-auto-limited-default`; package support producer `xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer`; auto diff/gate helper `xic_extractor.diagnostics.targeted_ms1_shape_identity_auto_diff`; 8RAW auto smoke at `output/ms1_shape_identity_auto_limited_8raw_20260617/`; 85RAW auto smoke at `output/ms1_shape_identity_auto_limited_85raw_20260617/`; existing 85RAW no-RAW gate mirror at `output/ms1_shape_identity_auto_limited_existing_85raw_gate_20260617/`.
-- Product surface changed: additive CLI flag and additive auto output artifact layout (`baseline/output`, `support/targeted_ms1_shape_identity_v0.tsv`, `final_unverified/output` staging before the gate, `final/output` only after the expected-diff gate passes, expected-diff summaries). Default settings, no-flag extraction behavior, GUI, workbook schema, selected candidate, manual boundary, and broader target scope did not change.
+- Product surface changed: additive CLI flag and additive auto output artifact layout (`baseline/output`, `support/targeted_ms1_shape_identity_v0.tsv`, `final_unverified/output` staging before the gate, `final/output` only after the expected-diff gate passes, expected-diff summaries). At that checkpoint, default settings, no-flag extraction behavior, GUI, workbook schema, selected candidate, manual boundary, and broader target scope did not change.
 - Safe behavior boundary: auto workflow always builds support only for `5-hmdC + 5-medC`, applies `limited_5hmdc_5medc_v1`, and fails closed through the same support-TSV key-set expected-diff gate. Accepted changes remain `not_counted/FALSE` to `detected_flagged/TRUE`; clean `detected` is not allowed.
 - Validation: focused lint passed for changed files; focused tests passed (`tests/test_targeted_ms1_shape_identity_auto_diff.py`, support builder, projection, expected-diff gate, and new CLI auto tests; latest focused command reported `29 passed`). 8RAW auto real run passed with `1` support row, `1` long-row change, `6` matrix cells. Existing 85RAW artifact no-RAW auto diff gate passed with `11`/`66`. One foreground 85RAW auto run passed with `11` support rows, `11` long-row changes, `66` matrix cells, diagnostics SHA256 unchanged between baseline/final, and wall-clock `369.2 s`.
-- Remaining blocker: none for headless limited auto CLI. Broader targets need their own evidence; making auto rescue run when the user provides no flag remains a separate product/default UX decision. GUI remains out of scope.
+- Remaining blocker: none for headless limited auto CLI. At this checkpoint,
+  broader targets still needed their own evidence, and making auto rescue run
+  when the user provides no flag remained a separate product/default UX
+  decision. The later `targeted_ms1_shape_identity_no_flag_default_v1` entry
+  records that default decision and guard. GUI remains out of scope.
 - Next checkpoint: after subagent review and full local gate, commit this slice. Do not rerun 85RAW again for this lane unless support production/projection/matrix semantics change.
 
 ### 2026-06-17 - targeted_ms1_shape_identity_auto_limited_review_fix_v1
@@ -1151,6 +1156,48 @@ scope.
   default extraction, GUI, and broader target rescue remain separate decisions.
 - Next checkpoint: commit after final subagent acceptance and full local gate.
 
+### 2026-06-17 - targeted_ms1_shape_identity_no_flag_default_v1
+
+- Previous tier: `production_ready` for headless explicit support-TSV workflow
+  and explicit auto-limited CLI; no-flag normal extraction remained blocked.
+- New tier: `production_ready` for canonical no-flag headless normal CLI
+  default, limited to `limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and
+  `detected_flagged` product output. GUI and broader targets remain out of
+  scope.
+- Evidence: canonical settings defaults, `config/settings.example.csv`, and
+  `CANONICAL_SETTINGS_DEFAULTS` now default
+  `targeted_ms1_shape_identity_activation_policy` to
+  `limited_5hmdc_5medc_v1`. `scripts/run_extraction.py` dispatches the same
+  auto workflow when the effective config has this policy and no
+  `targeted_ms1_shape_identity_support_tsv`; explicit support TSV or
+  `explicit_support_tsv` keeps the old manual/normal path. The no-RAW 85RAW
+  existing auto artifact gate was rerun at
+  `output/ms1_shape_identity_default_no_flag_existing_85raw_gate_20260617/limited_default_expected_diff_gate_summary.tsv`
+  and passed with `long_changed_rows=11`, `matrix_changed_cells=66`,
+  `support_tsv_supported_rows=11`, `target_counts=5-hmdC=10;5-medC=1`, and
+  `matrix_target_counts=5-hmdC=60;5-medC=6`.
+- Product surface changed: canonical settings default and config/example
+  default changed; no new workbook schema, GUI behavior, selected candidate,
+  manual boundary, target scope, or expected-diff semantics changed. The
+  default still publishes final output only after the support TSV key-set
+  expected-diff gate passes.
+- Validation: focused no-flag/default shard
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_settings_new_fields.py tests\test_settings_section.py tests\test_run_extraction.py tests\test_extractor_run.py::test_run_applies_targeted_ms1_shape_identity_support_tsv tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output tests\test_targeted_ms1_shape_identity_projection.py tests\test_targeted_ms1_shape_identity_expected_diff_gate.py tests\test_targeted_ms1_shape_identity_auto_diff.py -q`
+  passed `65` tests after review fixes. Focused ruff for changed code/tests
+  passed. Subagent reviewers `Kant` and `Socrates` found that manual
+  `--targeted-ms1-shape-identity-support-tsv` could inherit the limited default
+  instead of preserving the explicit path, and that docs still had stale
+  no-flag blocked wording. Both findings were fixed before commit. Full local
+  gate passed: `ruff check xic_extractor tests tools scripts`, `mypy
+  xic_extractor`, `pytest -v --tb=short -x` (`3728 passed, 1 skipped`), and
+  `python scripts\check_diagnostics_index.py`.
+- Remaining blocker: none for headless no-flag limited default after final
+  review/gate. GUI rescue and any target beyond `5-hmdC + 5-medC` still need
+  separate expected-diff evidence and UX/product contract.
+- Next checkpoint: commit this slice, then broaden Targeted MS1 only with
+  separate evidence for more targets or continue Backfill broadening by named
+  evidence class.
+
 ### 2026-06-17 - product_direction_low_manual_intervention_v1
 
 - Previous tier: unchanged. Backfill narrow 72-row writer is
@@ -1167,22 +1214,25 @@ scope.
   only; ReviewAction/reintegration should eventually minimize manual review,
   with the system responsible for alertness and auditability while the user
   reviews only a small number of obvious/representative cases.
-- Product surface changed: docs/control-plane wording only. No unflagged
-  default extraction behavior, GUI wiring, workbook schema, matrix schema,
-  selected-candidate switch, manual boundary area recompute, or broad Backfill
-  write scope changed in this entry.
+- Product surface changed: docs/control-plane wording only. The later
+  `targeted_ms1_shape_identity_no_flag_default_v1` entry changes headless
+  no-flag CLI default behavior under the bounded `limited_5hmdc_5medc_v1`
+  contract; this direction entry itself does not change GUI wiring, workbook
+  schema, matrix schema, selected-candidate switch, manual boundary area
+  recompute, or broad Backfill write scope.
 - Remaining blocker: broad Backfill still needs broader masked/product-writer
-  oracle and expected-diff evidence for any added writes beyond the 72-row
-  high-signal-clean scope. No-flag `NL_FAIL` rescue still needs a separate
-  default/UX activation decision and guard if it is to run without the explicit
-  auto flag. ReviewAction mutation still needs stable IDs, sidecar contracts,
+  oracle and expected-diff evidence for any added writes beyond the current
+  scoped ready slices. Headless no-flag `NL_FAIL` limited rescue is now covered
+  by `targeted_ms1_shape_identity_no_flag_default_v1`; GUI rescue and targets
+  beyond `5-hmdC + 5-medC` still need separate expected-diff evidence and UX
+  contract. ReviewAction mutation still needs stable IDs, sidecar contracts,
   expected-diff approval, and audited apply output before it can write selected
   peak/area/counting changes.
 - Next checkpoint: prioritize bounded automation packets that reduce manual
   review without broad silent writes: broaden Backfill evidence by evidence
-  class, evaluate whether the targeted auto CLI can later become a no-flag
-  default, and reopen ReviewAction mutation only after the ID/expected-diff
-  contract is concrete.
+  class, extend Targeted MS1 only after separate evidence for more targets, and
+  reopen ReviewAction mutation only after the ID/expected-diff contract is
+  concrete.
 
 ### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
 

@@ -27,6 +27,7 @@ from xic_extractor.peak_detection.model_selection_approval_registry import (
 )
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.targeted_ms1_shape_identity_policy import (
+    EXPLICIT_SUPPORT_TSV_POLICY,
     LIMITED_HMDC_MEDC_POLICY,
     LIMITED_HMDC_MEDC_TARGETS,
     TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
@@ -68,6 +69,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 settings_overrides["targeted_ms1_shape_identity_support_tsv"] = str(
                     args.targeted_ms1_shape_identity_support_tsv.resolve()
                 )
+                if args.targeted_ms1_shape_identity_activation_policy is None:
+                    settings_overrides[
+                        "targeted_ms1_shape_identity_activation_policy"
+                    ] = EXPLICIT_SUPPORT_TSV_POLICY
             if args.targeted_ms1_shape_identity_activation_policy is not None:
                 settings_overrides[
                     "targeted_ms1_shape_identity_activation_policy"
@@ -109,9 +114,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ValueError as exc:
             raise ConfigError(str(exc)) from exc
 
-        if (
-            replay_request is None
-            and args.targeted_ms1_shape_identity_auto_limited_default
+        if _should_run_targeted_ms1_shape_identity_auto_limited_default(
+            args,
+            config,
+            replay_request=replay_request,
         ):
             try:
                 auto_result = _run_targeted_ms1_shape_identity_auto_limited_default(
@@ -332,6 +338,23 @@ def _validate_targeted_ms1_shape_identity_auto_args(
             "--targeted-ms1-shape-identity-auto-limited-default cannot be "
             f"combined with {joined}"
         )
+
+
+def _should_run_targeted_ms1_shape_identity_auto_limited_default(
+    args: argparse.Namespace,
+    config: ExtractionConfig,
+    *,
+    replay_request,
+) -> bool:
+    if replay_request is not None:
+        return False
+    if args.targeted_ms1_shape_identity_auto_limited_default:
+        return True
+    return (
+        config.targeted_ms1_shape_identity_activation_policy
+        == LIMITED_HMDC_MEDC_POLICY
+        and config.targeted_ms1_shape_identity_support_tsv is None
+    )
 
 
 def _run_targeted_ms1_shape_identity_auto_limited_default(

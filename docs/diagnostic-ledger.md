@@ -41,12 +41,11 @@ known, where the evidence lives, and when a rerun is justified.
 
 ### 2026-06-16/17 5-hmdC Own-Max Support Limited Rescue Smoke
 
-Verdict: `production_ready` for the headless explicit limited
-`targeted_ms1_shape_identity_support_tsv` workflow and for the headless
-`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default`
-workflow. The ready claim is limited to `limited_5hmdc_5medc_v1`,
-`5-hmdC + 5-medC`, and `detected_flagged` output. This is still not unflagged
-normal extraction or GUI rescue: runs without the auto/support flag remain off,
+Verdict: `production_ready` for three headless workflows: explicit reviewed
+`targeted_ms1_shape_identity_support_tsv`, explicit
+`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default`, and the
+canonical no-flag normal CLI default. The ready claim is limited to
+`limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and `detected_flagged` output.
 GUI is not connected, and broader targets need separate expected-diff evidence.
 
 Update on the same date: the original five-row TSV was a handpicked review
@@ -72,6 +71,15 @@ and writes `expected_diff_summary.tsv`, `matrix_diff_summary.tsv`, and
 The 8RAW auto smoke passed with `1` support row, `1` changed long row, and
 `6` matrix cells. A single 85RAW auto smoke passed with `11` support rows,
 `11` changed long rows, `66` matrix cells, and wall-clock `369.2 s`.
+
+2026-06-17 no-flag default update: canonical settings defaults now use
+`targeted_ms1_shape_identity_activation_policy=limited_5hmdc_5medc_v1`. The
+headless CLI dispatches the same auto-limited workflow when no support TSV is
+configured, so no-flag normal CLI output is still gated by support TSV key-set
+expected-diff before `final/output` is published. Reused 85RAW artifact gate:
+`output/ms1_shape_identity_default_no_flag_existing_85raw_gate_20260617/limited_default_expected_diff_gate_summary.tsv`
+passed with 11 changed long rows, 66 matrix cells, and 11 support TSV supported
+rows. GUI and targets beyond `5-hmdC` / `5-medC` remain out of scope.
 
 Current 8RAW smoke:
 `output/ms1_shape_identity_optin_8raw_20260616/`
