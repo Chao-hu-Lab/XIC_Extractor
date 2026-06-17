@@ -1284,6 +1284,35 @@ scope.
   reopen ReviewAction mutation only after the ID/expected-diff contract is
   concrete.
 
+### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
+
+- Lane: documentation/control-plane closeout for the non-GUI productization
+  goal.
+- Previous tier: unchanged. Backfill high-signal and low-scan scoped writers
+  remained `production_ready`; broad 4613-row standard-path activation and the
+  low-height/apex-delta/width-only/shape-margin probes remained
+  `production_candidate`; Targeted MS1 headless no-flag limited default
+  remained `production_ready`; ReviewAction mutation remained parked.
+- New tier: unchanged; this is a handoff drift correction, not a behavior
+  promotion.
+- Evidence: `cc-framework-improvements-productization.md` still had current
+  state wording implying the shape-margin probe was uncommitted, the worktree
+  still contained productization diff/untracked files, and no-flag `NL_FAIL`
+  default rescue was still unavailable. The handoff now points at committed
+  HEAD `3581a9e`, records that productization code/output scope was clean and
+  the branch was ahead 12 before this docs-only refresh, and separates the ready
+  Targeted MS1 headless default from the still-blocked GUI/broader-target
+  surfaces. During this refresh, the only intended dirty scope is the
+  handoff/control-plane docs diff.
+- Validation: targeted stale-wording grep over the handoff after edit; docs-only
+  diff, so no RAW rerun and no matrix/product output validation needed.
+- Remaining blocker: none for this handoff drift. Product blockers remain the
+  same: broad Backfill needs broader oracle/expected-diff approval,
+  ReviewAction mutation needs stable IDs/sidecar/expected-diff approval, and
+  GUI/broader Targeted MS1 rescue remain out of this ready claim.
+- Next checkpoint: if this docs-only refresh is committed, use it as the current
+  handoff baseline before any PR closeout or next Backfill broadening slice.
+
 ### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
 
 - Previous tier: `diagnostic_only` with wording/no-promotion guard listed as next checkpoint.

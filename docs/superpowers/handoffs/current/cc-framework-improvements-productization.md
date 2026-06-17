@@ -10,6 +10,14 @@
 `production_ready` 的結論，外加幾個已收斂成 `production_candidate` /
 blocked-ready 的 Backfill probes。
 
+本次 handoff refresh 只修「現在狀態」的漂移：shape-margin probe 已提交在
+`3581a9e`；這次 docs-only refresh 前，productization code/output 工作樹是
+乾淨的，目前 dirty scope 只應是 handoff/control-plane refresh。Targeted MS1
+headless no-flag limited default 現在是 `production_ready` for
+`5-hmdC + 5-medC` / `detected_flagged`。仍 blocked 的是 GUI、broader target
+rescue、Backfill broad 4613-row 全量寫入、以及 ReviewAction
+selected-candidate/manual-boundary 產品寫回。
+
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
 現在我們仍不能說這 4613 格全部 ready，但這輪已把第二個安全切片推上去了。
@@ -120,12 +128,16 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD before current uncommitted Backfill shape-margin probe:
-  `4df635c feat: enable limited MS1 rescue default`
-- Current checkpoint scope: Backfill shape-margin heldout oracle support and
-  docs/control-plane recording. There is no shape-margin product writer, no
-  Backfill broad writer, no GUI wiring, no selected-candidate switch, and no
-  manual boundary area recompute in this slice.
+- Current HEAD after committed Backfill shape-margin probe:
+  `3581a9e feat: record shape-margin backfill probe`
+- Git state at this handoff refresh: before this docs-only refresh,
+  productization code/output scope was clean and the branch was ahead of origin
+  by 12 commits; the current dirty scope should be this docs-only refresh.
+- Current checkpoint scope: goal-closeout audit after the committed Backfill
+  shape-margin probe and Targeted MS1 no-flag limited default. There is no
+  shape-margin product writer, no Backfill broad writer, no GUI wiring, no
+  selected-candidate switch, and no manual boundary area recompute in this
+  slice.
 - 本輪 Backfill low-scan gate:
   - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
     low-scan clean 真實 no-RAW 85RAW artifact 在
@@ -607,10 +619,11 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
    clean subset 的 writer 已收窄並通過 expected-diff；如果要承認目前
    consolidated bridge 的 4613 writes，就需要
    broader masked/product-writer observed oracle，而不是用這 20 筆代表全部。
-3. 若要推 `NL_FAIL` default 行為，先做新的 activation/call-cost contract：
-   normal extraction 是否可自動產生或自動消費 limited support。現在只能
-   claim headless explicit limited support-TSV workflow `production_ready`；
-   不能 claim default rescue。
+3. `NL_FAIL` headless default 行為已完成到 bounded limited scope。現在可
+   claim `production_ready` 的是 headless explicit support-TSV workflow、
+   headless auto-limited CLI、以及 canonical no-flag normal CLI default；三者
+   都只限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`。仍不能 claim GUI
+   或 broader target default rescue。
 4. `Provisional production-candidate gate` 已記成 guarded `diagnostic_only`；
    不要把 `alignment_production_candidate_gate.tsv` 當 product authority。
 5. Sample metadata 的 no-output resolver parity 已接到
@@ -640,8 +653,10 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   - Targeted MS1 shape identity 的 explicit support-TSV workflow 當時先標
     `production_candidate`，沿用既有 8RAW/85RAW opt-in artifacts；後續已補
     `--support-tsv` key-set gate，把 headless explicit
-    `limited_5hmdc_5medc_v1` workflow 升到 `production_ready`。Default
-    `NL_FAIL` rescue 和 GUI 仍未啟用。
+    `limited_5hmdc_5medc_v1` workflow 升到 `production_ready`。再後續已把
+    headless auto-limited CLI 和 canonical no-flag normal CLI default 也推到
+    `production_ready` for `5-hmdC + 5-medC` / `detected_flagged`。GUI 和
+    broader targets 仍未啟用。
   - ReviewAction selected-candidate switch 與 manual-boundary area recompute
     已明確 `parked`：它們會改 selected peak/area/workbook/matrix，需要人類產品
     決策與 expected-diff gate，不能在本輪偷做。
@@ -679,14 +694,15 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   wiring，也沒有 broader target default。
 - Current debug note: `output/debug_tumorbc2294_5hmdc_current_code_20260616_110408/root_cause_note.md`。
 - 剛剛的 subagent 驗收不是直接 pass: reviewer 擋下 hook fixture 可信度、manifest replay config 綁定、expected-diff stale approval、sample metadata alias collision。這些已在 follow-up 修正並用 focused tests/hook fixture 重跑。
-- 目前這批 productization 變更仍在工作樹 diff 中，尚未 commit；接手時先看 `git status --short --branch` 和這份 handoff 的最上方「最近變更」。
+- 目前這批 productization 變更已分批 commit；接手時仍先看
+  `git status --short --branch` 和本文件最上方的目前 HEAD / clean-state
+  註記。
 - 目前 productization 權威不是這份 handoff: tier、active lane、WIP limit 以 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` 為準。本輪已同步 control plane maintenance log；若衝突，以 control plane 為準。
 - 這份 handoff 只回答「最近做了什麼、什麼真的可用、下一步怎麼接」，不能用「比較新」覆蓋 control plane 或 named spec。
 - 若後續還要 commit/stage，要整包檢查，不要只 stage 修改檔。
-- 目前有多個 untracked files，接手時以 `git status --short --branch` 為準；
-  已知包含本輪新增的 heldout oracle CLI、targeted MS1 expected-diff gate、
-  limited policy helper、以及相應 tests。若後續 commit 這批 productization
-  變更，不要只 stage modified files。
+- 此 handoff refresh 當下沒有未追蹤 productization 檔案；若後續又出現
+  untracked files，仍以 `git status --short --branch` 為準，並按 lane 檢查
+  不要只 stage modified files。
 - Hook/交接設計剛被 critical review 挑戰過；目前已補 repo-local hook guardrail，且 2026-06-16 local closeout 已重跑 hook fixture smoke。
 
 本輪 commit scope 內新增 files:
@@ -744,18 +760,20 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 ## 最近在做什麼
 
-- 目前最新討論已暫時切到 `NL_FAIL` analyte MS1 rescue: 以 `TumorBC2294_DNA / 5-hmdC` 為 debug case，釐清為什麼 trace 有峰但產品仍不能補值。
+- `NL_FAIL` analyte MS1 rescue 已從 `TumorBC2294_DNA / 5-hmdC` debug case
+  收斂到 limited headless product path：現在 no-flag CLI default 只在
+  `5-hmdC + 5-medC` / `detected_flagged` 範圍內自動跑 support/gate。
 - 共享 own-max evidence 目前仍是 `diagnostic_only`；product projection 端已先 fail-closed。意思是 own-max normalized same-peak similarity 必須和 paired ISTD / area-ratio / boundary policy 一起過，才有資格補進產品矩陣。5-case own-max diagnostic 只證明這五個 NL_FAIL analyte traces 彼此像同一組峰，還不等於 accepted analyte anchor authority。
 - 2026-06-16 已把 owner framing 釘成 shared target/untarget peak identity spine: shared 層只產生峰身份 evidence，targeted/untargeted 各自決定產品輸出；不要把 untargeted backfill authority 原封不動搬成 targeted counted detection。
-- 同日已補第一個 shared helper + no-RAW tests，讓一個既有 overlay diagnostic 使用 shared smoothing helper，並新增 targeted diagnostic adapter 輸出 same-peak evidence rows；接著把 product projection 改成 fail-closed，需要 `own_max_same_peak_support` 才能讓 area-ratio/paired-RT 解除 `NL_FAIL` not-counted policy。現在有 explicit opt-in settings/CLI 入口能把已審閱 TSV support row 投進 projection，但預設仍關閉，所以這還沒有讓 `5-hmdC` 在一般 run 裡自動補值。
+- 同日已補第一個 shared helper + no-RAW tests，讓一個既有 overlay diagnostic 使用 shared smoothing helper，並新增 targeted diagnostic adapter 輸出 same-peak evidence rows；接著把 product projection 改成 fail-closed，需要 `own_max_same_peak_support` 才能讓 area-ratio/paired-RT 解除 `NL_FAIL` not-counted policy。後續已新增 explicit support-TSV、headless auto-limited CLI、以及 canonical no-flag normal CLI default；全部仍只限 `5-hmdC + 5-medC` / `detected_flagged`。
 - 8RAW 和 85RAW explicit opt-in smoke 都已跑過，不是只停在 unit test。第一輪 85RAW 5-row 手動 support TSV 只改到 5 個 reviewed rows；後續 generic RAW-backed producer 產出 11 個 support rows，85RAW opt-in 也剛好改到 11 rows。這原本支持 explicit opt-in workflow 進 `production_candidate`；2026-06-17 補上 support TSV key-set gate 後，headless explicit limited support-TSV workflow 已可標 `production_ready`。後續本輪又把 explicit auto CLI 和 canonical no-flag headless CLI default 推到 `production_ready`；GUI 仍未 production-ready。
 - 這個分支正在補 XIC 的產品化地板，不是在重寫 peak picking 演算法。
 - 最近完成的主軸是 replay executor: `method_manifest.json` + `--replay-manifest`，已跑過 8RAW 和一次 85RAW replay parity。
 - 接著補了三個中期 contract: targeted output schema version、ReviewAction import/application plan/expected-diff/apply-readiness/changeset gate、SampleMetadata schema。
 - 2026-06-16 進一步把 ReviewAction changeset 接到 audited output copy，把 `sample_metadata_v1` 接成 extraction `injection_order_source` parity input，並在 manifest 寫清楚 artifact replay policy。
-- 本輪再把 `sample_metadata_v1` 投射到 instrument-QC method-doc sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup，並把 standard-path backfill seed guard 接進 productization bridge。這些都沒有啟用 sample-role matrix behavior、non-standard peak promotion、或 default targeted `NL_FAIL` rescue。
+- 本輪再把 `sample_metadata_v1` 投射到 instrument-QC method-doc sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup，並把 standard-path backfill seed guard 接進 productization bridge。這些都沒有啟用 sample-role matrix behavior、non-standard peak promotion、GUI rescue、或 broader targeted `NL_FAIL` rescue。
 - Alignment 這邊沒有重寫 runtime，只是把文件和 test name 改到符合現況: `alignment_matrix.tsv` 是 machine/validation，不是 production default。
-- 目前還不能誤會成完成的是 GUI replay、selected-candidate switch、manual-boundary area recompute、workbook rewrite、primary matrix rewrite、sample role 影響 quant output、default targeted `NL_FAIL` rescue、或 broad non-standard peak promotion。
+- 目前還不能誤會成完成的是 GUI replay、selected-candidate switch、manual-boundary area recompute、workbook rewrite、primary matrix rewrite、sample role 影響 quant output、GUI/broader targeted `NL_FAIL` rescue、或 broad non-standard peak promotion。
 - 下一個最安全的實作點不是 ReviewAction selected/manual writer；那條已 parked。下一個 agent 應先補 Backfill heldout oracle 的 independent observed boundary/area source，或先定義 boundary-observation contract；sample metadata resolver parity 的 no-output slices 已接到 RT-normalization anchor diagnostic，後續 role-aware 行為必須先有 expected-diff gate。
 
 ## 先講人話
@@ -769,7 +787,7 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - sample metadata 不能每個模組各自猜 QC、blank、batch、matrix；目前 extraction、alignment、RT-normalization anchor diagnostic 已能用 `sample_metadata_v1` 產生既有 injection-order 行為，instrument-QC method-doc workflow 也會輸出 `sample_metadata_v1` sidecar，但 role 還不能改矩陣或 normalized values。
 - alignment 的 production / machine output wording 要跟 runtime 一致，不然會一直誤會 `alignment_matrix.tsv` 是 production default。
 
-目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；ReviewAction 已能安全寫 audited copy；sample metadata 已能接 extraction injection order、instrument-QC metadata sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup；standard-path backfill seed guard 已是 `production_candidate` 且 heldout oracle result gate 可執行；仍沒有改 peak area、selected candidate、workbook、default targeted rescue、normalized value 寫回、或 broad primary matrix semantics。
+目前狀態: replay executor 已經真正跑過 8RAW 和一次 85RAW；ReviewAction 已能安全寫 audited copy；sample metadata 已能接 extraction injection order、instrument-QC metadata sidecar、alignment sample-column ordering、RT-normalization anchor diagnostic injection-order lookup；standard-path backfill seed guard 已是 `production_candidate` 且 heldout oracle result gate 可執行；Targeted MS1 headless no-flag limited default 已可用於 `5-hmdC + 5-medC` / `detected_flagged`；仍沒有改 peak area、selected candidate、workbook、GUI rescue、broader target rescue、normalized value 寫回、或 broad primary matrix semantics。
 
 ## 這輪已經做了什麼
 
