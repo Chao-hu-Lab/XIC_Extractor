@@ -738,6 +738,199 @@ def test_low_height_stability_family_scope_rejects_high_height_rows(
     )
 
 
+def test_heldout_trace_oracle_cli_writes_shape_clean_stability_family_packet(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    stability_tsv = tmp_path / "reintegration_stability_audit.tsv"
+    activation_scope_tsv = tmp_path / "activation_high_signal_clean_scope_audit.tsv"
+    _write_tsv(
+        stability_tsv,
+        [
+            {
+                "schema_version": "standard_peak_reintegration_stability_audit_v1",
+                "source_run_id": "unit-stability",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-shape-clean-sha",
+                "stability_status": "eligible",
+            },
+        ],
+    )
+    _write_tsv(
+        activation_scope_tsv,
+        [
+            {
+                "schema_version": "standard_peak_activation_scope_audit_v1",
+                "source_run_id": "unit-activation",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-shape-clean-sha",
+                "cell_height": str(oracle.MIN_CELL_HEIGHT + 1.0),
+                "apex_aligned_shape_similarity": str(oracle.MIN_SHAPE_SIMILARITY),
+            },
+        ],
+    )
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-shape-clean-family-oracle",
+                "--target-shape-class",
+                "standard_shape_clean_reintegration_stable_candidate_family_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+                "--expected-window-padding-min",
+                "0.5",
+                "--reintegration-stability-audit-tsv",
+                str(stability_tsv),
+                "--activation-scope-audit-tsv",
+                str(activation_scope_tsv),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["target_shape_class"] == (
+        "standard_shape_clean_reintegration_stable_candidate_family_trace"
+    )
+    assert summary["candidate_family_scope_status"] == "applied"
+    assert summary["candidate_family_scope_row_count"] == "1"
+    pool = _read_tsv(output_dir / "heldout_trace_reintegration_full_eligible_pool.tsv")
+    assert float(pool[0]["shape_similarity"]) >= oracle.MIN_SHAPE_SIMILARITY
+
+
+def test_shape_clean_stability_family_scope_rejects_low_shape_rows(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    stability_tsv = tmp_path / "reintegration_stability_audit.tsv"
+    activation_scope_tsv = tmp_path / "activation_high_signal_clean_scope_audit.tsv"
+    _write_tsv(
+        stability_tsv,
+        [
+            {
+                "schema_version": "standard_peak_reintegration_stability_audit_v1",
+                "source_run_id": "unit-stability",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-low-shape-sha",
+                "stability_status": "eligible",
+            },
+        ],
+    )
+    _write_tsv(
+        activation_scope_tsv,
+        [
+            {
+                "schema_version": "standard_peak_activation_scope_audit_v1",
+                "source_run_id": "unit-activation",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-low-shape-sha",
+                "cell_height": str(oracle.MIN_CELL_HEIGHT + 1.0),
+                "apex_aligned_shape_similarity": str(
+                    oracle.MIN_SHAPE_SIMILARITY - 0.001,
+                ),
+            },
+        ],
+    )
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(tmp_path / "oracle"),
+                "--source-run-id",
+                "unit-shape-clean-family-rejects-low-shape",
+                "--target-shape-class",
+                "standard_shape_clean_reintegration_stable_candidate_family_trace",
+                "--reintegration-stability-audit-tsv",
+                str(stability_tsv),
+                "--activation-scope-audit-tsv",
+                str(activation_scope_tsv),
+            ],
+        )
+        == 2
+    )
+
+
+def test_shape_clean_stability_family_scope_requires_shape_column(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    stability_tsv = tmp_path / "reintegration_stability_audit.tsv"
+    activation_scope_tsv = tmp_path / "activation_missing_shape_scope_audit.tsv"
+    _write_tsv(
+        stability_tsv,
+        [
+            {
+                "schema_version": "standard_peak_reintegration_stability_audit_v1",
+                "source_run_id": "unit-stability",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-missing-shape-sha",
+                "stability_status": "eligible",
+            },
+        ],
+    )
+    _write_tsv(
+        activation_scope_tsv,
+        [
+            {
+                "schema_version": "standard_peak_activation_scope_audit_v1",
+                "source_run_id": "unit-activation",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-missing-shape-sha",
+                "cell_height": str(oracle.MIN_CELL_HEIGHT + 1.0),
+            },
+        ],
+    )
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(tmp_path / "oracle"),
+                "--source-run-id",
+                "unit-shape-clean-family-requires-shape-column",
+                "--target-shape-class",
+                "standard_shape_clean_reintegration_stable_candidate_family_trace",
+                "--reintegration-stability-audit-tsv",
+                str(stability_tsv),
+                "--activation-scope-audit-tsv",
+                str(activation_scope_tsv),
+            ],
+        )
+        == 2
+    )
+
+
 def test_low_height_stability_family_scope_requires_scope_inputs(
     tmp_path: Path,
 ) -> None:

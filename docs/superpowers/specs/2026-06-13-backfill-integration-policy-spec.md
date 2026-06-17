@@ -366,6 +366,21 @@ Implementation closeout, 2026-06-16:
   and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
   blockers. This adds 199 cells outside the previous four ready scopes and
   brings the five-scope ready union to 439 cells.
+- Shape-clean reintegration-stable oracle, 2026-06-17:
+  this is a candidate evidence class, not a writer. The oracle target
+  `standard_shape_clean_reintegration_stable_candidate_family_trace` requires
+  both reintegration-stability eligibility and activation-scope
+  `apex_aligned_shape_similarity >=0.95`. On the current 85RAW no-RAW artifact,
+  `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/`
+  records 104 audit-intersection rows / 33 families, expands to 334 available
+  detected trace candidates / 31 families, selects 20 family cases, and passes
+  20/20 with max boundary error `0.0830019 min` and max area relative error
+  `0.0725986`. A local temporary writer probe failed expected-diff because all
+  104 selected rows were already present in the baseline matrix
+  (`matrix_cells_written=0`, `unchanged_delta_row_count=104`). Therefore no
+  shape-clean product writer flag is part of this spec. It may only be reused as
+  generated-policy explanation evidence or as input to a future missing-cell
+  product scope with nonzero expected-diff.
 - Generated policy path, 2026-06-17:
   `standard_peak_backfill_productization.py` now has a broad policy-engine
   entry point, `--backfill-policy-source-audit-tsv`. It generates
@@ -497,11 +512,26 @@ Implementation closeout, 2026-06-16:
     `acceptance_status=pass`, `readiness_tier=production_ready`,
     `expected_scope=low_height_reintegration_stable_eligible_activation_rows`,
     `product_surface_changed=TRUE`, and stability-audit path/SHA provenance.
+  - Real no-RAW shape-clean reintegration-stable oracle:
+    `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/`
+    reports 104 audit-intersection rows / 33 families, 334 available detected
+    trace candidates / 31 families, selected 20/20 pass, max boundary error
+    `0.0830019`, and max area relative error `0.0725986`.
+  - Local temporary shape-clean writer probe:
+    `narrow_shape_clean_reintegration_stable_no_raw_productization/` reports
+    104 selected activation rows but 0 new matrix writes; its
+    `narrow_product_writer_expected_diff_acceptance.json` has
+    `acceptance_status=fail`, `matrix_cells_written=0`,
+    `product_written_delta_row_count=0`, and `unchanged_delta_row_count=104`.
+    The corresponding public writer flag was intentionally removed before
+    commit.
 - Residual production-ready blocker: none for the five explicit scoped writer
   slices. Broad standard-path seed guard activation still needs a broader
   masked/product-writer observed oracle covering the current 4613-row activation
   scope before claiming broad `production_ready`; all-stability 299-row direct
-  writer remains blocked by the family-check area failure.
+  writer remains blocked by the family-check area failure. Shape-clean
+  reintegration-stable currently has passing family-level oracle evidence but no
+  missing-cell product delta, so it remains candidate/explanation evidence.
 
 Implement the seed guard as a pre-activation filter in the existing standard
 peak activation/productization path, close to

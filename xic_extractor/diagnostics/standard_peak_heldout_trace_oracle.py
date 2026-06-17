@@ -42,6 +42,9 @@ SHAPE_MARGIN_CLEAN_SCOPE = "standard_shape_margin_clean_trace"
 LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
     "standard_low_height_reintegration_stable_candidate_family_trace"
 )
+SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
+    "standard_shape_clean_reintegration_stable_candidate_family_trace"
+)
 REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
     "standard_reintegration_stable_candidate_family_trace"
 )
@@ -54,6 +57,7 @@ SUPPORTED_TARGET_SHAPE_CLASSES = (
     WIDTH_CLEAN_SCOPE,
     SHAPE_MARGIN_CLEAN_SCOPE,
     LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
+    SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
     REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
 )
 FULL_TRACE_REINTEGRATION_MODE = "full_trace"
@@ -417,7 +421,7 @@ def _candidate_family_scope(
     )
     activation_rows = read_tsv_required(
         activation_scope_audit_tsv,
-        ACTIVATION_SCOPE_FOR_STABILITY_REQUIRED_COLUMNS,
+        _activation_scope_for_stability_required_columns(target_shape_class),
     )
     _validate_schema_version(
         stability_rows,
@@ -523,9 +527,21 @@ def _candidate_family_scope(
 _REINTEGRATION_STABLE_FAMILY_SCOPES = frozenset(
     (
         LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
+        SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
         REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
     ),
 )
+
+
+def _activation_scope_for_stability_required_columns(
+    target_shape_class: str,
+) -> tuple[str, ...]:
+    if target_shape_class == SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        return (
+            *ACTIVATION_SCOPE_FOR_STABILITY_REQUIRED_COLUMNS,
+            "apex_aligned_shape_similarity",
+        )
+    return ACTIVATION_SCOPE_FOR_STABILITY_REQUIRED_COLUMNS
 
 
 def _family_scope_activation_row_matches(
@@ -539,6 +555,9 @@ def _family_scope_activation_row_matches(
     if target_shape_class == LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
         height = optional_float(activation.get("cell_height"))
         return height is not None and 0.0 <= height < MIN_CELL_HEIGHT
+    if target_shape_class == SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        shape = optional_float(activation.get("apex_aligned_shape_similarity"))
+        return shape is not None and shape >= MIN_SHAPE_SIMILARITY
     return False
 
 
@@ -784,6 +803,8 @@ def _target_shape_class_matches(
         )
     if target_shape_class == LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
         return True
+    if target_shape_class == SHAPE_CLEAN_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        return shape >= MIN_SHAPE_SIMILARITY
     if target_shape_class == REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
         return True
     return False
