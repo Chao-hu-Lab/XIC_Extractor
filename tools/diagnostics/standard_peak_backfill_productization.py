@@ -50,6 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.low_height_reintegration_stable_activation_scope_audit_tsv
             ),
             reintegration_stability_audit_tsv=args.reintegration_stability_audit_tsv,
+            backfill_policy_source_audit_tsv=args.backfill_policy_source_audit_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -191,8 +192,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--reintegration-stability-audit-tsv",
         type=Path,
         help=(
-            "reintegration_stability_audit.tsv required by "
-            "--low-height-reintegration-stable-activation-scope-audit-tsv."
+            "reintegration_stability_audit.tsv used by the low-height "
+            "reintegration-stable scope or the generated backfill policy path."
+        ),
+    )
+    parser.add_argument(
+        "--backfill-policy-source-audit-tsv",
+        type=Path,
+        help=(
+            "Broad activation scope audit TSV used to generate "
+            "standard_peak_backfill_policy.tsv. The product writer only "
+            "applies generated write_ready rows; detected_flagged and blocked "
+            "rows stay audit-only."
         ),
     )
     return parser.parse_args(argv)

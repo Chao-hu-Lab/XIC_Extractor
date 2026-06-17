@@ -362,6 +362,18 @@ Implementation closeout, 2026-06-16:
   and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
   blockers. This adds 199 cells outside the previous four ready scopes and
   brings the five-scope ready union to 439 cells.
+- Generated policy path, 2026-06-17:
+  `standard_peak_backfill_productization.py` now has a broad policy-engine
+  entry point, `--backfill-policy-source-audit-tsv`. It generates
+  `standard_peak_backfill_policy.tsv` for every supplied source-audit row and
+  classifies each candidate as `write_ready`, `detected_flagged`, or `blocked`.
+  The product writer then replays only generated `write_ready` rows through the
+  existing matrix-only activation writer and expected-diff acceptance. This is
+  not a new production-ready claim for broad 4613-row activation: the current
+  ready evidence classes still come from the five approved writer envelopes.
+  The purpose is to stop proliferating manual/nested scoped writer flags and
+  make future broadening happen by adding evidence classes to a single
+  auditable policy engine.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
@@ -1453,6 +1465,14 @@ Explicit opt-in writer contract for named Backfill release slices.
   stability eligible, still written in the activation scope audit, and have
   `cell_height < 2e6`; it writes
   `expected_scope=low_height_reintegration_stable_eligible_activation_rows`.
+- `--backfill-policy-source-audit-tsv` is the broad, non-manual policy path.
+  It consumes a source activation-scope audit covering the candidate universe,
+  optionally joins `--reintegration-stability-audit-tsv`, emits generated
+  `standard_peak_backfill_policy.tsv` /
+  `standard_peak_backfill_policy_summary.json`, and then filters the writer to
+  generated `backfill_policy_decision=write_ready` rows with
+  `expected_scope=backfill_policy_write_ready_rows`. Rows classified as
+  `detected_flagged` or `blocked` stay audit-only and do not write matrix cells.
 
 Only one scoped audit flag may be supplied at a time. When a scoped flag is
 supplied, the productization bridge reads
@@ -1475,6 +1495,14 @@ Fail-closed requirements:
 - The flag does not change default extraction, preset behavior, GUI behavior,
   workbook schema, non-standard promotion policy, or the broad 4613-row
   activation bridge.
+- The generated backfill policy TSV is an audit/replay artifact, not a manual
+  allowlist. Broadening Backfill should add a named evidence class to the
+  policy engine and its source artifacts, with oracle/expected-diff evidence,
+  rather than adding another nested dataset-specific writer flag.
+- `write_ready` policy rows must be `matrix_value_effect=written`, must carry a
+  nonblank evidence class, and must have
+  `backfill_policy_authority_status=writer_approved`; malformed generated or
+  replayed policy rows fail closed before matrix activation.
 
 The productization summary records:
 
@@ -1491,6 +1519,12 @@ The productization summary records:
 - `narrow_product_writer_expected_diff_acceptance_status`;
 - `narrow_product_writer_expected_diff_acceptance_tsv`;
 - `narrow_product_writer_expected_diff_acceptance_json`.
+
+The policy generator also records `source_activation_scope_audit_tsv` and
+artifact SHA in `standard_peak_backfill_policy_summary.json`, plus counts for
+`write_ready`, `detected_flagged`, and `blocked`. This closes the "TSV as human
+white-list" failure mode: every candidate row should receive a machine
+classification, even when only a subset is currently writer-approved.
 
 #### `narrow_product_writer_expected_diff_acceptance.tsv/json`
 
@@ -1535,7 +1569,8 @@ Acceptance expectations:
   `low_scan_clean_eligible_activation_rows`,
   `low_height_clean_eligible_activation_rows`,
   `low_height_low_scan_clean_eligible_activation_rows`, or
-  `low_height_reintegration_stable_eligible_activation_rows`.
+  `low_height_reintegration_stable_eligible_activation_rows`, or
+  `backfill_policy_write_ready_rows`.
 - `acceptance_status=pass` requires the product activation delta rows to match
   the eligible audit keys exactly, with no duplicate, missing, unexpected,
   non-eligible, non-written, unchanged, or blank activated-value rows.
@@ -1543,8 +1578,11 @@ Acceptance expectations:
 - `matrix_cells_written` and `product_written_delta_row_count` must both equal
   `eligible_audit_row_count`.
 - Passing this gate allows a `production_ready` claim only for the explicit
-  scoped writer slice named by `expected_scope`. It does not authorize broad
-  4613-row standard-path activation or default extraction behavior.
+  scoped writer slice or generated `write_ready` policy scope named by
+  `expected_scope`. It does not authorize broad 4613-row standard-path
+  activation or default extraction behavior unless every generated
+  `write_ready` row is backed by approved evidence classes and the same
+  expected-diff gate passes.
 
 ### No-RAW / existing-artifact phase
 

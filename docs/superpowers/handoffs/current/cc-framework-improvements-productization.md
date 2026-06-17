@@ -17,6 +17,15 @@ probes 仍是正式的 `production_candidate`，但 writer 被 heldout oracle fa
 一個小範圍；下一步應把 Backfill 收斂成短、可解釋、domain-meaningful 的
 通用 gate，例如 standard-seeded family、預期 RT window、`0.1 min / 10% area`
 oracle、write-ready / detected-flagged / blocked 分類，而不是繼續無限拆小。
+最新修正正是在處理「TSV 白名單」風險：Backfill productization 現在有
+generated policy path，CLI 收的是完整 source activation audit
+`--backfill-policy-source-audit-tsv`，程式自己輸出
+`standard_peak_backfill_policy.tsv`，把每個 candidate 分成 `write_ready`、
+`detected_flagged`、或 `blocked`。writer 只重放 generated `write_ready`；
+`detected_flagged` 和 `blocked` 留在 audit，不會改 matrix。白話說，TSV 不再是
+人手動改了就能放行的名單，而是 policy engine 的報告和 replay 證據。這沒有
+把 broad 4613 格推到 `production_ready`，但它把後續路徑改成「補 evidence
+class」而不是「再加一個更窄、更巢狀的 writer flag」。
 `AGENTS.md`、`docs/agent-subagent-routing.md`、`docs/agent/planning-workflows.md`
 和 repo-local skills 已補規則：工具、plugins、subagents、CodeGraph、GitHub/gh
 都要積極用；token/cost 不是主要限制。限制的是盲跑：每個長工具鏈或昂貴驗證
@@ -24,11 +33,25 @@ oracle、write-ready / detected-flagged / blocked 分類，而不是繼續無限
 decision map。同等安全與證據下，一律走最簡單、最短、最容易維護的產品規則、
 實作與驗證路徑。
 
+本輪最新程式驗證：focused ruff 通過；`uv run pytest
+tests\test_standard_peak_backfill_productization.py -q` 為 `22 passed`。新增測試
+不是只放行某個特徵，而是用四種 row 同時驗證：既有 high-signal evidence 可
+`write_ready`、低高度 reintegration-stable 可 `write_ready`、穩定但缺 writer
+oracle 的 row 只能 `detected_flagged`、缺 writer-approved evidence 的 row
+`blocked`，且 matrix 只寫前兩者。Subagent review 又抓到兩個有效缺口：
+public package API 不應接受手寫 policy TSV、trace mismatch 不能被 clean status
+蓋過；已修成 public API 只收 source audit，且 trace 不 matched 時 generated
+policy 會 blocked 而不寫 matrix。修完後 full local gate 也過：
+`ruff check xic_extractor tests`、`mypy xic_extractor`、
+`pytest -v --tb=short -x` (`3759 passed, 1 skipped`)、以及
+`scripts\check_diagnostics_index.py`。
+
 2026-06-17 規則檢討結果：三個 read-only subagent review 已完成。strategy
 reviewer 和 implementation/contract reviewer 都無 blocker；docs-handoff
 reviewer 找到 handoff PR/CI 狀態過期，已在「下一步建議」改成目前實況。
-control plane 也補了硬 gate：未來新增 Backfill scoped writer 必須說明它驗證的
-broader evidence class，以及它如何推進 broad 4613-row decision；否則只能留
+control plane 也補了硬 gate：未來 Backfill broadening 應優先把新的 broader
+evidence class 接進 generated policy engine，說明它如何推進 broad 4613-row
+decision；若只是再加一層 scoped/dataset 形容詞，只能留
 `production_candidate`，不能宣稱 `production_ready`。
 
 本次主線續推有兩個部分。第一，讀完並收進
@@ -1380,11 +1403,12 @@ RAW-backed 驗證:
    - PR #85 已存在：`https://github.com/Chao-hu-Lab/XIC_Extractor/pull/85`，
      base 是 `master`，head 是 `cc/framework-improvements`。
    - Remote CI 對 pushed head `3b10731745865731482a9da62cd49e951f7dcc65`
-     是綠的：lint、typecheck、Python 3.11 tests、Python 3.12 tests 都
-     success。
-   - Local `HEAD` 是 `a5828392`，branch 目前 ahead 19，且還有本輪
-     workflow-rule / handoff docs dirty diff。下一步若要 closeout，是先審完、
-     commit、push 這批 intended docs changes，再重看 PR CI。
+     曾是綠的：lint、typecheck、Python 3.11 tests、Python 3.12 tests 都
+     success；但本機現在已超前，PR CI 需要在 push 後重看。
+   - Local `HEAD` 是 `55f9e4b8`，branch 目前 ahead 20，且這輪 generated
+     Backfill policy path 還是 dirty diff。另有
+     `docs/agent-subagent-routing.md` dirty diff 是前一輪/其他 agent 留下的
+     workflow-rule 變更，commit 時不要不小心混入除非刻意收它。
 
 2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做已完成 scoped writer。
    - 目前 explicit 72-row high-signal-clean scoped writer 是 `production_ready`。
@@ -1394,6 +1418,12 @@ RAW-backed 驗證:
    - 目前 explicit 220-row low-height reintegration-stable scoped writer 也是
      `production_ready`；它新增 199 個不在前四個 writer scope 的 ready
      cells，五個 ready scope 聯集為 439 cells。
+   - 這輪新增 generated Backfill policy path：
+     `--backfill-policy-source-audit-tsv` 會對完整 source audit 產出
+     `standard_peak_backfill_policy.tsv`，每列自動分成 `write_ready`、
+     `detected_flagged`、或 `blocked`；writer 只寫 generated `write_ready`。
+     這是後續 broadening 的共同入口，不是人工 TSV 白名單，也不是 broad
+     4613-row ready 宣稱。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
      scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中
@@ -1417,11 +1447,13 @@ RAW-backed 驗證:
      writers，也不應重做這次已完成的 low-height reintegration-stable writer。
      apex-delta、width-only、shape-margin 仍要先解 oracle failures。下一個
      Backfill gate 應把這 299-row pool 送進 masked/product-writer oracle，或再
-     補 local S/N / selectivity、cohort-anchored expected window，並用預先宣告的
-     strata + lockbox 防止 cherry-picking。
-   - 新 scoped writer 不能只靠再加一層資料集形容詞來宣稱 ready。它必須說明
-     自己驗證的 broader evidence class、如何推進 broad 4613-row decision，
-     以及通過哪個 heldout/masked/product-writer oracle 和 expected-diff。
+     補 local S/N / selectivity、cohort-anchored expected window，並把通過的
+     evidence class 接進 generated policy engine；同時用預先宣告的 strata +
+     lockbox 防止 cherry-picking。
+   - 新 broadening 不能只靠再加一層資料集形容詞來宣稱 ready。它必須說明
+     自己驗證的 broader evidence class、如何讓 policy engine 自動分類整個
+     source audit、如何推進 broad 4613-row decision，以及通過哪個
+     heldout/masked/product-writer oracle 和 expected-diff。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。

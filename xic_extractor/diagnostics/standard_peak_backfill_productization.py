@@ -42,6 +42,12 @@ from xic_extractor.tabular_io import (
 )
 
 SCHEMA_VERSION = "standard_peak_backfill_productization_v1"
+BACKFILL_POLICY_SCHEMA_VERSION = "standard_peak_backfill_policy_v1"
+BACKFILL_POLICY_DECISION_COLUMN = "backfill_policy_decision"
+BACKFILL_POLICY_WRITE_READY = "write_ready"
+BACKFILL_POLICY_ALLOWED_DECISIONS = frozenset(
+    {"write_ready", "detected_flagged", "blocked"},
+)
 NARROW_PRODUCT_WRITER_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
     "standard_peak_narrow_product_writer_expected_diff_acceptance_v1"
 )
@@ -127,6 +133,42 @@ REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS = (
     "matrix_value_source_row_sha256",
     "stability_status",
 )
+BACKFILL_POLICY_REQUIRED_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "peak_hypothesis_id",
+    "sample_id",
+    "matrix_value_effect",
+    "matrix_value_source_row_sha256",
+    BACKFILL_POLICY_DECISION_COLUMN,
+    "backfill_policy_evidence_class",
+    "backfill_policy_authority_status",
+    "backfill_policy_reason",
+)
+BACKFILL_POLICY_OUTPUT_COLUMNS = (
+    "schema_version",
+    "source_run_id",
+    "feature_family_id",
+    "peak_hypothesis_id",
+    "sample_id",
+    "matrix_value_effect",
+    "matrix_value_source_row_sha256",
+    BACKFILL_POLICY_DECISION_COLUMN,
+    "backfill_policy_evidence_class",
+    "backfill_policy_authority_status",
+    "backfill_policy_reason",
+    "ready_evidence_classes",
+    "stability_status",
+    "backfill_policy_blockers",
+)
+BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS = (
+    *ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+    "low_scan_clean_status",
+    "low_height_clean_status",
+    "low_height_low_scan_clean_status",
+    "cell_height",
+    "trace_match_status",
+)
 LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN = (
     "low_height_reintegration_stable_status"
 )
@@ -184,6 +226,9 @@ class _ActivationScopeRequest:
     label: str
     no_rows_blocker: str
     ready_next_action: str
+    eligible_value: str = "eligible"
+    required_columns: tuple[str, ...] | None = None
+    schema_version: str = ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION
     reintegration_stability_audit_tsv: Path | None = None
 
 
@@ -208,6 +253,7 @@ def run_standard_peak_backfill_productization(
     low_height_low_scan_clean_activation_scope_audit_tsv: Path | None = None,
     low_height_reintegration_stable_activation_scope_audit_tsv: Path | None = None,
     reintegration_stability_audit_tsv: Path | None = None,
+    backfill_policy_source_audit_tsv: Path | None = None,
 ) -> StandardPeakBackfillProductizationOutputs:
     """Apply standard-peak projection accepts and optionally render synced gallery."""
 
@@ -225,6 +271,14 @@ def run_standard_peak_backfill_productization(
         alignment_matrix_tsv=alignment_matrix_tsv,
         alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
     )
+    generated_policy_tsv: Path | None = None
+    if backfill_policy_source_audit_tsv is not None:
+        generated_policy_tsv = _write_backfill_policy_from_source_audit(
+            source_audit_tsv=backfill_policy_source_audit_tsv,
+            reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+            output_dir=output_dir,
+            source_run_id=source_run_id,
+        )
     activation_scope = _activation_scope_request(
         high_signal_clean_activation_scope_audit_tsv=(
             high_signal_clean_activation_scope_audit_tsv
@@ -242,6 +296,7 @@ def run_standard_peak_backfill_productization(
             low_height_reintegration_stable_activation_scope_audit_tsv
         ),
         reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+        activation_policy_tsv=generated_policy_tsv,
     )
     (
         activation_shadow_rows,
@@ -256,6 +311,9 @@ def run_standard_peak_backfill_productization(
         activation_scope_contract=activation_scope.contract,
         scope_status_column=activation_scope.status_column,
         scope_label=activation_scope.label,
+        scope_eligible_value=activation_scope.eligible_value,
+        scope_required_columns=activation_scope.required_columns,
+        expected_schema_version=activation_scope.schema_version,
     )
     activation_index = build_standard_peak_activation_inputs(
         activation_shadow_rows,
@@ -357,6 +415,7 @@ def run_standard_peak_backfill_productization(
                     application_summary=application_summary,
                     source_run_id=source_run_id,
                     scope_status_column=activation_scope.status_column,
+                    scope_eligible_value=activation_scope.eligible_value,
                     expected_scope=activation_scope.contract,
                     no_rows_blocker=activation_scope.no_rows_blocker,
                     ready_next_action=activation_scope.ready_next_action,
@@ -608,6 +667,219 @@ def _summary_row(
     }
 
 
+def _write_backfill_policy_from_source_audit(
+    *,
+    source_audit_tsv: Path,
+    reintegration_stability_audit_tsv: Path | None,
+    output_dir: Path,
+    source_run_id: str,
+) -> Path:
+    source_rows = tuple(
+        read_tsv_required(
+            source_audit_tsv,
+            BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+        ),
+    )
+    _validate_scope_schema(
+        source_rows,
+        source_audit_tsv,
+        expected_schema_version=ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION,
+    )
+    stability_by_sha = _eligible_stability_by_sha(reintegration_stability_audit_tsv)
+    policy_rows = tuple(
+        _backfill_policy_row(
+            row,
+            source_run_id=source_run_id,
+            stability_by_sha=stability_by_sha,
+        )
+        for row in source_rows
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    policy_tsv = output_dir / "standard_peak_backfill_policy.tsv"
+    write_tsv(
+        policy_tsv,
+        policy_rows,
+        BACKFILL_POLICY_OUTPUT_COLUMNS,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
+    policy_summary = _backfill_policy_summary_row(
+        policy_rows,
+        source_run_id=source_run_id,
+        source_audit_tsv=source_audit_tsv,
+        reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+        policy_tsv=policy_tsv,
+    )
+    (output_dir / "standard_peak_backfill_policy_summary.json").write_text(
+        json.dumps(policy_summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return policy_tsv
+
+
+def _eligible_stability_by_sha(
+    reintegration_stability_audit_tsv: Path | None,
+) -> dict[str, Mapping[str, str]]:
+    if reintegration_stability_audit_tsv is None:
+        return {}
+    rows = read_tsv_required(
+        reintegration_stability_audit_tsv,
+        REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    _validate_stability_schema(rows, reintegration_stability_audit_tsv)
+    eligible_rows = tuple(
+        row
+        for row in rows
+        if text_value(row.get("stability_status")) == "eligible"
+        and text_value(row.get("matrix_value_effect")) == "written"
+    )
+    eligible_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in eligible_rows
+    )
+    duplicates = _duplicates(eligible_shas)
+    if duplicates:
+        raise ValueError(
+            "reintegration stability audit has duplicate eligible "
+            "matrix_value_source_row_sha256 values: "
+            f"{';'.join(duplicates[:10])}",
+        )
+    return {
+        text_value(row.get("matrix_value_source_row_sha256")): row
+        for row in eligible_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    }
+
+
+def _backfill_policy_row(
+    row: Mapping[str, str],
+    *,
+    source_run_id: str,
+    stability_by_sha: Mapping[str, Mapping[str, str]],
+) -> dict[str, str]:
+    sha = text_value(row.get("matrix_value_source_row_sha256"))
+    ready_evidence = list(_ready_evidence_classes(row))
+    stability_row = stability_by_sha.get(sha)
+    stability_status = (
+        text_value(stability_row.get("stability_status")) if stability_row else ""
+    )
+    if _low_height_stability_ready(row, stability_row):
+        ready_evidence.append("low_height_reintegration_stable")
+
+    if ready_evidence:
+        decision = BACKFILL_POLICY_WRITE_READY
+        authority = "writer_approved"
+        reason = "production_ready_scope:" + ",".join(ready_evidence)
+        blockers = ""
+    elif stability_row is not None:
+        decision = "detected_flagged"
+        authority = "review_only"
+        reason = "boundary_stable_candidate_needs_masked_or_product_writer_oracle"
+        blockers = "missing_writer_approved_oracle"
+    else:
+        decision = "blocked"
+        authority = "blocked"
+        reason = _blocked_policy_reason(row)
+        blockers = reason
+
+    return {
+        "schema_version": BACKFILL_POLICY_SCHEMA_VERSION,
+        "source_run_id": source_run_id,
+        "feature_family_id": text_value(row.get("feature_family_id")),
+        "peak_hypothesis_id": text_value(row.get("peak_hypothesis_id")),
+        "sample_id": text_value(row.get("sample_id")),
+        "matrix_value_effect": text_value(row.get("matrix_value_effect")),
+        "matrix_value_source_row_sha256": sha,
+        BACKFILL_POLICY_DECISION_COLUMN: decision,
+        "backfill_policy_evidence_class": ",".join(ready_evidence),
+        "backfill_policy_authority_status": authority,
+        "backfill_policy_reason": reason,
+        "ready_evidence_classes": ",".join(ready_evidence),
+        "stability_status": stability_status,
+        "backfill_policy_blockers": blockers,
+    }
+
+
+def _ready_evidence_classes(row: Mapping[str, str]) -> tuple[str, ...]:
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return ()
+    if text_value(row.get("trace_match_status")) != "matched":
+        return ()
+    evidence: list[str] = []
+    for column, evidence_class in (
+        ("high_signal_clean_status", "high_signal_clean"),
+        ("low_scan_clean_status", "low_scan_clean"),
+        ("low_height_clean_status", "low_height_clean"),
+        ("low_height_low_scan_clean_status", "low_height_low_scan_clean"),
+    ):
+        if text_value(row.get(column)) == "eligible":
+            evidence.append(evidence_class)
+    return tuple(evidence)
+
+
+def _low_height_stability_ready(
+    row: Mapping[str, str],
+    stability_row: Mapping[str, str] | None,
+) -> bool:
+    if stability_row is None:
+        return False
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return False
+    if text_value(row.get("trace_match_status")) != "matched":
+        return False
+    if text_value(row.get("feature_family_id")) != text_value(
+        stability_row.get("feature_family_id"),
+    ):
+        return False
+    height = optional_float(row.get("cell_height"))
+    return (
+        height is not None
+        and height >= 0.0
+        and height < MIN_LOW_HEIGHT_REINTEGRATION_STABLE_HEIGHT
+    )
+
+
+def _blocked_policy_reason(row: Mapping[str, str]) -> str:
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return "not_written_activation_row"
+    if text_value(row.get("trace_match_status")) != "matched":
+        return "missing_trace_evidence"
+    return "no_writer_approved_evidence_class"
+
+
+def _backfill_policy_summary_row(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    source_run_id: str,
+    source_audit_tsv: Path,
+    reintegration_stability_audit_tsv: Path | None,
+    policy_tsv: Path,
+) -> dict[str, str]:
+    decision_counts = Counter(
+        text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN)) for row in rows
+    )
+    return {
+        "schema_version": BACKFILL_POLICY_SCHEMA_VERSION,
+        "source_run_id": source_run_id,
+        "source_activation_scope_audit_tsv": str(source_audit_tsv),
+        "source_activation_scope_audit_sha256": file_sha256(source_audit_tsv),
+        "reintegration_stability_audit_tsv": _path_text(
+            reintegration_stability_audit_tsv,
+        ),
+        "reintegration_stability_audit_sha256": (
+            ""
+            if reintegration_stability_audit_tsv is None
+            else file_sha256(reintegration_stability_audit_tsv)
+        ),
+        "backfill_policy_tsv": str(policy_tsv),
+        "backfill_policy_sha256": file_sha256(policy_tsv),
+        "policy_row_count": str(len(rows)),
+        "write_ready_row_count": str(decision_counts[BACKFILL_POLICY_WRITE_READY]),
+        "detected_flagged_row_count": str(decision_counts["detected_flagged"]),
+        "blocked_row_count": str(decision_counts["blocked"]),
+    }
+
+
 def _activation_scope_request(
     *,
     high_signal_clean_activation_scope_audit_tsv: Path | None,
@@ -616,10 +888,12 @@ def _activation_scope_request(
     low_height_low_scan_clean_activation_scope_audit_tsv: Path | None,
     low_height_reintegration_stable_activation_scope_audit_tsv: Path | None,
     reintegration_stability_audit_tsv: Path | None,
+    activation_policy_tsv: Path | None,
 ) -> _ActivationScopeRequest:
     requested = tuple(
         path
         for path in (
+            activation_policy_tsv,
             high_signal_clean_activation_scope_audit_tsv,
             low_scan_clean_activation_scope_audit_tsv,
             low_height_clean_activation_scope_audit_tsv,
@@ -635,10 +909,23 @@ def _activation_scope_request(
     if (
         reintegration_stability_audit_tsv is not None
         and low_height_reintegration_stable_activation_scope_audit_tsv is None
+        and activation_policy_tsv is None
     ):
         raise ValueError(
             "--reintegration-stability-audit-tsv requires "
             "--low-height-reintegration-stable-activation-scope-audit-tsv",
+        )
+    if activation_policy_tsv is not None:
+        return _ActivationScopeRequest(
+            audit_tsv=activation_policy_tsv,
+            contract="backfill_policy_write_ready_rows",
+            status_column=BACKFILL_POLICY_DECISION_COLUMN,
+            label="backfill-policy",
+            no_rows_blocker="no_backfill_policy_write_ready_rows",
+            ready_next_action="backfill_policy_writer_production_ready",
+            eligible_value=BACKFILL_POLICY_WRITE_READY,
+            required_columns=BACKFILL_POLICY_REQUIRED_COLUMNS,
+            schema_version=BACKFILL_POLICY_SCHEMA_VERSION,
         )
     if high_signal_clean_activation_scope_audit_tsv is not None:
         return _ActivationScopeRequest(
@@ -715,6 +1002,9 @@ def _filter_shadow_rows_to_activation_scope(
     activation_scope_contract: str,
     scope_status_column: str,
     scope_label: str,
+    scope_eligible_value: str = "eligible",
+    scope_required_columns: tuple[str, ...] | None = None,
+    expected_schema_version: str = ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION,
 ) -> tuple[tuple[Mapping[str, str], ...], dict[str, str], tuple[dict[str, str], ...]]:
     if activation_scope_audit_tsv is None:
         return (
@@ -738,13 +1028,20 @@ def _filter_shadow_rows_to_activation_scope(
     audit_rows = tuple(
         read_tsv_required(
             activation_scope_audit_tsv,
-            _activation_scope_required_columns(
+            scope_required_columns
+            or _activation_scope_required_columns(
                 scope_status_column,
                 reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
             ),
         )
     )
-    _validate_activation_scope_schema(audit_rows, activation_scope_audit_tsv)
+    _validate_scope_schema(
+        audit_rows,
+        activation_scope_audit_tsv,
+        expected_schema_version=expected_schema_version,
+    )
+    if expected_schema_version == BACKFILL_POLICY_SCHEMA_VERSION:
+        _validate_backfill_policy_rows(audit_rows, activation_scope_audit_tsv)
     if reintegration_stability_audit_tsv is not None:
         audit_rows = _with_low_height_reintegration_stable_status(
             audit_rows,
@@ -754,7 +1051,7 @@ def _filter_shadow_rows_to_activation_scope(
     eligible_audit_rows = tuple(
         row
         for row in audit_rows
-        if text_value(row.get(scope_status_column)) == "eligible"
+        if text_value(row.get(scope_status_column)) == scope_eligible_value
         and text_value(row.get("matrix_value_effect")) == "written"
     )
     eligible_shas = tuple(
@@ -940,19 +1237,71 @@ def _validate_activation_scope_schema(
     rows: Sequence[Mapping[str, str]],
     path: Path,
 ) -> None:
+    _validate_scope_schema(
+        rows,
+        path,
+        expected_schema_version=ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION,
+    )
+
+
+def _validate_scope_schema(
+    rows: Sequence[Mapping[str, str]],
+    path: Path,
+    *,
+    expected_schema_version: str,
+) -> None:
     unexpected = sorted(
         {
             text_value(row.get("schema_version"))
             for row in rows
-            if text_value(row.get("schema_version"))
-            != ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION
+            if text_value(row.get("schema_version")) != expected_schema_version
         },
     )
     if unexpected:
         raise ValueError(
-            f"{path}: expected schema_version "
-            f"{ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION}; "
+            f"{path}: expected schema_version {expected_schema_version}; "
             f"found {', '.join(unexpected)}",
+        )
+
+
+def _validate_backfill_policy_rows(
+    rows: Sequence[Mapping[str, str]],
+    path: Path,
+) -> None:
+    invalid_decisions = sorted(
+        {
+            text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN))
+            for row in rows
+            if text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN))
+            not in BACKFILL_POLICY_ALLOWED_DECISIONS
+        },
+    )
+    if invalid_decisions:
+        raise ValueError(
+            f"{path}: invalid backfill_policy_decision values: "
+            f"{', '.join(invalid_decisions)}",
+        )
+
+    invalid_write_ready_rows = tuple(
+        row
+        for row in rows
+        if text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN))
+        == BACKFILL_POLICY_WRITE_READY
+        and (
+            text_value(row.get("matrix_value_effect")) != "written"
+            or not text_value(row.get("backfill_policy_evidence_class"))
+            or text_value(row.get("backfill_policy_authority_status"))
+            != "writer_approved"
+            or not text_value(row.get("backfill_policy_reason"))
+        )
+    )
+    if invalid_write_ready_rows:
+        bad_keys = tuple(
+            "/".join(_audit_key(row)) for row in invalid_write_ready_rows
+        )
+        raise ValueError(
+            f"{path}: invalid write_ready policy rows: "
+            f"{';'.join(bad_keys[:10])}",
         )
 
 
@@ -986,6 +1335,7 @@ def _narrow_product_writer_expected_diff_acceptance_row(
     application_summary: Mapping[str, str],
     source_run_id: str,
     scope_status_column: str,
+    scope_eligible_value: str,
     expected_scope: str,
     no_rows_blocker: str,
     ready_next_action: str,
@@ -993,7 +1343,7 @@ def _narrow_product_writer_expected_diff_acceptance_row(
     eligible_audit_keys = {
         _audit_key(row)
         for row in activation_scope_audit_rows
-        if text_value(row.get(scope_status_column)) == "eligible"
+        if text_value(row.get(scope_status_column)) == scope_eligible_value
         and text_value(row.get("matrix_value_effect")) == "written"
     }
     all_audit_written_keys = {
