@@ -327,6 +327,21 @@ Implementation closeout, 2026-06-16:
   `--low-height-clean-activation-scope-audit-tsv` product writer flag, and no
   `production_ready` claim is allowed until a narrower rule or new oracle
   packet resolves the heldout failure.
+- Heldout apex-delta trace reintegration probe, 2026-06-17:
+  `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
+  `standard_apex_delta_clean_trace`, where supported trace status, shape
+  `>=0.95`, local/global `>=0.95`, height `>=2e6`, boundary width
+  `0.30-0.65 min`, and `>=10` scans remain in force, but apex delta from the
+  family center is greater than `0.15 min`. This probe is not a writer
+  contract. The no-RAW 85RAW packet under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_apex_delta_clean_probe/`
+  found 78 eligible candidates across 27 families, selected 20
+  family-representative cases, and failed with 17/20 pass. The three failing
+  rows were `fail_boundary`, with max boundary error `2.19621 min` and max area
+  relative error `0.424518`; two failures already had apex deltas near
+  `0.25-0.27 min`, so a simple broad apex-delta threshold is not sufficient
+  evidence for automatic matrix writes. There is no apex-delta scoped writer
+  flag and no `production_ready` claim is allowed for this class.
 - Product direction update, 2026-06-17:
   the 72-row high-signal scope and 42-row low-scan scope are safe
   demonstrators, not the intended ceiling.

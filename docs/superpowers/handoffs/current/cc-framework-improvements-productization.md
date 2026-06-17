@@ -35,6 +35,16 @@ low-height clean，expected-diff 57/57 是乾淨的；但同類 heldout trace or
 `production_candidate` slice：證明「可能有東西可補」，但也證明 agent 必須
 自動擋住不穩的低訊號案例，不能為了少人工審查就偷偷寫 matrix。
 
+再下一個 probe 是 apex-only clean。它問的是：「形狀、高度、寬度、scan count
+都乾淨，只是 peak apex 離 family center 超過 0.15 min，能不能自動補？」
+這個目前也不能開 writer。No-RAW 85RAW oracle 找到 78 個候選、27 個
+families，選 20 個代表案例，結果 17/20 通過、3 個 boundary fail，最大
+boundary error `2.19621 min`、最大 area relative error `0.424518`。更重要的是，
+失敗案例裡有 apex delta 只有 `0.2493` 和 `0.273` 的 row，所以不是簡單把
+apex delta 上限收窄到 0.5 min 就能解決。這個 probe 同樣只能記成
+`production_candidate` / blocked-ready：它幫我們知道 apex-offset 類別有風險，
+但不能授權自動寫 matrix。
+
 第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
 support-TSV workflow ready；本輪新增 headless auto-limited CLI：
 `--targeted-ms1-shape-identity-auto-limited-default`。它會自己跑 baseline、
@@ -77,10 +87,11 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
 - HEAD before current uncommitted slice: `51e1d72`
-- Current checkpoint scope: Backfill low-height heldout oracle support,
-  activation scope audit low-height diagnostic expected-diff columns, focused
-  tests, tools index, handoff, spec, and control-plane updates. There is no
-  low-height product writer and no default matrix-writing behavior change.
+- Current checkpoint scope: Backfill low-height and apex-delta heldout oracle
+  support, activation scope audit low-height diagnostic expected-diff columns,
+  focused tests, tools index, handoff, spec, and control-plane updates. There
+  is no low-height or apex-delta product writer and no default matrix-writing
+  behavior change.
 - 本輪 Backfill low-scan gate:
   - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
     low-scan clean 真實 no-RAW 85RAW artifact 在
@@ -145,6 +156,21 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py`
     -> `88 entry points, 167 total files`
   - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
+- 本輪 Backfill apex-only probe:
+  - `standard_peak_heldout_trace_oracle.py` now supports
+    `standard_apex_delta_clean_trace` as a diagnostic/oracle target class.
+    This class keeps supported trace status, shape >=0.95, local/global >=0.95,
+    height >=2e6, width 0.30-0.65 min, and at least 10 boundary scans, but
+    requires apex delta >0.15 min from the family center.
+  - no-RAW 85RAW heldout artifact:
+    `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_apex_delta_clean_probe/`;
+    summary status is `fail`, with 78 eligible candidate rows / 27 families,
+    20 selected family cases, 17 pass, 3 fail. The max boundary error is
+    `2.19621 min` and max area relative error is `0.424518`.
+  - Tier decision: `production_candidate` only. No apex-delta product writer
+    flag was added, and no matrix output should be claimed `production_ready`
+    for this class. Do not try a quick threshold-only promotion without a new
+    oracle packet, because failures include apex delta `0.2493` and `0.273`.
 - 本輪 subagent review:
   - `Mendel` / `Meitner` 沒有找到 P1/P2 blocking issue。
   - P3 docs drift 已修：control-plane/spec/handoff 現在都明講 72-row

@@ -34,10 +34,12 @@ SCHEMA_VERSION = "standard_peak_heldout_trace_oracle_v1"
 HIGH_SIGNAL_CLEAN_SCOPE = "standard_high_signal_clean_trace"
 LOW_SCAN_CLEAN_SCOPE = "standard_low_scan_clean_trace"
 LOW_HEIGHT_CLEAN_SCOPE = "standard_low_height_clean_trace"
+APEX_DELTA_CLEAN_SCOPE = "standard_apex_delta_clean_trace"
 SUPPORTED_TARGET_SHAPE_CLASSES = (
     HIGH_SIGNAL_CLEAN_SCOPE,
     LOW_SCAN_CLEAN_SCOPE,
     LOW_HEIGHT_CLEAN_SCOPE,
+    APEX_DELTA_CLEAN_SCOPE,
 )
 
 MIN_SHAPE_SIMILARITY = 0.95
@@ -469,6 +471,15 @@ def _target_shape_class_matches(
             and scan_count >= MIN_HIGH_SIGNAL_SCAN_COUNT
         )
         return clean_except_height and height < MIN_CELL_HEIGHT
+    if target_shape_class == APEX_DELTA_CLEAN_SCOPE:
+        clean_except_apex_delta = (
+            shape >= MIN_SHAPE_SIMILARITY
+            and local_global >= MIN_LOCAL_GLOBAL_RATIO
+            and height >= MIN_CELL_HEIGHT
+            and MIN_BOUNDARY_WIDTH_MIN <= width <= MAX_BOUNDARY_WIDTH_MIN
+            and scan_count >= MIN_HIGH_SIGNAL_SCAN_COUNT
+        )
+        return clean_except_apex_delta and apex_delta > MAX_APEX_DELTA_ABS_MIN
     return False
 
 
