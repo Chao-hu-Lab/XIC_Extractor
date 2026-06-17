@@ -25,7 +25,13 @@ generated policy path，CLI 收的是完整 source activation audit
 `detected_flagged` 和 `blocked` 留在 audit，不會改 matrix。白話說，TSV 不再是
 人手動改了就能放行的名單，而是 policy engine 的報告和 replay 證據。這沒有
 把 broad 4613 格推到 `production_ready`，但它把後續路徑改成「補 evidence
-class」而不是「再加一個更窄、更巢狀的 writer flag」。
+class」而不是「再加一個更窄、更巢狀的 writer flag」。最新真實 no-RAW 85RAW
+replay 已跑過：4613 列全部進 policy，439 列是 current approved evidence 的
+`write_ready`，72 列是有穩定訊號但缺 masked/product-writer oracle 的
+`detected_flagged`，4102 列是 `blocked`；writer 只寫 439 格，expected-diff
+439/439 pass。所以 generated policy replay 現在可以宣稱
+`production_ready` for current approved evidence classes，但 broad 4613
+仍是 `production_candidate`。
 `AGENTS.md`、`docs/agent-subagent-routing.md`、`docs/agent/planning-workflows.md`
 和 repo-local skills 已補規則：工具、plugins、subagents、CodeGraph、GitHub/gh
 都要積極用；token/cost 不是主要限制。限制的是盲跑：每個長工具鏈或昂貴驗證
@@ -44,7 +50,9 @@ public package API 不應接受手寫 policy TSV、trace mismatch 不能被 clea
 policy 會 blocked 而不寫 matrix。修完後 full local gate 也過：
 `ruff check xic_extractor tests`、`mypy xic_extractor`、
 `pytest -v --tb=short -x` (`3759 passed, 1 skipped`)、以及
-`scripts\check_diagnostics_index.py`。
+`scripts\check_diagnostics_index.py`。後續真實 no-RAW replay command 也過，
+輸出在
+`output/productization_realdata_seed_guard_85raw_20260617/generated_policy_no_raw_productization/`。
 
 2026-06-17 規則檢討結果：三個 read-only subagent review 已完成。strategy
 reviewer 和 implementation/contract reviewer 都無 blocker；docs-handoff
@@ -1422,8 +1430,10 @@ RAW-backed 驗證:
      `--backfill-policy-source-audit-tsv` 會對完整 source audit 產出
      `standard_peak_backfill_policy.tsv`，每列自動分成 `write_ready`、
      `detected_flagged`、或 `blocked`；writer 只寫 generated `write_ready`。
-     這是後續 broadening 的共同入口，不是人工 TSV 白名單，也不是 broad
-     4613-row ready 宣稱。
+     這是後續 broadening 的共同入口，不是人工 TSV 白名單。真實 no-RAW
+     85RAW replay 已證明 current approved evidence classes 可用這條路徑一次
+     寫出 439 格且 expected-diff 439/439 pass；但這仍不是 broad 4613-row
+     ready 宣稱。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
      scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中

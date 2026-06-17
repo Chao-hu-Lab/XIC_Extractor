@@ -369,11 +369,18 @@ Implementation closeout, 2026-06-16:
   classifies each candidate as `write_ready`, `detected_flagged`, or `blocked`.
   The product writer then replays only generated `write_ready` rows through the
   existing matrix-only activation writer and expected-diff acceptance. This is
-  not a new production-ready claim for broad 4613-row activation: the current
-  ready evidence classes still come from the five approved writer envelopes.
-  The purpose is to stop proliferating manual/nested scoped writer flags and
-  make future broadening happen by adding evidence classes to a single
-  auditable policy engine.
+  now `production_ready` for replaying the current approved evidence classes:
+  the real no-RAW 85RAW run under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_no_raw_productization/`
+  classified all 4613 source-audit rows into 439 `write_ready`, 72
+  `detected_flagged`, and 4102 `blocked`, wrote exactly 439 matrix cells, and
+  passed `backfill_policy_write_ready_rows` writer expected-diff with zero
+  duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
+  blockers. This is not a new production-ready claim for broad 4613-row
+  activation: the current ready evidence classes still come from the five
+  approved writer envelopes. The purpose is to stop proliferating manual/nested
+  scoped writer flags and make future broadening happen by adding evidence
+  classes to a single auditable policy engine.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
