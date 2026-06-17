@@ -15,6 +15,7 @@ from xic_extractor.alignment.tsv_writer import (
 from xic_extractor.diagnostics import (
     standard_peak_backfill_productization as productization_module,
 )
+from xic_extractor.diagnostics.diagnostic_io import file_sha256
 from xic_extractor.diagnostics.shadow_production_projection import (
     SHADOW_PRODUCTION_PROJECTION_COLUMNS,
 )
@@ -1299,6 +1300,504 @@ def test_generated_backfill_policy_keeps_shape_clean_stability_review_only(
     assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
 
 
+def test_generated_backfill_policy_uses_policy_observed_oracle_for_write_ready(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row("FAM_STD", "S2", "100", standard=True, row_sha="b" * 64),
+            _shadow_row("FAM_NON", "S2", "200", standard=True, row_sha="c" * 64),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    source_sha = "b" * 64
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                source_sha,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", source_sha, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    policy_oracle = tmp_path / "standard_peak_policy_observed_oracle.tsv"
+    _write_tsv(
+        policy_oracle,
+        [_policy_observed_oracle_row("FAM_STD", "S2", source_sha)],
+        productization_module.POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    base_policy = _write_generated_policy_base(
+        fixture=fixture,
+        tmp_path=tmp_path,
+        source_audit=source_audit,
+        stability_audit=stability_audit,
+    )
+    policy_oracle_summary = tmp_path / "policy_observed_oracle_summary.json"
+    _write_policy_observed_oracle_summary(
+        policy_oracle_summary,
+        policy_oracle_tsv=policy_oracle,
+        source_audit_tsv=source_audit,
+        source_policy_tsv=base_policy,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-write-ready",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+                "--policy-observed-oracle-tsv",
+                str(policy_oracle),
+                "--policy-observed-oracle-summary-json",
+                str(policy_oracle_summary),
+            ],
+        )
+        == 0
+    )
+
+    policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
+    assert policy_rows[0]["backfill_policy_decision"] == "write_ready"
+    assert policy_rows[0]["backfill_policy_evidence_class"] == (
+        "policy_observed_full_trace_reintegration"
+    )
+    assert policy_rows[0]["backfill_policy_authority_status"] == "writer_approved"
+    assert policy_rows[0]["backfill_policy_decision_basis"] == (
+        "approved_writer_scope"
+    )
+    assert policy_rows[0]["backfill_policy_next_evidence"] == (
+        "none_current_scope_writer_approved"
+    )
+    assert policy_rows[0]["backfill_policy_candidate_evidence_class"] == (
+        "shape_clean_reintegration_stable,reintegration_stable"
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["activation_scope_contract"] == "backfill_policy_write_ready_rows"
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["next_action"] == "backfill_policy_writer_production_ready"
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["eligible_audit_row_count"] == "1"
+    assert acceptance["product_written_delta_row_count"] == "1"
+
+    matrix_rows = _read_tsv(output_dir / "activated_matrix" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        output_dir / "activated_matrix" / "alignment_matrix_identity.tsv",
+    )
+    matrix_index_by_hypothesis = {
+        row["peak_hypothesis_id"]: int(row["matrix_row_index"]) - 1
+        for row in identity_rows
+    }
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
+
+
+def test_generated_backfill_policy_rejects_failed_policy_observed_oracle(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row("FAM_STD", "S2", "100", standard=True, row_sha="b" * 64),
+            _shadow_row("FAM_NON", "S2", "200", standard=True, row_sha="c" * 64),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    source_sha = "b" * 64
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                source_sha,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", source_sha, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    policy_oracle = tmp_path / "standard_peak_policy_observed_oracle.tsv"
+    _write_tsv(
+        policy_oracle,
+        [
+            _policy_observed_oracle_row(
+                "FAM_STD",
+                "S2",
+                source_sha,
+                oracle_case_status="fail_area",
+                included_in_product_acceptance="FALSE",
+            ),
+        ],
+        productization_module.POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    base_policy = _write_generated_policy_base(
+        fixture=fixture,
+        tmp_path=tmp_path,
+        source_audit=source_audit,
+        stability_audit=stability_audit,
+    )
+    policy_oracle_summary = tmp_path / "policy_observed_oracle_summary.json"
+    _write_policy_observed_oracle_summary(
+        policy_oracle_summary,
+        policy_oracle_tsv=policy_oracle,
+        source_audit_tsv=source_audit,
+        source_policy_tsv=base_policy,
+        status="fail",
+        accepted_count=0,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-fail-closed",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+                "--policy-observed-oracle-tsv",
+                str(policy_oracle),
+                "--policy-observed-oracle-summary-json",
+                str(policy_oracle_summary),
+            ],
+        )
+        == 2
+    )
+
+    assert not (output_dir / "standard_peak_backfill_policy.tsv").exists()
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_rejects_observed_oracle_without_summary(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    source_sha = "b" * 64
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                source_sha,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", source_sha, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    policy_oracle = tmp_path / "standard_peak_policy_observed_oracle.tsv"
+    _write_tsv(
+        policy_oracle,
+        [_policy_observed_oracle_row("FAM_STD", "S2", source_sha)],
+        productization_module.POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-missing-summary",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+                "--policy-observed-oracle-tsv",
+                str(policy_oracle),
+            ],
+        )
+        == 2
+    )
+
+    assert not (output_dir / "standard_peak_backfill_policy.tsv").exists()
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_rejects_partial_policy_observed_oracle(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row("FAM_STD", "S2", "100", standard=True, row_sha="b" * 64),
+            _shadow_row("FAM_NON", "S2", "200", standard=True, row_sha="c" * 64),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+            _scope_audit_row(
+                "FAM_NON",
+                "S2",
+                "c" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [
+            _stability_audit_row("FAM_STD", "S2", "b" * 64, "eligible"),
+            _stability_audit_row("FAM_NON", "S2", "c" * 64, "eligible"),
+        ],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    base_policy = _write_generated_policy_base(
+        fixture=fixture,
+        tmp_path=tmp_path,
+        source_audit=source_audit,
+        stability_audit=stability_audit,
+    )
+    policy_oracle = tmp_path / "standard_peak_policy_observed_oracle.tsv"
+    _write_tsv(
+        policy_oracle,
+        [_policy_observed_oracle_row("FAM_STD", "S2", "b" * 64)],
+        productization_module.POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    policy_oracle_summary = tmp_path / "policy_observed_oracle_summary.json"
+    _write_policy_observed_oracle_summary(
+        policy_oracle_summary,
+        policy_oracle_tsv=policy_oracle,
+        source_audit_tsv=source_audit,
+        source_policy_tsv=base_policy,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-partial",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+                "--policy-observed-oracle-tsv",
+                str(policy_oracle),
+                "--policy-observed-oracle-summary-json",
+                str(policy_oracle_summary),
+            ],
+        )
+        == 2
+    )
+
+    assert not (output_dir / "standard_peak_backfill_policy.tsv").exists()
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_rejects_mismatched_policy_observed_oracle(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row("FAM_STD", "S2", "100", standard=True, row_sha="b" * 64),
+            _shadow_row("FAM_NON", "S2", "200", standard=True, row_sha="c" * 64),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    source_sha = "b" * 64
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                source_sha,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", source_sha, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    policy_oracle = tmp_path / "standard_peak_policy_observed_oracle.tsv"
+    _write_tsv(
+        policy_oracle,
+        [_policy_observed_oracle_row("FAM_OTHER", "S2", source_sha)],
+        productization_module.POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    base_policy = _write_generated_policy_base(
+        fixture=fixture,
+        tmp_path=tmp_path,
+        source_audit=source_audit,
+        stability_audit=stability_audit,
+    )
+    policy_oracle_summary = tmp_path / "policy_observed_oracle_summary.json"
+    _write_policy_observed_oracle_summary(
+        policy_oracle_summary,
+        policy_oracle_tsv=policy_oracle,
+        source_audit_tsv=source_audit,
+        source_policy_tsv=base_policy,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-mismatch",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+                "--policy-observed-oracle-tsv",
+                str(policy_oracle),
+                "--policy-observed-oracle-summary-json",
+                str(policy_oracle_summary),
+            ],
+        )
+        == 2
+    )
+
+    assert not (output_dir / "standard_peak_backfill_policy.tsv").exists()
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
 def test_standard_peak_productization_public_api_rejects_manual_policy_tsv(
     tmp_path: Path,
 ) -> None:
@@ -2193,6 +2692,109 @@ def _stability_audit_row(
         "matrix_value_source_row_sha256": row_sha,
         "stability_status": status,
     }
+
+
+def _policy_observed_oracle_row(
+    family: str,
+    sample: str,
+    row_sha: str,
+    *,
+    oracle_case_status: str = "pass",
+    included_in_product_acceptance: str = "TRUE",
+) -> dict[str, str]:
+    return {
+        "schema_version": "standard_peak_policy_observed_oracle_v1",
+        "feature_family_id": family,
+        "peak_hypothesis_id": family,
+        "sample_id": sample,
+        "matrix_value_source_row_sha256": row_sha,
+        "policy_decision": "detected_flagged",
+        "policy_candidate_evidence_class": "reintegration_stable",
+        "source_cell_status": "rescued",
+        "trace_match_status": "matched",
+        "trace_status": "rescued",
+        "observed_result_source": "policy_observed_full_trace_reintegration_v1",
+        "observed_independence_basis": "independent_boundary_reintegration_result",
+        "oracle_case_status": oracle_case_status,
+        "included_in_product_acceptance": included_in_product_acceptance,
+    }
+
+
+def _write_generated_policy_base(
+    *,
+    fixture: dict[str, Path],
+    tmp_path: Path,
+    source_audit: Path,
+    stability_audit: Path,
+) -> Path:
+    output_dir = tmp_path / f"base_policy_{source_audit.stem}"
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-observed-oracle-base",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+    return output_dir / "standard_peak_backfill_policy.tsv"
+
+
+def _write_policy_observed_oracle_summary(
+    path: Path,
+    *,
+    policy_oracle_tsv: Path,
+    source_audit_tsv: Path,
+    source_policy_tsv: Path,
+    status: str = "pass",
+    candidate_count: int = 1,
+    accepted_count: int = 1,
+) -> None:
+    summary = {
+        "schema_version": "standard_peak_policy_observed_oracle_summary_v1",
+        "source_run_id": "unit-policy-observed-oracle",
+        "status": status,
+        "observed_reintegration_mode": "full_trace",
+        "source_backfill_policy_tsv": str(source_policy_tsv),
+        "source_backfill_policy_sha256": file_sha256(source_policy_tsv),
+        "source_activation_scope_audit_tsv": str(source_audit_tsv),
+        "source_activation_scope_audit_sha256": file_sha256(source_audit_tsv),
+        "candidate_policy_decision": "detected_flagged",
+        "candidate_policy_row_count": str(candidate_count),
+        "oracle_case_status_pass_count": str(accepted_count),
+        "oracle_case_status_fail_boundary_count": "0",
+        "oracle_case_status_fail_area_count": "0"
+        if accepted_count == candidate_count
+        else str(candidate_count - accepted_count),
+        "oracle_case_status_inconclusive_count": "0",
+        "included_in_product_acceptance_count": str(accepted_count),
+        "max_boundary_error_min": "0",
+        "max_area_relative_error": "0",
+        "boundary_error_min_max_allowed": "0.1",
+        "area_relative_error_max_allowed": "0.1",
+        "policy_observed_oracle_tsv": str(policy_oracle_tsv),
+        "policy_observed_oracle_sha256": file_sha256(policy_oracle_tsv),
+        "next_action": (
+            "eligible_for_policy_evidence_class_expected_diff_gate"
+            if status == "pass"
+            else "review_policy_observed_oracle_failures"
+        ),
+    }
+    path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _blank_row(columns: tuple[str, ...]) -> dict[str, str]:

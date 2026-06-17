@@ -7,10 +7,31 @@
 ## 2026-06-17 白話結論
 
 目前這個分支的非 GUI productization goal 有兩條主線已經能講清楚：
-Backfill 有五個 explicit scoped writer 到 `production_ready`，Targeted MS1
-limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
-probes 仍是正式的 `production_candidate`，但 writer 被 heldout oracle failure
-或 expected-diff 缺口擋住。
+Backfill 的 generated policy writer surface 已推到 `production_ready` for
+current approved evidence classes + row-specific observed-oracle approved
+rows，實際可寫面從 439 格擴到 511 格；Targeted MS1 limited rescue 的
+headless default 也到 `production_ready`。其他 Backfill probes 仍是正式的
+`production_candidate`，但 writer 被 heldout oracle failure、缺 trace
+evidence、或 expected-diff 缺口擋住。
+
+本輪最新推進是把原本 72 個 `detected_flagged` 補上逐列 oracle。白話說，
+這 72 列不是靠人工 TSV 白名單放行，而是每列拿自己的 stored trace 重新跑
+`find_peak_and_area` + area integration，必須在你接受的 `0.1 min / 10% area`
+tolerance 內重現 source boundary/area；通過後才進 generated policy 的
+`write_ready`，再跑產品 writer expected-diff。Rawls subagent review 抓到
+裸 TSV 仍可能像白名單，所以現在 productization 端也要求 companion
+`summary.json`，並驗證 oracle TSV SHA、source audit SHA、base generated policy
+SHA 都對得上，否則 fail closed。新 artifact 在
+`output/productization_realdata_seed_guard_85raw_20260617/policy_observed_oracle_detected_flagged_full_trace/`：
+72/72 pass，最大 boundary error `8.91875e-05 min`，最大 area relative error
+`0.098218`。接著 no-RAW replay 在
+`output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/`
+把 4613 列分成 511 `write_ready`、0 `detected_flagged`、4102 `blocked`；
+writer 實際寫 511 格，`narrow_product_writer_expected_diff_acceptance.json`
+是 `acceptance_status=pass`、`readiness_tier=production_ready`、511/511
+written delta pass，且 duplicate/missing/unexpected/non-eligible/non-written/
+unchanged/blank blockers 全是 0。這仍不是 broad 4613 全部 ready；剩下 4102
+列仍要新的 evidence class 或 trace/oracle 證據。
 
 本輪最新結論：all-stability 299-row candidate pool 不能直接推 writer。先前
 只是「快速 family check 看到一個 area fail」；現在已變成正式、可重跑的
@@ -70,18 +91,18 @@ generated policy path，CLI 收的是完整 source activation audit
 人手動改了就能放行的名單，而是 policy engine 的報告和 replay 證據。這沒有
 把 broad 4613 格推到 `production_ready`，但它把後續路徑改成「補 evidence
 class」而不是「再加一個更窄、更巢狀的 writer flag」。最新真實 no-RAW 85RAW
-replay 已跑過：4613 列全部進 policy，439 列是 current approved evidence 的
-`write_ready`，72 列是有穩定訊號但缺 masked/product-writer oracle 的
-`detected_flagged`，4102 列是 `blocked`；writer 只寫 439 格，expected-diff
-439/439 pass。所以 generated policy replay 現在可以宣稱
-`production_ready` for current approved evidence classes，但 broad 4613
-仍是 `production_candidate`。最新 v2 explanation replay 又把這件事補完整：
+replay 已跑過：4613 列全部進 policy，511 列是
+`write_ready`，0 列是 `detected_flagged`，4102 列是 `blocked`；writer 只寫
+511 格，expected-diff 511/511 pass。所以 generated policy replay 現在可以宣稱
+`production_ready` for current approved evidence classes +
+`policy_observed_full_trace_reintegration`，但 broad 4613 仍是
+`production_candidate`。v2 explanation replay 也把這件事補完整：
 `standard_peak_backfill_policy.tsv` 現在每列都必須有 decision-basis、
 candidate evidence、blocker、next-evidence；4613/4613 都有解釋，沒有空白
 原因。白話說，4102 個 blocked 不是「不知道所以略過」，而是拆成 1087 個
 缺 trace overlay / reintegration evidence、3015 個還缺新 approved evidence
-class 或 passing oracle；72 個 `detected_flagged` 則是有 boundary-stable 訊號，
-但還缺 masked/product-writer oracle，所以不能寫 matrix。
+class 或 passing oracle；原本 72 個 `detected_flagged` 已由
+row-specific full-trace observed oracle 通過後升成 `write_ready`。
 `AGENTS.md`、`docs/agent-subagent-routing.md`、`docs/agent/planning-workflows.md`
 和 repo-local skills 已補規則：工具、plugins、subagents、CodeGraph、GitHub/gh
 都要積極用；token/cost 不是主要限制。限制的是盲跑：每個長工具鏈或昂貴驗證
@@ -1489,16 +1510,16 @@ RAW-backed 驗證:
      85RAW replay 已證明 current approved evidence classes 可用這條路徑一次
      寫出 439 格且 expected-diff 439/439 pass；但這仍不是 broad 4613-row
      ready 宣稱。
-   - 這輪最新補強是 policy v2 explanation contract：每列都有
-      `backfill_policy_decision_basis`、`backfill_policy_next_evidence`、和
-      candidate-evidence 欄位。最新 no-RAW replay 中 `missing_explanation_rows=0`；
-      4102 blocked 被拆成 1087 個缺 trace evidence、3015 個缺新
-      evidence/oracle。這代表產品規則已能「解釋為什麼不補」，不是把 row
-      輕易放過。
+   - 這輪最新補強是 policy observed-oracle contract：原本 72 個
+      `detected_flagged` rows 已逐列用 full stored trace 重新找 peak/重算 area，
+      72/72 通過 `0.1 min / 10% area`，再接進 generated policy 的
+      `policy_observed_full_trace_reintegration` evidence class。最新 no-RAW
+      replay 是 511 `write_ready`、0 `detected_flagged`、4102 `blocked`；
+      writer expected-diff 511/511 pass。這代表產品規則不需要你人工審這 72
+      格，但仍會把缺 trace 或缺 evidence 的 4102 格保留 blocked。
    - shape-clean + stability 已進 generated policy 的 candidate-evidence 欄位，
-     不是 writer 欄位。最新 no-RAW replay 中 row counts 沒變：
-     439 `write_ready`、72 `detected_flagged`、4102 `blocked`，writer expected-diff
-     仍是 439/439 pass；新增的是 104 rows 被標成含
+     不是 writer 欄位。它本身不直接給 writer authority；它只是幫政策說明
+     哪些 row 看起來像下一批候選。先前 no-RAW replay 中新增 104 rows 被標成含
      `shape_clean_reintegration_stable`，其中 30 rows 仍是
      `review_only` / `detected_flagged`，74 rows 已由既有 evidence class
      `writer_approved` / `write_ready`；這方便後續解釋或設計 missing-cell scope。

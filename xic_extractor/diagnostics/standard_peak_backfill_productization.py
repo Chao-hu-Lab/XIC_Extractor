@@ -27,6 +27,12 @@ from xic_extractor.diagnostics.diagnostic_io import (
 from xic_extractor.diagnostics.shadow_production_projection import (
     canonical_shadow_projection_sha256,
 )
+from xic_extractor.diagnostics.standard_peak_policy_observed_oracle import (
+    SCHEMA_VERSION as POLICY_OBSERVED_ORACLE_SCHEMA_VERSION,
+)
+from xic_extractor.diagnostics.standard_peak_policy_observed_oracle import (
+    SUMMARY_SCHEMA_VERSION as POLICY_OBSERVED_ORACLE_SUMMARY_SCHEMA_VERSION,
+)
 from xic_extractor.diagnostics.standard_peak_shadow_activation_inputs import (
     StandardPeakActivationInputOutputs,
     build_standard_peak_activation_inputs,
@@ -175,6 +181,27 @@ BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS = (
     "apex_aligned_shape_similarity",
     "trace_match_status",
 )
+POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "peak_hypothesis_id",
+    "sample_id",
+    "matrix_value_source_row_sha256",
+    "policy_decision",
+    "policy_candidate_evidence_class",
+    "source_cell_status",
+    "trace_match_status",
+    "trace_status",
+    "observed_result_source",
+    "observed_independence_basis",
+    "oracle_case_status",
+    "included_in_product_acceptance",
+)
+POLICY_OBSERVED_ORACLE_EVIDENCE_CLASS = "policy_observed_full_trace_reintegration"
+POLICY_OBSERVED_ORACLE_RESULT_SOURCE = "policy_observed_full_trace_reintegration_v1"
+POLICY_OBSERVED_ORACLE_INDEPENDENCE_BASIS = (
+    "independent_boundary_reintegration_result"
+)
 LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN = (
     "low_height_reintegration_stable_status"
 )
@@ -261,6 +288,8 @@ def run_standard_peak_backfill_productization(
     low_height_reintegration_stable_activation_scope_audit_tsv: Path | None = None,
     reintegration_stability_audit_tsv: Path | None = None,
     backfill_policy_source_audit_tsv: Path | None = None,
+    policy_observed_oracle_tsv: Path | None = None,
+    policy_observed_oracle_summary_json: Path | None = None,
 ) -> StandardPeakBackfillProductizationOutputs:
     """Apply standard-peak projection accepts and optionally render synced gallery."""
 
@@ -278,11 +307,32 @@ def run_standard_peak_backfill_productization(
         alignment_matrix_tsv=alignment_matrix_tsv,
         alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
     )
+    if policy_observed_oracle_tsv is not None and (
+        backfill_policy_source_audit_tsv is None
+        or policy_observed_oracle_summary_json is None
+    ):
+        raise ValueError(
+            "--policy-observed-oracle-tsv requires "
+            "--backfill-policy-source-audit-tsv and "
+            "--policy-observed-oracle-summary-json",
+        )
+    if (
+        policy_observed_oracle_summary_json is not None
+        and policy_observed_oracle_tsv is None
+    ):
+        raise ValueError(
+            "--policy-observed-oracle-summary-json requires "
+            "--policy-observed-oracle-tsv",
+        )
     generated_policy_tsv: Path | None = None
     if backfill_policy_source_audit_tsv is not None:
         generated_policy_tsv = _write_backfill_policy_from_source_audit(
             source_audit_tsv=backfill_policy_source_audit_tsv,
             reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+            policy_observed_oracle_tsv=policy_observed_oracle_tsv,
+            policy_observed_oracle_summary_json=(
+                policy_observed_oracle_summary_json
+            ),
             output_dir=output_dir,
             source_run_id=source_run_id,
         )
@@ -678,6 +728,8 @@ def _write_backfill_policy_from_source_audit(
     *,
     source_audit_tsv: Path,
     reintegration_stability_audit_tsv: Path | None,
+    policy_observed_oracle_tsv: Path | None,
+    policy_observed_oracle_summary_json: Path | None,
     output_dir: Path,
     source_run_id: str,
 ) -> Path:
@@ -693,13 +745,33 @@ def _write_backfill_policy_from_source_audit(
         expected_schema_version=ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION,
     )
     stability_by_sha = _eligible_stability_by_sha(reintegration_stability_audit_tsv)
-    policy_rows = tuple(
+    base_policy_rows = tuple(
         _backfill_policy_row(
             row,
             source_run_id=source_run_id,
             stability_by_sha=stability_by_sha,
+            policy_observed_oracle_by_sha={},
         )
         for row in source_rows
+    )
+    policy_observed_oracle_by_sha = _eligible_policy_observed_oracle_by_sha(
+        policy_observed_oracle_tsv,
+        policy_observed_oracle_summary_json,
+        source_audit_tsv=source_audit_tsv,
+        base_policy_rows=base_policy_rows,
+    )
+    policy_rows = (
+        base_policy_rows
+        if not policy_observed_oracle_by_sha
+        else tuple(
+            _backfill_policy_row(
+                row,
+                source_run_id=source_run_id,
+                stability_by_sha=stability_by_sha,
+                policy_observed_oracle_by_sha=policy_observed_oracle_by_sha,
+            )
+            for row in source_rows
+        )
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     policy_tsv = output_dir / "standard_peak_backfill_policy.tsv"
@@ -715,6 +787,9 @@ def _write_backfill_policy_from_source_audit(
         source_run_id=source_run_id,
         source_audit_tsv=source_audit_tsv,
         reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+        policy_observed_oracle_tsv=policy_observed_oracle_tsv,
+        policy_observed_oracle_summary_json=policy_observed_oracle_summary_json,
+        policy_observed_oracle_by_sha=policy_observed_oracle_by_sha,
         policy_tsv=policy_tsv,
     )
     (output_dir / "standard_peak_backfill_policy_summary.json").write_text(
@@ -758,11 +833,318 @@ def _eligible_stability_by_sha(
     }
 
 
+def _eligible_policy_observed_oracle_by_sha(
+    policy_observed_oracle_tsv: Path | None,
+    policy_observed_oracle_summary_json: Path | None,
+    *,
+    source_audit_tsv: Path,
+    base_policy_rows: Sequence[Mapping[str, str]],
+) -> dict[str, Mapping[str, str]]:
+    if policy_observed_oracle_tsv is None:
+        return {}
+    if policy_observed_oracle_summary_json is None:
+        raise ValueError(
+            "--policy-observed-oracle-tsv requires "
+            "--policy-observed-oracle-summary-json",
+        )
+    rows = read_tsv_required(
+        policy_observed_oracle_tsv,
+        POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS,
+    )
+    _validate_scope_schema(
+        rows,
+        policy_observed_oracle_tsv,
+        expected_schema_version=POLICY_OBSERVED_ORACLE_SCHEMA_VERSION,
+    )
+    _validate_policy_observed_oracle_summary(
+        policy_observed_oracle_summary_json,
+        policy_observed_oracle_tsv=policy_observed_oracle_tsv,
+        source_audit_tsv=source_audit_tsv,
+        base_policy_rows=base_policy_rows,
+        oracle_result_rows=rows,
+    )
+    eligible_rows = tuple(
+        row
+        for row in rows
+        if _policy_observed_oracle_row_is_accepted(row)
+    )
+    eligible_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in eligible_rows
+    )
+    duplicates = _duplicates(eligible_shas)
+    if duplicates:
+        raise ValueError(
+            "policy observed oracle has duplicate accepted "
+            "matrix_value_source_row_sha256 values: "
+            f"{';'.join(duplicates[:10])}",
+        )
+    return {
+        text_value(row.get("matrix_value_source_row_sha256")): row
+        for row in eligible_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    }
+
+
+def _policy_observed_oracle_row_is_accepted(row: Mapping[str, str]) -> bool:
+    return (
+        text_value(row.get("policy_decision")) == "detected_flagged"
+        and text_value(row.get("oracle_case_status")) == "pass"
+        and text_value(row.get("included_in_product_acceptance")) == "TRUE"
+        and text_value(row.get("observed_result_source"))
+        == POLICY_OBSERVED_ORACLE_RESULT_SOURCE
+        and text_value(row.get("observed_independence_basis"))
+        == POLICY_OBSERVED_ORACLE_INDEPENDENCE_BASIS
+        and text_value(row.get("trace_match_status")) == "matched"
+    )
+
+
+def _validate_policy_observed_oracle_summary(
+    summary_json: Path,
+    *,
+    policy_observed_oracle_tsv: Path,
+    source_audit_tsv: Path,
+    base_policy_rows: Sequence[Mapping[str, str]],
+    oracle_result_rows: Sequence[Mapping[str, str]],
+) -> None:
+    summary = _read_json_mapping(summary_json)
+    _require_summary_value(
+        summary,
+        "schema_version",
+        POLICY_OBSERVED_ORACLE_SUMMARY_SCHEMA_VERSION,
+        summary_json,
+    )
+    _require_summary_value(summary, "status", "pass", summary_json)
+    _require_summary_hash(
+        summary,
+        "policy_observed_oracle_sha256",
+        policy_observed_oracle_tsv,
+        summary_json,
+    )
+    _require_summary_hash(
+        summary,
+        "source_activation_scope_audit_sha256",
+        source_audit_tsv,
+        summary_json,
+    )
+    source_policy_tsv = _summary_path(summary, "source_backfill_policy_tsv")
+    if not source_policy_tsv.is_file():
+        raise ValueError(
+            f"{summary_json}: source_backfill_policy_tsv does not exist: "
+            f"{source_policy_tsv}",
+        )
+    _require_summary_hash(
+        summary,
+        "source_backfill_policy_sha256",
+        source_policy_tsv,
+        summary_json,
+    )
+    source_policy_rows = tuple(
+        read_tsv_required(source_policy_tsv, BACKFILL_POLICY_OUTPUT_COLUMNS),
+    )
+    _validate_scope_schema(
+        source_policy_rows,
+        source_policy_tsv,
+        expected_schema_version=BACKFILL_POLICY_SCHEMA_VERSION,
+    )
+    _validate_backfill_policy_rows(source_policy_rows, source_policy_tsv)
+    _validate_policy_rows_match_current_base(
+        base_policy_rows,
+        source_policy_rows,
+        source_policy_tsv=source_policy_tsv,
+    )
+    _validate_oracle_rows_cover_detected_flagged_policy_rows(
+        source_policy_rows,
+        oracle_result_rows,
+        source_policy_tsv=source_policy_tsv,
+    )
+    _require_summary_count(
+        summary,
+        "candidate_policy_row_count",
+        len(_detected_flagged_policy_rows(source_policy_rows)),
+        summary_json,
+    )
+    pass_count = sum(
+        1
+        for row in oracle_result_rows
+        if text_value(row.get("oracle_case_status")) == "pass"
+    )
+    _require_summary_count(
+        summary,
+        "oracle_case_status_pass_count",
+        pass_count,
+        summary_json,
+    )
+    accepted_count = sum(
+        1 for row in oracle_result_rows if _policy_observed_oracle_row_is_accepted(row)
+    )
+    _require_summary_count(
+        summary,
+        "included_in_product_acceptance_count",
+        accepted_count,
+        summary_json,
+    )
+
+
+def _validate_oracle_rows_cover_detected_flagged_policy_rows(
+    source_policy_rows: Sequence[Mapping[str, str]],
+    oracle_result_rows: Sequence[Mapping[str, str]],
+    *,
+    source_policy_tsv: Path,
+) -> None:
+    expected_rows = _detected_flagged_policy_rows(source_policy_rows)
+    expected_keys = set(
+        _policy_rows_by_compare_key(
+            expected_rows,
+            label=f"{source_policy_tsv} detected_flagged rows",
+        ),
+    )
+    observed_keys = set(
+        _policy_rows_by_compare_key(
+            oracle_result_rows,
+            label="policy observed oracle rows",
+        ),
+    )
+    missing = sorted(expected_keys - observed_keys)
+    extra = sorted(observed_keys - expected_keys)
+    if missing or extra:
+        raise ValueError(
+            "policy observed oracle rows must exactly cover generated "
+            f"detected_flagged policy rows from {source_policy_tsv}; "
+            f"missing={';'.join('/'.join(key) for key in missing[:5])}; "
+            f"extra={';'.join('/'.join(key) for key in extra[:5])}",
+        )
+
+
+def _detected_flagged_policy_rows(
+    rows: Sequence[Mapping[str, str]],
+) -> tuple[Mapping[str, str], ...]:
+    return tuple(
+        row
+        for row in rows
+        if text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN)) == "detected_flagged"
+    )
+
+
+def _read_json_mapping(path: Path) -> Mapping[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path}: expected JSON object")
+    return value
+
+
+def _require_summary_value(
+    summary: Mapping[str, object],
+    key: str,
+    expected: str,
+    path: Path,
+) -> None:
+    actual = text_value(summary.get(key))
+    if actual != expected:
+        raise ValueError(f"{path}: expected {key}={expected}; found {actual}")
+
+
+def _require_summary_hash(
+    summary: Mapping[str, object],
+    key: str,
+    artifact: Path,
+    path: Path,
+) -> None:
+    actual = text_value(summary.get(key))
+    expected = file_sha256(artifact)
+    if actual != expected:
+        raise ValueError(
+            f"{path}: {key} mismatch for {artifact}; "
+            f"expected {expected}, found {actual or 'missing'}",
+        )
+
+
+def _require_summary_count(
+    summary: Mapping[str, object],
+    key: str,
+    expected: int,
+    path: Path,
+) -> None:
+    actual = _int_value(summary.get(key))
+    if actual != expected:
+        raise ValueError(f"{path}: expected {key}={expected}; found {actual}")
+
+
+def _summary_path(summary: Mapping[str, object], key: str) -> Path:
+    value = text_value(summary.get(key))
+    if not value:
+        raise ValueError(f"policy observed oracle summary missing {key}")
+    return Path(value)
+
+
+def _validate_policy_rows_match_current_base(
+    current_base_rows: Sequence[Mapping[str, str]],
+    source_policy_rows: Sequence[Mapping[str, str]],
+    *,
+    source_policy_tsv: Path,
+) -> None:
+    current_by_key = _policy_rows_by_compare_key(
+        current_base_rows,
+        label="current generated base policy",
+    )
+    source_by_key = _policy_rows_by_compare_key(
+        source_policy_rows,
+        label=str(source_policy_tsv),
+    )
+    missing = sorted(set(current_by_key) - set(source_by_key))
+    extra = sorted(set(source_by_key) - set(current_by_key))
+    if missing or extra:
+        raise ValueError(
+            f"{source_policy_tsv}: source policy keys do not match current "
+            "generated base policy; "
+            f"missing={';'.join('/'.join(key) for key in missing[:5])}; "
+            f"extra={';'.join('/'.join(key) for key in extra[:5])}",
+        )
+    for key, current_row in current_by_key.items():
+        source_row = source_by_key[key]
+        for column in BACKFILL_POLICY_OUTPUT_COLUMNS:
+            if column == "source_run_id":
+                continue
+            current_value = text_value(current_row.get(column))
+            source_value = text_value(source_row.get(column))
+            if current_value != source_value:
+                raise ValueError(
+                    f"{source_policy_tsv}: source policy row {'/'.join(key)} "
+                    f"differs from current generated base policy at {column}",
+                )
+
+
+def _policy_rows_by_compare_key(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    label: str,
+) -> dict[tuple[str, str, str, str], Mapping[str, str]]:
+    by_key: dict[tuple[str, str, str, str], Mapping[str, str]] = {}
+    duplicates: list[tuple[str, str, str, str]] = []
+    for row in rows:
+        key = (
+            text_value(row.get("matrix_value_source_row_sha256")),
+            text_value(row.get("feature_family_id")),
+            text_value(row.get("peak_hypothesis_id")),
+            text_value(row.get("sample_id")),
+        )
+        if key in by_key:
+            duplicates.append(key)
+        by_key[key] = row
+    if duplicates:
+        raise ValueError(
+            f"{label}: duplicate policy row keys: "
+            f"{';'.join('/'.join(key) for key in duplicates[:10])}",
+        )
+    return by_key
+
+
 def _backfill_policy_row(
     row: Mapping[str, str],
     *,
     source_run_id: str,
     stability_by_sha: Mapping[str, Mapping[str, str]],
+    policy_observed_oracle_by_sha: Mapping[str, Mapping[str, str]],
 ) -> dict[str, str]:
     sha = text_value(row.get("matrix_value_source_row_sha256"))
     ready_evidence = list(_ready_evidence_classes(row))
@@ -772,6 +1154,9 @@ def _backfill_policy_row(
     )
     if _low_height_stability_ready(row, stability_row):
         ready_evidence.append("low_height_reintegration_stable")
+    policy_observed_oracle_row = policy_observed_oracle_by_sha.get(sha)
+    if _policy_observed_oracle_ready(row, policy_observed_oracle_row):
+        ready_evidence.append(POLICY_OBSERVED_ORACLE_EVIDENCE_CLASS)
     candidate_evidence = list(_candidate_evidence_classes(row, stability_row))
 
     if ready_evidence:
@@ -876,6 +1261,27 @@ def _low_height_stability_ready(
     )
 
 
+def _policy_observed_oracle_ready(
+    row: Mapping[str, str],
+    oracle_row: Mapping[str, str] | None,
+) -> bool:
+    if oracle_row is None:
+        return False
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return False
+    if text_value(row.get("trace_match_status")) != "matched":
+        return False
+    for column in (
+        "feature_family_id",
+        "peak_hypothesis_id",
+        "sample_id",
+        "matrix_value_source_row_sha256",
+    ):
+        if text_value(row.get(column)) != text_value(oracle_row.get(column)):
+            return False
+    return True
+
+
 def _shape_clean_stability_candidate(
     row: Mapping[str, str],
     stability_row: Mapping[str, str] | None,
@@ -948,6 +1354,9 @@ def _backfill_policy_summary_row(
     source_run_id: str,
     source_audit_tsv: Path,
     reintegration_stability_audit_tsv: Path | None,
+    policy_observed_oracle_tsv: Path | None,
+    policy_observed_oracle_summary_json: Path | None,
+    policy_observed_oracle_by_sha: Mapping[str, Mapping[str, str]],
     policy_tsv: Path,
 ) -> dict[str, str]:
     decision_counts = Counter(
@@ -971,6 +1380,23 @@ def _backfill_policy_summary_row(
             ""
             if reintegration_stability_audit_tsv is None
             else file_sha256(reintegration_stability_audit_tsv)
+        ),
+        "policy_observed_oracle_tsv": _path_text(policy_observed_oracle_tsv),
+        "policy_observed_oracle_sha256": (
+            ""
+            if policy_observed_oracle_tsv is None
+            else file_sha256(policy_observed_oracle_tsv)
+        ),
+        "policy_observed_oracle_summary_json": _path_text(
+            policy_observed_oracle_summary_json,
+        ),
+        "policy_observed_oracle_summary_sha256": (
+            ""
+            if policy_observed_oracle_summary_json is None
+            else file_sha256(policy_observed_oracle_summary_json)
+        ),
+        "policy_observed_oracle_accepted_row_count": str(
+            len(policy_observed_oracle_by_sha),
         ),
         "backfill_policy_tsv": str(policy_tsv),
         "backfill_policy_sha256": file_sha256(policy_tsv),

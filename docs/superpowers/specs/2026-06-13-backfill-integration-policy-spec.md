@@ -418,6 +418,31 @@ Implementation closeout, 2026-06-16:
   `write_ready` through current ready scopes. By candidate-evidence string, 76
   are `shape_clean_reintegration_stable,reintegration_stable`, 21 overlap
   `low_height_clean`, and 7 overlap `high_signal_clean`.
+- Policy observed oracle bridge, 2026-06-17:
+  `standard_peak_policy_observed_oracle.py` writes
+  `standard_peak_policy_observed_oracle_v1` packets for generated policy rows
+  that are still `detected_flagged`. The productization CLI may consume this
+  packet through paired `--policy-observed-oracle-tsv` and
+  `--policy-observed-oracle-summary-json` only together with
+  `--backfill-policy-source-audit-tsv`; it is not a manual allowlist and is not
+  accepted as a standalone writer scope. The summary must bind the oracle TSV
+  to the source activation-scope audit SHA and to the base generated-policy SHA.
+  A row can become
+  `policy_observed_full_trace_reintegration` writer evidence only when the
+  oracle row is `pass`, `included_in_product_acceptance=TRUE`,
+  `observed_result_source=policy_observed_full_trace_reintegration_v1`, the row
+  SHA/family/sample still match the generated source audit, and the source audit
+  row remains `matrix_value_effect=written` plus `trace_match_status=matched`.
+  The current no-RAW 85RAW packet under
+  `output/productization_realdata_seed_guard_85raw_20260617/policy_observed_oracle_detected_flagged_full_trace/`
+  passed 72/72 previous `detected_flagged` rows by full stored-trace
+  reintegration, with max boundary error `8.91875e-05 min` and max area
+  relative error `0.098218`. The follow-up replay under
+  `generated_policy_policy_observed_oracle_no_raw_productization/` classified
+  all 4613 source-audit rows as 511 `write_ready`, 0 `detected_flagged`, and
+  4102 `blocked`, wrote 511 cells, and passed expected-diff 511/511 with
+  `readiness_tier=production_ready`. This is production-ready only for the
+  generated write-ready scope, not for broad 4613-row activation.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
@@ -1540,6 +1565,22 @@ Explicit opt-in writer contract for named Backfill release slices.
   `backfill_policy_next_evidence`, and
   `backfill_policy_candidate_evidence_class` so blocked rows are explainable
   product decisions instead of silent exclusions.
+- `--policy-observed-oracle-tsv` may only be supplied with
+  `--policy-observed-oracle-summary-json` and
+  `--backfill-policy-source-audit-tsv`. It consumes a generated
+  `standard_peak_policy_observed_oracle_v1` packet and its summary, and may add the ready
+  evidence class `policy_observed_full_trace_reintegration` only for rows whose
+  oracle result passed, whose `included_in_product_acceptance` is `TRUE`, whose
+  `observed_result_source` is
+  `policy_observed_full_trace_reintegration_v1`, and whose row SHA, family,
+  peak hypothesis, and sample still match the source audit row. The summary
+  must have `status=pass`, must bind `policy_observed_oracle_sha256` to the TSV
+  being consumed, must bind `source_activation_scope_audit_sha256` to the
+  supplied source audit, and its `source_backfill_policy_sha256` must match a
+  base generated policy equivalent to the one regenerated from the current
+  source audit before observed-oracle promotion. Failed, inconclusive, stale,
+  duplicate, mismatched, or unbound oracle rows fail closed and do not create
+  writer authority.
 
 Only one scoped audit flag may be supplied at a time. When a scoped flag is
 supplied, the productization bridge reads
@@ -1566,6 +1607,10 @@ Fail-closed requirements:
   allowlist. Broadening Backfill should add a named evidence class to the
   policy engine and its source artifacts, with oracle/expected-diff evidence,
   rather than adding another nested dataset-specific writer flag.
+- Policy observed oracle TSVs are also machine evidence packets, not manual
+  allowlists. They can only promote rows already generated from the current
+  source audit and must still pass the normal writer expected-diff gate before
+  any matrix output is claimed.
 - `write_ready` policy rows must be `matrix_value_effect=written`, must carry a
   nonblank evidence class, and must have
   `backfill_policy_authority_status=writer_approved`; malformed generated or

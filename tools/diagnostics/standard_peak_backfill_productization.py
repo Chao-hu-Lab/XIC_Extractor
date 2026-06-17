@@ -51,6 +51,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             reintegration_stability_audit_tsv=args.reintegration_stability_audit_tsv,
             backfill_policy_source_audit_tsv=args.backfill_policy_source_audit_tsv,
+            policy_observed_oracle_tsv=args.policy_observed_oracle_tsv,
+            policy_observed_oracle_summary_json=(
+                args.policy_observed_oracle_summary_json
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -204,6 +208,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "standard_peak_backfill_policy.tsv. The product writer only "
             "applies generated write_ready rows; detected_flagged and blocked "
             "rows stay audit-only."
+        ),
+    )
+    parser.add_argument(
+        "--policy-observed-oracle-tsv",
+        type=Path,
+        help=(
+            "Optional standard_peak_policy_observed_oracle.tsv. When set with "
+            "--backfill-policy-source-audit-tsv, generated detected_flagged "
+            "rows whose source row has a passing full-trace observed oracle may "
+            "be promoted to generated write_ready before the writer "
+            "expected-diff gate runs."
+        ),
+    )
+    parser.add_argument(
+        "--policy-observed-oracle-summary-json",
+        type=Path,
+        help=(
+            "Required companion summary.json for "
+            "--policy-observed-oracle-tsv. The summary binds the oracle TSV to "
+            "the source activation audit and base generated policy hashes."
         ),
     )
     return parser.parse_args(argv)
