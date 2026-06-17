@@ -337,10 +337,14 @@ Implementation closeout, 2026-06-16:
   broadened without a named oracle rule.
 - Low-height reintegration-stable scoped writer, 2026-06-17:
   this follow-up uses the reintegration-stability audit as a candidate pool but
-  does not promote all 299 eligible rows. A quick all-stability family check
-  had 19/20 pass with one area failure
-  (`FAM000949/NormalBC2261_DNA`, area relative error about 19.6%), so direct
-  all-stability writer approval remains blocked. The promoted scope is
+  does not promote all 299 eligible rows. The formal all-stability family
+  oracle target `standard_reintegration_stable_candidate_family_trace` under
+  `heldout_trace_reintegration_oracle_all_stability_family/` records 299
+  audit-intersection rows / 77 families, expands to 1694 available detected
+  trace candidates from those families, selects 20 family cases, and fails
+  closed at 19/20 because `FAM000949/NormalBC2261_DNA` has area relative error
+  `0.19621`, above the accepted 10% ceiling. Direct all-stability writer
+  approval therefore remains blocked. The promoted scope is
   stability-eligible written rows whose activation audit has `cell_height <2e6`.
   `standard_low_height_reintegration_stable_candidate_family_trace` requires
   both `--reintegration-stability-audit-tsv` and

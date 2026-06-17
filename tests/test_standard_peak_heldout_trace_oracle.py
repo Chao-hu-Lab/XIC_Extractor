@@ -604,6 +604,140 @@ def test_heldout_trace_oracle_cli_writes_low_height_stability_family_packet(
     assert pool[0]["selected_for_oracle"] == "TRUE"
 
 
+def test_heldout_trace_oracle_cli_writes_all_stability_family_packet(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    stability_tsv = tmp_path / "reintegration_stability_audit.tsv"
+    activation_scope_tsv = tmp_path / "activation_high_signal_clean_scope_audit.tsv"
+    _write_tsv(
+        stability_tsv,
+        [
+            {
+                "schema_version": "standard_peak_reintegration_stability_audit_v1",
+                "source_run_id": "unit-stability",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-all-height-sha",
+                "stability_status": "eligible",
+            },
+        ],
+    )
+    _write_tsv(
+        activation_scope_tsv,
+        [
+            {
+                "schema_version": "standard_peak_activation_scope_audit_v1",
+                "source_run_id": "unit-activation",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-all-height-sha",
+                "cell_height": str(oracle.MIN_CELL_HEIGHT + 1.0),
+            },
+        ],
+    )
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-all-stability-family-oracle",
+                "--target-shape-class",
+                "standard_reintegration_stable_candidate_family_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+                "--expected-window-padding-min",
+                "0.5",
+                "--reintegration-stability-audit-tsv",
+                str(stability_tsv),
+                "--activation-scope-audit-tsv",
+                str(activation_scope_tsv),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["target_shape_class"] == (
+        "standard_reintegration_stable_candidate_family_trace"
+    )
+    assert summary["candidate_family_scope_status"] == "applied"
+    assert summary["candidate_family_scope_row_count"] == "1"
+    assert summary["candidate_family_scope_family_count"] == "1"
+    assert summary["candidate_family_scope_match_level"] == "family_id"
+    assert summary["candidate_family_scope_oracle_basis"] == (
+        "detected_trace_rows_from_candidate_families"
+    )
+
+
+def test_low_height_stability_family_scope_rejects_high_height_rows(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    stability_tsv = tmp_path / "reintegration_stability_audit.tsv"
+    activation_scope_tsv = tmp_path / "activation_high_signal_clean_scope_audit.tsv"
+    _write_tsv(
+        stability_tsv,
+        [
+            {
+                "schema_version": "standard_peak_reintegration_stability_audit_v1",
+                "source_run_id": "unit-stability",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-high-height-sha",
+                "stability_status": "eligible",
+            },
+        ],
+    )
+    _write_tsv(
+        activation_scope_tsv,
+        [
+            {
+                "schema_version": "standard_peak_activation_scope_audit_v1",
+                "source_run_id": "unit-activation",
+                "feature_family_id": "FAM_LOW_HEIGHT",
+                "sample_id": "BackfilledSample",
+                "matrix_value_effect": "written",
+                "matrix_value_source_row_sha256": "stable-high-height-sha",
+                "cell_height": str(oracle.MIN_CELL_HEIGHT + 1.0),
+            },
+        ],
+    )
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(tmp_path / "oracle"),
+                "--source-run-id",
+                "unit-low-height-family-rejects-high-height",
+                "--target-shape-class",
+                "standard_low_height_reintegration_stable_candidate_family_trace",
+                "--reintegration-stability-audit-tsv",
+                str(stability_tsv),
+                "--activation-scope-audit-tsv",
+                str(activation_scope_tsv),
+            ],
+        )
+        == 2
+    )
+
+
 def test_low_height_stability_family_scope_requires_scope_inputs(
     tmp_path: Path,
 ) -> None:

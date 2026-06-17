@@ -12,6 +12,20 @@ limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
 probes 仍是正式的 `production_candidate`，但 writer 被 heldout oracle failure
 或 expected-diff 缺口擋住。
 
+本輪最新結論：all-stability 299-row candidate pool 不能直接推 writer。先前
+只是「快速 family check 看到一個 area fail」；現在已變成正式、可重跑的
+`standard_reintegration_stable_candidate_family_trace` oracle artifact。它用既有
+85RAW trace，不重跑 RAW，對 299 個 audit-intersection rows / 77 families 做
+family-level heldout replay，從同 family 的 1694 個 detected trace candidates
+選 20 個代表案例，結果 19/20；失敗的
+`FAM000949/NormalBC2261_DNA` area relative error 是 `0.19621`，超過你接受的
+10% area tolerance。所以這一輪不是把 Backfill 推 ready，而是把「299 個穩定
+候選全部直接寫」這條路正式關掉，避免後面靠感覺放行。
+Subagent review 也已做：docs/evidence reviewer 無 blocker；code reviewer 抓到
+一個有效 P2，要求補測「all-stability 可接受 high-height activation row，但
+low-height family target 仍要拒絕同一類 high-height row」。已補 regression
+test，focused oracle tests 從 15 增為 16 passed。
+
 策略修正：不要再把 `low-height-low-scan-clean-stable` 這類層層切片當成
 長期產品規則。這些切片只證明 writer/audit/expected-diff 管線可以安全放行
 一個小範圍；下一步應把 Backfill 收斂成短、可解釋、domain-meaningful 的
@@ -129,9 +143,12 @@ masked/product-writer oracle 和 expected-diff。
 
 這輪把其中一個能被證據支持的子集合正式推上去了：low-height +
 reintegration-stable。先說清楚，不是把 299 個 stability eligible 或 broad
-4613 格全部放行。快速 all-family check 在 20 個 family 代表案例裡有 1 個
-area fail（`FAM000949/NormalBC2261_DNA`，area relative error 約 19.6%），
-所以「全部 stability eligible 直接寫」仍 blocked。可放行的是更窄的交集：
+4613 格全部放行。後續已把 all-stability family check 正式化成
+`standard_reintegration_stable_candidate_family_trace` oracle：299 個
+audit-intersection rows / 77 families，從同 family 的 1694 個 detected trace
+candidates 裡選 20 個代表案例，結果 19/20；失敗的是
+`FAM000949/NormalBC2261_DNA`，area relative error `0.19621`，超過你接受的
+10% area tolerance。所以「全部 stability eligible 直接寫」仍 blocked。可放行的是更窄的交集：
 stability eligible、activation row 仍是 written、且 `cell_height < 2e6`。
 這個 writer scope 有 220 格 / 66 families；heldout oracle 是 family-level，
 不是 row-identity oracle，因為這 220 格本身都是 rescued cells，沒有 original
@@ -1462,8 +1479,9 @@ RAW-backed 驗證:
      也已通過。combined activation scope audit 已證明目前
      broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean、
      57 個 low-height clean、69 個 low-height-low-scan clean。
-   - 299-row stability candidate pool 不能直接接 writer。快速 all-family
-     check 已看到 `FAM000949/NormalBC2261_DNA` area fail；可寫的是
+   - 299-row stability candidate pool 不能直接接 writer。formal all-stability
+     family oracle 已看到 `FAM000949/NormalBC2261_DNA` area fail
+     (`0.19621` > accepted 10% ceiling)；可寫的是
      low-height + stability 的 220-row 子集合，因為它有 per-row
      reintegration-stability audit、family-level detected-trace oracle
      20/20 pass、以及 writer expected-diff 220/220 pass。

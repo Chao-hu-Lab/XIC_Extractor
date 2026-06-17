@@ -42,6 +42,9 @@ SHAPE_MARGIN_CLEAN_SCOPE = "standard_shape_margin_clean_trace"
 LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
     "standard_low_height_reintegration_stable_candidate_family_trace"
 )
+REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
+    "standard_reintegration_stable_candidate_family_trace"
+)
 SUPPORTED_TARGET_SHAPE_CLASSES = (
     HIGH_SIGNAL_CLEAN_SCOPE,
     LOW_SCAN_CLEAN_SCOPE,
@@ -51,6 +54,7 @@ SUPPORTED_TARGET_SHAPE_CLASSES = (
     WIDTH_CLEAN_SCOPE,
     SHAPE_MARGIN_CLEAN_SCOPE,
     LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
+    REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
 )
 FULL_TRACE_REINTEGRATION_MODE = "full_trace"
 EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE = "expected_window_bounded"
@@ -394,16 +398,16 @@ def _candidate_family_scope(
         reintegration_stability_audit_tsv is not None
         or activation_scope_audit_tsv is not None
     )
-    if target_shape_class != LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+    if target_shape_class not in _REINTEGRATION_STABLE_FAMILY_SCOPES:
         if requested:
             raise ValueError(
                 "reintegration stability family scope inputs are only supported "
-                f"for {LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE}",
+                "for reintegration-stable candidate-family target scopes",
             )
         return None, blank
     if reintegration_stability_audit_tsv is None or activation_scope_audit_tsv is None:
         raise ValueError(
-            f"{LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE} requires "
+            f"{target_shape_class} requires "
             "--reintegration-stability-audit-tsv and --activation-scope-audit-tsv",
         )
 
@@ -478,8 +482,7 @@ def _candidate_family_scope(
         if stability_family != activation_family:
             family_mismatch_shas.append(sha)
             continue
-        height = optional_float(activation.get("cell_height"))
-        if height is None or height < 0.0 or height >= MIN_CELL_HEIGHT:
+        if not _family_scope_activation_row_matches(target_shape_class, activation):
             continue
         candidate_family_ids.add(stability_family)
         candidate_row_count += 1
@@ -496,7 +499,9 @@ def _candidate_family_scope(
             f"{';'.join(family_mismatch_shas[:10])}",
         )
     if not candidate_family_ids:
-        raise ValueError("no low-height reintegration-stable candidate families")
+        raise ValueError(
+            f"no candidate families for target_shape_class {target_shape_class}",
+        )
     return (
         frozenset(candidate_family_ids),
         {
@@ -513,6 +518,28 @@ def _candidate_family_scope(
             "source_activation_scope_audit_tsv": str(activation_scope_audit_tsv),
         },
     )
+
+
+_REINTEGRATION_STABLE_FAMILY_SCOPES = frozenset(
+    (
+        LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
+        REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
+    ),
+)
+
+
+def _family_scope_activation_row_matches(
+    target_shape_class: str,
+    activation: Mapping[str, str],
+) -> bool:
+    if text_value(activation.get("matrix_value_effect")) != "written":
+        return False
+    if target_shape_class == REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        return True
+    if target_shape_class == LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        height = optional_float(activation.get("cell_height"))
+        return height is not None and 0.0 <= height < MIN_CELL_HEIGHT
+    return False
 
 
 def _validate_schema_version(
@@ -756,6 +783,8 @@ def _target_shape_class_matches(
             and MIN_SHAPE_MARGIN_SIMILARITY <= shape < MIN_SHAPE_SIMILARITY
         )
     if target_shape_class == LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        return True
+    if target_shape_class == REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
         return True
     return False
 
