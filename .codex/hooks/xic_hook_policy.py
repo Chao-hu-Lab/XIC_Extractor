@@ -2,6 +2,7 @@ from __future__ import annotations
 
 CONTROL_PLANE_PATH = "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
 HANDOFF_PATH = "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
+HANDOFF_MAX_LINES = 200
 
 PRODUCT_SURFACE_PATHS = [
     "README.md",

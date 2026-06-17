@@ -114,6 +114,45 @@ While executing:
   Do not mark complete because the budget is low or because partial work is
   useful.
 
+## XIC Handoff Snapshot Discipline
+
+Apply the global current-state handoff rule through this skill because XIC
+goals are usually launched via `$goal-execution`.
+
+Use the active handoff named by the goal, control plane, plan, or PR workflow,
+such as `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`;
+use `HANDOFF.md` only when the current goal establishes it as the active file.
+The active handoff is a short continuation snapshot, not the productization
+tier authority. Tier history, per-round maintenance logs, and lane evidence
+belong in the control plane, named specs, validation notes, or archive.
+Long exploration logs and scratch analysis belong in notes, not the active
+handoff.
+
+For XIC, the same three-layer rule applies even when filenames differ:
+
+- active handoff: short current-state snapshot;
+- archive: completed phase summaries only, not raw progress logs;
+- notes: optional long logs, scratch analysis, and temporary exploration.
+
+Before each meaningful checkpoint, compact-risk pause, or closeout:
+
+1. Inspect `git status`, the intended dirty scope, and latest validation
+   evidence.
+2. Rewrite the active handoff from current repo state instead of appending a
+   chronological update.
+3. Prune completed, superseded, stale, or intermediate details. Keep only active
+   constraints, decisions, blockers, validation, relevant file changes, rejected
+   paths still likely to be repeated, and next 1-3 concrete actions.
+4. Use `[active]`, `[blocked]`, `[done]`, and `[superseded]` labels where they
+   make pruning easier. Remove `[done]` and `[superseded]` items during the next
+   update unless they remain important rejected-path warnings.
+5. If the active handoff is over about 200 lines, prune it before continuing
+   unless the user explicitly asks for a longer handoff.
+
+Hooks may remind that the handoff is stale or missing from a productization
+update. They must not be treated as the author of the handoff; the executing
+agent owns the rewrite and pruning.
+
 ## Required XIC Context
 
 Every non-trivial XIC goal should read:

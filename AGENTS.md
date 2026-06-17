@@ -43,6 +43,9 @@ Canonical references:
   `docs/agent-parameter-settings.md` and use documented runners and paths.
 - Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
   diagnostic output groups need a summary or index.
+- Keep active handoffs as short current-state snapshots, not logs. Use archive
+  for completed phase summaries, notes for long scratch details, and prune
+  around the 200-line target before substantial continuation.
 - State validation status explicitly: `diagnostic_only`, `shadow_ready`,
   `production_candidate`, `production_ready`, or `inconclusive`.
 - Tests passing is not production readiness. For extraction, alignment, scoring,

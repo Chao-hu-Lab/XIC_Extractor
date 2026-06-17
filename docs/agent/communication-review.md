@@ -26,8 +26,16 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
   sample, label or family id, m/z, RT/window, status, reason, and linked
   artifact path.
 - Worktree or PR closeout should leave an operator-readable handoff: branch/task
-  purpose, verdict, important artifacts, validation commands/results, and an
-  explicit next-step recommendation.
+  purpose, verdict, important artifacts, validation commands/results, active
+  blockers, rejected paths still likely to recur, and an explicit next-step
+  recommendation. Keep it as current state, not a chronological log.
+- Active handoffs should stay short enough to read every time, normally under
+  about 200 lines. Completed phase summaries belong in archive; long logs,
+  stack traces, and scratch analysis belong in notes only when still useful.
+- Status labels such as `[active]`, `[blocked]`, `[done]`, and `[superseded]`
+  are useful in open-work sections. Remove `[done]` and `[superseded]` items
+  from the active handoff during the next prune unless they prevent repeated
+  mistakes.
 
 ## Review Checklist
 
