@@ -1565,6 +1565,14 @@ Explicit opt-in writer contract for named Backfill release slices.
   `backfill_policy_next_evidence`, and
   `backfill_policy_candidate_evidence_class` so blocked rows are explainable
   product decisions instead of silent exclusions.
+  The generator also emits
+  `standard_peak_backfill_policy_quality_explanations.tsv` with
+  `schema_version=standard_peak_backfill_policy_quality_explanation_v1`. This
+  sidecar is explanation-only: it may surface source-audit quality blockers such
+  as missing overlay, shape, height, width, apex-delta, or scan-count blockers,
+  but it must not alter `standard_peak_backfill_policy.tsv`, writer authority,
+  expected-diff scope, selected peaks, areas, counted detections, workbook
+  output, or the primary matrix.
 - `--policy-observed-oracle-tsv` may only be supplied with
   `--policy-observed-oracle-summary-json` and
   `--backfill-policy-source-audit-tsv`. It consumes a generated
@@ -1607,6 +1615,10 @@ Fail-closed requirements:
   allowlist. Broadening Backfill should add a named evidence class to the
   policy engine and its source artifacts, with oracle/expected-diff evidence,
   rather than adding another nested dataset-specific writer flag.
+- The generated quality-explanation TSV is lower authority than the generated
+  policy TSV. Consumers may use it to explain why a row stayed blocked or what
+  evidence is missing, but must not use `quality_blockers`,
+  `source_clean_status_summary`, or `explanation_only` as activation inputs.
 - Policy observed oracle TSVs are also machine evidence packets, not manual
   allowlists. They can only promote rows already generated from the current
   source audit and must still pass the normal writer expected-diff gate before
@@ -1638,7 +1650,10 @@ The productization summary records:
 The policy generator also records `source_activation_scope_audit_tsv` and
 artifact SHA in `standard_peak_backfill_policy_summary.json`, plus counts for
 `write_ready`, `detected_flagged`, and `blocked`, plus
-`policy_reason_counts_json` and `policy_next_evidence_counts_json`. This closes
+`policy_reason_counts_json`, `policy_next_evidence_counts_json`,
+`backfill_policy_quality_explanations_tsv`,
+`backfill_policy_quality_explanations_sha256`, and
+`backfill_policy_quality_explanation_row_count`. This closes
 the "TSV as human white-list" failure mode: every candidate row should receive a
 machine classification and a next-evidence reason, even when only a subset is
 currently writer-approved.

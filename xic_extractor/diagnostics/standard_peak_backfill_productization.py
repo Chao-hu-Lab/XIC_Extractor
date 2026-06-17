@@ -181,6 +181,30 @@ BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS = (
     "apex_aligned_shape_similarity",
     "trace_match_status",
 )
+BACKFILL_POLICY_SOURCE_QUALITY_BLOCKER_COLUMNS = (
+    "high_signal_clean_blockers",
+    "low_scan_clean_blockers",
+    "low_height_clean_blockers",
+    "low_height_low_scan_clean_blockers",
+)
+BACKFILL_POLICY_QUALITY_EXPLANATION_SCHEMA_VERSION = (
+    "standard_peak_backfill_policy_quality_explanation_v1"
+)
+BACKFILL_POLICY_QUALITY_EXPLANATION_COLUMNS = (
+    "schema_version",
+    "source_run_id",
+    "feature_family_id",
+    "peak_hypothesis_id",
+    "sample_id",
+    "matrix_value_source_row_sha256",
+    BACKFILL_POLICY_DECISION_COLUMN,
+    "backfill_policy_reason",
+    "backfill_policy_next_evidence",
+    "quality_blocker_count",
+    "quality_blockers",
+    "source_clean_status_summary",
+    "explanation_only",
+)
 POLICY_OBSERVED_ORACLE_REQUIRED_COLUMNS = (
     "schema_version",
     "feature_family_id",
@@ -782,6 +806,12 @@ def _write_backfill_policy_from_source_audit(
         formatter=format_diagnostic_value,
         lineterminator="\n",
     )
+    quality_explanation_tsv = _write_backfill_policy_quality_explanations(
+        output_dir=output_dir,
+        source_rows=source_rows,
+        policy_rows=policy_rows,
+        source_run_id=source_run_id,
+    )
     policy_summary = _backfill_policy_summary_row(
         policy_rows,
         source_run_id=source_run_id,
@@ -791,12 +821,90 @@ def _write_backfill_policy_from_source_audit(
         policy_observed_oracle_summary_json=policy_observed_oracle_summary_json,
         policy_observed_oracle_by_sha=policy_observed_oracle_by_sha,
         policy_tsv=policy_tsv,
+        quality_explanation_tsv=quality_explanation_tsv,
     )
     (output_dir / "standard_peak_backfill_policy_summary.json").write_text(
         json.dumps(policy_summary, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     return policy_tsv
+
+
+def _write_backfill_policy_quality_explanations(
+    *,
+    output_dir: Path,
+    source_rows: Sequence[Mapping[str, str]],
+    policy_rows: Sequence[Mapping[str, str]],
+    source_run_id: str,
+) -> Path:
+    source_by_sha = {
+        text_value(row.get("matrix_value_source_row_sha256")): row
+        for row in source_rows
+    }
+    rows = tuple(
+        _backfill_policy_quality_explanation_row(
+            policy_row,
+            source_row=source_by_sha.get(
+                text_value(policy_row.get("matrix_value_source_row_sha256")),
+                {},
+            ),
+            source_run_id=source_run_id,
+        )
+        for policy_row in policy_rows
+    )
+    path = output_dir / "standard_peak_backfill_policy_quality_explanations.tsv"
+    write_tsv(
+        path,
+        rows,
+        BACKFILL_POLICY_QUALITY_EXPLANATION_COLUMNS,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
+    return path
+
+
+def _backfill_policy_quality_explanation_row(
+    policy_row: Mapping[str, str],
+    *,
+    source_row: Mapping[str, str],
+    source_run_id: str,
+) -> dict[str, str]:
+    quality_blockers = _source_quality_blockers(source_row)
+    return {
+        "schema_version": BACKFILL_POLICY_QUALITY_EXPLANATION_SCHEMA_VERSION,
+        "source_run_id": source_run_id,
+        "feature_family_id": text_value(policy_row.get("feature_family_id")),
+        "peak_hypothesis_id": text_value(policy_row.get("peak_hypothesis_id")),
+        "sample_id": text_value(policy_row.get("sample_id")),
+        "matrix_value_source_row_sha256": text_value(
+            policy_row.get("matrix_value_source_row_sha256"),
+        ),
+        BACKFILL_POLICY_DECISION_COLUMN: text_value(
+            policy_row.get(BACKFILL_POLICY_DECISION_COLUMN),
+        ),
+        "backfill_policy_reason": text_value(
+            policy_row.get("backfill_policy_reason"),
+        ),
+        "backfill_policy_next_evidence": text_value(
+            policy_row.get("backfill_policy_next_evidence"),
+        ),
+        "quality_blocker_count": str(len(quality_blockers)),
+        "quality_blockers": ";".join(quality_blockers),
+        "source_clean_status_summary": _source_clean_status_summary(source_row),
+        "explanation_only": "TRUE",
+    }
+
+
+def _source_clean_status_summary(row: Mapping[str, str]) -> str:
+    parts: list[str] = []
+    for column in (
+        "high_signal_clean_status",
+        "low_scan_clean_status",
+        "low_height_clean_status",
+        "low_height_low_scan_clean_status",
+    ):
+        parts.append(f"{column}:{text_value(row.get(column)) or 'missing'}")
+    return ";".join(parts)
 
 
 def _eligible_stability_by_sha(
@@ -1348,6 +1456,19 @@ def _blocked_policy_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(blockers)
 
 
+def _source_quality_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    blockers: list[str] = []
+    for column in BACKFILL_POLICY_SOURCE_QUALITY_BLOCKER_COLUMNS:
+        for item in text_value(row.get(column)).split(";"):
+            item = item.strip()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            blockers.append(item)
+    return tuple(blockers)
+
+
 def _backfill_policy_summary_row(
     rows: Sequence[Mapping[str, str]],
     *,
@@ -1358,6 +1479,7 @@ def _backfill_policy_summary_row(
     policy_observed_oracle_summary_json: Path | None,
     policy_observed_oracle_by_sha: Mapping[str, Mapping[str, str]],
     policy_tsv: Path,
+    quality_explanation_tsv: Path,
 ) -> dict[str, str]:
     decision_counts = Counter(
         text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN)) for row in rows
@@ -1400,6 +1522,11 @@ def _backfill_policy_summary_row(
         ),
         "backfill_policy_tsv": str(policy_tsv),
         "backfill_policy_sha256": file_sha256(policy_tsv),
+        "backfill_policy_quality_explanations_tsv": str(quality_explanation_tsv),
+        "backfill_policy_quality_explanations_sha256": file_sha256(
+            quality_explanation_tsv,
+        ),
+        "backfill_policy_quality_explanation_row_count": str(len(rows)),
         "policy_row_count": str(len(rows)),
         "write_ready_row_count": str(decision_counts[BACKFILL_POLICY_WRITE_READY]),
         "detected_flagged_row_count": str(decision_counts["detected_flagged"]),

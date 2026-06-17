@@ -986,6 +986,14 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
         "low_height_low_scan_clean_status:ineligible;"
         "reintegration_stability_status:missing_or_ineligible"
     )
+    explanation_rows = _read_tsv(
+        output_dir / "standard_peak_backfill_policy_quality_explanations.tsv",
+    )
+    assert len(explanation_rows) == len(policy_rows)
+    assert {row["feature_family_id"] for row in explanation_rows} == set(
+        policy_by_family,
+    )
+    assert {row["explanation_only"] for row in explanation_rows} == {"TRUE"}
 
     policy_summary = json.loads(
         (output_dir / "standard_peak_backfill_policy_summary.json").read_text(
@@ -993,6 +1001,7 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
         ),
     )
     assert policy_summary["policy_row_count"] == "4"
+    assert policy_summary["backfill_policy_quality_explanation_row_count"] == "4"
     assert policy_summary["write_ready_row_count"] == "2"
     assert policy_summary["detected_flagged_row_count"] == "1"
     assert policy_summary["blocked_row_count"] == "1"
@@ -1036,6 +1045,112 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
     assert matrix_rows[matrix_index_by_hypothesis["FAM_STABLE"]]["S2"] == "150"
     assert matrix_rows[matrix_index_by_hypothesis["FAM_FLAG"]]["S2"] == ""
     assert matrix_rows[matrix_index_by_hypothesis["FAM_BLOCK"]]["S2"] == ""
+
+
+def test_generated_backfill_policy_explains_blocked_quality_reasons(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    blocked_row = _scope_audit_row(
+        "FAM_BLOCK",
+        "S2",
+        "d" * 64,
+        "ineligible",
+        low_scan_clean_status="ineligible",
+        low_height_clean_status="ineligible",
+        low_height_low_scan_clean_status="ineligible",
+        cell_height="300000",
+        apex_aligned_shape_similarity="0.91",
+        trace_match_status="matched",
+    )
+    blocked_row.update(
+        {
+            "high_signal_clean_blockers": (
+                "shape_lt_0.95;height_lt_2000000;"
+                "width_outside_0.30_0.65;scan_count_lt_10"
+            ),
+            "low_scan_clean_blockers": (
+                "shape_lt_0.95;height_lt_2000000;"
+                "width_outside_0.30_0.65;scan_count_lt_7"
+            ),
+            "low_height_clean_blockers": (
+                "shape_lt_0.95;width_outside_0.30_0.65;scan_count_lt_10"
+            ),
+            "low_height_low_scan_clean_blockers": (
+                "shape_lt_0.95;width_outside_0.30_0.65;scan_count_lt_7"
+            ),
+        },
+    )
+    _write_tsv(
+        source_audit,
+        [blocked_row],
+        (
+            *productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+            *productization_module.BACKFILL_POLICY_SOURCE_QUALITY_BLOCKER_COLUMNS,
+        ),
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-quality-blockers",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+            ],
+        )
+        == 2
+    )
+    assert "has no eligible written rows" in capsys.readouterr().err
+
+    policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
+    assert policy_rows[0]["backfill_policy_decision"] == "blocked"
+    assert policy_rows[0]["backfill_policy_reason"] == (
+        "no_writer_approved_evidence_class"
+    )
+    assert policy_rows[0]["backfill_policy_next_evidence"] == (
+        "approved_evidence_class_or_passing_oracle_required"
+    )
+    assert policy_rows[0]["backfill_policy_blockers"] == (
+        "no_writer_approved_evidence_class;"
+        "high_signal_clean_status:ineligible;"
+        "low_scan_clean_status:ineligible;"
+        "low_height_clean_status:ineligible;"
+        "low_height_low_scan_clean_status:ineligible;"
+        "reintegration_stability_status:missing_or_ineligible"
+    )
+    explanation_rows = _read_tsv(
+        output_dir / "standard_peak_backfill_policy_quality_explanations.tsv",
+    )
+    assert explanation_rows[0]["explanation_only"] == "TRUE"
+    assert explanation_rows[0]["quality_blocker_count"] == "5"
+    assert explanation_rows[0]["quality_blockers"] == (
+        "shape_lt_0.95;height_lt_2000000;width_outside_0.30_0.65;"
+        "scan_count_lt_10;scan_count_lt_7"
+    )
+    policy_summary = json.loads(
+        (output_dir / "standard_peak_backfill_policy_summary.json").read_text(
+            encoding="utf-8",
+        ),
+    )
+    assert policy_summary["backfill_policy_quality_explanations_tsv"].endswith(
+        "standard_peak_backfill_policy_quality_explanations.tsv",
+    )
+    assert policy_summary["backfill_policy_quality_explanation_row_count"] == "1"
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
 
 
 def test_generated_backfill_policy_blocks_trace_mismatch_clean_status(

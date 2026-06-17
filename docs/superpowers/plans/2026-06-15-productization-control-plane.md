@@ -200,6 +200,19 @@ duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers.
 This extends `production_ready` to the current approved evidence classes plus
 `policy_observed_full_trace_reintegration`; it still does not claim broad
 4613-row `production_ready`.
+The latest generated-policy replay now also writes an explanation-only quality
+sidecar,
+`standard_peak_backfill_policy_quality_explanations.tsv`, under
+`generated_policy_quality_explained_no_raw_productization/`. This sidecar keeps
+the generated policy rows unchanged and does not add writer authority; it only
+records source-audit quality blockers for human/debug review. The replay kept
+the same product decision surface: 4613 policy rows, 511 `write_ready`, 0
+`detected_flagged`, 4102 `blocked`, 511 matrix writes, and 511/511
+expected-diff pass. The policy summary now records
+`backfill_policy_quality_explanation_row_count=4613`, matching the sidecar TSV.
+The most common blocked bucket remains the 1087 rows with missing overlay path,
+and the remaining blocked rows mainly carry combined shape/height/width/scan/
+apex-delta blockers or still need a new approved evidence class/passing oracle.
 The Backfill Production Gate research input under `docs/deepresearch/` reviewed
 on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
 demonstrator / rollout guardrail, not a product hard gate. Low-height
@@ -2104,6 +2117,45 @@ at that older checkpoint, not the latest release claim.
   change.
 - Next checkpoint: keep role metadata as pass-through context only unless a new
   product contract names the exact output values allowed to change.
+
+### 2026-06-17 - standard_peak_generated_policy_quality_explanation_sidecar_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: generated policy replay was `production_ready` for the 511
+  current approved-evidence / observed-oracle rows, but the 4102 blocked rows
+  were still hard to explain beyond coarse `next_evidence` buckets.
+- New tier: unchanged for writer authority. Generated policy replay remains
+  `production_ready` only for 511 `write_ready` rows; broad 4613-row Backfill
+  remains `production_candidate`. The new sidecar is explanation-only.
+- Evidence: `standard_peak_backfill_productization.py` now writes
+  `standard_peak_backfill_policy_quality_explanations.tsv` beside
+  `standard_peak_backfill_policy.tsv` and records its path/SHA/row count in
+  `standard_peak_backfill_policy_summary.json`. The sidecar has one row per
+  generated policy row,
+  `schema_version=standard_peak_backfill_policy_quality_explanation_v1`,
+  `explanation_only=TRUE`, quality blocker count/tokens, and source clean-status
+  summary. It does not modify policy row hashes, evidence classes, writer
+  authority, expected-diff scope, workbook output, selected peak/area, counted
+  detection, or primary matrix semantics.
+- Real-data replay: no new RAW run. Existing 85RAW artifacts were replayed
+  no-RAW under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/`.
+  The replay classified 4613 rows as 511 `write_ready`, 0 `detected_flagged`,
+  and 4102 `blocked`; writer expected-diff remained 511/511 pass. The
+  summary records `backfill_policy_quality_explanation_row_count=4613`, and the
+  explanation sidecar has 4613 rows. The top explanation bucket is 1087
+  `missing_overlay_path` rows, followed by combined shape/height/width/scan or
+  apex-delta blocker combinations.
+- Validation: `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_backfill_productization.py -q`
+  passed `31`; focused ruff and mypy passed for the productization module/test;
+  the no-RAW real-data replay command exited `0`.
+- Remaining blocker: this sidecar explains blocked rows; it does not make them
+  writable. The next Backfill broadening step still needs a named evidence
+  class with observed/masked/product-writer oracle evidence and expected-diff.
+- Next checkpoint: review the sidecar contract, then use its blocker
+  distribution to choose the next simple evidence class; do not promote rows
+  from `quality_blockers` directly.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 
