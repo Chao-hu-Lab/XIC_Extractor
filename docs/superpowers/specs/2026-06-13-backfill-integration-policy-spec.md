@@ -252,6 +252,22 @@ Implementation closeout, 2026-06-16:
   pre-observed eligible rows with quality rank, selected flag, and rejection
   reason; unselected rows do not carry observed reintegration outcomes. This is
   the anti-cherry-pick audit surface for the 20 selected cases.
+- Heldout low-scan trace reintegration oracle, 2026-06-17:
+  `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now makes the
+  previously one-off trace-oracle generation reproducible from existing
+  `alignment_backfill_cell_evidence.tsv` and `*_trace_data.json` artifacts. The
+  low-scan clean scope keeps the same trace status, shape >=0.95,
+  local/global >=0.95, height >=2e6, boundary width 0.30-0.65 min, and apex
+  within 0.15 min constraints, but requires 7-9 boundary scans instead of at
+  least 10. The no-RAW 85RAW run under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_low_scan_clean_probe/`
+  found 56 eligible detected-cell candidates across 11 families, selected all
+  11 family-representative cases, and wrote `heldout_oracle_results.tsv` with
+  11/11 `pass` and 11/11 `included_in_product_acceptance=TRUE`. Maximum
+  boundary error was `4.86717e-05` min and maximum area relative error was
+  `0.038786`, within the accepted `0.1 min / 10% area` ceiling. This evidence
+  supports only the explicit low-scan clean trace scope; it still does not
+  authorize broad 4613-row activation or non-standard peak promotion.
 - Broad activation scope note, 2026-06-17:
   the trace reintegration oracle above is positive evidence, not a blanket
   promotion of every current standard-path activation write. The consolidated
@@ -276,11 +292,26 @@ Implementation closeout, 2026-06-16:
   `acceptance_status=pass`, `readiness_tier=production_ready`, and zero
   duplicate, missing, unexpected, non-eligible, non-written, unchanged, or
   blank-value rows. Therefore the explicit 72-row high-signal-clean writer
-  slice is `production_ready`, while the broad 4613-row standard-path seed
-  guard lane remains `production_candidate` until it has a broader
-  masked/product-writer observed oracle for the full activation scope.
+  slice is `production_ready`. The same activation scope audit now also writes
+  `low_scan_clean_activation_value_delta.tsv` and
+  `low_scan_clean_activation_expected_diff_acceptance.json`; the real 85RAW
+  no-RAW combined-scope audit found 42 low-scan clean eligible writes and the
+  expected-diff gate passed with 42/42 eligible rows and zero duplicate,
+  missing, unexpected, non-eligible, unchanged, non-written, or blank-value
+  rows. The opt-in writer run under
+  `output/productization_realdata_seed_guard_85raw_20260617/narrow_low_scan_clean_no_raw_productization/`
+  selected 42 rows, wrote 42 matrix cells, and emitted
+  `narrow_product_writer_expected_diff_acceptance.json` with
+  `acceptance_status=pass`, `readiness_tier=production_ready`,
+  `expected_scope=low_scan_clean_eligible_activation_rows`, and zero blockers.
+  Therefore the explicit 42-row low-scan clean writer slice is also
+  `production_ready`, while the broad 4613-row standard-path seed guard lane
+  remains `production_candidate` until it has broader masked/product-writer
+  observed oracle coverage and expected-diff approval for any additional
+  writes.
 - Product direction update, 2026-06-17:
-  the 72-row scope is the first safe demonstrator, not the intended ceiling.
+  the 72-row high-signal scope and 42-row low-scan scope are safe
+  demonstrators, not the intended ceiling.
   The product north star is to backfill automatically whenever evidence is
   sufficient. Future slices should broaden the evidence class or observed-oracle
   coverage and then approve the additional matrix writes through their own
@@ -317,19 +348,32 @@ Implementation closeout, 2026-06-16:
     contract.
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_activation_scope_audit --activation-value-delta-tsv output\productization_realdata_seed_guard_85raw_20260617\consolidated_no_raw_productization\activated_matrix\activation_value_delta.tsv --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\high_signal_clean_activation_scope_audit --source-run-id seed-guard-realdata-85raw-consolidated-high-signal-scope-20260617`
     (`broad_activation_scope_status=not_ready`; 72 high-signal clean eligible
-    writes out of 4613; `narrow_activation_expected_diff_acceptance.json`
-    reports `acceptance_status=pass` for those 72 rows and
-    `product_surface_changed=FALSE`).
+    writes out of 4613 in the first run; rerun as
+    `seed-guard-realdata-85raw-consolidated-combined-scope-20260617` also
+    reports 42 low-scan clean eligible writes; both expected-diff artifacts
+    report `acceptance_status=pass` and `product_surface_changed=FALSE`).
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --alignment-matrix-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix.pre_standard_peak_backfill.tsv --alignment-matrix-identity-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix_identity.pre_standard_peak_backfill.tsv --alignment-review-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_review.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\narrow_high_signal_clean_no_raw_productization --source-run-id seed-guard-realdata-85raw-consolidated-narrow-high-signal-clean-20260617 --high-signal-clean-activation-scope-audit-tsv output\productization_realdata_seed_guard_85raw_20260617\high_signal_clean_activation_scope_audit\activation_high_signal_clean_scope_audit.tsv`
     (`selected_activation_row_count=72`, `matrix_cells_written=72`,
     `activation_value_delta_written_count=72`, and
     `narrow_product_writer_expected_diff_acceptance.json` reports
     `acceptance_status=pass`, `readiness_tier=production_ready`, and
     `product_surface_changed=TRUE`).
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_heldout_trace_oracle --alignment-backfill-cell-evidence-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_backfill_cell_evidence.tsv --trace-root output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\chunks --output-dir output\productization_realdata_seed_guard_85raw_20260617\heldout_trace_reintegration_oracle_low_scan_clean_probe --source-run-id seed-guard-realdata-85raw-heldout-low-scan-clean-probe-20260617 --target-shape-class standard_low_scan_clean_trace`
+    (`selected_case_count=11`, `oracle_case_status_pass_count=11`,
+    `included_in_product_acceptance_count=11`, max boundary error
+    `4.86717e-05`, max area relative error `0.038786`).
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.diagnostics.standard_peak_backfill_productization --shadow-projection-cells-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\standard_peak_backfill_preset\consolidated\consolidated_shadow_projection_cells.tsv --alignment-matrix-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix.pre_standard_peak_backfill.tsv --alignment-matrix-identity-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_matrix_identity.pre_standard_peak_backfill.tsv --alignment-review-tsv output\standard_peak_backfill_preset_85raw_20260610\alignment_preset_dna_dr_85raw_validation_minimal\alignment_review.tsv --output-dir output\productization_realdata_seed_guard_85raw_20260617\narrow_low_scan_clean_no_raw_productization --source-run-id seed-guard-realdata-85raw-consolidated-narrow-low-scan-clean-20260617 --low-scan-clean-activation-scope-audit-tsv output\productization_realdata_seed_guard_85raw_20260617\high_signal_clean_activation_scope_audit\activation_high_signal_clean_scope_audit.tsv`
+    (`selected_activation_row_count=42`, `matrix_cells_written=42`,
+    `activation_value_delta_written_count=42`, and
+    `narrow_product_writer_expected_diff_acceptance.json` reports
+    `acceptance_status=pass`, `readiness_tier=production_ready`,
+    `expected_scope=low_scan_clean_eligible_activation_rows`, and
+    `product_surface_changed=TRUE`).
 - Residual production-ready blocker: none for the explicit 72-row
-  high-signal-clean writer slice. Broad standard-path seed guard activation
-  still needs a broader masked/product-writer observed oracle covering the
-  current 4613-row activation scope before claiming broad `production_ready`.
+  high-signal-clean writer slice or the explicit 42-row low-scan-clean writer
+  slice. Broad standard-path seed guard activation still needs a broader
+  masked/product-writer observed oracle covering the current 4613-row activation
+  scope before claiming broad `production_ready`.
 
 Implement the seed guard as a pre-activation filter in the existing standard
 peak activation/productization path, close to
@@ -1091,8 +1135,8 @@ Acceptance expectations:
 
 One row per `activation_value_delta.tsv` row from the current standard-peak
 productization bridge. This is a readback gate that asks whether actual written
-activation cells are covered by the same high-signal clean evidence envelope
-used by the heldout trace oracle. It does not authorize writes by itself.
+activation cells are covered by named evidence envelopes used by heldout trace
+oracles. It does not authorize writes by itself.
 
 Required fields:
 
@@ -1125,7 +1169,9 @@ Required fields:
 - `apex_aligned_shape_similarity`;
 - `local_window_to_global_max_ratio`;
 - `high_signal_clean_status`;
-- `high_signal_clean_blockers`.
+- `high_signal_clean_blockers`;
+- `low_scan_clean_status`;
+- `low_scan_clean_blockers`.
 
 The high-signal clean envelope for this audit is intentionally identical to the
 heldout trace oracle case selector: `trace_status` in `detected` or `rescued`,
@@ -1138,11 +1184,18 @@ explicit high-signal-clean product scope. `missing_evidence` means the write
 cannot be assessed from the current projection/trace artifacts. `ineligible`
 means available trace evidence exists but falls outside this oracle envelope.
 
+The low-scan clean envelope uses the same supported trace status, shape,
+local/global, height, width, and apex-delta thresholds, but requires `7-9`
+scans inside the integration boundary. `low_scan_clean_status=eligible` means
+the row is a candidate for the explicit low-scan-clean product scope. It is not
+a general low-quality allowance: scan count below `7` or any additional blocker
+keeps the row ineligible.
+
 #### `activation_high_signal_clean_scope_summary.tsv/json`
 
 The summary records source artifact paths/hashes, written row counts, projection
-join counts, trace join counts, eligible/ineligible/missing-evidence counts, and
-two status fields:
+join counts, trace join counts, high-signal and low-scan
+eligible/ineligible/missing-evidence counts, and status fields:
 
 - `broad_activation_scope_status`: may be `ready` only when every written
   activation row is high-signal clean eligible. Otherwise it must remain
@@ -1152,11 +1205,20 @@ two status fields:
   candidate. It is not production behavior unless a product writer actually
   limits output to those rows and an expected-diff gate accepts that matrix
   change.
+- `low_scan_clean_activation_scope_status`: may report
+  `ready_if_product_scope_is_limited_to_low_scan_clean_rows` only as a decision
+  candidate. It is not production behavior unless a product writer actually
+  limits output to those rows and an expected-diff gate accepts that matrix
+  change.
 
 `eligible_activation_value_delta.tsv` is a filtered convenience artifact for the
 eligible subset. It is not a replacement for `activation_value_delta.tsv` and
 must not be treated as product output unless the activation contract is
 explicitly narrowed to that scope.
+
+`low_scan_clean_activation_value_delta.tsv` is the equivalent filtered
+convenience artifact for `low_scan_clean_status=eligible` rows and has the same
+non-product limitation.
 
 #### `narrow_activation_expected_diff_acceptance.tsv/json`
 
@@ -1203,16 +1265,35 @@ Acceptance expectations:
   active. A formal product writer must explicitly limit output to this scope
   before a `production_ready` claim can be made.
 
-#### `standard_peak_backfill_productization.py --high-signal-clean-activation-scope-audit-tsv`
+#### `low_scan_clean_activation_expected_diff_acceptance.tsv/json`
 
-Explicit opt-in writer contract for the first high-signal-clean Backfill
-release slice. When this flag is supplied, the productization bridge reads
+One-row acceptance artifact for the explicit low-scan-clean activation subset.
+It uses the same fields and acceptance expectations as
+`narrow_activation_expected_diff_acceptance.tsv/json`, except `schema_version`
+is `standard_peak_low_scan_activation_expected_diff_acceptance_v1` and
+`expected_scope` must be `low_scan_clean_eligible_activation_rows`. Passing this
+gate is sufficient to say the 42-row subset has delta-level expected-diff
+acceptance; production behavior still requires the explicit scoped writer.
+
+#### Scoped `standard_peak_backfill_productization.py` writer flags
+
+Explicit opt-in writer contract for named Backfill release slices.
+
+- `--high-signal-clean-activation-scope-audit-tsv` filters to
+  `high_signal_clean_status=eligible` and writes
+  `expected_scope=high_signal_clean_eligible_activation_rows`.
+- `--low-scan-clean-activation-scope-audit-tsv` filters to
+  `low_scan_clean_status=eligible` and writes
+  `expected_scope=low_scan_clean_eligible_activation_rows`.
+
+Only one scoped audit flag may be supplied at a time. When a scoped flag is
+supplied, the productization bridge reads
 `activation_high_signal_clean_scope_audit.tsv`, filters the input
 `shadow_production_projection_cells.tsv` to rows whose
 `shadow_projection_row_sha256` appears as
 `matrix_value_source_row_sha256` with
-`high_signal_clean_status=eligible` and `matrix_value_effect=written`, and
-then runs the existing standard-peak activation input builder plus existing
+the selected scope status equal to `eligible` and `matrix_value_effect=written`,
+and then runs the existing standard-peak activation input builder plus existing
 matrix-only product activation writer on that filtered set.
 
 Fail-closed requirements:
@@ -1243,7 +1324,7 @@ The productization summary records:
 
 #### `narrow_product_writer_expected_diff_acceptance.tsv/json`
 
-One-row acceptance artifact emitted by the explicit high-signal-clean writer.
+One-row acceptance artifact emitted by each explicit scoped writer.
 Unlike `narrow_activation_expected_diff_acceptance.tsv/json`, this gate is tied
 to an actual matrix-only productization output and therefore records
 `product_surface_changed=TRUE`.

@@ -1,0 +1,73 @@
+"""Build a standard-peak held-out trace reintegration oracle packet."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from xic_extractor.diagnostics.standard_peak_heldout_trace_oracle import (
+    HIGH_SIGNAL_CLEAN_SCOPE,
+    SUPPORTED_TARGET_SHAPE_CLASSES,
+    run_heldout_trace_oracle,
+)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        outputs = run_heldout_trace_oracle(
+            alignment_backfill_cell_evidence_tsv=(
+                args.alignment_backfill_cell_evidence_tsv
+            ),
+            trace_root=args.trace_root,
+            output_dir=args.output_dir,
+            source_run_id=args.source_run_id,
+            target_shape_class=args.target_shape_class,
+            max_cases=args.max_cases,
+            max_cases_per_family=args.max_cases_per_family,
+        )
+    except (OSError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    print(f"Held-out trace oracle summary JSON: {outputs.summary_json}")
+    print(f"Held-out trace oracle manifest TSV: {outputs.manifest_tsv}")
+    print(f"Held-out observed results TSV: {outputs.observed_results_tsv}")
+    print(f"Held-out oracle results TSV: {outputs.oracle_results_tsv}")
+    print(f"Full eligible pool TSV: {outputs.full_eligible_pool_tsv}")
+    return 0 if outputs.status == "pass" else 1
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--alignment-backfill-cell-evidence-tsv",
+        type=Path,
+        required=True,
+        help="alignment_backfill_cell_evidence.tsv from the source alignment run.",
+    )
+    parser.add_argument(
+        "--trace-root",
+        type=Path,
+        required=True,
+        help="Root directory containing *_trace_data.json artifacts.",
+    )
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--source-run-id", default="")
+    parser.add_argument(
+        "--target-shape-class",
+        choices=SUPPORTED_TARGET_SHAPE_CLASSES,
+        default=HIGH_SIGNAL_CLEAN_SCOPE,
+    )
+    parser.add_argument("--max-cases", type=int, default=20)
+    parser.add_argument("--max-cases-per-family", type=int, default=1)
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

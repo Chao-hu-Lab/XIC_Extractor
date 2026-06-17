@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+import numpy as np
+
+from tools.diagnostics import standard_peak_heldout_trace_oracle as cli
+from xic_extractor.alignment.matrix_handoff import integration_from_peak_trace
+from xic_extractor.config import ExtractionConfig
+from xic_extractor.signal_processing import find_peak_and_area
+
+
+def test_heldout_trace_oracle_cli_writes_low_scan_packet(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_scan_fixture(tmp_path)
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-low-scan-oracle",
+                "--target-shape-class",
+                "standard_low_scan_clean_trace",
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["target_shape_class"] == "standard_low_scan_clean_trace"
+    assert summary["available_candidate_rows"] == "1"
+    assert summary["selected_case_count"] == "1"
+    assert summary["oracle_case_status_pass_count"] == "1"
+    assert summary["included_in_product_acceptance_count"] == "1"
+
+    manifest = _read_tsv(output_dir / "heldout_oracle_manifest.tsv")[0]
+    assert manifest["target_shape_class"] == "standard_low_scan_clean_trace"
+    assert manifest["acceptable_boundary_delta_min"] == "0.1"
+    assert manifest["acceptable_area_relative_error"] == "0.1"
+
+    result = _read_tsv(output_dir / "heldout_oracle_results.tsv")[0]
+    assert result["oracle_case_status"] == "pass"
+    assert result["included_in_product_acceptance"] == "TRUE"
+    assert result["observed_independence_basis"] == (
+        "independent_boundary_reintegration_result"
+    )
+
+    pool = _read_tsv(output_dir / "heldout_trace_reintegration_full_eligible_pool.tsv")
+    assert pool[0]["selected_for_oracle"] == "TRUE"
+    assert pool[0]["oracle_scan_count"] == "7"
+
+
+def _write_low_scan_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    trace_root = tmp_path / "traces"
+    trace_root.mkdir()
+    rt = np.round(np.arange(0.0, 2.01, 0.05), 4)
+    intensity = 1_000.0 + 5_000_000.0 * np.exp(-((rt - 1.0) ** 2) / (2 * 0.08**2))
+    result = find_peak_and_area(rt, intensity, _config())
+    assert result.peak is not None
+    integration = integration_from_peak_trace(
+        result.peak,
+        rt,
+        intensity,
+        boundary_sources=("local_minimum",),
+        integration_method="raw_trapezoid",
+        baseline_integration_method="asls",
+    )
+    assert integration is not None
+    assert integration.area_ms1_morphology is not None
+    trace_json = trace_root / "FAM_LOW_SCAN_trace_data.json"
+    trace_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_LOW_SCAN",
+                "family_center_rt": 1.0,
+                "traces": [
+                    {
+                        "sample_stem": "SampleA",
+                        "status": "detected",
+                        "cell_area": float(result.peak.area),
+                        "cell_height": float(result.peak.intensity),
+                        "cell_apex_rt": float(result.peak.rt),
+                        "cell_start_rt": 0.84995,
+                        "cell_end_rt": 1.15005,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "apex_aligned_shape_similarity": 0.99,
+                        "rt": [float(value) for value in rt],
+                        "intensity": [float(value) for value in intensity],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    evidence_tsv = tmp_path / "alignment_backfill_cell_evidence.tsv"
+    _write_tsv(
+        evidence_tsv,
+        [
+            {
+                "feature_family_id": "FAM_LOW_SCAN",
+                "sample_stem": "SampleA",
+                "status": "detected",
+                "production_cell_status": "detected",
+                "write_matrix_value": "TRUE",
+                "include_in_primary_matrix": "TRUE",
+                "primary_matrix_area": f"{integration.area_ms1_morphology:.8f}",
+                "primary_matrix_area_source": (
+                    "gaussian15_positive_asls_residual"
+                ),
+                "peak_start_rt": f"{result.peak.peak_start:.5f}",
+                "peak_end_rt": f"{result.peak.peak_end:.5f}",
+                "reason": (
+                    "source_reason=sample-local MS1 owner with original MS2 "
+                    "evidence"
+                ),
+            },
+        ],
+    )
+    return evidence_tsv, trace_root
+
+
+def _config() -> ExtractionConfig:
+    return ExtractionConfig(
+        data_dir=Path("."),
+        dll_dir=Path("."),
+        output_csv=Path("unused.csv"),
+        diagnostics_csv=Path("unused_diagnostics.csv"),
+        smooth_window=15,
+        smooth_polyorder=3,
+        peak_rel_height=0.05,
+        peak_min_prominence_ratio=0.0,
+        ms2_precursor_tol_da=0.5,
+        nl_min_intensity_ratio=0.0,
+        resolver_mode="local_minimum",
+        resolver_min_search_range_min=0.08,
+        resolver_min_relative_height=0.02,
+        resolver_min_ratio_top_edge=1.7,
+        resolver_peak_duration_max=2.0,
+        baseline_integration_method="asls",
+    )
+
+
+def _write_tsv(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _read_tsv(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))

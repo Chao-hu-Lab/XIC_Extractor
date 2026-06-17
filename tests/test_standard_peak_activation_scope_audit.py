@@ -84,10 +84,12 @@ def test_activation_scope_audit_classifies_high_signal_clean_rows(
 
     by_family = {row["feature_family_id"]: row for row in rows}
     assert by_family["FAM_A"]["high_signal_clean_status"] == "eligible"
+    assert by_family["FAM_A"]["low_scan_clean_status"] == "ineligible"
     assert by_family["FAM_A"]["integration_scan_count"] == "11"
     assert by_family["FAM_A"]["high_signal_clean_blockers"] == ""
     assert by_family["FAM_B"]["high_signal_clean_status"] == "ineligible"
     assert "height_lt_2000000" in by_family["FAM_B"]["high_signal_clean_blockers"]
+    assert "height_lt_2000000" in by_family["FAM_B"]["low_scan_clean_blockers"]
     assert by_family["FAM_C"]["trace_match_status"] == "missing_overlay_path"
     assert by_family["FAM_C"]["high_signal_clean_status"] == "missing_evidence"
     assert by_family["FAM_D"]["projection_match_status"] == "missing_projection_row"
@@ -96,6 +98,7 @@ def test_activation_scope_audit_classifies_high_signal_clean_rows(
     assert summary["written_activation_row_count"] == "4"
     assert summary["projection_matched_written_count"] == "3"
     assert summary["high_signal_clean_eligible_written_count"] == "1"
+    assert summary["low_scan_clean_eligible_written_count"] == "0"
     assert summary["high_signal_clean_missing_evidence_written_count"] == "2"
     assert summary["broad_activation_scope_status"] == "not_ready"
 
@@ -200,6 +203,61 @@ def test_activation_scope_audit_reports_each_high_signal_threshold_blocker(
         "apex_delta_gt_0.15",
         "scan_count_lt_10",
     }
+
+
+def test_activation_scope_audit_classifies_low_scan_clean_rows(
+    tmp_path: Path,
+) -> None:
+    overlay = tmp_path / "low_scan_overlay.png"
+    _write_trace_json(
+        overlay.with_name(f"{overlay.stem}_trace_data.json"),
+        sample_stem="LowScanSample",
+        family_center_rt=5.0,
+        cell_height=2_500_000.0,
+        cell_start_rt=4.8,
+        cell_end_rt=5.2,
+        cell_apex_rt=5.03,
+        shape_similarity=0.97,
+        local_global_ratio=0.99,
+        rt_values=[
+            4.80,
+            4.85,
+            4.90,
+            4.95,
+            5.00,
+            5.05,
+            5.10,
+            5.15,
+            5.20,
+        ],
+    )
+
+    rows, summary = audit_activation_scope(
+        activation_value_delta_rows=[
+            _delta_row("FAM_LOW_SCAN", "LowScanSample", "low-scan-sha"),
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                "FAM_LOW_SCAN",
+                "LowScanSample",
+                "low-scan-sha",
+                str(overlay),
+            ),
+        ],
+        activation_value_delta_tsv=tmp_path / "activation_value_delta.tsv",
+        shadow_projection_cells_tsv=tmp_path / "shadow_projection_cells.tsv",
+        source_run_id="unit",
+    )
+
+    assert rows[0]["high_signal_clean_status"] == "ineligible"
+    assert rows[0]["high_signal_clean_blockers"] == "scan_count_lt_10"
+    assert rows[0]["low_scan_clean_status"] == "eligible"
+    assert rows[0]["low_scan_clean_blockers"] == ""
+    assert summary["high_signal_clean_eligible_written_count"] == "0"
+    assert summary["low_scan_clean_eligible_written_count"] == "1"
+    assert summary["low_scan_clean_activation_scope_status"] == (
+        "ready_if_product_scope_is_limited_to_low_scan_clean_rows"
+    )
 
 
 def test_narrow_expected_diff_acceptance_fails_on_noneligible_delta(
@@ -316,6 +374,91 @@ def test_activation_scope_audit_cli_writes_summary_and_eligible_delta(
     assert acceptance["product_surface_changed"] == "FALSE"
     assert len(eligible_delta) == 1
     assert eligible_delta[0]["feature_family_id"] == "FAM_A"
+
+
+def test_activation_scope_audit_cli_writes_low_scan_expected_diff(
+    tmp_path: Path,
+) -> None:
+    from tools.diagnostics import standard_peak_activation_scope_audit as cli
+
+    overlay = tmp_path / "low_scan_overlay.png"
+    _write_trace_json(
+        overlay.with_name(f"{overlay.stem}_trace_data.json"),
+        sample_stem="LowScanSample",
+        family_center_rt=5.0,
+        cell_height=2_500_000.0,
+        cell_start_rt=4.8,
+        cell_end_rt=5.2,
+        cell_apex_rt=5.03,
+        shape_similarity=0.97,
+        local_global_ratio=0.99,
+        rt_values=[
+            4.80,
+            4.85,
+            4.90,
+            4.95,
+            5.00,
+            5.05,
+            5.10,
+            5.15,
+            5.20,
+        ],
+    )
+    delta_tsv = tmp_path / "activation_value_delta.tsv"
+    shadow_tsv = tmp_path / "shadow_projection_cells.tsv"
+    output_dir = tmp_path / "audit"
+    write_tsv(
+        delta_tsv,
+        [_delta_row("FAM_LOW_SCAN", "LowScanSample", "low-scan-sha")],
+        _DELTA_COLUMNS,
+        lineterminator="\n",
+    )
+    write_tsv(
+        shadow_tsv,
+        [
+            _projection_row(
+                "FAM_LOW_SCAN",
+                "LowScanSample",
+                "low-scan-sha",
+                str(overlay),
+            ),
+        ],
+        _SHADOW_COLUMNS,
+        lineterminator="\n",
+    )
+
+    assert cli.main(
+        [
+            "--activation-value-delta-tsv",
+            str(delta_tsv),
+            "--shadow-projection-cells-tsv",
+            str(shadow_tsv),
+            "--output-dir",
+            str(output_dir),
+            "--source-run-id",
+            "unit-low-scan-cli",
+        ],
+    ) == 0
+
+    summary = json.loads(
+        (output_dir / "activation_high_signal_clean_scope_summary.json").read_text(
+            encoding="utf-8",
+        )
+    )
+    acceptance = json.loads(
+        (
+            output_dir / "low_scan_clean_activation_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8")
+    )
+    low_scan_delta = read_tsv_required(
+        output_dir / "low_scan_clean_activation_value_delta.tsv",
+        _DELTA_COLUMNS,
+    )
+    assert summary["low_scan_clean_eligible_written_count"] == "1"
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["expected_scope"] == "low_scan_clean_eligible_activation_rows"
+    assert len(low_scan_delta) == 1
+    assert low_scan_delta[0]["feature_family_id"] == "FAM_LOW_SCAN"
 
 
 _DELTA_COLUMNS = (
@@ -435,6 +578,8 @@ def _audit_row(
         "high_signal_clean_blockers": ""
         if high_signal_clean_status == "eligible"
         else "height_lt_2000000",
+        "low_scan_clean_status": "missing_evidence",
+        "low_scan_clean_blockers": "not_tested",
     }
 
 

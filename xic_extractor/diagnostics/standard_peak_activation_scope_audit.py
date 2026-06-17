@@ -22,6 +22,9 @@ SCHEMA_VERSION = "standard_peak_activation_scope_audit_v1"
 NARROW_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
     "standard_peak_narrow_activation_expected_diff_acceptance_v1"
 )
+LOW_SCAN_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
+    "standard_peak_low_scan_activation_expected_diff_acceptance_v1"
+)
 
 MIN_SHAPE_SIMILARITY = 0.95
 MIN_LOCAL_GLOBAL_RATIO = 0.95
@@ -30,6 +33,8 @@ MIN_BOUNDARY_WIDTH_MIN = 0.30
 MAX_BOUNDARY_WIDTH_MIN = 0.65
 MAX_APEX_DELTA_ABS_MIN = 0.15
 MIN_INTEGRATION_SCAN_COUNT = 10
+MIN_LOW_SCAN_CLEAN_SCAN_COUNT = 7
+MAX_LOW_SCAN_CLEAN_SCAN_COUNT = 9
 SUPPORTED_TRACE_STATUSES = frozenset({"detected", "rescued"})
 
 ACTIVATION_DELTA_REQUIRED_COLUMNS = (
@@ -84,6 +89,8 @@ AUDIT_COLUMNS = (
     "local_window_to_global_max_ratio",
     "high_signal_clean_status",
     "high_signal_clean_blockers",
+    "low_scan_clean_status",
+    "low_scan_clean_blockers",
 )
 
 SUMMARY_COLUMNS = (
@@ -106,12 +113,18 @@ SUMMARY_COLUMNS = (
     "high_signal_clean_eligible_written_count",
     "high_signal_clean_ineligible_written_count",
     "high_signal_clean_missing_evidence_written_count",
+    "low_scan_clean_eligible_written_count",
+    "low_scan_clean_ineligible_written_count",
+    "low_scan_clean_missing_evidence_written_count",
     "eligible_scope_fraction_of_written",
+    "low_scan_clean_scope_fraction_of_written",
     "broad_activation_scope_status",
     "narrow_activation_scope_status",
+    "low_scan_clean_activation_scope_status",
     "remaining_blocker",
     "audit_tsv",
     "eligible_activation_value_delta_tsv",
+    "low_scan_clean_activation_value_delta_tsv",
 )
 
 NARROW_EXPECTED_DIFF_ACCEPTANCE_COLUMNS = (
@@ -147,8 +160,11 @@ class ActivationScopeAuditOutputs:
     summary_tsv: Path
     summary_json: Path
     eligible_activation_value_delta_tsv: Path
+    low_scan_clean_activation_value_delta_tsv: Path
     narrow_expected_diff_acceptance_tsv: Path
     narrow_expected_diff_acceptance_json: Path
+    low_scan_expected_diff_acceptance_tsv: Path
+    low_scan_expected_diff_acceptance_json: Path
     status: str
 
 
@@ -183,16 +199,28 @@ def run_activation_scope_audit(
     summary_tsv = output_dir / "activation_high_signal_clean_scope_summary.tsv"
     summary_json = output_dir / "activation_high_signal_clean_scope_summary.json"
     eligible_delta_tsv = output_dir / "eligible_activation_value_delta.tsv"
+    low_scan_delta_tsv = output_dir / "low_scan_clean_activation_value_delta.tsv"
     narrow_acceptance_tsv = (
         output_dir / "narrow_activation_expected_diff_acceptance.tsv"
     )
     narrow_acceptance_json = (
         output_dir / "narrow_activation_expected_diff_acceptance.json"
     )
+    low_scan_acceptance_tsv = (
+        output_dir / "low_scan_clean_activation_expected_diff_acceptance.tsv"
+    )
+    low_scan_acceptance_json = (
+        output_dir / "low_scan_clean_activation_expected_diff_acceptance.json"
+    )
     eligible_hashes = {
         text_value(row.get("matrix_value_source_row_sha256"))
         for row in audit_rows
         if text_value(row.get("high_signal_clean_status")) == "eligible"
+    }
+    low_scan_hashes = {
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in audit_rows
+        if text_value(row.get("low_scan_clean_status")) == "eligible"
     }
     eligible_delta_rows = tuple(
         row
@@ -200,10 +228,17 @@ def run_activation_scope_audit(
         if text_value(row.get("matrix_value_effect")) == "written"
         and text_value(row.get("matrix_value_source_row_sha256")) in eligible_hashes
     )
+    low_scan_delta_rows = tuple(
+        row
+        for row in delta_rows
+        if text_value(row.get("matrix_value_effect")) == "written"
+        and text_value(row.get("matrix_value_source_row_sha256")) in low_scan_hashes
+    )
 
     summary = dict(summary)
     summary["audit_tsv"] = str(audit_tsv)
     summary["eligible_activation_value_delta_tsv"] = str(eligible_delta_tsv)
+    summary["low_scan_clean_activation_value_delta_tsv"] = str(low_scan_delta_tsv)
     write_tsv(
         audit_tsv,
         audit_rows,
@@ -218,6 +253,13 @@ def run_activation_scope_audit(
         formatter=format_diagnostic_value,
         lineterminator="\n",
     )
+    write_tsv(
+        low_scan_delta_tsv,
+        low_scan_delta_rows,
+        delta_header,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
     narrow_acceptance = build_narrow_expected_diff_acceptance(
         audit_rows=audit_rows,
         eligible_activation_value_delta_rows=eligible_delta_rows,
@@ -226,6 +268,22 @@ def run_activation_scope_audit(
         activation_scope_audit_tsv=audit_tsv,
         eligible_activation_value_delta_tsv=eligible_delta_tsv,
         source_run_id=source_run_id,
+    )
+    low_scan_acceptance = build_scope_expected_diff_acceptance(
+        audit_rows=audit_rows,
+        eligible_activation_value_delta_rows=low_scan_delta_rows,
+        activation_value_delta_rows=delta_rows,
+        activation_value_delta_tsv=activation_value_delta_tsv,
+        activation_scope_audit_tsv=audit_tsv,
+        eligible_activation_value_delta_tsv=low_scan_delta_tsv,
+        source_run_id=source_run_id,
+        scope_status_column="low_scan_clean_status",
+        expected_scope="low_scan_clean_eligible_activation_rows",
+        schema_version=LOW_SCAN_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION,
+        no_rows_blocker="no_low_scan_clean_eligible_delta_rows",
+        product_decision_next_action=(
+            "product_decision_required_before_writing_low_scan_clean_activation_output"
+        ),
     )
     write_tsv(
         narrow_acceptance_tsv,
@@ -236,6 +294,17 @@ def run_activation_scope_audit(
     )
     narrow_acceptance_json.write_text(
         json.dumps(narrow_acceptance, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_tsv(
+        low_scan_acceptance_tsv,
+        (low_scan_acceptance,),
+        NARROW_EXPECTED_DIFF_ACCEPTANCE_COLUMNS,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
+    low_scan_acceptance_json.write_text(
+        json.dumps(low_scan_acceptance, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     write_tsv(
@@ -254,8 +323,11 @@ def run_activation_scope_audit(
         summary_tsv=summary_tsv,
         summary_json=summary_json,
         eligible_activation_value_delta_tsv=eligible_delta_tsv,
+        low_scan_clean_activation_value_delta_tsv=low_scan_delta_tsv,
         narrow_expected_diff_acceptance_tsv=narrow_acceptance_tsv,
         narrow_expected_diff_acceptance_json=narrow_acceptance_json,
+        low_scan_expected_diff_acceptance_tsv=low_scan_acceptance_tsv,
+        low_scan_expected_diff_acceptance_json=low_scan_acceptance_json,
         status=summary["broad_activation_scope_status"],
     )
 
@@ -303,6 +375,41 @@ def build_narrow_expected_diff_acceptance(
 ) -> dict[str, str]:
     """Validate the filtered high-signal-clean delta as a narrow expected diff."""
 
+    return build_scope_expected_diff_acceptance(
+        audit_rows=audit_rows,
+        eligible_activation_value_delta_rows=eligible_activation_value_delta_rows,
+        activation_value_delta_rows=activation_value_delta_rows,
+        activation_value_delta_tsv=activation_value_delta_tsv,
+        activation_scope_audit_tsv=activation_scope_audit_tsv,
+        eligible_activation_value_delta_tsv=eligible_activation_value_delta_tsv,
+        source_run_id=source_run_id,
+        scope_status_column="high_signal_clean_status",
+        expected_scope="high_signal_clean_eligible_activation_rows",
+        schema_version=NARROW_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION,
+        no_rows_blocker="no_high_signal_clean_eligible_delta_rows",
+        product_decision_next_action=(
+            "product_decision_required_before_writing_narrow_activation_output"
+        ),
+    )
+
+
+def build_scope_expected_diff_acceptance(
+    *,
+    audit_rows: Sequence[Mapping[str, str]],
+    eligible_activation_value_delta_rows: Sequence[Mapping[str, str]],
+    activation_value_delta_rows: Sequence[Mapping[str, str]],
+    activation_value_delta_tsv: Path,
+    activation_scope_audit_tsv: Path,
+    eligible_activation_value_delta_tsv: Path,
+    source_run_id: str = "",
+    scope_status_column: str,
+    expected_scope: str,
+    schema_version: str,
+    no_rows_blocker: str,
+    product_decision_next_action: str,
+) -> dict[str, str]:
+    """Validate a filtered activation delta as an explicit expected diff."""
+
     written_full_keys = {
         _delta_key(row)
         for row in activation_value_delta_rows
@@ -311,7 +418,7 @@ def build_narrow_expected_diff_acceptance(
     eligible_audit_keys = {
         _audit_key(row)
         for row in audit_rows
-        if text_value(row.get("high_signal_clean_status")) == "eligible"
+        if text_value(row.get(scope_status_column)) == "eligible"
         and text_value(row.get("matrix_value_effect")) == "written"
     }
     eligible_delta_keys = [
@@ -346,12 +453,13 @@ def build_narrow_expected_diff_acceptance(
         not_written_delta_count=not_written_delta_count,
         unchanged_delta_count=unchanged_delta_count,
         blank_activated_value_count=blank_activated_value_count,
+        no_rows_blocker=no_rows_blocker,
     )
     return {
-        "schema_version": NARROW_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "source_run_id": source_run_id,
         "acceptance_status": "pass" if not blocking_reasons else "fail",
-        "expected_scope": "high_signal_clean_eligible_activation_rows",
+        "expected_scope": expected_scope,
         "activation_value_delta_tsv": str(activation_value_delta_tsv),
         "activation_value_delta_sha256": _file_sha_text(activation_value_delta_tsv),
         "activation_scope_audit_tsv": str(activation_scope_audit_tsv),
@@ -373,7 +481,7 @@ def build_narrow_expected_diff_acceptance(
         "blocking_reasons": ";".join(blocking_reasons),
         "product_surface_changed": "FALSE",
         "next_action": (
-            "product_decision_required_before_writing_narrow_activation_output"
+            product_decision_next_action
             if not blocking_reasons
             else "review_narrow_expected_diff_acceptance_failures"
         ),
@@ -482,10 +590,11 @@ def _narrow_expected_diff_blockers(
     not_written_delta_count: int,
     unchanged_delta_count: int,
     blank_activated_value_count: int,
+    no_rows_blocker: str = "no_high_signal_clean_eligible_delta_rows",
 ) -> tuple[str, ...]:
     blockers: list[str] = []
     if eligible_delta_row_count == 0:
-        blockers.append("no_high_signal_clean_eligible_delta_rows")
+        blockers.append(no_rows_blocker)
     if duplicate_delta_key_count:
         blockers.append("duplicate_eligible_delta_keys")
     if missing_delta_count:
@@ -541,6 +650,15 @@ def _with_trace_metrics(
         apex_delta=apex_delta,
         integration_scan_count=integration_scan_count,
     )
+    low_scan_blockers = _low_scan_clean_blockers(
+        trace_status=trace_status,
+        shape=shape,
+        local_global=local_global,
+        height=height,
+        boundary_width=boundary_width,
+        apex_delta=apex_delta,
+        integration_scan_count=integration_scan_count,
+    )
     out.update(
         {
             "trace_match_status": "matched",
@@ -560,6 +678,10 @@ def _with_trace_metrics(
             "local_window_to_global_max_ratio": _metric_text(local_global),
             "high_signal_clean_status": "eligible" if not blockers else "ineligible",
             "high_signal_clean_blockers": ";".join(blockers),
+            "low_scan_clean_status": (
+                "eligible" if not low_scan_blockers else "ineligible"
+            ),
+            "low_scan_clean_blockers": ";".join(low_scan_blockers),
         }
     )
     return out
@@ -600,6 +722,65 @@ def _high_signal_clean_blockers(
     return tuple(blockers)
 
 
+def _low_scan_clean_blockers(
+    *,
+    trace_status: str,
+    shape: float | None,
+    local_global: float | None,
+    height: float | None,
+    boundary_width: float | None,
+    apex_delta: float | None,
+    integration_scan_count: int | None,
+) -> tuple[str, ...]:
+    blockers = list(
+        _clean_except_scan_blockers(
+            trace_status=trace_status,
+            shape=shape,
+            local_global=local_global,
+            height=height,
+            boundary_width=boundary_width,
+            apex_delta=apex_delta,
+        )
+    )
+    if (
+        integration_scan_count is None
+        or integration_scan_count < MIN_LOW_SCAN_CLEAN_SCAN_COUNT
+    ):
+        blockers.append("scan_count_lt_7")
+    elif integration_scan_count > MAX_LOW_SCAN_CLEAN_SCAN_COUNT:
+        blockers.append("scan_count_gt_9")
+    return tuple(blockers)
+
+
+def _clean_except_scan_blockers(
+    *,
+    trace_status: str,
+    shape: float | None,
+    local_global: float | None,
+    height: float | None,
+    boundary_width: float | None,
+    apex_delta: float | None,
+) -> tuple[str, ...]:
+    blockers: list[str] = []
+    if trace_status not in SUPPORTED_TRACE_STATUSES:
+        blockers.append("unsupported_trace_status")
+    if shape is None or shape < MIN_SHAPE_SIMILARITY:
+        blockers.append("shape_lt_0.95")
+    if local_global is None or local_global < MIN_LOCAL_GLOBAL_RATIO:
+        blockers.append("local_global_ratio_lt_0.95")
+    if height is None or height < MIN_CELL_HEIGHT:
+        blockers.append("height_lt_2000000")
+    if (
+        boundary_width is None
+        or boundary_width < MIN_BOUNDARY_WIDTH_MIN
+        or boundary_width > MAX_BOUNDARY_WIDTH_MIN
+    ):
+        blockers.append("width_outside_0.30_0.65")
+    if apex_delta is None or apex_delta > MAX_APEX_DELTA_ABS_MIN:
+        blockers.append("apex_delta_gt_0.15")
+    return tuple(blockers)
+
+
 def _summary_row(
     audit_rows: Sequence[Mapping[str, str]],
     *,
@@ -615,6 +796,9 @@ def _summary_row(
     counters = Counter(
         text_value(row.get("high_signal_clean_status")) for row in written_rows
     )
+    low_scan_counters = Counter(
+        text_value(row.get("low_scan_clean_status")) for row in written_rows
+    )
     projection_counters = Counter(
         text_value(row.get("projection_match_status")) for row in written_rows
     )
@@ -625,8 +809,12 @@ def _summary_row(
     eligible_count = counters["eligible"]
     missing_count = counters["missing_evidence"]
     ineligible_count = counters["ineligible"]
+    low_scan_eligible_count = low_scan_counters["eligible"]
+    low_scan_missing_count = low_scan_counters["missing_evidence"]
+    low_scan_ineligible_count = low_scan_counters["ineligible"]
     broad_ready = written_count > 0 and eligible_count == written_count
     narrow_ready = eligible_count > 0
+    low_scan_ready = low_scan_eligible_count > 0
     return {
         "schema_version": SCHEMA_VERSION,
         "source_run_id": source_run_id,
@@ -657,8 +845,17 @@ def _summary_row(
         "high_signal_clean_eligible_written_count": str(eligible_count),
         "high_signal_clean_ineligible_written_count": str(ineligible_count),
         "high_signal_clean_missing_evidence_written_count": str(missing_count),
+        "low_scan_clean_eligible_written_count": str(low_scan_eligible_count),
+        "low_scan_clean_ineligible_written_count": str(low_scan_ineligible_count),
+        "low_scan_clean_missing_evidence_written_count": str(
+            low_scan_missing_count,
+        ),
         "eligible_scope_fraction_of_written": _fraction_text(
             eligible_count,
+            written_count,
+        ),
+        "low_scan_clean_scope_fraction_of_written": _fraction_text(
+            low_scan_eligible_count,
             written_count,
         ),
         "broad_activation_scope_status": "ready" if broad_ready else "not_ready",
@@ -667,14 +864,21 @@ def _summary_row(
             if narrow_ready
             else "not_ready"
         ),
+        "low_scan_clean_activation_scope_status": (
+            "ready_if_product_scope_is_limited_to_low_scan_clean_rows"
+            if low_scan_ready
+            else "not_ready"
+        ),
         "remaining_blocker": _remaining_blocker(
             written_count=written_count,
             eligible_count=eligible_count,
             missing_count=missing_count,
             ineligible_count=ineligible_count,
+            low_scan_eligible_count=low_scan_eligible_count,
         ),
         "audit_tsv": "",
         "eligible_activation_value_delta_tsv": "",
+        "low_scan_clean_activation_value_delta_tsv": "",
     }
 
 
@@ -684,6 +888,7 @@ def _remaining_blocker(
     eligible_count: int,
     missing_count: int,
     ineligible_count: int,
+    low_scan_eligible_count: int = 0,
 ) -> str:
     if written_count == 0:
         return "no_activation_writes"
@@ -692,6 +897,8 @@ def _remaining_blocker(
     parts: list[str] = []
     if eligible_count:
         parts.append("product_scope_decision_required_for_high_signal_clean_subset")
+    if low_scan_eligible_count:
+        parts.append("product_scope_decision_required_for_low_scan_clean_subset")
     if missing_count:
         parts.append("missing_trace_or_projection_evidence_for_some_writes")
     if ineligible_count:
@@ -789,6 +996,8 @@ def _with_trace_defaults(
             "local_window_to_global_max_ratio": "",
             "high_signal_clean_status": high_signal_clean_status,
             "high_signal_clean_blockers": ";".join(blockers),
+            "low_scan_clean_status": high_signal_clean_status,
+            "low_scan_clean_blockers": ";".join(blockers),
         }
     )
     return row

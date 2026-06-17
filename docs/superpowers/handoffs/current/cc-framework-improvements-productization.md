@@ -10,13 +10,18 @@
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
-現在我們還不能說這 4613 格全部 ready，因為其中只有 72 格落在已被獨立
-oracle 驗過的 high-signal clean 範圍。這 72 格已經有 explicit writer、
-expected-diff acceptance、真實 no-RAW 85RAW artifact，並標
-`readiness_tier=production_ready`。但是你的產品方向已記下來：72 格只是第一個
-示範/放行 slice，不是天花板。北極星是「只要證據足夠就補」，下一步應該擴大
-oracle / expected-diff 證據，把 broad 4613 類似格子逐步推上去，而不是永遠停在
-72 格。
+現在我們仍不能說這 4613 格全部 ready，但這輪已把第二個安全切片推上去了。
+原本的 72 格 high-signal clean 仍是 `production_ready`；這輪新增的
+low-scan clean 是「其他證據都乾淨，只是邊界內 scan count 只有 7-9」。
+新的 no-RAW heldout oracle 從既有 85RAW trace 找到 56 個候選、11 個 family
+代表案例，11/11 通過 `0.1 min / 10% area`；activation scope audit 在 4613
+格裡找到 42 格符合 low-scan clean，expected-diff 42/42 乾淨，opt-in writer
+也只寫這 42 格並得到 `readiness_tier=production_ready`。所以現在 Backfill
+有兩個 explicit scoped ready slices：72 格 high-signal clean + 42 格
+low-scan clean。你的產品方向也已落地成工作規則：這兩個只是示範/放行
+slice，不是天花板；北極星仍是「只要證據足夠就補」，下一步要繼續用 named
+evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
+推上去。
 
 第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
 support-TSV workflow ready；本輪新增 headless auto-limited CLI：
@@ -59,15 +64,37 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD before current uncommitted slice: `f0c0ca8`
+- HEAD before current uncommitted slice: `2497166`
 - Dirty scope: 沒有 staged file；請以 `git status --short` 為準。目前主要是
-  Targeted MS1 auto-limited CLI、support producer package refactor、auto
-  expected-diff gate、README/index/handoff/spec/control-plane 更新。
-- 上一個 checkpoint 的 full local gate 已跑完:
+  Backfill low-scan scoped writer/oracle producer、activation scope audit
+  low-scan columns、tools index/handoff/spec/control-plane 更新。
+- 本輪 Backfill low-scan gate:
+  - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
+    low-scan clean 真實 no-RAW 85RAW artifact 在
+    `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_low_scan_clean_probe/`。
+  - combined activation scope audit 仍在
+    `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/`；
+    summary 現在同時記 72 high-signal clean 與 42 low-scan clean。
+  - low-scan writer 真實 no-RAW output 在
+    `output/productization_realdata_seed_guard_85raw_20260617/narrow_low_scan_clean_no_raw_productization/`；
+    `narrow_product_writer_expected_diff_acceptance.json` 是 pass /
+    `readiness_tier=production_ready` / 42 rows。
+  - focused gate 已跑：
+    `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py tests\test_standard_peak_heldout_trace_oracle.py -q`
+    -> `19 passed`，包含新增的 fail-closed coverage：同時給兩種
+    scope audit、low-scan 沒有 eligible row、audit SHA 重複、audit 指到
+    missing shadow SHA、shadow projection SHA 重複。
+- 本輪 subagent review:
+  - `Mendel` / `Meitner` 沒有找到 P1/P2 blocking issue。
+  - P3 docs drift 已修：control-plane/spec/handoff 現在都明講 72-row
+    high-signal 與 42-row low-scan 是兩個 explicit scoped
+    `production_ready` slices，broad 4613-row 仍只是
+    `production_candidate`。
+- 本輪完整 local gate 已跑完:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 343 source files`)
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3707 passed, 1 skipped`
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py` -> `87 entry points, 166 total files`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 346 source files`)
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3721 passed, 1 skipped`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py` -> `88 entry points, 167 total files`
   - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
 - 本輪後續 focused gate:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` -> `9 passed`
@@ -1026,13 +1053,17 @@ RAW-backed 驗證:
    - Local PR closeout gate 已在 2026-06-16 跑過。
    - 尚未 push、尚未看 GitHub CI、尚未開或更新 PR。
 
-2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做 72-row narrow writer。
+2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做已完成 scoped writer。
    - 目前 explicit 72-row high-signal-clean scoped writer 是 `production_ready`。
+   - 目前 explicit 42-row low-scan-clean scoped writer 也是 `production_ready`。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
-   - High-signal clean 20-case heldout oracle 已通過，activation scope audit
-     已證明目前 broad 4613 writes 只有 72 個落在同一 evidence envelope。
+   - High-signal clean 20-case heldout oracle 已通過；low-scan clean 11-case
+     heldout oracle 也已通過。combined activation scope audit 已證明目前
+     broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
-     observed oracle 和 full-scope expected-diff gate。
+     observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
+     應該挑下一個 named evidence class，例如 height-only 或 apex-delta-only，
+     但前提是能產生對應 heldout oracle packet。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。

@@ -155,6 +155,16 @@ class StandardPeakBackfillProductizationOutputs:
     reconciliation_gallery_html: Path | None = None
 
 
+@dataclass(frozen=True)
+class _ActivationScopeRequest:
+    audit_tsv: Path | None
+    contract: str
+    status_column: str
+    label: str
+    no_rows_blocker: str
+    ready_next_action: str
+
+
 def run_standard_peak_backfill_productization(
     *,
     shadow_projection_cells_tsv: Path,
@@ -171,6 +181,7 @@ def run_standard_peak_backfill_productization(
     retained_backfill_gate_tsv: Path | None = None,
     gallery_output_dir: Path | None = None,
     high_signal_clean_activation_scope_audit_tsv: Path | None = None,
+    low_scan_clean_activation_scope_audit_tsv: Path | None = None,
 ) -> StandardPeakBackfillProductizationOutputs:
     """Apply standard-peak projection accepts and optionally render synced gallery."""
 
@@ -188,13 +199,24 @@ def run_standard_peak_backfill_productization(
         alignment_matrix_tsv=alignment_matrix_tsv,
         alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
     )
+    activation_scope = _activation_scope_request(
+        high_signal_clean_activation_scope_audit_tsv=(
+            high_signal_clean_activation_scope_audit_tsv
+        ),
+        low_scan_clean_activation_scope_audit_tsv=(
+            low_scan_clean_activation_scope_audit_tsv
+        ),
+    )
     (
         activation_shadow_rows,
         activation_scope_filter,
         activation_scope_audit_rows,
-    ) = _filter_shadow_rows_to_high_signal_clean_scope(
+    ) = _filter_shadow_rows_to_activation_scope(
         shadow_rows,
-        activation_scope_audit_tsv=high_signal_clean_activation_scope_audit_tsv,
+        activation_scope_audit_tsv=activation_scope.audit_tsv,
+        activation_scope_contract=activation_scope.contract,
+        scope_status_column=activation_scope.status_column,
+        scope_label=activation_scope.label,
     )
     activation_index = build_standard_peak_activation_inputs(
         activation_shadow_rows,
@@ -288,10 +310,14 @@ def run_standard_peak_backfill_productization(
                 _narrow_product_writer_expected_diff_acceptance_row(
                     activation_scope_audit_rows=activation_scope_audit_rows,
                     product_activation_value_delta_rows=delta_rows,
-                    activation_scope_audit_tsv=high_signal_clean_activation_scope_audit_tsv,
+                    activation_scope_audit_tsv=activation_scope.audit_tsv,
                     product_activation_value_delta_tsv=apply_outputs.value_delta_tsv,
                     application_summary=application_summary,
                     source_run_id=source_run_id,
+                    scope_status_column=activation_scope.status_column,
+                    expected_scope=activation_scope.contract,
+                    no_rows_blocker=activation_scope.no_rows_blocker,
+                    ready_next_action=activation_scope.ready_next_action,
                 )
             )
             write_tsv(
@@ -313,9 +339,7 @@ def run_standard_peak_backfill_productization(
                     (narrow_writer_acceptance["blocking_reasons"],),
                 )
             elif status == "pass":
-                next_action = (
-                    "narrow_high_signal_clean_backfill_production_ready"
-                )
+                next_action = activation_scope.ready_next_action
     elif activation_scope_audit_rows:
         status = "fail"
         next_action = "review_narrow_activation_scope_no_product_rows"
@@ -536,16 +560,64 @@ def _summary_row(
     }
 
 
-def _filter_shadow_rows_to_high_signal_clean_scope(
+def _activation_scope_request(
+    *,
+    high_signal_clean_activation_scope_audit_tsv: Path | None,
+    low_scan_clean_activation_scope_audit_tsv: Path | None,
+) -> _ActivationScopeRequest:
+    requested = tuple(
+        path
+        for path in (
+            high_signal_clean_activation_scope_audit_tsv,
+            low_scan_clean_activation_scope_audit_tsv,
+        )
+        if path is not None
+    )
+    if len(requested) > 1:
+        raise ValueError(
+            "only one activation scope audit may be provided at a time",
+        )
+    if high_signal_clean_activation_scope_audit_tsv is not None:
+        return _ActivationScopeRequest(
+            audit_tsv=high_signal_clean_activation_scope_audit_tsv,
+            contract="high_signal_clean_eligible_activation_rows",
+            status_column="high_signal_clean_status",
+            label="high-signal-clean",
+            no_rows_blocker="no_high_signal_clean_eligible_audit_rows",
+            ready_next_action="narrow_high_signal_clean_backfill_production_ready",
+        )
+    if low_scan_clean_activation_scope_audit_tsv is not None:
+        return _ActivationScopeRequest(
+            audit_tsv=low_scan_clean_activation_scope_audit_tsv,
+            contract="low_scan_clean_eligible_activation_rows",
+            status_column="low_scan_clean_status",
+            label="low-scan-clean",
+            no_rows_blocker="no_low_scan_clean_eligible_audit_rows",
+            ready_next_action="narrow_low_scan_clean_backfill_production_ready",
+        )
+    return _ActivationScopeRequest(
+        audit_tsv=None,
+        contract="unscoped_standard_peak_gate",
+        status_column="",
+        label="unscoped",
+        no_rows_blocker="",
+        ready_next_action="review_activation_application_summary",
+    )
+
+
+def _filter_shadow_rows_to_activation_scope(
     shadow_rows: Sequence[Mapping[str, str]],
     *,
     activation_scope_audit_tsv: Path | None,
+    activation_scope_contract: str,
+    scope_status_column: str,
+    scope_label: str,
 ) -> tuple[tuple[Mapping[str, str], ...], dict[str, str], tuple[dict[str, str], ...]]:
     if activation_scope_audit_tsv is None:
         return (
             tuple(shadow_rows),
             {
-                "activation_scope_contract": "unscoped_standard_peak_gate",
+                "activation_scope_contract": activation_scope_contract,
                 "activation_scope_filter_status": "not_requested",
                 "activation_scope_audit_tsv": "",
                 "activation_scope_audit_sha256": "",
@@ -561,13 +633,13 @@ def _filter_shadow_rows_to_high_signal_clean_scope(
     audit_rows = tuple(
         read_tsv_required(
             activation_scope_audit_tsv,
-            ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            (*ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS, scope_status_column),
         )
     )
     eligible_audit_rows = tuple(
         row
         for row in audit_rows
-        if text_value(row.get("high_signal_clean_status")) == "eligible"
+        if text_value(row.get(scope_status_column)) == "eligible"
         and text_value(row.get("matrix_value_effect")) == "written"
     )
     eligible_shas = tuple(
@@ -576,12 +648,12 @@ def _filter_shadow_rows_to_high_signal_clean_scope(
     )
     if not eligible_shas:
         raise ValueError(
-            "high-signal-clean activation scope audit has no eligible written rows",
+            f"{scope_label} activation scope audit has no eligible written rows",
         )
     duplicate_audit_shas = _duplicates(eligible_shas)
     if duplicate_audit_shas:
         raise ValueError(
-            "high-signal-clean activation scope audit has duplicate eligible "
+            f"{scope_label} activation scope audit has duplicate eligible "
             "matrix_value_source_row_sha256 values: "
             f"{';'.join(duplicate_audit_shas[:10])}",
         )
@@ -604,7 +676,7 @@ def _filter_shadow_rows_to_high_signal_clean_scope(
     )
     if missing_shadow_shas:
         raise ValueError(
-            "high-signal-clean activation scope audit references missing "
+            f"{scope_label} activation scope audit references missing "
             "shadow_projection_row_sha256 values: "
             f"{';'.join(missing_shadow_shas[:10])}",
         )
@@ -618,7 +690,7 @@ def _filter_shadow_rows_to_high_signal_clean_scope(
     return (
         filtered_rows,
         {
-            "activation_scope_contract": "high_signal_clean_eligible_activation_rows",
+            "activation_scope_contract": activation_scope_contract,
             "activation_scope_filter_status": "applied",
             "activation_scope_audit_tsv": str(activation_scope_audit_tsv),
             "activation_scope_audit_sha256": file_sha256(
@@ -646,11 +718,15 @@ def _narrow_product_writer_expected_diff_acceptance_row(
     product_activation_value_delta_tsv: Path,
     application_summary: Mapping[str, str],
     source_run_id: str,
+    scope_status_column: str,
+    expected_scope: str,
+    no_rows_blocker: str,
+    ready_next_action: str,
 ) -> dict[str, str]:
     eligible_audit_keys = {
         _audit_key(row)
         for row in activation_scope_audit_rows
-        if text_value(row.get("high_signal_clean_status")) == "eligible"
+        if text_value(row.get(scope_status_column)) == "eligible"
         and text_value(row.get("matrix_value_effect")) == "written"
     }
     all_audit_written_keys = {
@@ -700,6 +776,7 @@ def _narrow_product_writer_expected_diff_acceptance_row(
         blank_activated_value_count=blank_activated_value_count,
         matrix_cells_written=matrix_cells_written,
         application_status=text_value(application_summary.get("application_status")),
+        no_rows_blocker=no_rows_blocker,
     )
     acceptance_status = "pass" if not blockers else "fail"
     return {
@@ -709,7 +786,7 @@ def _narrow_product_writer_expected_diff_acceptance_row(
         "source_run_id": source_run_id,
         "acceptance_status": acceptance_status,
         "readiness_tier": "production_ready" if acceptance_status == "pass" else "",
-        "expected_scope": "high_signal_clean_eligible_activation_rows",
+        "expected_scope": expected_scope,
         "activation_scope_audit_tsv": _path_text(activation_scope_audit_tsv),
         "activation_scope_audit_sha256": (
             "" if activation_scope_audit_tsv is None else file_sha256(
@@ -737,7 +814,7 @@ def _narrow_product_writer_expected_diff_acceptance_row(
         "blocking_reasons": ";".join(blockers),
         "product_surface_changed": "TRUE",
         "next_action": (
-            "claim_narrow_high_signal_clean_backfill_production_ready"
+            f"claim_{ready_next_action}"
             if acceptance_status == "pass"
             else "review_narrow_product_writer_expected_diff_failures"
         ),
@@ -758,10 +835,11 @@ def _narrow_product_writer_acceptance_blockers(
     blank_activated_value_count: int,
     matrix_cells_written: int,
     application_status: str,
+    no_rows_blocker: str = "no_high_signal_clean_eligible_audit_rows",
 ) -> tuple[str, ...]:
     blockers: list[str] = []
     if eligible_audit_row_count == 0:
-        blockers.append("no_high_signal_clean_eligible_audit_rows")
+        blockers.append(no_rows_blocker)
     if product_delta_row_count == 0:
         blockers.append("no_product_delta_rows")
     if product_written_delta_row_count != eligible_audit_row_count:

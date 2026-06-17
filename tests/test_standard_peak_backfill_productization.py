@@ -171,7 +171,10 @@ def test_standard_peak_productization_can_limit_writer_to_high_signal_clean_scop
             _scope_audit_row("FAM_STD", "S2", "a" * 64, "eligible"),
             _scope_audit_row("FAM_NON", "S2", "c" * 64, "ineligible"),
         ],
-        productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
     )
     output_dir = tmp_path / "out"
 
@@ -239,6 +242,374 @@ def test_standard_peak_productization_can_limit_writer_to_high_signal_clean_scop
     }
     assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
     assert matrix_rows[matrix_index_by_hypothesis["FAM_NON"]]["S2"] == ""
+
+
+def test_standard_peak_productization_can_limit_writer_to_low_scan_clean_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="a" * 64,
+            ),
+            _shadow_row(
+                "FAM_NON",
+                "S2",
+                "200",
+                standard=True,
+                row_sha="c" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "a" * 64,
+                "ineligible",
+                low_scan_clean_status="eligible",
+            ),
+            _scope_audit_row(
+                "FAM_NON",
+                "S2",
+                "c" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-narrow-low-scan-clean-productization",
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["activation_scope_filter_status"] == "applied"
+    assert summary["activation_scope_contract"] == (
+        "low_scan_clean_eligible_activation_rows"
+    )
+    assert summary["activation_scope_filter_selected_shadow_row_count"] == "1"
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["narrow_product_writer_expected_diff_acceptance_status"] == "pass"
+    assert summary["next_action"] == "narrow_low_scan_clean_backfill_production_ready"
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["readiness_tier"] == "production_ready"
+    assert acceptance["expected_scope"] == "low_scan_clean_eligible_activation_rows"
+    assert acceptance["product_written_delta_row_count"] == "1"
+    assert acceptance["non_eligible_delta_row_count"] == "0"
+
+
+def test_standard_peak_productization_rejects_multiple_activation_scope_audits(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [_scope_audit_row("FAM_STD", "S2", "b" * 64, "eligible")],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-multiple-scope-audits",
+                "--high-signal-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "only one activation scope audit may be provided" in capsys.readouterr().err
+
+
+def test_standard_peak_productization_rejects_empty_low_scan_scope(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-empty-low-scan-scope",
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "low-scan-clean activation scope audit has no eligible written rows" in (
+        capsys.readouterr().err
+    )
+
+
+def test_standard_peak_productization_rejects_duplicate_low_scan_scope_sha(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="eligible",
+            ),
+            _scope_audit_row(
+                "FAM_STD_DUP",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="eligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-duplicate-low-scan-scope-sha",
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "duplicate eligible matrix_value_source_row_sha256 values" in (
+        capsys.readouterr().err
+    )
+
+
+def test_standard_peak_productization_rejects_low_scan_scope_missing_shadow_sha(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "d" * 64,
+                "ineligible",
+                low_scan_clean_status="eligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-low-scan-scope-missing-shadow-sha",
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "references missing shadow_projection_row_sha256 values" in (
+        capsys.readouterr().err
+    )
+
+
+def test_standard_peak_productization_rejects_duplicate_shadow_scope_sha(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="b" * 64,
+            ),
+            _shadow_row(
+                "FAM_NON",
+                "S2",
+                "200",
+                standard=True,
+                row_sha="b" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="eligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+        ),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-duplicate-shadow-scope-sha",
+                "--low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "shadow projection contains duplicate shadow_projection_row_sha256" in (
+        capsys.readouterr().err
+    )
 
 
 def test_standard_peak_productization_rejects_stale_current_projection(
@@ -666,6 +1037,8 @@ def _scope_audit_row(
     sample: str,
     row_sha: str,
     status: str,
+    *,
+    low_scan_clean_status: str = "missing_evidence",
 ) -> dict[str, str]:
     return {
         "schema_version": "standard_peak_activation_scope_audit_v1",
@@ -675,6 +1048,7 @@ def _scope_audit_row(
         "matrix_value_effect": "written",
         "matrix_value_source_row_sha256": row_sha,
         "high_signal_clean_status": status,
+        "low_scan_clean_status": low_scan_clean_status,
     }
 
 
