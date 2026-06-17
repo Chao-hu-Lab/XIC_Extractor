@@ -9,10 +9,10 @@ plane remains the product tier authority.
 ## Current Objective
 
 Execute the low-manual productization sequence toward mechanically adjudicated,
-reviewable, non-black-box decisions. Goal 0/1 authority/adjudication is being
-hardened, Goal 2 review packets are now the active checkpoint, and later goals
-must proceed through truth lockbox, missing-overlay evidence recovery, control
-plane cleanup, and bounded non-broad lane hardening.
+reviewable, non-black-box decisions. Goal 0/1 authority/adjudication and Goal 2
+review packets are committed. Goal 3 peak-choice truth lockbox is now built as
+a non-mutating `production_candidate` evidence-acquisition contract. Next goal:
+Goal 4 missing-overlay evidence recovery.
 
 ## Current State
 
@@ -36,6 +36,17 @@ plane cleanup, and bounded non-broad lane hardening.
   - Free-form value filling is forbidden.
   - Approval writes only to `review_decision_log_v1.tsv`; it grants no product
     authority and cannot touch matrix values.
+- [active] Goal 3 added Peak-Choice Truth Set / Lockbox v1:
+  - 72 deterministic cases cover approved 511 controls, 3015 unresolved review
+    rows, 1087 missing-overlay evidence gaps, failed heldout-oracle negatives,
+    and manual wrong-peak/no-peak fixtures.
+  - Each case is split by `family_id`, requires two independent reviewers, and
+    separates peak-choice labels from area labels.
+  - Missing-overlay evidence-gap cases are not forced into fake area labels:
+    `area_label_required=FALSE`, with `not_assessed/unavailable` allowed.
+  - No labels have been collected yet; agreement metrics are intentionally
+    `null`.
+  - Lockbox labels cannot write matrix values or grant ProductWriter authority.
 - [active] `quality_explanations` and `quality_blockers` are explanation and
   triage inputs only. They cannot grant write authority or become writer
   predicates.
@@ -63,6 +74,16 @@ plane cleanup, and bounded non-broad lane hardening.
   decision-log template.
 - `tests/test_review_packet_contract.py`: review queue/log authority and schema
   tests.
+- `scripts/build_peak_choice_truth_lockbox.py`: deterministic lockbox generator.
+- `docs/superpowers/specs/peak_choice_truth_protocol.v1.md`: lockbox protocol.
+- `docs/superpowers/specs/truth_label_schema.v1.json`: truth-label schema.
+- `docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv`: 72-case
+  lockbox sampling manifest.
+- `docs/superpowers/validation/reviewer_label_log_v1.tsv`: empty structured
+  label log.
+- `docs/superpowers/validation/inter_reviewer_agreement_summary_v1.json`: empty
+  agreement summary.
+- `tests/test_peak_choice_truth_lockbox_contract.py`: lockbox contract tests.
 - `docs/superpowers/plans/2026-06-15-productization-control-plane.md`: tier and
   maintenance-log updates for this checkpoint.
 
@@ -79,6 +100,8 @@ plane cleanup, and bounded non-broad lane hardening.
   expected-diff authority update.
 - RAW/85RAW is not needed for this checkpoint because the artifacts are
   contract/index transforms over existing no-RAW evidence.
+- Lockbox review output is truth evidence only. It must not be consumed by
+  ProductWriter without a later authority manifest and expected-diff goal.
 
 ## Rejected Paths
 
@@ -91,6 +114,8 @@ plane cleanup, and bounded non-broad lane hardening.
 - [blocked] Auto-write missing-overlay rows without recovered trace evidence.
 - [blocked] Use ISTD as analyte peak-choice or area truth without independent
   proof.
+- [blocked] Treat lockbox sampling membership or future reviewer labels as
+  automatic write authority.
 
 ## Tests / Validation
 
@@ -102,6 +127,18 @@ plane cleanup, and bounded non-broad lane hardening.
 - Checker passed:
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`.
 - JSON parse passed for `review_packet_schema.v1.json`.
+- Goal 3 focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_peak_choice_truth_lockbox_contract.py -v --tb=short`
+  (`6 passed`).
+- Goal 3 focused lint passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_peak_choice_truth_lockbox.py tests/test_peak_choice_truth_lockbox_contract.py`.
+- JSON parse passed for `truth_label_schema.v1.json` and
+  `inter_reviewer_agreement_summary_v1.json`.
+- Subagent Goal 3 review completed. Lovelace found no docs/control-plane
+  issues. Pauli found a P2 gap where missing-overlay rows were forced to area
+  labels; fixed by adding `not_assessed/unavailable` and setting
+  `area_label_required=FALSE` for missing-overlay cases, then rerunning focused
+  tests/lint.
 - Full local gate passed:
   `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`,
   `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`,
@@ -115,9 +152,11 @@ plane cleanup, and bounded non-broad lane hardening.
 
 ## Remaining Work
 
-- Commit this checkpoint, then start Goal 3 Peak-Choice Truth Set / Lockbox v1.
+- Goal 3 still needs subagent review and commit.
+- Next implementation goal after that: Goal 4 missing-overlay evidence recovery.
 
 ## Next Actions
 
-1. Commit current Goal 0/1 + Goal 2 checkpoint.
-2. Continue Goal 3 with a small independent lockbox/truth-label contract.
+1. Subagent review Goal 3 lockbox contract.
+2. Fix review findings, run focused/full gate as needed, then commit.
+3. Continue Goal 4 without making missing-overlay rows writable.

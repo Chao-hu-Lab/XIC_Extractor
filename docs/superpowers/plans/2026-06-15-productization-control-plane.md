@@ -247,6 +247,12 @@ The next checkpoint adds Review Packet / Approval Workflow v1 as a structured
 human-review asset, not ProductWriter authority: the 3015 trace-matched
 unresolved rows become review packets, the 1087 missing-overlay rows remain
 evidence-recovery work, and reviewer approval can only write a decision log.
+Peak-Choice Truth Set / Lockbox v1 then adds the first independent truth-label
+acquisition contract: 72 deterministic cases across approved controls,
+unresolved review rows, missing-overlay evidence gaps, failed-oracle negatives,
+and manual wrong-peak/no-peak fixtures. It is `production_candidate` as a
+non-mutating truth/review asset only; no labels have been collected, agreement
+metrics are null, and lockbox membership cannot grant ProductWriter authority.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -2119,6 +2125,47 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: superseded for broad Backfill. Future evidence classes may be
   considered only under a new independent truth-source / expected-diff goal;
   this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - peak_choice_truth_lockbox_v1
+
+- Lane: Peak-choice truth acquisition / low-manual review infrastructure.
+- Previous tier: Review Packet / Approval Workflow v1 made the 3015
+  trace-matched unresolved rows reviewable, but there was no independent
+  truth-label protocol or family-split lockbox.
+- New tier: `production_candidate` for a non-mutating truth acquisition
+  contract. This does not change writer authority.
+- Evidence: `docs/superpowers/specs/peak_choice_truth_protocol.v1.md` defines
+  the truth-lockbox protocol. `docs/superpowers/specs/truth_label_schema.v1.json`
+  defines the sampling manifest and label-log schema. The generated
+  `docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv` contains 72
+  deterministic cases: 18 approved write-ready controls, 24 unresolved
+  review-ready rows split across high-signal dirty / low-height / apex-delta /
+  shape-width-scan contexts, 12 missing-overlay evidence-gap rows, 12 failed
+  heldout-oracle negative cases, and 6 manual wrong-peak/no-peak fixtures.
+  `docs/superpowers/validation/reviewer_label_log_v1.tsv` is intentionally
+  header-only, and
+  `docs/superpowers/validation/inter_reviewer_agreement_summary_v1.json`
+  records `status=no_labels_collected`. Missing-overlay evidence-gap rows are
+  not forced into fake area labels: they have `area_label_required=FALSE`, and
+  all rows allow `not_assessed` / `unavailable`.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_peak_choice_truth_lockbox.py`
+  generated the 72-case lockbox. Focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_peak_choice_truth_lockbox_contract.py -v --tb=short`
+  (`6 passed`). Focused ruff passed for
+  `scripts/build_peak_choice_truth_lockbox.py` and
+  `tests/test_peak_choice_truth_lockbox_contract.py`. JSON parse passed for the
+  truth schema and agreement summary. Subagent review found one P2 issue where
+  missing-overlay rows could be forced into area labels; the generated manifest
+  and tests now require honest `not_assessed` / `unavailable` handling.
+- Remaining blocker: no reviewer labels or agreement metrics exist yet; lockbox
+  membership and future labels cannot grant ProductWriter authority without a
+  later authority manifest plus expected-diff goal.
+- Next checkpoint: Goal 4 missing-overlay evidence recovery. Do not make the
+  1087 missing-overlay rows writable simply because they are sampled here.
 
 ### 2026-06-18 - productization_review_packet_v1
 
