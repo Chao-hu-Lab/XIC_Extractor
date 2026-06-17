@@ -14,6 +14,17 @@ headless default 也到 `production_ready`。其他 Backfill probes 仍是正式
 `production_candidate`，但 writer 被 heldout oracle failure、缺 trace
 evidence、或 expected-diff 缺口擋住。
 
+本輪最新非 Backfill 推進是 ReviewAction candidate sidecar verifier。白話說，
+`select_candidate` 以前只有一個 `candidate_id` 字串，系統還不能證明它真的
+來自同一 sample/target 的候選表；現在
+`scripts/plan_review_action_candidate_sidecars.py` 會把 ReviewAction 對到
+targeted `peak_candidates.tsv`，確認 candidate id 唯一存在，並寫
+`review_action_candidate_sidecar_v1`，附 candidate row SHA、RT/area/confidence
+欄位。同一 sample/target 若有多個 `select_candidate` 也會 blocked；找不到、
+重複、或 target 沒候選列都 fail closed。這只把候選身份驗證推到
+`production_candidate`，仍不會切換 selected peak、不會重算 area、不會改
+counted detection、workbook 或 primary matrix；manual boundary 仍 parked。
+
 本輪最新推進是把原本 72 個 `detected_flagged` 補上逐列 oracle。白話說，
 這 72 列不是靠人工 TSV 白名單放行，而是每列拿自己的 stored trace 重新跑
 `find_peak_and_area` + area integration，必須在你接受的 `0.1 min / 10% area`
@@ -1101,7 +1112,8 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - 新增 `scripts/apply_review_action_changesets.py`，可以讀 changeset TSV 和 targeted long CSV，輸出 audited targeted-long copy 和 `review_action_apply_audit_v1` TSV。
 - `mark_unresolved` 現在可把 audited copy 的 `Review State` 改成 `unresolved_by_review`。
 - `reject_current` 在 approved expected-diff 後可把 audited copy 的 `Product State` / `Counted Detection` / `Review State` 改成 reject 狀態。
-- `select_candidate` 和 `set_manual_boundary` 仍只會寫 deferred audit，因為還缺 candidate sidecar writer 或 area recompute writer。
+- 新增 `scripts/plan_review_action_candidate_sidecars.py`，可以把 `select_candidate` 的 `candidate_id` 對到 targeted `peak_candidates.tsv`，輸出 `review_action_candidate_sidecar_v1`。唯一 match 才是 `candidate_verified`；同 target 多個 `select_candidate`、missing、duplicate、target 沒候選 rows 都會 blocked；已經是目前 selected candidate 則標成 current-selection no-op 證據。
+- `select_candidate` 仍不會真的切換 selected candidate；candidate sidecar verifier 只是把 candidate identity 變成可驗證輸入。`set_manual_boundary` 仍只會寫 deferred audit，因為還缺 area recompute writer。
 - 支援 action:
   - `accept_current`
   - `mark_unresolved`
@@ -1116,7 +1128,7 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 白話結論:
 
-現在有正式「人工 review action 檔案長什麼樣」的入口，也能產生 apply-readiness/changeset，並把 changeset 寫成 audited targeted-long copy 和 audit TSV。這已經不是純 dry-run，但仍不是完整 reintegration: selected candidate switch 和 manual boundary area recompute 還沒做。
+現在有正式「人工 review action 檔案長什麼樣」的入口，也能產生 apply-readiness/changeset，把 changeset 寫成 audited targeted-long copy 和 audit TSV，並把 `select_candidate` 的 candidate id 對回 `peak_candidates.tsv` 做 fail-closed 驗證。這已經不是純 dry-run，但仍不是完整 reintegration: selected candidate switch 和 manual boundary area recompute 還沒做。
 
 還沒做:
 

@@ -225,7 +225,7 @@ main matrix。
 |---|---|---|---|---|
 | Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; apex-delta, width-only, and shape-margin probes are candidate only; reintegration-stability audit still leaves the full 299-row pool as `production_candidate` / writer-blocked because only the low-height subset plus the 72 observed-oracle rows have oracle + writer expected-diff approval and the formal all-stability family oracle failed 19/20 due one area error; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts, use the generated policy engine as the future broadening control point, and add broader evidence classes only with observed/masked/product-writer oracle evidence plus expected-diff | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if generated policy rows become a manual allowlist, if apex-delta/width-only/shape-margin or all-stability rows are promoted without resolving heldout oracle failures, if shape-clean stability is promoted without a missing-cell/nonzero-delta product scope, or if a RAW rerun would not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
-| Parked | `review_action_reintegration_v1` | parked for this release claim | candidate sidecar and manual boundary area recompute remain blocked until stable IDs, sidecar contract, and expected-diff gate exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
+| Parked | `review_action_reintegration_v1` | parked for this release claim; candidate-sidecar verifier is now `production_candidate` | selected-candidate writer and manual boundary area recompute remain blocked until expected-diff/product apply contracts exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
 | Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
 
@@ -270,8 +270,8 @@ scope.
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
 | `Review Queue` | `production_surface` as worklist | workbook `Review Queue` sheet | 不能讀回 decision；不能 reintegrate | `review_roundtrip_v1` | unassigned |
-| ReviewAction audited apply copy | `production_surface` for audited targeted-long copy | `xic_extractor.review_actions`, `scripts/apply_review_action_changesets.py`, `review_action_apply_audit_v1` | accept/mark/reject 可寫 audited output copy；select candidate/manual boundary 仍 deferred | candidate sidecar + manual boundary recompute writer | none; audited apply slice done |
-| Manual boundary / reintegration | `parked`; `production_candidate` for deferred changeset only | candidate/boundary sidecars + action schema + changeset rows | 沒有 area recompute writer；沒有 selected candidate switch writer；需要產品決策確認是否可改 selected peak/area | `review_action_reintegration_v1` product decision | parked |
+| ReviewAction audited apply copy | `production_surface` for audited targeted-long copy; `production_candidate` for candidate-sidecar verification | `xic_extractor.review_actions`, `scripts/apply_review_action_changesets.py`, `scripts/plan_review_action_candidate_sidecars.py`, `review_action_apply_audit_v1`, `review_action_candidate_sidecar_v1` | accept/mark/reject 可寫 audited output copy；`select_candidate` candidate_id 現在可對 `peak_candidates.tsv` 做唯一性/SHA 驗證；selected candidate switch/manual boundary 仍 deferred | selected-candidate writer + manual boundary recompute writer only after expected-diff/product decision | none; audited apply and candidate-sidecar verifier slices done |
+| Manual boundary / reintegration | `parked`; `production_candidate` for deferred changeset and candidate-sidecar verification only | candidate sidecar verifier + action schema + changeset rows | 沒有 area recompute writer；沒有 selected candidate switch writer；candidate sidecar 只驗證 id，不授權改 selected peak/area；需要產品決策確認是否可改 selected peak/area | `review_action_reintegration_v1` product decision | parked |
 | `Run Metadata` | `production_surface` as workbook metadata | workbook sheet + manifest/schema reverse reference | 不是 full replay manifest；只反向記錄 targeted output schema 與 manifest schema/path/hash | workbook hash capture / release metadata docs | unassigned |
 | `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + normalized workbook replay parity passed；artifact policy says CSV exact, workbook normalized compare, manifest provenance-only | full byte-exact workbook replay only if a future release needs it | unassigned |
 | Headless targeted CLI | `production_ready` for targeted CLI replay parity | `xic-extractor-cli`, `--replay-manifest`, method manifest invocation context | replay rejects runtime overrides；GUI replay 未接主線 | GUI parity after mainline wiring | unassigned |
@@ -697,6 +697,37 @@ at that older checkpoint, not the latest release claim.
 - Product surface changed: none this round
 - Validation: no code path changed in this lane this round
 - Remaining blocker: human product decision and expected-diff acceptance are required before any writer may change selected peak, selected area, workbook, primary matrix, or counted detection for these actions
+
+### 2026-06-17 - review_action_candidate_sidecar_verifier_v1
+
+- Lane: `review_action_reintegration_v1`.
+- Previous tier: selected-candidate switch was `parked`; candidate identity could
+  only appear as a free `candidate_id` string inside ReviewAction/expected-diff
+  rows.
+- New tier: `production_candidate` for candidate-sidecar verification only.
+  Selected-candidate switch and manual-boundary area recompute remain parked.
+- Evidence: `xic_extractor.review_actions` now defines
+  `review_action_candidate_sidecar_v1`; `scripts/plan_review_action_candidate_sidecars.py`
+  reads `review_action_v1` plus targeted `peak_candidates.tsv`, verifies that
+  each `select_candidate` action's `candidate_id` is present and unique for the
+  same sample/target, records a candidate row SHA-256 plus RT/area/confidence
+  audit fields, and fails closed for multiple `select_candidate` actions on the
+  same target, missing target rows, missing candidates, or duplicate candidate
+  ids.
+- Product surface changed: additive CLI and additive TSV schema only. No
+  selected peak, selected area, counted detection, workbook, primary matrix, or
+  extraction output is changed.
+- Validation: `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_review_actions.py -q`
+  (`32 passed`); focused ruff/mypy for `xic_extractor\review_actions.py`,
+  `scripts\plan_review_action_candidate_sidecars.py`, and
+  `tests\test_review_actions.py`.
+- Remaining blocker: a future product-writing selected-candidate switch still
+  needs an explicit expected-diff/apply contract that consumes the verified
+  candidate sidecar row. Manual boundary still needs an area recompute writer and
+  product decision.
+- Next checkpoint: if reopening ReviewAction mutation, consume
+  `review_action_candidate_sidecar_v1` together with approved expected-diff; do
+  not infer candidate identity from workbook display text.
 
 ### 2026-06-16 - sample_metadata_instrument_qc_projection_v1
 
