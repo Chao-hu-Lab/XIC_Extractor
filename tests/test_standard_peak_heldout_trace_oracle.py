@@ -186,6 +186,48 @@ def test_heldout_trace_oracle_cli_writes_width_packet(
     assert int(pool[0]["oracle_scan_count"]) >= 10
 
 
+def test_heldout_trace_oracle_cli_writes_shape_margin_packet(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_shape_margin_fixture(tmp_path)
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-shape-margin-oracle",
+                "--target-shape-class",
+                "standard_shape_margin_clean_trace",
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["target_shape_class"] == "standard_shape_margin_clean_trace"
+    assert summary["available_candidate_rows"] == "1"
+    assert summary["selected_case_count"] == "1"
+    assert summary["oracle_case_status_pass_count"] == "1"
+
+    manifest = _read_tsv(output_dir / "heldout_oracle_manifest.tsv")[0]
+    assert manifest["target_shape_class"] == "standard_shape_margin_clean_trace"
+
+    pool = _read_tsv(output_dir / "heldout_trace_reintegration_full_eligible_pool.tsv")
+    shape = float(pool[0]["shape_similarity"])
+    assert pool[0]["selected_for_oracle"] == "TRUE"
+    assert oracle.MIN_SHAPE_MARGIN_SIMILARITY <= shape < oracle.MIN_SHAPE_SIMILARITY
+    assert float(pool[0]["local_window_to_global_max_ratio"]) >= 0.95
+    assert int(pool[0]["oracle_scan_count"]) >= 10
+
+
 def test_width_target_shape_class_matches_only_outside_clean_width_band() -> None:
     clean = {
         "shape": oracle.MIN_SHAPE_SIMILARITY,
@@ -228,6 +270,57 @@ def test_width_target_shape_class_matches_only_outside_clean_width_band() -> Non
         assert not oracle._target_shape_class_matches(
             oracle.WIDTH_CLEAN_SCOPE,
             width=oracle.MAX_BOUNDARY_WIDTH_MIN + 0.0001,
+            **(clean | dirty),
+        )
+
+
+def test_shape_margin_target_shape_class_requires_near_threshold_shape() -> None:
+    clean = {
+        "local_global": oracle.MIN_LOCAL_GLOBAL_RATIO,
+        "height": oracle.MIN_CELL_HEIGHT,
+        "width": oracle.MIN_BOUNDARY_WIDTH_MIN,
+        "apex_delta": oracle.MAX_APEX_DELTA_ABS_MIN,
+        "scan_count": oracle.MIN_HIGH_SIGNAL_SCAN_COUNT,
+    }
+
+    assert oracle._target_shape_class_matches(
+        oracle.SHAPE_MARGIN_CLEAN_SCOPE,
+        shape=oracle.MIN_SHAPE_MARGIN_SIMILARITY,
+        **clean,
+    )
+    assert oracle._target_shape_class_matches(
+        oracle.SHAPE_MARGIN_CLEAN_SCOPE,
+        shape=oracle.MIN_SHAPE_SIMILARITY - 0.0001,
+        **clean,
+    )
+    assert oracle._target_shape_class_matches(
+        oracle.SHAPE_MARGIN_CLEAN_SCOPE,
+        shape=oracle.MIN_SHAPE_MARGIN_SIMILARITY,
+        **(clean | {"width": oracle.MAX_BOUNDARY_WIDTH_MIN}),
+    )
+
+    for shape in (
+        oracle.MIN_SHAPE_MARGIN_SIMILARITY - 0.0001,
+        oracle.MIN_SHAPE_SIMILARITY,
+    ):
+        assert not oracle._target_shape_class_matches(
+            oracle.SHAPE_MARGIN_CLEAN_SCOPE,
+            shape=shape,
+            **clean,
+        )
+
+    dirty_cases = (
+        {"local_global": oracle.MIN_LOCAL_GLOBAL_RATIO - 0.0001},
+        {"height": oracle.MIN_CELL_HEIGHT - 1.0},
+        {"width": oracle.MIN_BOUNDARY_WIDTH_MIN - 0.0001},
+        {"width": oracle.MAX_BOUNDARY_WIDTH_MIN + 0.0001},
+        {"apex_delta": oracle.MAX_APEX_DELTA_ABS_MIN + 0.0001},
+        {"scan_count": oracle.MIN_HIGH_SIGNAL_SCAN_COUNT - 1},
+    )
+    for dirty in dirty_cases:
+        assert not oracle._target_shape_class_matches(
+            oracle.SHAPE_MARGIN_CLEAN_SCOPE,
+            shape=oracle.MIN_SHAPE_MARGIN_SIMILARITY,
             **(clean | dirty),
         )
 
@@ -280,6 +373,75 @@ def _write_low_scan_fixture(tmp_path: Path) -> tuple[Path, Path]:
         [
             {
                 "feature_family_id": "FAM_LOW_SCAN",
+                "sample_stem": "SampleA",
+                "status": "detected",
+                "production_cell_status": "detected",
+                "write_matrix_value": "TRUE",
+                "include_in_primary_matrix": "TRUE",
+                "primary_matrix_area": f"{integration.area_ms1_morphology:.8f}",
+                "primary_matrix_area_source": (
+                    "gaussian15_positive_asls_residual"
+                ),
+                "peak_start_rt": f"{result.peak.peak_start:.5f}",
+                "peak_end_rt": f"{result.peak.peak_end:.5f}",
+                "reason": (
+                    "source_reason=sample-local MS1 owner with original MS2 "
+                    "evidence"
+                ),
+            },
+        ],
+    )
+    return evidence_tsv, trace_root
+
+
+def _write_shape_margin_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    trace_root = tmp_path / "traces"
+    trace_root.mkdir()
+    rt = np.round(np.arange(0.0, 2.01, 0.05), 4)
+    intensity = 1_000.0 + 5_000_000.0 * np.exp(-((rt - 1.0) ** 2) / (2 * 0.12**2))
+    result = find_peak_and_area(rt, intensity, _config())
+    assert result.peak is not None
+    integration = integration_from_peak_trace(
+        result.peak,
+        rt,
+        intensity,
+        boundary_sources=("local_minimum",),
+        integration_method="raw_trapezoid",
+        baseline_integration_method="asls",
+    )
+    assert integration is not None
+    assert integration.area_ms1_morphology is not None
+    trace_json = trace_root / "FAM_SHAPE_MARGIN_trace_data.json"
+    trace_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_SHAPE_MARGIN",
+                "family_center_rt": 1.0,
+                "traces": [
+                    {
+                        "sample_stem": "SampleA",
+                        "status": "detected",
+                        "cell_area": float(result.peak.area),
+                        "cell_height": float(result.peak.intensity),
+                        "cell_apex_rt": float(result.peak.rt),
+                        "cell_start_rt": float(result.peak.peak_start),
+                        "cell_end_rt": float(result.peak.peak_end),
+                        "local_window_to_global_max_ratio": 1.0,
+                        "apex_aligned_shape_similarity": 0.94,
+                        "rt": [float(value) for value in rt],
+                        "intensity": [float(value) for value in intensity],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    evidence_tsv = tmp_path / "alignment_backfill_cell_evidence.tsv"
+    _write_tsv(
+        evidence_tsv,
+        [
+            {
+                "feature_family_id": "FAM_SHAPE_MARGIN",
                 "sample_stem": "SampleA",
                 "status": "detected",
                 "production_cell_status": "detected",
