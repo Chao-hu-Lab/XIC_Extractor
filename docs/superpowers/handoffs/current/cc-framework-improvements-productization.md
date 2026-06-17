@@ -3,16 +3,17 @@
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
 HEAD before current six-goal sequence: `87c51c05`
+Current HEAD before Goal 4 checkpoint: `eb5286f5`
 Purpose: short current-state snapshot for the next agent/session. The control
 plane remains the product tier authority.
 
 ## Current Objective
 
 Execute the low-manual productization sequence toward mechanically adjudicated,
-reviewable, non-black-box decisions. Goal 0/1 authority/adjudication and Goal 2
-review packets are committed. Goal 3 peak-choice truth lockbox is now built as
-a non-mutating `production_candidate` evidence-acquisition contract. Next goal:
-Goal 4 missing-overlay evidence recovery.
+reviewable, non-black-box decisions. Goal 0/1 authority firewall, Goal 2 review
+packets, and Goal 3 truth lockbox are committed. Goal 4 missing-overlay
+evidence recovery is the active checkpoint; it recovers evidence links only and
+does not create writer authority.
 
 ## Current State
 
@@ -47,6 +48,14 @@ Goal 4 missing-overlay evidence recovery.
   - No labels have been collected yet; agreement metrics are intentionally
     `null`.
   - Lockbox labels cannot write matrix values or grant ProductWriter authority.
+- [active] Goal 4 added Missing-Overlay Evidence Recovery v1:
+  - All 1087 source `missing_overlay_path` rows are linked to existing
+    family-level trace JSON, overlay PNG, hypothesis PNG, and sample-level trace
+    fields from 114 families.
+  - The report changes their evidence state only to
+    `C_trace_recovered` / `evidence_required`.
+  - It does not create review approval, ProductWriter authority, matrix writes,
+    selected peak/area changes, or counted-detection changes.
 - [active] `quality_explanations` and `quality_blockers` are explanation and
   triage inputs only. They cannot grant write authority or become writer
   predicates.
@@ -84,6 +93,16 @@ Goal 4 missing-overlay evidence recovery.
 - `docs/superpowers/validation/inter_reviewer_agreement_summary_v1.json`: empty
   agreement summary.
 - `tests/test_peak_choice_truth_lockbox_contract.py`: lockbox contract tests.
+- `scripts/build_trace_overlay_recovery_report.py`: deterministic recovery
+  report generator for the 1087 missing-overlay rows.
+- `docs/superpowers/specs/trace_overlay_recovery_contract.v1.json`: recovery
+  report schema and authority boundary.
+- `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv`: 1087-row
+  recovery report.
+- `docs/superpowers/validation/missing_overlay_resolution_summary_v1.json`:
+  recovery summary.
+- `tests/test_trace_overlay_recovery_contract.py`: recovery report contract
+  tests.
 - `docs/superpowers/plans/2026-06-15-productization-control-plane.md`: tier and
   maintenance-log updates for this checkpoint.
 
@@ -94,8 +113,8 @@ Goal 4 missing-overlay evidence recovery.
 - Review Packet approval is not ProductWriter approval. It records structured
   human judgment only.
 - 3015 rows are review candidates, not auto-write candidates.
-- 1087 missing-overlay rows require evidence recovery before review or product
-  claims.
+- 1087 missing-overlay rows now have recovered trace/overlay evidence links, but
+  still require review/truth/reintegration decisions before any product claim.
 - Broad Backfill can reopen only with a new independent truth source and a later
   expected-diff authority update.
 - RAW/85RAW is not needed for this checkpoint because the artifacts are
@@ -111,7 +130,8 @@ Goal 4 missing-overlay evidence recovery.
   slice.
 - [blocked] Use review approval as write authority.
 - [blocked] Allow reviewers to free-form fill values.
-- [blocked] Auto-write missing-overlay rows without recovered trace evidence.
+- [blocked] Auto-write missing-overlay rows because trace evidence was
+  recovered.
 - [blocked] Use ISTD as analyte peak-choice or area truth without independent
   proof.
 - [blocked] Treat lockbox sampling membership or future reviewer labels as
@@ -139,6 +159,13 @@ Goal 4 missing-overlay evidence recovery.
   labels; fixed by adding `not_assessed/unavailable` and setting
   `area_label_required=FALSE` for missing-overlay cases, then rerunning focused
   tests/lint.
+- Goal 4 focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_trace_overlay_recovery_contract.py -v --tb=short`
+  (`5 passed`).
+- Goal 4 focused lint passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_trace_overlay_recovery_report.py tests/test_trace_overlay_recovery_contract.py`.
+- JSON parse passed for `trace_overlay_recovery_contract.v1.json` and
+  `missing_overlay_resolution_summary_v1.json`.
 - Full local gate passed:
   `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`,
   `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`,
@@ -152,11 +179,12 @@ Goal 4 missing-overlay evidence recovery.
 
 ## Remaining Work
 
-- Goal 3 still needs subagent review and commit.
-- Next implementation goal after that: Goal 4 missing-overlay evidence recovery.
+- Goal 4 needs subagent review, any fixes, final gate, and commit.
+- Next implementation goal after that: Goal 5 productization control-plane
+  cleanup.
 
 ## Next Actions
 
-1. Subagent review Goal 3 lockbox contract.
-2. Fix review findings, run focused/full gate as needed, then commit.
-3. Continue Goal 4 without making missing-overlay rows writable.
+1. Subagent review Goal 4 recovery contract.
+2. Fix review findings and run final gate.
+3. Commit, then continue Goal 5 control-plane cleanup.

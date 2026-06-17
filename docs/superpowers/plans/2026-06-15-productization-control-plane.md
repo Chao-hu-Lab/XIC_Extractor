@@ -253,6 +253,11 @@ unresolved review rows, missing-overlay evidence gaps, failed-oracle negatives,
 and manual wrong-peak/no-peak fixtures. It is `production_candidate` as a
 non-mutating truth/review asset only; no labels have been collected, agreement
 metrics are null, and lockbox membership cannot grant ProductWriter authority.
+Missing-Overlay Evidence Recovery v1 now links the 1087
+`missing_overlay_path` rows back to existing family-level trace/overlay
+artifacts and sample-level trace fields across 114 families. This moves the
+evidence explanation from "artifact link missing" to "trace recovered but still
+needs review/truth/reintegration decision"; it does not grant write authority.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -2125,6 +2130,40 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: superseded for broad Backfill. Future evidence classes may be
   considered only under a new independent truth-source / expected-diff goal;
   this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - missing_overlay_evidence_recovery_v1
+
+- Lane: Missing-overlay evidence recovery / low-manual review infrastructure.
+- Previous tier: 1087 rows were `evidence_required` because the source audit had
+  `missing_overlay_path` and no trace/overlay links.
+- New tier: `production_candidate` evidence-recovery asset. The rows remain
+  `evidence_required`; no writer authority changes.
+- Evidence: `scripts/build_trace_overlay_recovery_report.py` links all 1087
+  missing-overlay rows from `mechanical_adjudication_index_v1.tsv` to existing
+  family-level trace JSON, overlay PNG, hypothesis PNG, and sample-level trace
+  fields across 114 families. The generated
+  `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv` records
+  `recovery_status=family_trace_overlay_recovered`, `sample_trace_present=TRUE`,
+  and `post_recovery_evidence_grade=C_trace_recovered` for all 1087 rows.
+  `docs/superpowers/validation/missing_overlay_resolution_summary_v1.json`
+  records `status=all_existing_family_trace_overlays_recovered`.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_trace_overlay_recovery_report.py`
+  generated the recovery report. Focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_trace_overlay_recovery_contract.py -v --tb=short`
+  (`5 passed`). Focused ruff passed for
+  `scripts/build_trace_overlay_recovery_report.py` and
+  `tests/test_trace_overlay_recovery_contract.py`. JSON parse passed for the
+  recovery schema and summary.
+- Remaining blocker: recovered trace/overlay evidence is not peak-choice truth
+  and not area approval. These rows need structured review, truth labels, or a
+  later reintegration/expected-diff authority goal before any product write can
+  be considered.
+- Next checkpoint: Goal 5 productization control-plane cleanup. Do not use this
+  recovery report as ProductWriter input.
 
 ### 2026-06-18 - peak_choice_truth_lockbox_v1
 
