@@ -6,58 +6,57 @@
 
 ## 2026-06-17 白話結論
 
-目前這個分支的非 GUI productization goal 有兩個已經往前推到
-`production_ready` 的結論，外加幾個已收斂成 `production_candidate` /
-blocked-ready 的 Backfill probes。
+目前這個分支的非 GUI productization goal 有兩條主線已經能講清楚：
+Backfill 有三個 explicit scoped writer 到 `production_ready`，Targeted MS1
+limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
+probes 仍是 `production_candidate` / blocked-ready。
 
 本次主線續推有兩個部分。第一，讀完並收進
 `docs/deepresearch/Backfill Production Gate.md` 後，Backfill 的產品方向已
 從「用 `height >= 2e6` 當硬門檻」改成「用 boundary-stability /
 reintegration agreement 等可驗證證據來逐步放大」。第二，low-height heldout
 oracle 新增 `expected_window_bounded` 觀察模式，用既有 85RAW trace 做 no-RAW
-replay。這輪改的是 diagnostic CLI / summary / focused tests，沒有改 product
-writer、primary matrix、workbook schema、extraction default 或 RAW artifact。
-low-height tier 仍是 `production_candidate`，不是 `production_ready`。Targeted
-MS1 headless no-flag limited default 現在是 `production_ready` for
+replay；再把通過的 bounded oracle 證據接到 explicit low-height scoped writer。
+這輪沒有改 broad/default behavior、workbook schema、extraction default 或 RAW
+artifact。low-height 現在是 `production_ready` only for the explicit 57-row
+scoped writer。Targeted MS1 headless no-flag limited default 現在是
+`production_ready` for
 `5-hmdC + 5-medC` / `detected_flagged`。仍 blocked 的是 GUI、broader target
 rescue、Backfill broad 4613-row 全量寫入、以及 ReviewAction
 selected-candidate/manual-boundary 產品寫回。
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
-現在我們仍不能說這 4613 格全部 ready，但這輪已把第二個安全切片推上去了。
+現在我們仍不能說這 4613 格全部 ready，但這輪已把第三個安全切片推上去了。
 原本的 72 格 high-signal clean 仍是 `production_ready`；這輪新增的
 low-scan clean 是「其他證據都乾淨，只是邊界內 scan count 只有 7-9」。
 新的 no-RAW heldout oracle 從既有 85RAW trace 找到 56 個候選、11 個 family
 代表案例，11/11 通過 `0.1 min / 10% area`；activation scope audit 在 4613
 格裡找到 42 格符合 low-scan clean，expected-diff 42/42 乾淨，opt-in writer
-也只寫這 42 格並得到 `readiness_tier=production_ready`。所以現在 Backfill
-有兩個 explicit scoped ready slices：72 格 high-signal clean + 42 格
-low-scan clean。你的產品方向也已落地成工作規則：這兩個只是示範/放行
+也只寫這 42 格並得到 `readiness_tier=production_ready`。接著 low-height
+clean 也接到 explicit opt-in writer：它只寫 57 格，writer expected-diff 57/57
+通過，`readiness_tier=production_ready`。所以現在 Backfill 有三個 explicit
+scoped ready slices：72 格 high-signal clean + 42 格 low-scan clean + 57 格
+low-height clean。你的產品方向也已落地成工作規則：這三個只是示範/放行
 slice，不是天花板；北極星仍是「只要證據足夠就補」，下一步要繼續用 named
 evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
 推上去。
 
-前一個 probe 是 low-height clean。它問的是：「其他形狀、RT、寬度、scan
-count 都乾淨，只是 peak height 低於 2e6 的格子，能不能也自動補？」答案是：
-現在還不能開 writer。Activation scope audit 在 broad 4613 格裡找到 57 格
-low-height clean，expected-diff 57/57 是乾淨的；但同類 heldout trace oracle
-從既有 85RAW trace 找 20 個代表案例時只有 19/20 通過，其中
-`FAM008651/TumorBC2312_DNA` 的 boundary error 是 `1.16445 min`，超過你接受的
-`0.1 min`。所以 low-height 不是被殺掉，而是目前只能當下一個
-`production_candidate` slice：證明「可能有東西可補」，但也證明 agent 必須
-自動擋住不穩的低訊號案例，不能為了少人工審查就偷偷寫 matrix。
+low-height clean 問的是：「其他形狀、RT、寬度、scan count 都乾淨，只是
+peak height 低於 2e6 的格子，能不能也自動補？」現在答案是：可以，但只限
+explicit 57-row scoped writer。舊 full-trace heldout oracle 曾經 19/20，失敗的
+`FAM008651/TumorBC2312_DNA` boundary error 是 `1.16445 min`；這說明不能直接用
+full-trace reintegration 放行低高度。新的 bounded-window oracle 改用 oracle
+window 附近重積分，`padding=0.5 min` 時 20/20 通過，最大 boundary error
+`0.0857986 min`、最大 area relative error `0.0564106`。接著 opt-in writer
+用 `--low-height-clean-activation-scope-audit-tsv` 只寫 activation scope audit
+裡 `low_height_clean_status=eligible` 的 57 格；真實 no-RAW 85RAW writer run
+通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 全是 0。
 
-這輪針對 low-height 的新資訊是：舊 oracle 讓觀察端在整條 trace 上重新找
-boundary，容易被很長的低訊號尾巴拉走；新的 `expected_window_bounded` 模式把
-觀察端限制在 oracle window 附近再重積分。用既有 85RAW artifact 重跑後，
-`padding=0.1/0.2/0.3 min` 都還是 19/20，剩下同一個
-`FAM000883/NormalBC2292_DNA` area error 稍微超過 10%；`padding=0.5 min`
-則 20/20 通過，最大 boundary error `0.0857986 min`、最大 area relative error
-`0.0564106`。白話說，這證明低高度問題更像「怎麼穩定定義要積分的區間」，
-不是「低於 2e6 一律不可信」。但 `0.5 min` padding 還需要 review 和 writer
-expected-diff 才能變成正式產品 gate；現在只能把 low-height 往前推成更強的
-`production_candidate`，不能直接開 low-height writer。
+白話說，低高度這次不是靠降低 height 門檻硬闖，而是靠「區間要被穩定定義」
+的 evidence gate。這也不代表所有低高度、所有 4613 格或所有非標準 peak
+都可以寫；只代表這個已命名且有 oracle/expected-diff 的 57-row low-height
+slice 可以正式當 explicit scoped product behavior。
 
 Subagent reviewer `Tesla` 已驗收這個 bounded-oracle diff，沒有 P1/P2 blocker，
 也沒有發現 product overclaim。它提出兩個 P3：handoff 舊句子會讓人以為
@@ -206,11 +205,11 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
     It found 57 low-height clean eligible writes out of 4613 and the
     diagnostic expected-diff packet passed 57/57 with no duplicate/missing/
     unexpected/non-eligible/non-written/unchanged/blank rows.
-  - Tier decision: `production_candidate` only. No low-height product writer
-    flag was added, and no matrix output should be claimed `production_ready`
-    for this class. The later bounded-window oracle packet is useful evidence,
-    but still needs review plus an explicit low-height writer contract and
-    writer expected-diff before it can become product behavior.
+  - Tier decision at that checkpoint was `production_candidate` only. This is
+    now superseded by the later low-height bounded-window oracle plus explicit
+    `--low-height-clean-activation-scope-audit-tsv` writer: 57/57 writer
+    expected-diff passed and the explicit scoped writer can now claim
+    `production_ready`.
 - 本輪 Backfill low-height subagent review:
   - Reviewer `Jason` checked docs/control-plane/spec/index and found no P1/P2
     blocker. It raised a P3 that `tools/diagnostics/INDEX.md` did not carry the
@@ -1291,17 +1290,20 @@ RAW-backed 驗證:
 2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做已完成 scoped writer。
    - 目前 explicit 72-row high-signal-clean scoped writer 是 `production_ready`。
    - 目前 explicit 42-row low-scan-clean scoped writer 也是 `production_ready`。
+   - 目前 explicit 57-row low-height-clean scoped writer 也是 `production_ready`。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - High-signal clean 20-case heldout oracle 已通過；low-scan clean 11-case
-     heldout oracle 也已通過。combined activation scope audit 已證明目前
-     broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean。
+     heldout oracle 也已通過；low-height bounded-window 20-case oracle 已用
+     `padding=0.5 min` 通過。combined activation scope audit 已證明目前
+     broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean、
+     57 個 low-height clean。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
      observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
-     不應再直接押 low-height、apex-delta 或 width-only，也不應把
-     `height >= 2e6` 當產品硬門檻；`2e6` 只是 high-signal demonstrator /
-     rollout guardrail。下一個 Backfill gate 應先驗證 boundary-stability /
-     reintegration agreement、local S/N / selectivity、cohort-anchored expected
-     window，並用預先宣告的 strata + lockbox 防止 cherry-picking。
+     不應重做已完成的 high-signal/low-scan/low-height scoped writers；apex-delta、
+     width-only、shape-margin 仍要先解 oracle failures。下一個 Backfill gate
+     應先驗證更一般化的 boundary-stability / reintegration agreement、local
+     S/N / selectivity、cohort-anchored expected window，並用預先宣告的 strata
+     + lockbox 防止 cherry-picking。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。
