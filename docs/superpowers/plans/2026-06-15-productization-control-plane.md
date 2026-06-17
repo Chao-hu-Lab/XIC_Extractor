@@ -270,6 +270,16 @@ Goal 5 machine status lane ids are tracked in
 `review_action_candidate_sidecar_v1`, `review_action_selected_candidate_switch`,
 `review_action_manual_boundary_area_writer`,
 `calibration_normalization_activation`, and `gui_replay_parity`.
+Goal 6 bounded non-broad acceptance is tracked in
+`docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv` and
+checked by `scripts/check_bounded_product_lanes.py`. It does not add product
+authority; it only locks the current non-broad lane boundaries: Targeted MS1
+limited rescue may stay within `limited_5hmdc_5medc_v1` / `5-hmdC + 5-medC` /
+`detected_flagged`, SampleMetadata may stay no-output/order-projection only,
+and ReviewAction candidate sidecar may verify identity only. Broader Targeted
+MS1 targets, role-driven value behavior, selected-candidate switch, and
+manual-boundary area writer remain blocked or parked until a separate product
+contract plus expected-diff gate exists.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -2142,6 +2152,60 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: superseded for broad Backfill. Future evidence classes may be
   considered only under a new independent truth-source / expected-diff goal;
   this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - bounded_non_broad_lane_acceptance_v1
+
+- Lane: Targeted non-broad production lanes / bounded continuation guard.
+- Previous tier: Targeted MS1 limited rescue and SampleMetadata no-output
+  projection were individually `production_ready`; ReviewAction candidate
+  sidecar was `production_candidate`; broader target rescue, role-driven value
+  behavior, selected-candidate switch, and manual-boundary area writer were
+  blocked or parked, but there was no compact guard tying these non-broad lanes
+  to the machine status index.
+- New tier: `production_candidate` bounded-lane guard. This does not change
+  product behavior or writer authority.
+- Evidence: `docs/superpowers/specs/bounded_non_broad_product_lanes.v1.json`
+  defines the acceptance schema.
+  `docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv`
+  records seven non-broad lane outcomes and binds to
+  `docs/superpowers/validation/productization_status_index_v1.tsv`
+  (`sha256=16C5CF817D216C82C891EFE7FBC319D89F477353BF50E7EBE004EF6411625A95`).
+  `scripts/check_bounded_product_lanes.py` validates that broad Backfill is
+  absent, readiness matches the status index, no row grants new product
+  authority or ProductWriter input, GUI/target expansion are disabled, blocked
+  or parked rows have no effect/scope, Targeted MS1 is limited to
+  `limited_5hmdc_5medc_v1;5-hmdC;5-medC` with `detected_flagged_only`, and
+  SampleMetadata / ReviewAction effects stay no-output or identity-only.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  returned `Bounded non-broad product lanes are consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_bounded_product_lanes_contract.py -v --tb=short`
+  passed `12`; focused ruff passed for `scripts/check_bounded_product_lanes.py`
+  and `tests/test_bounded_product_lanes_contract.py`. Subagent review found
+  status-index/source-hash self-attestation, status-index extra/risk-row, and
+  schema+TSV+status coordinated-promotion gaps. They were fixed by chaining
+  `check_productization_state.py`, binding hash checks to the supplied status
+  index, hardcoding the bounded readiness sets in the checker, documenting
+  `current_bounded_surface` as non-authority, and adding focused negative
+  tests for each failure mode. Post-fix subagent review re-ran the original
+  mutation probes and found no P0/P1/P2/P3 findings. Full local gate passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3825 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `git diff --check` passed with LF/CRLF warnings only.
+- Remaining blocker: this guard does not collect new Targeted MS1 evidence,
+  alter SampleMetadata role behavior, or implement ReviewAction selected
+  candidate / manual-boundary writeback.
+- Next checkpoint: commit this Goal 6 slice. Future non-broad lane changes must
+  update this guard or explicitly supersede it.
 
 ### 2026-06-18 - productization_status_index_v1
 

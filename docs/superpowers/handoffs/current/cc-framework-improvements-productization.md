@@ -3,7 +3,7 @@
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
 Baseline before this six-goal sequence: `87c51c05`
-Latest committed checkpoint before Goal 5: `00c241cf`
+Previous committed checkpoint before Goal 6: `1ba884a7`
 
 This file is a short continuation snapshot. The control plane remains the tier
 authority; generated validation/spec artifacts own their schemas and row counts.
@@ -15,8 +15,9 @@ reviewable, non-black-box decisions, without granting new ProductWriter,
 matrix, workbook, selected peak/area, counted-detection, default extraction, or
 GUI authority.
 
-Goal 0/1, Goal 2, Goal 3, and Goal 4 are committed. Goal 5 is verified and
-ready to commit. Goal 6 is next: bounded non-broad lane hardening.
+Goal 0/1 through Goal 6 are complete for this sequence. Goal 6 bounded
+non-broad lane hardening has subagent review, post-fix review, focused tests,
+and full local gate evidence.
 
 ## Current State
 
@@ -40,6 +41,12 @@ ready to commit. Goal 6 is next: bounded non-broad lane hardening.
   but remain `evidence_required`.
 - `productization_status_index_v1`: `production_candidate`; each active lane is
   listed once and `check_productization_state.py` rejects authority drift.
+- `bounded_non_broad_lane_acceptance_v1`: `production_candidate`; the currently
+  bounded non-broad lanes are machine-checked without adding writer authority:
+  Targeted MS1 limited rescue, SampleMetadata no-output projection, and
+  ReviewAction candidate-sidecar verification can progress only inside their
+  named scopes; broader targets, role-driven value changes, selected-candidate
+  switch, and manual-boundary area writer remain blocked or parked.
 - `quality_explanation_sidecar_v1`: `diagnostic_only`; quality blocker/explainer
   rows cannot grant write authority; keep only as explanation/triage.
 - `targeted_ms1_shape_identity_limited_rescue_v1`: `production_ready` only for
@@ -87,6 +94,10 @@ ready to commit. Goal 6 is next: bounded non-broad lane hardening.
   - `docs/superpowers/specs/productization_control_plane_schema.v1.json`
   - `docs/superpowers/validation/productization_status_index_v1.tsv`
   - `scripts/check_productization_state.py`
+- Bounded non-broad lanes:
+  - `docs/superpowers/specs/bounded_non_broad_product_lanes.v1.json`
+  - `docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv`
+  - `scripts/check_bounded_product_lanes.py`
 
 ## Active Decisions
 
@@ -102,7 +113,7 @@ ready to commit. Goal 6 is next: bounded non-broad lane hardening.
   rows writable.
 - ISTD is a limited reference anchor only. It is not analyte peak-choice truth
   or area truth.
-- RAW/85RAW was skipped for Goals 0/1 through 5 because these checkpoints are
+- RAW/85RAW was skipped for Goals 0/1 through 6 because these checkpoints are
   no-RAW contract/index transforms over existing artifacts.
 
 ## Rejected Paths
@@ -139,16 +150,48 @@ Latest Goal 5 verification:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
   - `git diff --check` passed with LF/CRLF warnings only.
 
+Latest Goal 6 focused verification:
+
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  returned `Bounded non-broad product lanes are consistent and fail-closed.`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_bounded_product_lanes_contract.py -v --tb=short`
+  passed `12`.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/check_bounded_product_lanes.py tests/test_bounded_product_lanes_contract.py`
+  passed.
+- Subagent Goal 6 review: Hubble found no findings. Feynman found P1 gaps where
+  custom status-index paths, status-index extra/risk rows, and coordinated
+  schema+TSV+status promotion could self-attest. Fixed by chaining
+  `check_productization_state.py`, binding hashes to the supplied status index,
+  moving ready/candidate/blocked/parked lane sets into code-level invariants,
+  and adding three focused negative tests. The `current_bounded_surface` field
+  is now documented as a bounded progress surface, not product authority.
+- Post-fix subagent review: Feynman re-ran the original mutation probes and
+  found no P0/P1/P2/P3 findings.
+- Final full local gate passed:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+    (`3825 passed, 1 skipped`)
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  - `git diff --check` passed with LF/CRLF warnings only.
+
 ## Remaining Work
 
-- Commit Goal 5.
-- Implement Goal 6 bounded non-broad lane hardening. This should make the
-  already-bounded Targeted MS1, SampleMetadata, and ReviewAction lanes more
-  mechanically guarded without changing product output or reviving broad
-  Backfill.
+- None for the six-goal control sequence. No new writer authority, GUI work,
+  matrix/workbook mutation, selected peak/area mutation, counted-detection
+  mutation, or broad Backfill revival was added.
+- Remaining product decisions are still separate future goals: collect lockbox
+  labels, turn review packets into structured human approval UX, decide if and
+  when bounded Targeted MS1 can expand beyond 5-hmdC/5-medC, decide if
+  SampleMetadata roles may ever change values, and decide whether ReviewAction
+  selected-candidate/manual-boundary writeback gets an expected-diff writer.
 
 ## Next Actions
 
-1. Commit Goal 5.
-2. Add Goal 6 bounded-lane contract/index/checker/tests.
-3. Run subagent review, fix findings, run full gate, and commit Goal 6.
+1. Commit Goal 6.
+2. Next product goal should start from `review_queue_v1.tsv`,
+   `lockbox_sampling_manifest_v1.tsv`, or bounded non-broad lane evidence, not
+   broad Backfill.
