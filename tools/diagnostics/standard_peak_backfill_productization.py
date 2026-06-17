@@ -46,6 +46,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             low_height_low_scan_clean_activation_scope_audit_tsv=(
                 args.low_height_low_scan_clean_activation_scope_audit_tsv
             ),
+            low_height_reintegration_stable_activation_scope_audit_tsv=(
+                args.low_height_reintegration_stable_activation_scope_audit_tsv
+            ),
+            reintegration_stability_audit_tsv=args.reintegration_stability_audit_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -171,6 +175,24 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "activation is limited to rows with "
             "low_height_low_scan_clean_status=eligible and an explicit writer "
             "expected-diff acceptance artifact is emitted."
+        ),
+    )
+    parser.add_argument(
+        "--low-height-reintegration-stable-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation scope audit TSV. When set with "
+            "--reintegration-stability-audit-tsv, matrix-only activation is "
+            "limited to low-height rows whose source row is eligible in the "
+            "reintegration stability audit."
+        ),
+    )
+    parser.add_argument(
+        "--reintegration-stability-audit-tsv",
+        type=Path,
+        help=(
+            "reintegration_stability_audit.tsv required by "
+            "--low-height-reintegration-stable-activation-scope-audit-tsv."
         ),
     )
     return parser.parse_args(argv)

@@ -305,10 +305,15 @@ Implementation closeout, 2026-06-16:
   `acceptance_status=pass`, `readiness_tier=production_ready`,
   `expected_scope=low_scan_clean_eligible_activation_rows`, and zero blockers.
   Therefore the explicit 42-row low-scan clean writer slice is also
-  `production_ready`, while the broad 4613-row standard-path seed guard lane
-  remains `production_candidate` until it has broader masked/product-writer
-  observed oracle coverage and expected-diff approval for any additional
-  writes.
+  `production_ready`. Later scoped writers extended the same explicit contract:
+  low-height clean writes 57 cells after bounded-window oracle approval,
+  low-height-low-scan clean writes 69 cells after bounded-window oracle
+  approval, and low-height reintegration-stable writes 220 cells after
+  family-scope oracle approval plus writer expected-diff. These five slices are
+  current `production_ready` demonstrators; the broad 4613-row standard-path
+  seed guard lane remains `production_candidate` until it has broader
+  masked/product-writer observed oracle coverage and expected-diff approval for
+  any additional writes.
 - Heldout low-height trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_low_height_clean_trace`, where all clean trace constraints remain
@@ -322,11 +327,41 @@ Implementation closeout, 2026-06-16:
   relative error was about `0.033`. The activation scope audit found 57
   low-height clean eligible writes out of 4613 and
   `low_height_clean_activation_expected_diff_acceptance.json` passed 57/57
-  with `product_surface_changed=FALSE`; this makes low-height a
-  `production_candidate` evidence class only. There is no
-  `--low-height-clean-activation-scope-audit-tsv` product writer flag, and no
-  `production_ready` claim is allowed until a narrower rule or new oracle
-  packet resolves the heldout failure.
+  with `product_surface_changed=FALSE`; at that historical checkpoint
+  low-height was only `production_candidate`. It was later promoted only after
+  a narrower bounded-window oracle packet passed 20/20 at `padding=0.5 min`,
+  followed by the explicit
+  `--low-height-clean-activation-scope-audit-tsv` product writer with 57/57
+  writer expected-diff pass and `readiness_tier=production_ready`. The original
+  full-trace 19/20 failure remains evidence that low-height must not be
+  broadened without a named oracle rule.
+- Low-height reintegration-stable scoped writer, 2026-06-17:
+  this follow-up uses the reintegration-stability audit as a candidate pool but
+  does not promote all 299 eligible rows. A quick all-stability family check
+  had 19/20 pass with one area failure
+  (`FAM000949/NormalBC2261_DNA`, area relative error about 19.6%), so direct
+  all-stability writer approval remains blocked. The promoted scope is
+  stability-eligible written rows whose activation audit has `cell_height <2e6`.
+  `standard_low_height_reintegration_stable_candidate_family_trace` requires
+  both `--reintegration-stability-audit-tsv` and
+  `--activation-scope-audit-tsv`, yielding 220 audit-intersection rows / 66
+  families on the current 85RAW no-RAW artifact. The formal family-scope oracle
+  is not a row-identity oracle: it records
+  `candidate_family_scope_match_level=family_id`,
+  `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`,
+  and 1520 available detected trace candidates from those same families. It
+  selected 20 family cases and passed 20/20 with max boundary error
+  `0.0830019 min` and max area relative error `0.0725986`. The matching
+  explicit writer requires
+  `--low-height-reintegration-stable-activation-scope-audit-tsv` plus
+  `--reintegration-stability-audit-tsv`; the real no-RAW writer run selected
+  and wrote 220 cells and its
+  `narrow_product_writer_expected_diff_acceptance.json` reports
+  `acceptance_status=pass`, `readiness_tier=production_ready`,
+  `expected_scope=low_height_reintegration_stable_eligible_activation_rows`,
+  and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
+  blockers. This adds 199 cells outside the previous four ready scopes and
+  brings the five-scope ready union to 439 cells.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
@@ -356,8 +391,9 @@ Implementation closeout, 2026-06-16:
   width-only scoped writer flag and no `production_ready` claim is allowed for
   this class.
 - Product direction update, 2026-06-17:
-  the 72-row high-signal scope and 42-row low-scan scope are safe
-  demonstrators, not the intended ceiling.
+  the 72-row high-signal, 42-row low-scan, 57-row low-height,
+  69-row low-height-low-scan, and 220-row low-height reintegration-stable
+  scopes are safe demonstrators, not the intended ceiling.
   The product north star is to backfill automatically whenever evidence is
   sufficient. Future slices should broaden the evidence class or observed-oracle
   coverage and then approve the additional matrix writes through their own
@@ -415,11 +451,27 @@ Implementation closeout, 2026-06-16:
     `acceptance_status=pass`, `readiness_tier=production_ready`,
     `expected_scope=low_scan_clean_eligible_activation_rows`, and
     `product_surface_changed=TRUE`).
-- Residual production-ready blocker: none for the explicit 72-row
-  high-signal-clean writer slice or the explicit 42-row low-scan-clean writer
-  slice. Broad standard-path seed guard activation still needs a broader
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_backfill_productization.py -q`
+    now covers the low-height reintegration-stable family oracle and scoped
+    writer tests (`14 passed` and `16 passed` when run as focused files before
+    the later full gate).
+  - Real no-RAW low-height reintegration-stable oracle:
+    `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/`
+    reports 220 audit-intersection rows / 66 families, family-level oracle
+    matching, 1520 available detected trace candidates, selected 20/20 pass,
+    max boundary error `0.0830019`, and max area relative error `0.0725986`.
+  - Real no-RAW low-height reintegration-stable writer:
+    `narrow_low_height_reintegration_stable_no_raw_productization/` reports
+    220 selected/written cells and
+    `narrow_product_writer_expected_diff_acceptance.json` reports
+    `acceptance_status=pass`, `readiness_tier=production_ready`,
+    `expected_scope=low_height_reintegration_stable_eligible_activation_rows`,
+    `product_surface_changed=TRUE`, and stability-audit path/SHA provenance.
+- Residual production-ready blocker: none for the five explicit scoped writer
+  slices. Broad standard-path seed guard activation still needs a broader
   masked/product-writer observed oracle covering the current 4613-row activation
-  scope before claiming broad `production_ready`.
+  scope before claiming broad `production_ready`; all-stability 299-row direct
+  writer remains blocked by the family-check area failure.
 
 Implement the seed guard as a pre-activation filter in the existing standard
 peak activation/productization path, close to
@@ -1219,7 +1271,9 @@ Required fields:
 - `low_scan_clean_status`;
 - `low_scan_clean_blockers`;
 - `low_height_clean_status`;
-- `low_height_clean_blockers`.
+- `low_height_clean_blockers`;
+- `low_height_low_scan_clean_status`;
+- `low_height_low_scan_clean_blockers`.
 
 The high-signal clean envelope for this audit is intentionally identical to the
 heldout trace oracle case selector: `trace_status` in `detected` or `rescued`,
@@ -1242,14 +1296,22 @@ keeps the row ineligible.
 The low-height clean envelope uses the same supported trace status, shape,
 local/global, width, apex-delta, and `>=10` scan thresholds as high-signal
 clean, but requires `cell_height < 2e6`. `low_height_clean_status=eligible`
-means the row is a diagnostic candidate for a possible future product scope; it
-is not writer approval because the first heldout oracle packet for this class
-failed 19/20 with one boundary miss.
+means the row is a diagnostic candidate for the explicit low-height product
+scope. It became writer-approved only after the later bounded-window heldout
+oracle and scoped writer expected-diff passed; the first full-trace oracle
+failure remains the reason this class must stay tied to the bounded-window
+oracle rule.
+
+The low-height-low-scan clean envelope requires `cell_height < 2e6`, `7-9`
+scans, and the same supported trace, shape, local/global, width, and apex-delta
+constraints. `low_height_low_scan_clean_status=eligible` means the row is a
+candidate for the explicit low-height-low-scan product scope.
 
 #### `activation_high_signal_clean_scope_summary.tsv/json`
 
 The summary records source artifact paths/hashes, written row counts, projection
-join counts, trace join counts, high-signal, low-scan, and low-height
+join counts, trace join counts, high-signal, low-scan, low-height, and
+low-height-low-scan
 eligible/ineligible/missing-evidence counts, and status fields:
 
 - `broad_activation_scope_status`: may be `ready` only when every written
@@ -1266,9 +1328,15 @@ eligible/ineligible/missing-evidence counts, and status fields:
   limits output to those rows and an expected-diff gate accepts that matrix
   change.
 - `low_height_clean_activation_scope_status`: may report
-  `candidate_only_pending_low_height_heldout_oracle` when candidate rows exist.
-  It is not production behavior, and current evidence explicitly blocks a
-  writer claim because the heldout trace oracle failed one selected case.
+  `ready_if_product_scope_is_limited_to_low_height_clean_rows` only as a
+  decision candidate. It is not production behavior unless a product writer
+  actually limits output to those rows and an expected-diff gate accepts that
+  matrix change.
+- `low_height_low_scan_clean_activation_scope_status`: may report
+  `ready_if_product_scope_is_limited_to_low_height_low_scan_clean_rows` only as
+  a decision candidate. It is not production behavior unless a product writer
+  actually limits output to those rows and an expected-diff gate accepts that
+  matrix change.
 
 `eligible_activation_value_delta.tsv` is a filtered convenience artifact for the
 eligible subset. It is not a replacement for `activation_value_delta.tsv` and
@@ -1279,11 +1347,12 @@ explicitly narrowed to that scope.
 convenience artifact for `low_scan_clean_status=eligible` rows and has the same
 non-product limitation.
 
-`low_height_clean_activation_value_delta.tsv` is the equivalent filtered
-convenience artifact for `low_height_clean_status=eligible` rows and has the
-same non-product limitation. It must not be consumed by a product writer until a
-separate oracle packet passes and this spec adds an explicit scoped writer
-contract.
+`low_height_clean_activation_value_delta.tsv` and
+`low_height_low_scan_clean_activation_value_delta.tsv` are the equivalent
+filtered convenience artifacts for `low_height_clean_status=eligible` and
+`low_height_low_scan_clean_status=eligible` rows. They have the same
+non-product limitation until consumed by an explicit scoped writer with passing
+writer expected-diff.
 
 #### `narrow_activation_expected_diff_acceptance.tsv/json`
 
@@ -1342,15 +1411,25 @@ acceptance; production behavior still requires the explicit scoped writer.
 
 #### `low_height_clean_activation_expected_diff_acceptance.tsv/json`
 
-One-row acceptance artifact for the diagnostic low-height-clean activation
-subset. It uses the same fields and acceptance expectations as
+One-row acceptance artifact for the low-height-clean activation subset. It uses
+the same fields and acceptance expectations as
 `narrow_activation_expected_diff_acceptance.tsv/json`, except `schema_version`
 is `standard_peak_low_height_activation_expected_diff_acceptance_v1` and
 `expected_scope` must be `low_height_clean_eligible_activation_rows`. Passing
-this gate is sufficient only to say the 57-row subset has delta-level
-expected-diff cleanliness. It is not sufficient for production behavior because
-the matching heldout trace oracle failed one selected case and no scoped writer
-flag exists for low-height.
+this gate is sufficient to say the 57-row subset has delta-level expected-diff
+cleanliness. Production behavior still requires the explicit scoped writer and
+the bounded-window oracle rule.
+
+#### `low_height_low_scan_clean_activation_expected_diff_acceptance.tsv/json`
+
+One-row acceptance artifact for the low-height-low-scan activation subset. It
+uses the same fields and acceptance expectations as
+`narrow_activation_expected_diff_acceptance.tsv/json`, except `schema_version`
+is `standard_peak_low_height_low_scan_activation_expected_diff_acceptance_v1`
+and `expected_scope` must be
+`low_height_low_scan_clean_eligible_activation_rows`. Passing this gate is
+sufficient to say the 69-row subset has delta-level expected-diff cleanliness;
+production behavior still requires the explicit scoped writer.
 
 #### Scoped `standard_peak_backfill_productization.py` writer flags
 
@@ -1362,10 +1441,18 @@ Explicit opt-in writer contract for named Backfill release slices.
 - `--low-scan-clean-activation-scope-audit-tsv` filters to
   `low_scan_clean_status=eligible` and writes
   `expected_scope=low_scan_clean_eligible_activation_rows`.
-
-There is intentionally no low-height scoped writer flag in this spec version.
-The low-height audit/expected-diff artifacts are candidate evidence only until
-the heldout oracle failure is resolved.
+- `--low-height-clean-activation-scope-audit-tsv` filters to
+  `low_height_clean_status=eligible` and writes
+  `expected_scope=low_height_clean_eligible_activation_rows`.
+- `--low-height-low-scan-clean-activation-scope-audit-tsv` filters to
+  `low_height_low_scan_clean_status=eligible` and writes
+  `expected_scope=low_height_low_scan_clean_eligible_activation_rows`.
+- `--low-height-reintegration-stable-activation-scope-audit-tsv` plus
+  `--reintegration-stability-audit-tsv` derives a transient
+  `low_height_reintegration_stable_status=eligible` only for rows that are
+  stability eligible, still written in the activation scope audit, and have
+  `cell_height < 2e6`; it writes
+  `expected_scope=low_height_reintegration_stable_eligible_activation_rows`.
 
 Only one scoped audit flag may be supplied at a time. When a scoped flag is
 supplied, the productization bridge reads
@@ -1396,6 +1483,8 @@ The productization summary records:
 - `activation_scope_filter_status`;
 - `activation_scope_audit_tsv`;
 - `activation_scope_audit_sha256`;
+- `reintegration_stability_audit_tsv`;
+- `reintegration_stability_audit_sha256`;
 - `activation_scope_filter_selected_shadow_row_count`;
 - `activation_scope_filter_excluded_shadow_row_count`;
 - `activation_scope_filter_eligible_audit_row_count`;
@@ -1419,6 +1508,8 @@ Required fields:
 - `expected_scope`;
 - `activation_scope_audit_tsv`;
 - `activation_scope_audit_sha256`;
+- `reintegration_stability_audit_tsv`;
+- `reintegration_stability_audit_sha256`;
 - `product_activation_value_delta_tsv`;
 - `product_activation_value_delta_sha256`;
 - `activation_application_status`;
@@ -1439,7 +1530,12 @@ Required fields:
 
 Acceptance expectations:
 
-- `expected_scope` must be `high_signal_clean_eligible_activation_rows`.
+- `expected_scope` must be one of
+  `high_signal_clean_eligible_activation_rows`,
+  `low_scan_clean_eligible_activation_rows`,
+  `low_height_clean_eligible_activation_rows`,
+  `low_height_low_scan_clean_eligible_activation_rows`, or
+  `low_height_reintegration_stable_eligible_activation_rows`.
 - `acceptance_status=pass` requires the product activation delta rows to match
   the eligible audit keys exactly, with no duplicate, missing, unexpected,
   non-eligible, non-written, unchanged, or blank activated-value rows.
@@ -1447,8 +1543,8 @@ Acceptance expectations:
 - `matrix_cells_written` and `product_written_delta_row_count` must both equal
   `eligible_audit_row_count`.
 - Passing this gate allows a `production_ready` claim only for the explicit
-  high-signal-clean scoped writer slice. It does not authorize broad 4613-row
-  standard-path activation or default extraction behavior.
+  scoped writer slice named by `expected_scope`. It does not authorize broad
+  4613-row standard-path activation or default extraction behavior.
 
 ### No-RAW / existing-artifact phase
 

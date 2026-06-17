@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,9 @@ LOW_HEIGHT_LOW_SCAN_CLEAN_SCOPE = "standard_low_height_low_scan_clean_trace"
 APEX_DELTA_CLEAN_SCOPE = "standard_apex_delta_clean_trace"
 WIDTH_CLEAN_SCOPE = "standard_width_clean_trace"
 SHAPE_MARGIN_CLEAN_SCOPE = "standard_shape_margin_clean_trace"
+LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE = (
+    "standard_low_height_reintegration_stable_candidate_family_trace"
+)
 SUPPORTED_TARGET_SHAPE_CLASSES = (
     HIGH_SIGNAL_CLEAN_SCOPE,
     LOW_SCAN_CLEAN_SCOPE,
@@ -46,6 +50,7 @@ SUPPORTED_TARGET_SHAPE_CLASSES = (
     APEX_DELTA_CLEAN_SCOPE,
     WIDTH_CLEAN_SCOPE,
     SHAPE_MARGIN_CLEAN_SCOPE,
+    LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE,
 )
 FULL_TRACE_REINTEGRATION_MODE = "full_trace"
 EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE = "expected_window_bounded"
@@ -101,6 +106,13 @@ SUMMARY_COLUMNS = (
     "expected_window_padding_min",
     "status",
     "readiness_scope",
+    "candidate_family_scope_status",
+    "candidate_family_scope_row_count",
+    "candidate_family_scope_family_count",
+    "candidate_family_scope_match_level",
+    "candidate_family_scope_oracle_basis",
+    "source_reintegration_stability_audit_tsv",
+    "source_activation_scope_audit_tsv",
     "source_alignment_backfill_cell_evidence_tsv",
     "source_trace_root",
     "available_candidate_rows",
@@ -135,6 +147,25 @@ BACKFILL_EVIDENCE_REQUIRED_COLUMNS = (
     "peak_start_rt",
     "peak_end_rt",
     "reason",
+)
+
+REINTEGRATION_STABILITY_AUDIT_SCHEMA_VERSION = (
+    "standard_peak_reintegration_stability_audit_v1"
+)
+ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION = "standard_peak_activation_scope_audit_v1"
+REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "matrix_value_effect",
+    "matrix_value_source_row_sha256",
+    "stability_status",
+)
+ACTIVATION_SCOPE_FOR_STABILITY_REQUIRED_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "matrix_value_effect",
+    "matrix_value_source_row_sha256",
+    "cell_height",
 )
 
 
@@ -184,6 +215,8 @@ def run_heldout_trace_oracle(
     expected_window_padding_min: float = DEFAULT_EXPECTED_WINDOW_PADDING_MIN,
     max_cases: int = 20,
     max_cases_per_family: int = 1,
+    reintegration_stability_audit_tsv: Path | None = None,
+    activation_scope_audit_tsv: Path | None = None,
 ) -> HeldoutTraceOracleOutputs:
     """Build deterministic held-out trace oracle artifacts without opening RAW."""
 
@@ -205,6 +238,11 @@ def run_heldout_trace_oracle(
         raise ValueError("max_cases must be positive")
     if max_cases_per_family <= 0:
         raise ValueError("max_cases_per_family must be positive")
+    candidate_family_ids, candidate_family_scope = _candidate_family_scope(
+        target_shape_class=target_shape_class,
+        reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+        activation_scope_audit_tsv=activation_scope_audit_tsv,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates_tsv = output_dir / "heldout_trace_reintegration_candidates.tsv"
@@ -220,6 +258,7 @@ def run_heldout_trace_oracle(
         candidate_rows,
         trace_root=trace_root,
         target_shape_class=target_shape_class,
+        candidate_family_ids=candidate_family_ids,
     )
     selected = _select_candidates(
         candidates,
@@ -281,6 +320,7 @@ def run_heldout_trace_oracle(
         target_shape_class=target_shape_class,
         observed_reintegration_mode=observed_reintegration_mode,
         expected_window_padding_min=expected_window_padding_min,
+        candidate_family_scope=candidate_family_scope,
         alignment_backfill_cell_evidence_tsv=alignment_backfill_cell_evidence_tsv,
         trace_root=trace_root,
         candidates=candidates,
@@ -335,6 +375,171 @@ def _candidate_evidence_rows(
     return candidates
 
 
+def _candidate_family_scope(
+    *,
+    target_shape_class: str,
+    reintegration_stability_audit_tsv: Path | None,
+    activation_scope_audit_tsv: Path | None,
+) -> tuple[frozenset[str] | None, dict[str, str]]:
+    blank = {
+        "candidate_family_scope_status": "not_requested",
+        "candidate_family_scope_row_count": "",
+        "candidate_family_scope_family_count": "",
+        "candidate_family_scope_match_level": "",
+        "candidate_family_scope_oracle_basis": "",
+        "source_reintegration_stability_audit_tsv": "",
+        "source_activation_scope_audit_tsv": "",
+    }
+    requested = (
+        reintegration_stability_audit_tsv is not None
+        or activation_scope_audit_tsv is not None
+    )
+    if target_shape_class != LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        if requested:
+            raise ValueError(
+                "reintegration stability family scope inputs are only supported "
+                f"for {LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE}",
+            )
+        return None, blank
+    if reintegration_stability_audit_tsv is None or activation_scope_audit_tsv is None:
+        raise ValueError(
+            f"{LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE} requires "
+            "--reintegration-stability-audit-tsv and --activation-scope-audit-tsv",
+        )
+
+    stability_rows = read_tsv_required(
+        reintegration_stability_audit_tsv,
+        REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    activation_rows = read_tsv_required(
+        activation_scope_audit_tsv,
+        ACTIVATION_SCOPE_FOR_STABILITY_REQUIRED_COLUMNS,
+    )
+    _validate_schema_version(
+        stability_rows,
+        expected_schema=REINTEGRATION_STABILITY_AUDIT_SCHEMA_VERSION,
+        path=reintegration_stability_audit_tsv,
+    )
+    _validate_schema_version(
+        activation_rows,
+        expected_schema=ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION,
+        path=activation_scope_audit_tsv,
+    )
+
+    activation_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in activation_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    )
+    duplicate_activation_shas = _duplicates(activation_shas)
+    if duplicate_activation_shas:
+        raise ValueError(
+            "activation scope audit has duplicate matrix_value_source_row_sha256 "
+            f"values: {';'.join(duplicate_activation_shas[:10])}",
+        )
+    activation_by_sha = {
+        text_value(row.get("matrix_value_source_row_sha256")): row
+        for row in activation_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    }
+
+    eligible_stability_rows = tuple(
+        row
+        for row in stability_rows
+        if text_value(row.get("stability_status")) == "eligible"
+        and text_value(row.get("matrix_value_effect")) == "written"
+    )
+    eligible_stability_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in eligible_stability_rows
+    )
+    duplicate_stability_shas = _duplicates(eligible_stability_shas)
+    if duplicate_stability_shas:
+        raise ValueError(
+            "reintegration stability audit has duplicate eligible "
+            "matrix_value_source_row_sha256 values: "
+            f"{';'.join(duplicate_stability_shas[:10])}",
+        )
+
+    missing_activation_shas: list[str] = []
+    family_mismatch_shas: list[str] = []
+    candidate_family_ids: set[str] = set()
+    candidate_row_count = 0
+    for row in eligible_stability_rows:
+        sha = text_value(row.get("matrix_value_source_row_sha256"))
+        activation = activation_by_sha.get(sha)
+        if activation is None:
+            missing_activation_shas.append(sha)
+            continue
+        if text_value(activation.get("matrix_value_effect")) != "written":
+            continue
+        stability_family = text_value(row.get("feature_family_id"))
+        activation_family = text_value(activation.get("feature_family_id"))
+        if stability_family != activation_family:
+            family_mismatch_shas.append(sha)
+            continue
+        height = optional_float(activation.get("cell_height"))
+        if height is None or height < 0.0 or height >= MIN_CELL_HEIGHT:
+            continue
+        candidate_family_ids.add(stability_family)
+        candidate_row_count += 1
+    if missing_activation_shas:
+        raise ValueError(
+            "reintegration stability audit references activation rows missing "
+            "from activation scope audit: "
+            f"{';'.join(missing_activation_shas[:10])}",
+        )
+    if family_mismatch_shas:
+        raise ValueError(
+            "reintegration stability audit family ids disagree with activation "
+            "scope rows for shas: "
+            f"{';'.join(family_mismatch_shas[:10])}",
+        )
+    if not candidate_family_ids:
+        raise ValueError("no low-height reintegration-stable candidate families")
+    return (
+        frozenset(candidate_family_ids),
+        {
+            "candidate_family_scope_status": "applied",
+            "candidate_family_scope_row_count": str(candidate_row_count),
+            "candidate_family_scope_family_count": str(len(candidate_family_ids)),
+            "candidate_family_scope_match_level": "family_id",
+            "candidate_family_scope_oracle_basis": (
+                "detected_trace_rows_from_candidate_families"
+            ),
+            "source_reintegration_stability_audit_tsv": str(
+                reintegration_stability_audit_tsv,
+            ),
+            "source_activation_scope_audit_tsv": str(activation_scope_audit_tsv),
+        },
+    )
+
+
+def _validate_schema_version(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    expected_schema: str,
+    path: Path,
+) -> None:
+    unexpected = sorted(
+        {
+            text_value(row.get("schema_version"))
+            for row in rows
+            if text_value(row.get("schema_version")) != expected_schema
+        },
+    )
+    if unexpected:
+        raise ValueError(
+            f"{path}: expected schema_version {expected_schema}; "
+            f"found {', '.join(unexpected)}",
+        )
+
+
+def _duplicates(values: Sequence[str]) -> tuple[str, ...]:
+    counts = Counter(values)
+    return tuple(value for value, count in counts.items() if value and count > 1)
+
+
 def _is_detected_oracle_source_row(row: Mapping[str, str]) -> bool:
     reason = text_value(row.get("reason"))
     return (
@@ -354,6 +559,7 @@ def _discover_trace_candidates(
     *,
     trace_root: Path,
     target_shape_class: str,
+    candidate_family_ids: frozenset[str] | None = None,
 ) -> tuple[_TraceCandidate, ...]:
     if not trace_root.is_dir():
         raise ValueError(
@@ -365,6 +571,8 @@ def _discover_trace_candidates(
         family_id = text_value(trace_data.get("family_id"))
         family_center_rt = optional_float(trace_data.get("family_center_rt"))
         if not family_id or family_center_rt is None:
+            continue
+        if candidate_family_ids is not None and family_id not in candidate_family_ids:
             continue
         traces = trace_data.get("traces")
         if not isinstance(traces, list):
@@ -547,6 +755,8 @@ def _target_shape_class_matches(
             clean_except_shape
             and MIN_SHAPE_MARGIN_SIMILARITY <= shape < MIN_SHAPE_SIMILARITY
         )
+    if target_shape_class == LOW_HEIGHT_REINTEGRATION_STABLE_CANDIDATE_FAMILY_SCOPE:
+        return True
     return False
 
 
@@ -818,6 +1028,7 @@ def _summary_row(
     target_shape_class: str,
     observed_reintegration_mode: str,
     expected_window_padding_min: float,
+    candidate_family_scope: Mapping[str, str],
     alignment_backfill_cell_evidence_tsv: Path,
     trace_root: Path,
     candidates: Sequence[_TraceCandidate],
@@ -864,6 +1075,27 @@ def _summary_row(
         ),
         "status": status,
         "readiness_scope": f"{target_shape_class}_heldout_oracle",
+        "candidate_family_scope_status": text_value(
+            candidate_family_scope.get("candidate_family_scope_status"),
+        ),
+        "candidate_family_scope_row_count": text_value(
+            candidate_family_scope.get("candidate_family_scope_row_count"),
+        ),
+        "candidate_family_scope_family_count": text_value(
+            candidate_family_scope.get("candidate_family_scope_family_count"),
+        ),
+        "candidate_family_scope_match_level": text_value(
+            candidate_family_scope.get("candidate_family_scope_match_level"),
+        ),
+        "candidate_family_scope_oracle_basis": text_value(
+            candidate_family_scope.get("candidate_family_scope_oracle_basis"),
+        ),
+        "source_reintegration_stability_audit_tsv": text_value(
+            candidate_family_scope.get("source_reintegration_stability_audit_tsv"),
+        ),
+        "source_activation_scope_audit_tsv": text_value(
+            candidate_family_scope.get("source_activation_scope_audit_tsv"),
+        ),
         "source_alignment_backfill_cell_evidence_tsv": str(
             alignment_backfill_cell_evidence_tsv,
         ),

@@ -19,6 +19,7 @@ from xic_extractor.diagnostics import backfill_reconciliation_gallery
 from xic_extractor.diagnostics.diagnostic_io import (
     file_sha256,
     format_diagnostic_value,
+    optional_float,
     read_tsv_required,
     text_value,
     write_tsv,
@@ -69,6 +70,8 @@ SUMMARY_COLUMNS = (
     "activation_scope_filter_status",
     "activation_scope_audit_tsv",
     "activation_scope_audit_sha256",
+    "reintegration_stability_audit_tsv",
+    "reintegration_stability_audit_sha256",
     "activation_scope_filter_selected_shadow_row_count",
     "activation_scope_filter_excluded_shadow_row_count",
     "activation_scope_filter_eligible_audit_row_count",
@@ -112,6 +115,22 @@ ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS = (
     "matrix_value_source_row_sha256",
     "high_signal_clean_status",
 )
+ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION = "standard_peak_activation_scope_audit_v1"
+REINTEGRATION_STABILITY_AUDIT_SCHEMA_VERSION = (
+    "standard_peak_reintegration_stability_audit_v1"
+)
+REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "sample_id",
+    "matrix_value_effect",
+    "matrix_value_source_row_sha256",
+    "stability_status",
+)
+LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN = (
+    "low_height_reintegration_stable_status"
+)
+MIN_LOW_HEIGHT_REINTEGRATION_STABLE_HEIGHT = 2_000_000.0
 
 NARROW_PRODUCT_WRITER_EXPECTED_DIFF_ACCEPTANCE_COLUMNS = (
     "schema_version",
@@ -121,6 +140,8 @@ NARROW_PRODUCT_WRITER_EXPECTED_DIFF_ACCEPTANCE_COLUMNS = (
     "expected_scope",
     "activation_scope_audit_tsv",
     "activation_scope_audit_sha256",
+    "reintegration_stability_audit_tsv",
+    "reintegration_stability_audit_sha256",
     "product_activation_value_delta_tsv",
     "product_activation_value_delta_sha256",
     "activation_application_status",
@@ -163,6 +184,7 @@ class _ActivationScopeRequest:
     label: str
     no_rows_blocker: str
     ready_next_action: str
+    reintegration_stability_audit_tsv: Path | None = None
 
 
 def run_standard_peak_backfill_productization(
@@ -184,6 +206,8 @@ def run_standard_peak_backfill_productization(
     low_scan_clean_activation_scope_audit_tsv: Path | None = None,
     low_height_clean_activation_scope_audit_tsv: Path | None = None,
     low_height_low_scan_clean_activation_scope_audit_tsv: Path | None = None,
+    low_height_reintegration_stable_activation_scope_audit_tsv: Path | None = None,
+    reintegration_stability_audit_tsv: Path | None = None,
 ) -> StandardPeakBackfillProductizationOutputs:
     """Apply standard-peak projection accepts and optionally render synced gallery."""
 
@@ -214,6 +238,10 @@ def run_standard_peak_backfill_productization(
         low_height_low_scan_clean_activation_scope_audit_tsv=(
             low_height_low_scan_clean_activation_scope_audit_tsv
         ),
+        low_height_reintegration_stable_activation_scope_audit_tsv=(
+            low_height_reintegration_stable_activation_scope_audit_tsv
+        ),
+        reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
     )
     (
         activation_shadow_rows,
@@ -222,6 +250,9 @@ def run_standard_peak_backfill_productization(
     ) = _filter_shadow_rows_to_activation_scope(
         shadow_rows,
         activation_scope_audit_tsv=activation_scope.audit_tsv,
+        reintegration_stability_audit_tsv=(
+            activation_scope.reintegration_stability_audit_tsv
+        ),
         activation_scope_contract=activation_scope.contract,
         scope_status_column=activation_scope.status_column,
         scope_label=activation_scope.label,
@@ -319,6 +350,9 @@ def run_standard_peak_backfill_productization(
                     activation_scope_audit_rows=activation_scope_audit_rows,
                     product_activation_value_delta_rows=delta_rows,
                     activation_scope_audit_tsv=activation_scope.audit_tsv,
+                    reintegration_stability_audit_tsv=(
+                        activation_scope.reintegration_stability_audit_tsv
+                    ),
                     product_activation_value_delta_tsv=apply_outputs.value_delta_tsv,
                     application_summary=application_summary,
                     source_run_id=source_run_id,
@@ -481,6 +515,12 @@ def _summary_row(
         "activation_scope_audit_sha256": text_value(
             activation_scope_filter.get("activation_scope_audit_sha256"),
         ),
+        "reintegration_stability_audit_tsv": text_value(
+            activation_scope_filter.get("reintegration_stability_audit_tsv"),
+        ),
+        "reintegration_stability_audit_sha256": text_value(
+            activation_scope_filter.get("reintegration_stability_audit_sha256"),
+        ),
         "activation_scope_filter_selected_shadow_row_count": text_value(
             activation_scope_filter.get(
                 "activation_scope_filter_selected_shadow_row_count",
@@ -574,6 +614,8 @@ def _activation_scope_request(
     low_scan_clean_activation_scope_audit_tsv: Path | None,
     low_height_clean_activation_scope_audit_tsv: Path | None,
     low_height_low_scan_clean_activation_scope_audit_tsv: Path | None,
+    low_height_reintegration_stable_activation_scope_audit_tsv: Path | None,
+    reintegration_stability_audit_tsv: Path | None,
 ) -> _ActivationScopeRequest:
     requested = tuple(
         path
@@ -582,12 +624,21 @@ def _activation_scope_request(
             low_scan_clean_activation_scope_audit_tsv,
             low_height_clean_activation_scope_audit_tsv,
             low_height_low_scan_clean_activation_scope_audit_tsv,
+            low_height_reintegration_stable_activation_scope_audit_tsv,
         )
         if path is not None
     )
     if len(requested) > 1:
         raise ValueError(
             "only one activation scope audit may be provided at a time",
+        )
+    if (
+        reintegration_stability_audit_tsv is not None
+        and low_height_reintegration_stable_activation_scope_audit_tsv is None
+    ):
+        raise ValueError(
+            "--reintegration-stability-audit-tsv requires "
+            "--low-height-reintegration-stable-activation-scope-audit-tsv",
         )
     if high_signal_clean_activation_scope_audit_tsv is not None:
         return _ActivationScopeRequest(
@@ -627,6 +678,25 @@ def _activation_scope_request(
                 "narrow_low_height_low_scan_clean_backfill_production_ready"
             ),
         )
+    if low_height_reintegration_stable_activation_scope_audit_tsv is not None:
+        if reintegration_stability_audit_tsv is None:
+            raise ValueError(
+                "--low-height-reintegration-stable-activation-scope-audit-tsv "
+                "requires --reintegration-stability-audit-tsv",
+            )
+        return _ActivationScopeRequest(
+            audit_tsv=low_height_reintegration_stable_activation_scope_audit_tsv,
+            contract="low_height_reintegration_stable_eligible_activation_rows",
+            status_column=LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN,
+            label="low-height-reintegration-stable",
+            no_rows_blocker=(
+                "no_low_height_reintegration_stable_eligible_audit_rows"
+            ),
+            ready_next_action=(
+                "narrow_low_height_reintegration_stable_backfill_production_ready"
+            ),
+            reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+        )
     return _ActivationScopeRequest(
         audit_tsv=None,
         contract="unscoped_standard_peak_gate",
@@ -641,6 +711,7 @@ def _filter_shadow_rows_to_activation_scope(
     shadow_rows: Sequence[Mapping[str, str]],
     *,
     activation_scope_audit_tsv: Path | None,
+    reintegration_stability_audit_tsv: Path | None,
     activation_scope_contract: str,
     scope_status_column: str,
     scope_label: str,
@@ -653,6 +724,8 @@ def _filter_shadow_rows_to_activation_scope(
                 "activation_scope_filter_status": "not_requested",
                 "activation_scope_audit_tsv": "",
                 "activation_scope_audit_sha256": "",
+                "reintegration_stability_audit_tsv": "",
+                "reintegration_stability_audit_sha256": "",
                 "activation_scope_filter_selected_shadow_row_count": str(
                     len(shadow_rows),
                 ),
@@ -665,9 +738,19 @@ def _filter_shadow_rows_to_activation_scope(
     audit_rows = tuple(
         read_tsv_required(
             activation_scope_audit_tsv,
-            (*ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS, scope_status_column),
+            _activation_scope_required_columns(
+                scope_status_column,
+                reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+            ),
         )
     )
+    _validate_activation_scope_schema(audit_rows, activation_scope_audit_tsv)
+    if reintegration_stability_audit_tsv is not None:
+        audit_rows = _with_low_height_reintegration_stable_status(
+            audit_rows,
+            reintegration_stability_audit_tsv=reintegration_stability_audit_tsv,
+            activation_scope_audit_tsv=activation_scope_audit_tsv,
+        )
     eligible_audit_rows = tuple(
         row
         for row in audit_rows
@@ -728,6 +811,14 @@ def _filter_shadow_rows_to_activation_scope(
             "activation_scope_audit_sha256": file_sha256(
                 activation_scope_audit_tsv,
             ),
+            "reintegration_stability_audit_tsv": _path_text(
+                reintegration_stability_audit_tsv,
+            ),
+            "reintegration_stability_audit_sha256": (
+                ""
+                if reintegration_stability_audit_tsv is None
+                else file_sha256(reintegration_stability_audit_tsv)
+            ),
             "activation_scope_filter_selected_shadow_row_count": str(
                 len(filtered_rows),
             ),
@@ -742,11 +833,155 @@ def _filter_shadow_rows_to_activation_scope(
     )
 
 
+def _activation_scope_required_columns(
+    scope_status_column: str,
+    *,
+    reintegration_stability_audit_tsv: Path | None,
+) -> tuple[str, ...]:
+    if reintegration_stability_audit_tsv is None:
+        return (*ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS, scope_status_column)
+    return (*ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS, "cell_height")
+
+
+def _with_low_height_reintegration_stable_status(
+    activation_rows: Sequence[Mapping[str, str]],
+    *,
+    reintegration_stability_audit_tsv: Path,
+    activation_scope_audit_tsv: Path,
+) -> tuple[dict[str, str], ...]:
+    stability_rows = read_tsv_required(
+        reintegration_stability_audit_tsv,
+        REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    _validate_stability_schema(stability_rows, reintegration_stability_audit_tsv)
+    activation_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in activation_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    )
+    duplicate_activation_shas = _duplicates(activation_shas)
+    if duplicate_activation_shas:
+        raise ValueError(
+            "activation scope audit has duplicate matrix_value_source_row_sha256 "
+            f"values: {';'.join(duplicate_activation_shas[:10])}",
+        )
+    activation_by_sha = {
+        text_value(row.get("matrix_value_source_row_sha256")): row
+        for row in activation_rows
+        if text_value(row.get("matrix_value_source_row_sha256"))
+    }
+    eligible_stability_rows = tuple(
+        row
+        for row in stability_rows
+        if text_value(row.get("stability_status")) == "eligible"
+        and text_value(row.get("matrix_value_effect")) == "written"
+    )
+    eligible_stability_shas = tuple(
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in eligible_stability_rows
+    )
+    duplicate_stability_shas = _duplicates(eligible_stability_shas)
+    if duplicate_stability_shas:
+        raise ValueError(
+            "reintegration stability audit has duplicate eligible "
+            "matrix_value_source_row_sha256 values: "
+            f"{';'.join(duplicate_stability_shas[:10])}",
+        )
+    missing_activation_shas: list[str] = []
+    family_mismatch_shas: list[str] = []
+    eligible_low_height_shas: set[str] = set()
+    for row in eligible_stability_rows:
+        sha = text_value(row.get("matrix_value_source_row_sha256"))
+        activation = activation_by_sha.get(sha)
+        if activation is None:
+            missing_activation_shas.append(sha)
+            continue
+        if text_value(activation.get("matrix_value_effect")) != "written":
+            continue
+        if text_value(row.get("feature_family_id")) != text_value(
+            activation.get("feature_family_id"),
+        ):
+            family_mismatch_shas.append(sha)
+            continue
+        height = optional_float(activation.get("cell_height"))
+        if (
+            height is not None
+            and height >= 0.0
+            and height < MIN_LOW_HEIGHT_REINTEGRATION_STABLE_HEIGHT
+        ):
+            eligible_low_height_shas.add(sha)
+    if missing_activation_shas:
+        raise ValueError(
+            "reintegration stability audit references activation rows missing "
+            f"from {activation_scope_audit_tsv}: "
+            f"{';'.join(missing_activation_shas[:10])}",
+        )
+    if family_mismatch_shas:
+        raise ValueError(
+            "reintegration stability audit family ids disagree with activation "
+            "scope rows for shas: "
+            f"{';'.join(family_mismatch_shas[:10])}",
+        )
+    return tuple(
+        {
+            **dict(row),
+            LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN: (
+                "eligible"
+                if text_value(row.get("matrix_value_source_row_sha256"))
+                in eligible_low_height_shas
+                else "ineligible"
+            ),
+        }
+        for row in activation_rows
+    )
+
+
+def _validate_activation_scope_schema(
+    rows: Sequence[Mapping[str, str]],
+    path: Path,
+) -> None:
+    unexpected = sorted(
+        {
+            text_value(row.get("schema_version"))
+            for row in rows
+            if text_value(row.get("schema_version"))
+            != ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION
+        },
+    )
+    if unexpected:
+        raise ValueError(
+            f"{path}: expected schema_version "
+            f"{ACTIVATION_SCOPE_AUDIT_SCHEMA_VERSION}; "
+            f"found {', '.join(unexpected)}",
+        )
+
+
+def _validate_stability_schema(
+    rows: Sequence[Mapping[str, str]],
+    path: Path,
+) -> None:
+    unexpected = sorted(
+        {
+            text_value(row.get("schema_version"))
+            for row in rows
+            if text_value(row.get("schema_version"))
+            != REINTEGRATION_STABILITY_AUDIT_SCHEMA_VERSION
+        },
+    )
+    if unexpected:
+        raise ValueError(
+            f"{path}: expected schema_version "
+            f"{REINTEGRATION_STABILITY_AUDIT_SCHEMA_VERSION}; "
+            f"found {', '.join(unexpected)}",
+        )
+
+
 def _narrow_product_writer_expected_diff_acceptance_row(
     *,
     activation_scope_audit_rows: Sequence[Mapping[str, str]],
     product_activation_value_delta_rows: Sequence[Mapping[str, str]],
     activation_scope_audit_tsv: Path | None,
+    reintegration_stability_audit_tsv: Path | None,
     product_activation_value_delta_tsv: Path,
     application_summary: Mapping[str, str],
     source_run_id: str,
@@ -824,6 +1059,14 @@ def _narrow_product_writer_expected_diff_acceptance_row(
             "" if activation_scope_audit_tsv is None else file_sha256(
                 activation_scope_audit_tsv,
             )
+        ),
+        "reintegration_stability_audit_tsv": _path_text(
+            reintegration_stability_audit_tsv,
+        ),
+        "reintegration_stability_audit_sha256": (
+            ""
+            if reintegration_stability_audit_tsv is None
+            else file_sha256(reintegration_stability_audit_tsv)
         ),
         "product_activation_value_delta_tsv": str(product_activation_value_delta_tsv),
         "product_activation_value_delta_sha256": file_sha256(

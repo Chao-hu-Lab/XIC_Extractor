@@ -7,7 +7,7 @@
 ## 2026-06-17 白話結論
 
 目前這個分支的非 GUI productization goal 有兩條主線已經能講清楚：
-Backfill 有四個 explicit scoped writer 到 `production_ready`，Targeted MS1
+Backfill 有五個 explicit scoped writer 到 `production_ready`，Targeted MS1
 limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
 probes 仍是正式的 `production_candidate`，但 writer 被 heldout oracle failure
 或 expected-diff 缺口擋住。
@@ -31,7 +31,8 @@ selected-candidate/manual-boundary 產品寫回。
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
-現在我們仍不能說這 4613 格全部 ready，但這輪已把第四個安全切片推上去了。
+現在我們仍不能說這 4613 格全部 ready；前面先把第四個安全切片推上去，
+這輪又把第五個 low-height reintegration-stable 切片推上去。
 原本的 72 格 high-signal clean 仍是 `production_ready`；這輪新增的
 low-scan clean 是「其他證據都乾淨，只是邊界內 scan count 只有 7-9」。
 新的 no-RAW heldout oracle 從既有 85RAW trace 找到 56 個候選、11 個 family
@@ -44,7 +45,7 @@ clean 也接到 explicit opt-in writer：它只寫 57 格，writer expected-diff
 bounded heldout oracle 有 210 個 eligible detected cases / 51 families，選
 20 family cases 時 20/20 pass，最大 boundary error `4.80376e-05 min`、
 最大 area relative error `0.00881912`；writer expected-diff 69/69 乾淨，
-`readiness_tier=production_ready`。所以現在 Backfill 有四個 explicit
+`readiness_tier=production_ready`。截至那一步 Backfill 有四個 explicit
 scoped ready slices：72 格 high-signal clean + 42 格 low-scan clean + 57 格
 low-height clean + 69 格 low-height-low-scan clean。你的產品方向也已落地成工作規則：這些只是示範/放行
 slice，不是天花板；北極星仍是「只要證據足夠就補」，下一步要繼續用 named
@@ -65,6 +66,35 @@ eligible。用既有 85RAW no-RAW artifact 跑完整 4613-row scope 後，結果
 gate。白話說，這找到了一批比原本四個 slice 更廣的「邊界穩定候選」，但它
 仍不是 writer approval，因為它只是 stored-trace self-consistency，還缺
 masked/product-writer oracle 和 expected-diff。
+
+這輪把其中一個能被證據支持的子集合正式推上去了：low-height +
+reintegration-stable。先說清楚，不是把 299 個 stability eligible 或 broad
+4613 格全部放行。快速 all-family check 在 20 個 family 代表案例裡有 1 個
+area fail（`FAM000949/NormalBC2261_DNA`，area relative error 約 19.6%），
+所以「全部 stability eligible 直接寫」仍 blocked。可放行的是更窄的交集：
+stability eligible、activation row 仍是 written、且 `cell_height < 2e6`。
+這個 writer scope 有 220 格 / 66 families；heldout oracle 是 family-level，
+不是 row-identity oracle，因為這 220 格本身都是 rescued cells，沒有 original
+detected cell 可做 masked-heldout。新的 summary 已明寫
+`candidate_family_scope_match_level=family_id` 與
+`candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`：
+也就是從同 66 個 families 的 1520 個 detected trace candidates 裡選 20 個
+family 代表案例，20/20 pass，最大 boundary error `0.0830019 min`、最大 area
+relative error `0.0725986`。接著 explicit writer 只吃
+`--low-height-reintegration-stable-activation-scope-audit-tsv` +
+`--reintegration-stability-audit-tsv`，writer expected-diff 220/220 pass，
+`readiness_tier=production_ready`，duplicate/missing/unexpected/non-eligible/
+non-written/unchanged/blank 全是 0。這 220 格裡有 199 格不在既有四個 ready
+writer scope，五個 ready scope 的 cell-level 聯集現在是 439 格。
+
+這個第五個 writer 已經過兩輪 subagent review。`Bernoulli` 先擋下兩個有效
+問題：oracle 其實是 family-level，不能寫成 220-row row-identity oracle；以及
+product writer 原本只檢查 activation scope audit 有 `schema_version` 欄位，
+但沒有驗值。兩者已修：summary 現在明寫 family-level oracle basis，docs
+不再 overclaim row identity；writer 也驗
+`standard_peak_activation_scope_audit_v1`，並新增同 family 混合高/低高度只寫
+exact SHA 的 regression test。`Avicenna` follow-up review 確認 P1/P2 關閉，
+沒有 blocking finding。
 
 low-height clean 問的是：「其他形狀、RT、寬度、scan count 都乾淨，只是
 peak height 低於 2e6 的格子，能不能也自動補？」現在答案是：可以，但只限
@@ -202,12 +232,14 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- Latest productization code commit referenced by this handoff:
-  `efa679f feat: add low-height low-scan backfill writer`.
+- Latest productization code baseline before this handoff refresh:
+  `11517c0 feat: add reintegration stability audit`. This handoff also
+  describes the current low-height reintegration-stable writer diff; use
+  `git log -1` after closeout for the exact committed hash.
 - Git state after that product slice: branch was ahead of origin by 16 commits
   and worktree was clean before this docs consistency refresh. Run
   `git status --short --branch` for the exact current docs-only state.
-- Current checkpoint scope: after four Backfill scoped writers and Targeted
+- Current checkpoint scope: after five Backfill scoped writers and Targeted
   MS1 no-flag limited default. There is no apex-delta, width-only,
   shape-margin, or broad 4613-row Backfill product writer, no GUI wiring, no
   selected-candidate switch, and no manual boundary area recompute.
@@ -1334,6 +1366,9 @@ RAW-backed 驗證:
    - 目前 explicit 42-row low-scan-clean scoped writer 也是 `production_ready`。
    - 目前 explicit 57-row low-height-clean scoped writer 也是 `production_ready`。
    - 目前 explicit 69-row low-height-low-scan-clean scoped writer 也是 `production_ready`。
+   - 目前 explicit 220-row low-height reintegration-stable scoped writer 也是
+     `production_ready`；它新增 199 個不在前四個 writer scope 的 ready
+     cells，五個 ready scope 聯集為 439 cells。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
      scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中
@@ -1346,10 +1381,15 @@ RAW-backed 驗證:
      也已通過。combined activation scope audit 已證明目前
      broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean、
      57 個 low-height clean、69 個 low-height-low-scan clean。
+   - 299-row stability candidate pool 不能直接接 writer。快速 all-family
+     check 已看到 `FAM000949/NormalBC2261_DNA` area fail；可寫的是
+     low-height + stability 的 220-row 子集合，因為它有 per-row
+     reintegration-stability audit、family-level detected-trace oracle
+     20/20 pass、以及 writer expected-diff 220/220 pass。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
      observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
      不應重做已完成的 high-signal/low-scan/low-height/low-height-low-scan scoped
-     writers；也不要把 299-row stability candidate pool 直接接 writer。
+     writers，也不應重做這次已完成的 low-height reintegration-stable writer。
      apex-delta、width-only、shape-margin 仍要先解 oracle failures。下一個
      Backfill gate 應把這 299-row pool 送進 masked/product-writer oracle，或再
      補 local S/N / selectivity、cohort-anchored expected window，並用預先宣告的

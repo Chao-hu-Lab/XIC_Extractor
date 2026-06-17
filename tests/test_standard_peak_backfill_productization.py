@@ -556,6 +556,376 @@ def test_standard_peak_productization_can_limit_writer_to_low_height_low_scan_sc
     assert acceptance["not_written_delta_row_count"] == "0"
 
 
+def test_standard_peak_productization_can_limit_writer_to_low_height_stability_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="a" * 64,
+            ),
+            _shadow_row(
+                "FAM_NON",
+                "S2",
+                "200",
+                standard=True,
+                row_sha="c" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_low_height_stability_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "a" * 64,
+                "ineligible",
+                cell_height="500000",
+            ),
+            _scope_audit_row(
+                "FAM_NON",
+                "S2",
+                "c" * 64,
+                "ineligible",
+                cell_height="3000000",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+            "cell_height",
+        ),
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [
+            _stability_audit_row("FAM_STD", "S2", "a" * 64, "eligible"),
+            _stability_audit_row("FAM_NON", "S2", "c" * 64, "eligible"),
+        ],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-low-height-stability-productization",
+                "--low-height-reintegration-stable-activation-scope-audit-tsv",
+                str(scope_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["activation_scope_filter_status"] == "applied"
+    assert summary["activation_scope_contract"] == (
+        "low_height_reintegration_stable_eligible_activation_rows"
+    )
+    assert summary["activation_scope_filter_selected_shadow_row_count"] == "1"
+    assert summary["activation_scope_filter_eligible_audit_row_count"] == "1"
+    assert summary["reintegration_stability_audit_tsv"] == str(stability_audit)
+    assert len(summary["reintegration_stability_audit_sha256"]) == 64
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["narrow_product_writer_expected_diff_acceptance_status"] == "pass"
+    assert summary["next_action"] == (
+        "narrow_low_height_reintegration_stable_backfill_production_ready"
+    )
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["readiness_tier"] == "production_ready"
+    assert acceptance["expected_scope"] == (
+        "low_height_reintegration_stable_eligible_activation_rows"
+    )
+    assert acceptance["reintegration_stability_audit_tsv"] == str(stability_audit)
+    assert len(acceptance["reintegration_stability_audit_sha256"]) == 64
+    assert acceptance["product_written_delta_row_count"] == "1"
+    assert acceptance["non_eligible_delta_row_count"] == "0"
+
+    matrix_rows = _read_tsv(output_dir / "activated_matrix" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        output_dir / "activated_matrix" / "alignment_matrix_identity.tsv",
+    )
+    matrix_index_by_hypothesis = {
+        row["peak_hypothesis_id"]: int(row["matrix_row_index"]) - 1
+        for row in identity_rows
+    }
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_NON"]]["S2"] == ""
+
+
+def test_low_height_stability_scope_filters_rows_not_whole_family(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["matrix"],
+        [
+            {"Mz": "300.3", "RT": "9.3", "S1": "10", "S2": "", "S3": ""},
+            {"Mz": "301.3", "RT": "9.4", "S1": "20", "S2": "", "S3": ""},
+        ],
+        ("Mz", "RT", "S1", "S2", "S3"),
+    )
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="a" * 64,
+            ),
+            _shadow_row(
+                "FAM_STD",
+                "S3",
+                "300",
+                standard=True,
+                row_sha="d" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_low_height_stability_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "a" * 64,
+                "ineligible",
+                cell_height="500000",
+            ),
+            _scope_audit_row(
+                "FAM_STD",
+                "S3",
+                "d" * 64,
+                "ineligible",
+                cell_height="3000000",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+            "cell_height",
+        ),
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [
+            _stability_audit_row("FAM_STD", "S2", "a" * 64, "eligible"),
+            _stability_audit_row("FAM_STD", "S3", "d" * 64, "eligible"),
+        ],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-low-height-stability-family-exact-filter",
+                "--low-height-reintegration-stable-activation-scope-audit-tsv",
+                str(scope_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 0
+    )
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["eligible_audit_row_count"] == "1"
+    assert acceptance["product_written_delta_row_count"] == "1"
+
+    matrix_rows = _read_tsv(output_dir / "activated_matrix" / "alignment_matrix.tsv")
+    identity_rows = _read_tsv(
+        output_dir / "activated_matrix" / "alignment_matrix_identity.tsv",
+    )
+    matrix_index_by_hypothesis = {
+        row["peak_hypothesis_id"]: int(row["matrix_row_index"]) - 1
+        for row in identity_rows
+    }
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S2"] == "100"
+    assert matrix_rows[matrix_index_by_hypothesis["FAM_STD"]]["S3"] == ""
+
+
+def test_standard_peak_productization_rejects_wrong_activation_scope_schema(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_low_height_stability_scope_audit.tsv"
+    wrong_schema_row = _scope_audit_row(
+        "FAM_STD",
+        "S2",
+        "b" * 64,
+        "ineligible",
+        cell_height="500000",
+    )
+    wrong_schema_row["schema_version"] = "wrong_activation_scope_schema"
+    _write_tsv(
+        scope_audit,
+        [wrong_schema_row],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+            "cell_height",
+        ),
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", "b" * 64, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-low-height-stability-wrong-activation-schema",
+                "--low-height-reintegration-stable-activation-scope-audit-tsv",
+                str(scope_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert "expected schema_version standard_peak_activation_scope_audit_v1" in (
+        capsys.readouterr().err
+    )
+
+
+def test_standard_peak_productization_rejects_wrong_stability_schema(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    scope_audit = tmp_path / "activation_low_height_stability_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                cell_height="500000",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+            "cell_height",
+        ),
+    )
+    stability_row = _stability_audit_row(
+        "FAM_STD",
+        "S2",
+        "b" * 64,
+        "eligible",
+    )
+    stability_row["schema_version"] = "wrong_stability_schema"
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [stability_row],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--source-run-id",
+                "unit-low-height-stability-wrong-stability-schema",
+                "--low-height-reintegration-stable-activation-scope-audit-tsv",
+                str(scope_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+
+    assert (
+        "expected schema_version standard_peak_reintegration_stability_audit_v1"
+        in capsys.readouterr().err
+    )
+
+
 @pytest.mark.parametrize(
     "second_scope_flag",
     (
@@ -1265,6 +1635,7 @@ def _scope_audit_row(
     low_scan_clean_status: str = "missing_evidence",
     low_height_clean_status: str | None = None,
     low_height_low_scan_clean_status: str | None = None,
+    cell_height: str | None = None,
 ) -> dict[str, str]:
     row = {
         "schema_version": "standard_peak_activation_scope_audit_v1",
@@ -1280,7 +1651,25 @@ def _scope_audit_row(
         row["low_height_clean_status"] = low_height_clean_status
     if low_height_low_scan_clean_status is not None:
         row["low_height_low_scan_clean_status"] = low_height_low_scan_clean_status
+    if cell_height is not None:
+        row["cell_height"] = cell_height
     return row
+
+
+def _stability_audit_row(
+    family: str,
+    sample: str,
+    row_sha: str,
+    status: str,
+) -> dict[str, str]:
+    return {
+        "schema_version": "standard_peak_reintegration_stability_audit_v1",
+        "feature_family_id": family,
+        "sample_id": sample,
+        "matrix_value_effect": "written",
+        "matrix_value_source_row_sha256": row_sha,
+        "stability_status": status,
+    }
 
 
 def _blank_row(columns: tuple[str, ...]) -> dict[str, str]:

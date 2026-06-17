@@ -35,6 +35,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_window_padding_min=args.expected_window_padding_min,
             max_cases=args.max_cases,
             max_cases_per_family=args.max_cases_per_family,
+            reintegration_stability_audit_tsv=args.reintegration_stability_audit_tsv,
+            activation_scope_audit_tsv=args.activation_scope_audit_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -90,6 +92,25 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--max-cases", type=int, default=20)
     parser.add_argument("--max-cases-per-family", type=int, default=1)
+    parser.add_argument(
+        "--reintegration-stability-audit-tsv",
+        type=Path,
+        default=None,
+        help=(
+            "Required only for the low-height reintegration-stable candidate "
+            "family target scope."
+        ),
+    )
+    parser.add_argument(
+        "--activation-scope-audit-tsv",
+        type=Path,
+        default=None,
+        help=(
+            "Matching activation_high_signal_clean_scope_audit.tsv used to "
+            "classify low-height rows for the reintegration-stable candidate "
+            "family target scope."
+        ),
+    )
     return parser.parse_args(argv)
 
 
