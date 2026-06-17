@@ -55,11 +55,17 @@ Backfill standard-path activation 目前分成兩個 release tier：72-row
 high-signal-clean scoped writer 與 42-row low-scan-clean scoped writer 都已用
 explicit opt-in scope audit filter 寫出 product matrix-only output，且各自的
 `narrow_product_writer_expected_diff_acceptance.json` 通過並標
-`readiness_tier=production_ready`；但 broad 4613-row consolidated activation
-仍只有 `production_candidate`，因為 1087 個缺 overlay/trace evidence，
-其餘 trace-matched writes 還沒有全部落進已命名、已 oracle-backed 的
-ready envelope。若要把 broad scope 也推 ready，下一個 checkpoint 必須補
-broader masked/product-writer oracle，不能把 narrow ready 外推到 4613-row。
+`readiness_tier=production_ready`。Low-height clean 目前只到
+`production_candidate`：activation scope audit 找到 57 個 eligible writes，
+且 diagnostic expected-diff 57/57 pass；但同類 heldout trace oracle 只有
+19/20 pass，`FAM008651/TumorBC2312_DNA` boundary error `1.16445 min` 超過
+accepted `0.1 min` ceiling，所以不得新增 low-height writer 或 claim ready。
+Broad 4613-row consolidated activation 仍只有 `production_candidate`，因為
+1087 個缺 overlay/trace evidence，其餘 trace-matched writes 還沒有全部落進
+已命名、已 oracle-backed 的 ready envelope。若要把 broad scope 也推 ready，
+下一個 checkpoint 必須補 broader masked/product-writer oracle，不能把 narrow
+ready 外推到 4613-row，也不能把 low-height diagnostic expected-diff 當成
+writer approval。
 This is a release-safety boundary, not a product north-star limit: the product
 direction is to backfill automatically whenever evidence is sufficient, using
 the 72-row high-signal and 42-row low-scan slices as demonstrators before
@@ -79,7 +85,7 @@ main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal and 42-row low-scan narrow writer ready slices done | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal and 42-row low-scan narrow writer ready slices done; 57-row low-height slice is candidate only | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if low-height is promoted without resolving the 19/20 oracle failure, or if a RAW rerun would not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim | candidate sidecar and manual boundary area recompute remain blocked until stable IDs, sidecar contract, and expected-diff gate exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -139,7 +145,7 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer and explicit 42-row low-scan-clean scoped writer; `production_candidate` for broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say 72-row and 42-row scopes are current safe demonstrators, not the product ceiling; next broadening step needs another named evidence class with masked/product-writer observed oracle and expected-diff approval | none for the two scoped writers; broad 4613 still needs additional evidence class/oracle coverage |
+| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer and explicit 42-row low-scan-clean scoped writer; `production_candidate` for the 57-row low-height diagnostic slice and broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height `low_height_clean_activation_expected_diff_acceptance.json` 57/57 pass 但 `product_surface_changed=FALSE`，同類 `heldout_trace_reintegration_oracle_low_height_clean_probe/summary.json` 是 `status=fail`、19/20 pass、max boundary error `1.16445 min`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say 72-row and 42-row scopes are current safe demonstrators, low-height is only a candidate probe, and none of these are the product ceiling; next broadening step needs another named evidence class with masked/product-writer observed oracle and expected-diff approval | none for the two scoped writers; low-height needs a narrower rule or passing oracle before writer work; broad 4613 still needs additional evidence class/oracle coverage |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
 
 ## WIP limits
@@ -912,6 +918,61 @@ scope.
   reuse a matching held-out oracle packet, then connect it through activation
   scope audit and scoped writer expected-diff before adding more automatic
   writes.
+
+### 2026-06-17 - standard_peak_low_height_probe_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad 4613-row standard-path activation remained
+  `production_candidate`; the next proposed single-blocker class was
+  height-only or apex-delta-only.
+- New tier: low-height clean is `production_candidate` only. The explicit
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
+  `production_ready`; broad 4613-row activation remains `production_candidate`.
+- Evidence:
+  `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
+  `--target-shape-class standard_low_height_clean_trace`, where all clean
+  thresholds remain in force except cell height must be below `2e6`.
+  The no-RAW 85RAW heldout packet under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_low_height_clean_probe/`
+  found 230 eligible candidate rows across 54 families and selected 20
+  family-representative cases. It failed closed with 19/20 pass and one
+  `fail_boundary` case:
+  `HOLDOUT85TRACE001_FAM008651_TumorBC2312_DNA`, boundary error
+  `1.16445 min`, area relative error about `0.033`.
+- Additional audit evidence:
+  `standard_peak_activation_scope_audit.py` now writes
+  `low_height_clean_activation_value_delta.tsv` and
+  `low_height_clean_activation_expected_diff_acceptance.tsv/json`. The real
+  combined audit found 57 low-height clean eligible writes out of 4613; the
+  diagnostic expected-diff packet passed 57/57 with zero duplicate, missing,
+  unexpected, non-eligible, non-written, unchanged, or blank rows, and
+  `product_surface_changed=FALSE`.
+- Product surface changed: no matrix writer was added for low-height; no
+  default extraction behavior, workbook schema, GUI behavior, non-standard
+  promotion, matrix identity, selected peak, selected area, or broad activation
+  behavior changed.
+- Review: subagent reviewers `Jason` and `Volta` found no P1/P2 blockers. P3
+  docs/index wording and CLI labeling gaps were fixed so low-height is visibly
+  diagnostic/candidate-only and not product writer approval.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+  (`22 passed`); `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts`
+  (pass); `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` (pass,
+  346 source files); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3724 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py`
+  (`88 entry points, 167 total files`); `git diff --check` (no whitespace
+  errors; Windows LF/CRLF warnings only). The no-RAW heldout oracle command
+  exited `1` by design because the summary status is `fail`; the activation
+  scope audit rerun exited `0` and emitted the 57-row expected-diff packet
+  above.
+- Remaining blocker: low-height cannot be promoted to `production_ready` until
+  the 19/20 heldout failure is explained by a narrower fail-closed evidence
+  rule or a new accepted oracle packet passes the `0.1 min / 10% area` gate.
+- Next checkpoint: inspect the failing low-height class as a blocker source, or
+  switch to the apex-only clean class if it can produce a passing oracle packet
+  without creating another diagnostic-only artifact.
 
 ### 2026-06-17 - targeted_ms1_shape_identity_limited_policy_gate_v1
 

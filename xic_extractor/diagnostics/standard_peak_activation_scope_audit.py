@@ -25,6 +25,9 @@ NARROW_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
 LOW_SCAN_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
     "standard_peak_low_scan_activation_expected_diff_acceptance_v1"
 )
+LOW_HEIGHT_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION = (
+    "standard_peak_low_height_activation_expected_diff_acceptance_v1"
+)
 
 MIN_SHAPE_SIMILARITY = 0.95
 MIN_LOCAL_GLOBAL_RATIO = 0.95
@@ -91,6 +94,8 @@ AUDIT_COLUMNS = (
     "high_signal_clean_blockers",
     "low_scan_clean_status",
     "low_scan_clean_blockers",
+    "low_height_clean_status",
+    "low_height_clean_blockers",
 )
 
 SUMMARY_COLUMNS = (
@@ -116,15 +121,21 @@ SUMMARY_COLUMNS = (
     "low_scan_clean_eligible_written_count",
     "low_scan_clean_ineligible_written_count",
     "low_scan_clean_missing_evidence_written_count",
+    "low_height_clean_eligible_written_count",
+    "low_height_clean_ineligible_written_count",
+    "low_height_clean_missing_evidence_written_count",
     "eligible_scope_fraction_of_written",
     "low_scan_clean_scope_fraction_of_written",
+    "low_height_clean_scope_fraction_of_written",
     "broad_activation_scope_status",
     "narrow_activation_scope_status",
     "low_scan_clean_activation_scope_status",
+    "low_height_clean_activation_scope_status",
     "remaining_blocker",
     "audit_tsv",
     "eligible_activation_value_delta_tsv",
     "low_scan_clean_activation_value_delta_tsv",
+    "low_height_clean_activation_value_delta_tsv",
 )
 
 NARROW_EXPECTED_DIFF_ACCEPTANCE_COLUMNS = (
@@ -161,10 +172,13 @@ class ActivationScopeAuditOutputs:
     summary_json: Path
     eligible_activation_value_delta_tsv: Path
     low_scan_clean_activation_value_delta_tsv: Path
+    low_height_clean_activation_value_delta_tsv: Path
     narrow_expected_diff_acceptance_tsv: Path
     narrow_expected_diff_acceptance_json: Path
     low_scan_expected_diff_acceptance_tsv: Path
     low_scan_expected_diff_acceptance_json: Path
+    low_height_expected_diff_acceptance_tsv: Path
+    low_height_expected_diff_acceptance_json: Path
     status: str
 
 
@@ -200,6 +214,7 @@ def run_activation_scope_audit(
     summary_json = output_dir / "activation_high_signal_clean_scope_summary.json"
     eligible_delta_tsv = output_dir / "eligible_activation_value_delta.tsv"
     low_scan_delta_tsv = output_dir / "low_scan_clean_activation_value_delta.tsv"
+    low_height_delta_tsv = output_dir / "low_height_clean_activation_value_delta.tsv"
     narrow_acceptance_tsv = (
         output_dir / "narrow_activation_expected_diff_acceptance.tsv"
     )
@@ -212,6 +227,12 @@ def run_activation_scope_audit(
     low_scan_acceptance_json = (
         output_dir / "low_scan_clean_activation_expected_diff_acceptance.json"
     )
+    low_height_acceptance_tsv = (
+        output_dir / "low_height_clean_activation_expected_diff_acceptance.tsv"
+    )
+    low_height_acceptance_json = (
+        output_dir / "low_height_clean_activation_expected_diff_acceptance.json"
+    )
     eligible_hashes = {
         text_value(row.get("matrix_value_source_row_sha256"))
         for row in audit_rows
@@ -221,6 +242,11 @@ def run_activation_scope_audit(
         text_value(row.get("matrix_value_source_row_sha256"))
         for row in audit_rows
         if text_value(row.get("low_scan_clean_status")) == "eligible"
+    }
+    low_height_hashes = {
+        text_value(row.get("matrix_value_source_row_sha256"))
+        for row in audit_rows
+        if text_value(row.get("low_height_clean_status")) == "eligible"
     }
     eligible_delta_rows = tuple(
         row
@@ -234,11 +260,20 @@ def run_activation_scope_audit(
         if text_value(row.get("matrix_value_effect")) == "written"
         and text_value(row.get("matrix_value_source_row_sha256")) in low_scan_hashes
     )
+    low_height_delta_rows = tuple(
+        row
+        for row in delta_rows
+        if text_value(row.get("matrix_value_effect")) == "written"
+        and text_value(row.get("matrix_value_source_row_sha256")) in low_height_hashes
+    )
 
     summary = dict(summary)
     summary["audit_tsv"] = str(audit_tsv)
     summary["eligible_activation_value_delta_tsv"] = str(eligible_delta_tsv)
     summary["low_scan_clean_activation_value_delta_tsv"] = str(low_scan_delta_tsv)
+    summary["low_height_clean_activation_value_delta_tsv"] = str(
+        low_height_delta_tsv,
+    )
     write_tsv(
         audit_tsv,
         audit_rows,
@@ -256,6 +291,13 @@ def run_activation_scope_audit(
     write_tsv(
         low_scan_delta_tsv,
         low_scan_delta_rows,
+        delta_header,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
+    write_tsv(
+        low_height_delta_tsv,
+        low_height_delta_rows,
         delta_header,
         formatter=format_diagnostic_value,
         lineterminator="\n",
@@ -285,6 +327,22 @@ def run_activation_scope_audit(
             "product_decision_required_before_writing_low_scan_clean_activation_output"
         ),
     )
+    low_height_acceptance = build_scope_expected_diff_acceptance(
+        audit_rows=audit_rows,
+        eligible_activation_value_delta_rows=low_height_delta_rows,
+        activation_value_delta_rows=delta_rows,
+        activation_value_delta_tsv=activation_value_delta_tsv,
+        activation_scope_audit_tsv=audit_tsv,
+        eligible_activation_value_delta_tsv=low_height_delta_tsv,
+        source_run_id=source_run_id,
+        scope_status_column="low_height_clean_status",
+        expected_scope="low_height_clean_eligible_activation_rows",
+        schema_version=LOW_HEIGHT_EXPECTED_DIFF_ACCEPTANCE_SCHEMA_VERSION,
+        no_rows_blocker="no_low_height_clean_eligible_delta_rows",
+        product_decision_next_action=(
+            "product_decision_required_before_writing_low_height_clean_activation_output"
+        ),
+    )
     write_tsv(
         narrow_acceptance_tsv,
         (narrow_acceptance,),
@@ -308,6 +366,17 @@ def run_activation_scope_audit(
         encoding="utf-8",
     )
     write_tsv(
+        low_height_acceptance_tsv,
+        (low_height_acceptance,),
+        NARROW_EXPECTED_DIFF_ACCEPTANCE_COLUMNS,
+        formatter=format_diagnostic_value,
+        lineterminator="\n",
+    )
+    low_height_acceptance_json.write_text(
+        json.dumps(low_height_acceptance, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_tsv(
         summary_tsv,
         (summary,),
         SUMMARY_COLUMNS,
@@ -324,10 +393,13 @@ def run_activation_scope_audit(
         summary_json=summary_json,
         eligible_activation_value_delta_tsv=eligible_delta_tsv,
         low_scan_clean_activation_value_delta_tsv=low_scan_delta_tsv,
+        low_height_clean_activation_value_delta_tsv=low_height_delta_tsv,
         narrow_expected_diff_acceptance_tsv=narrow_acceptance_tsv,
         narrow_expected_diff_acceptance_json=narrow_acceptance_json,
         low_scan_expected_diff_acceptance_tsv=low_scan_acceptance_tsv,
         low_scan_expected_diff_acceptance_json=low_scan_acceptance_json,
+        low_height_expected_diff_acceptance_tsv=low_height_acceptance_tsv,
+        low_height_expected_diff_acceptance_json=low_height_acceptance_json,
         status=summary["broad_activation_scope_status"],
     )
 
@@ -659,6 +731,15 @@ def _with_trace_metrics(
         apex_delta=apex_delta,
         integration_scan_count=integration_scan_count,
     )
+    low_height_blockers = _low_height_clean_blockers(
+        trace_status=trace_status,
+        shape=shape,
+        local_global=local_global,
+        height=height,
+        boundary_width=boundary_width,
+        apex_delta=apex_delta,
+        integration_scan_count=integration_scan_count,
+    )
     out.update(
         {
             "trace_match_status": "matched",
@@ -682,6 +763,10 @@ def _with_trace_metrics(
                 "eligible" if not low_scan_blockers else "ineligible"
             ),
             "low_scan_clean_blockers": ";".join(low_scan_blockers),
+            "low_height_clean_status": (
+                "eligible" if not low_height_blockers else "ineligible"
+            ),
+            "low_height_clean_blockers": ";".join(low_height_blockers),
         }
     )
     return out
@@ -752,6 +837,65 @@ def _low_scan_clean_blockers(
     return tuple(blockers)
 
 
+def _low_height_clean_blockers(
+    *,
+    trace_status: str,
+    shape: float | None,
+    local_global: float | None,
+    height: float | None,
+    boundary_width: float | None,
+    apex_delta: float | None,
+    integration_scan_count: int | None,
+) -> tuple[str, ...]:
+    blockers = list(
+        _clean_except_height_blockers(
+            trace_status=trace_status,
+            shape=shape,
+            local_global=local_global,
+            boundary_width=boundary_width,
+            apex_delta=apex_delta,
+            integration_scan_count=integration_scan_count,
+        )
+    )
+    if height is None:
+        blockers.append("height_missing")
+    elif height >= MIN_CELL_HEIGHT:
+        blockers.append("height_gte_2000000")
+    return tuple(blockers)
+
+
+def _clean_except_height_blockers(
+    *,
+    trace_status: str,
+    shape: float | None,
+    local_global: float | None,
+    boundary_width: float | None,
+    apex_delta: float | None,
+    integration_scan_count: int | None,
+) -> tuple[str, ...]:
+    blockers: list[str] = []
+    if trace_status not in SUPPORTED_TRACE_STATUSES:
+        blockers.append("unsupported_trace_status")
+    if shape is None or shape < MIN_SHAPE_SIMILARITY:
+        blockers.append("shape_lt_0.95")
+    if local_global is None or local_global < MIN_LOCAL_GLOBAL_RATIO:
+        blockers.append("local_global_ratio_lt_0.95")
+    if (
+        boundary_width is None
+        or boundary_width < MIN_BOUNDARY_WIDTH_MIN
+        or boundary_width > MAX_BOUNDARY_WIDTH_MIN
+    ):
+        blockers.append("width_outside_0.30_0.65")
+    if apex_delta is None or apex_delta > MAX_APEX_DELTA_ABS_MIN:
+        blockers.append("apex_delta_gt_0.15")
+    if (
+        integration_scan_count is None
+        or integration_scan_count < MIN_INTEGRATION_SCAN_COUNT
+    ):
+        blockers.append("scan_count_lt_10")
+    return tuple(blockers)
+
+
 def _clean_except_scan_blockers(
     *,
     trace_status: str,
@@ -799,6 +943,9 @@ def _summary_row(
     low_scan_counters = Counter(
         text_value(row.get("low_scan_clean_status")) for row in written_rows
     )
+    low_height_counters = Counter(
+        text_value(row.get("low_height_clean_status")) for row in written_rows
+    )
     projection_counters = Counter(
         text_value(row.get("projection_match_status")) for row in written_rows
     )
@@ -812,9 +959,13 @@ def _summary_row(
     low_scan_eligible_count = low_scan_counters["eligible"]
     low_scan_missing_count = low_scan_counters["missing_evidence"]
     low_scan_ineligible_count = low_scan_counters["ineligible"]
+    low_height_eligible_count = low_height_counters["eligible"]
+    low_height_missing_count = low_height_counters["missing_evidence"]
+    low_height_ineligible_count = low_height_counters["ineligible"]
     broad_ready = written_count > 0 and eligible_count == written_count
     narrow_ready = eligible_count > 0
     low_scan_ready = low_scan_eligible_count > 0
+    low_height_ready = low_height_eligible_count > 0
     return {
         "schema_version": SCHEMA_VERSION,
         "source_run_id": source_run_id,
@@ -850,12 +1001,23 @@ def _summary_row(
         "low_scan_clean_missing_evidence_written_count": str(
             low_scan_missing_count,
         ),
+        "low_height_clean_eligible_written_count": str(low_height_eligible_count),
+        "low_height_clean_ineligible_written_count": str(
+            low_height_ineligible_count,
+        ),
+        "low_height_clean_missing_evidence_written_count": str(
+            low_height_missing_count,
+        ),
         "eligible_scope_fraction_of_written": _fraction_text(
             eligible_count,
             written_count,
         ),
         "low_scan_clean_scope_fraction_of_written": _fraction_text(
             low_scan_eligible_count,
+            written_count,
+        ),
+        "low_height_clean_scope_fraction_of_written": _fraction_text(
+            low_height_eligible_count,
             written_count,
         ),
         "broad_activation_scope_status": "ready" if broad_ready else "not_ready",
@@ -869,16 +1031,23 @@ def _summary_row(
             if low_scan_ready
             else "not_ready"
         ),
+        "low_height_clean_activation_scope_status": (
+            "candidate_only_pending_low_height_heldout_oracle"
+            if low_height_ready
+            else "not_ready"
+        ),
         "remaining_blocker": _remaining_blocker(
             written_count=written_count,
             eligible_count=eligible_count,
             missing_count=missing_count,
             ineligible_count=ineligible_count,
             low_scan_eligible_count=low_scan_eligible_count,
+            low_height_eligible_count=low_height_eligible_count,
         ),
         "audit_tsv": "",
         "eligible_activation_value_delta_tsv": "",
         "low_scan_clean_activation_value_delta_tsv": "",
+        "low_height_clean_activation_value_delta_tsv": "",
     }
 
 
@@ -889,6 +1058,7 @@ def _remaining_blocker(
     missing_count: int,
     ineligible_count: int,
     low_scan_eligible_count: int = 0,
+    low_height_eligible_count: int = 0,
 ) -> str:
     if written_count == 0:
         return "no_activation_writes"
@@ -899,6 +1069,8 @@ def _remaining_blocker(
         parts.append("product_scope_decision_required_for_high_signal_clean_subset")
     if low_scan_eligible_count:
         parts.append("product_scope_decision_required_for_low_scan_clean_subset")
+    if low_height_eligible_count:
+        parts.append("product_scope_decision_required_for_low_height_clean_subset")
     if missing_count:
         parts.append("missing_trace_or_projection_evidence_for_some_writes")
     if ineligible_count:
@@ -998,6 +1170,8 @@ def _with_trace_defaults(
             "high_signal_clean_blockers": ";".join(blockers),
             "low_scan_clean_status": high_signal_clean_status,
             "low_scan_clean_blockers": ";".join(blockers),
+            "low_height_clean_status": high_signal_clean_status,
+            "low_height_clean_blockers": ";".join(blockers),
         }
     )
     return row

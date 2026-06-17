@@ -1039,8 +1039,9 @@ def _scope_audit_row(
     status: str,
     *,
     low_scan_clean_status: str = "missing_evidence",
+    low_height_clean_status: str | None = None,
 ) -> dict[str, str]:
-    return {
+    row = {
         "schema_version": "standard_peak_activation_scope_audit_v1",
         "feature_family_id": family,
         "peak_hypothesis_id": family,
@@ -1050,6 +1051,9 @@ def _scope_audit_row(
         "high_signal_clean_status": status,
         "low_scan_clean_status": low_scan_clean_status,
     }
+    if low_height_clean_status is not None:
+        row["low_height_clean_status"] = low_height_clean_status
+    return row
 
 
 def _blank_row(columns: tuple[str, ...]) -> dict[str, str]:

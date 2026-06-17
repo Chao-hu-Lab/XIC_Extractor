@@ -6,7 +6,9 @@
 
 ## 2026-06-17 白話結論
 
-目前這個分支的非 GUI productization goal 有兩個真正往前推的結論。
+目前這個分支的非 GUI productization goal 有兩個已經往前推到
+`production_ready` 的結論，外加一個剛收斂成 `production_candidate` /
+blocked-ready 的 Backfill probe。
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
@@ -22,6 +24,16 @@ low-scan clean。你的產品方向也已落地成工作規則：這兩個只是
 slice，不是天花板；北極星仍是「只要證據足夠就補」，下一步要繼續用 named
 evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
 推上去。
+
+最新 probe 是 low-height clean。它問的是：「其他形狀、RT、寬度、scan
+count 都乾淨，只是 peak height 低於 2e6 的格子，能不能也自動補？」答案是：
+現在還不能開 writer。Activation scope audit 在 broad 4613 格裡找到 57 格
+low-height clean，expected-diff 57/57 是乾淨的；但同類 heldout trace oracle
+從既有 85RAW trace 找 20 個代表案例時只有 19/20 通過，其中
+`FAM008651/TumorBC2312_DNA` 的 boundary error 是 `1.16445 min`，超過你接受的
+`0.1 min`。所以 low-height 不是被殺掉，而是目前只能當下一個
+`production_candidate` slice：證明「可能有東西可補」，但也證明 agent 必須
+自動擋住不穩的低訊號案例，不能為了少人工審查就偷偷寫 matrix。
 
 第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
 support-TSV workflow ready；本輪新增 headless auto-limited CLI：
@@ -64,10 +76,11 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD before current uncommitted slice: `2497166`
-- Dirty scope: 沒有 staged file；請以 `git status --short` 為準。目前主要是
-  Backfill low-scan scoped writer/oracle producer、activation scope audit
-  low-scan columns、tools index/handoff/spec/control-plane 更新。
+- HEAD before current uncommitted slice: `51e1d72`
+- Current checkpoint scope: Backfill low-height heldout oracle support,
+  activation scope audit low-height diagnostic expected-diff columns, focused
+  tests, tools index, handoff, spec, and control-plane updates. There is no
+  low-height product writer and no default matrix-writing behavior change.
 - 本輪 Backfill low-scan gate:
   - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
     low-scan clean 真實 no-RAW 85RAW artifact 在
@@ -84,6 +97,54 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
     -> `19 passed`，包含新增的 fail-closed coverage：同時給兩種
     scope audit、low-scan 沒有 eligible row、audit SHA 重複、audit 指到
     missing shadow SHA、shadow projection SHA 重複。
+- 本輪 Backfill low-height probe:
+  - `standard_peak_heldout_trace_oracle.py`  now supports
+    `standard_low_height_clean_trace` as a diagnostic/oracle target class.
+    This class keeps supported trace status, shape >=0.95, local/global >=0.95,
+    width 0.30-0.65 min, apex delta <=0.15 min, and at least 10 boundary scans,
+    but requires `cell_height < 2e6`.
+  - no-RAW 85RAW heldout artifact:
+    `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_low_height_clean_probe/`;
+    summary status is `fail`, with 230 eligible candidate rows / 54 families,
+    20 selected family cases, 19 pass, 1 fail. The failing case is
+    `HOLDOUT85TRACE001_FAM008651_TumorBC2312_DNA`, `fail_boundary`,
+    boundary error `1.16445 min`, area relative error about `0.033`.
+  - combined activation scope audit now also writes
+    `low_height_clean_activation_value_delta.tsv` and
+    `low_height_clean_activation_expected_diff_acceptance.json` under
+    `output/productization_realdata_seed_guard_85raw_20260617/high_signal_clean_activation_scope_audit/`.
+    It found 57 low-height clean eligible writes out of 4613 and the
+    diagnostic expected-diff packet passed 57/57 with no duplicate/missing/
+    unexpected/non-eligible/non-written/unchanged/blank rows.
+  - Tier decision: `production_candidate` only. No low-height product writer
+    flag was added, and no matrix output should be claimed `production_ready`
+    for this class until the failing boundary case is explained by a narrower
+    evidence rule or a new oracle packet passes.
+- 本輪 Backfill low-height subagent review:
+  - Reviewer `Jason` checked docs/control-plane/spec/index and found no P1/P2
+    blocker. It raised a P3 that `tools/diagnostics/INDEX.md` did not carry the
+    4613/72/42/57 tier boundary near the diagnostic entries; fixed by adding
+    those counts and explicit `production_ready` vs `production_candidate`
+    wording to the relevant index notes.
+  - Reviewer `Volta` checked code/tests/contracts and found no P1/P2 blocker.
+    It raised a P3 that the CLI printed low-height expected-diff next to
+    product-adjacent artifacts without naming it candidate-only; fixed by
+    changing the CLI label to
+    `Low-height clean diagnostic/candidate-only expected-diff acceptance JSON`
+    and extending the CLI test to assert `product_surface_changed=FALSE` plus
+    the low-height product-decision `next_action`.
+- 本輪 Backfill low-height final gate:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+    -> `22 passed`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts`
+    -> pass
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass
+    (`Success: no issues found in 346 source files`)
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` ->
+    `3724 passed, 1 skipped`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py`
+    -> `88 entry points, 167 total files`
+  - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
 - 本輪 subagent review:
   - `Mendel` / `Meitner` 沒有找到 P1/P2 blocking issue。
   - P3 docs drift 已修：control-plane/spec/handoff 現在都明講 72-row

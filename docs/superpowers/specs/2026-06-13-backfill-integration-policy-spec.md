@@ -309,6 +309,24 @@ Implementation closeout, 2026-06-16:
   remains `production_candidate` until it has broader masked/product-writer
   observed oracle coverage and expected-diff approval for any additional
   writes.
+- Heldout low-height trace reintegration probe, 2026-06-17:
+  `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
+  `standard_low_height_clean_trace`, where all clean trace constraints remain
+  in force except `cell_height < 2e6`. This is intentionally a probe, not a
+  writer contract. The no-RAW 85RAW packet under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_low_height_clean_probe/`
+  found 230 eligible candidates across 54 families, selected 20
+  family-representative cases, and failed with 19/20 pass. The failing case
+  `HOLDOUT85TRACE001_FAM008651_TumorBC2312_DNA` had boundary error
+  `1.16445 min`, exceeding the accepted `0.1 min` tolerance, while its area
+  relative error was about `0.033`. The activation scope audit found 57
+  low-height clean eligible writes out of 4613 and
+  `low_height_clean_activation_expected_diff_acceptance.json` passed 57/57
+  with `product_surface_changed=FALSE`; this makes low-height a
+  `production_candidate` evidence class only. There is no
+  `--low-height-clean-activation-scope-audit-tsv` product writer flag, and no
+  `production_ready` claim is allowed until a narrower rule or new oracle
+  packet resolves the heldout failure.
 - Product direction update, 2026-06-17:
   the 72-row high-signal scope and 42-row low-scan scope are safe
   demonstrators, not the intended ceiling.
@@ -1171,7 +1189,9 @@ Required fields:
 - `high_signal_clean_status`;
 - `high_signal_clean_blockers`;
 - `low_scan_clean_status`;
-- `low_scan_clean_blockers`.
+- `low_scan_clean_blockers`;
+- `low_height_clean_status`;
+- `low_height_clean_blockers`.
 
 The high-signal clean envelope for this audit is intentionally identical to the
 heldout trace oracle case selector: `trace_status` in `detected` or `rescued`,
@@ -1191,10 +1211,17 @@ the row is a candidate for the explicit low-scan-clean product scope. It is not
 a general low-quality allowance: scan count below `7` or any additional blocker
 keeps the row ineligible.
 
+The low-height clean envelope uses the same supported trace status, shape,
+local/global, width, apex-delta, and `>=10` scan thresholds as high-signal
+clean, but requires `cell_height < 2e6`. `low_height_clean_status=eligible`
+means the row is a diagnostic candidate for a possible future product scope; it
+is not writer approval because the first heldout oracle packet for this class
+failed 19/20 with one boundary miss.
+
 #### `activation_high_signal_clean_scope_summary.tsv/json`
 
 The summary records source artifact paths/hashes, written row counts, projection
-join counts, trace join counts, high-signal and low-scan
+join counts, trace join counts, high-signal, low-scan, and low-height
 eligible/ineligible/missing-evidence counts, and status fields:
 
 - `broad_activation_scope_status`: may be `ready` only when every written
@@ -1210,6 +1237,10 @@ eligible/ineligible/missing-evidence counts, and status fields:
   candidate. It is not production behavior unless a product writer actually
   limits output to those rows and an expected-diff gate accepts that matrix
   change.
+- `low_height_clean_activation_scope_status`: may report
+  `candidate_only_pending_low_height_heldout_oracle` when candidate rows exist.
+  It is not production behavior, and current evidence explicitly blocks a
+  writer claim because the heldout trace oracle failed one selected case.
 
 `eligible_activation_value_delta.tsv` is a filtered convenience artifact for the
 eligible subset. It is not a replacement for `activation_value_delta.tsv` and
@@ -1219,6 +1250,12 @@ explicitly narrowed to that scope.
 `low_scan_clean_activation_value_delta.tsv` is the equivalent filtered
 convenience artifact for `low_scan_clean_status=eligible` rows and has the same
 non-product limitation.
+
+`low_height_clean_activation_value_delta.tsv` is the equivalent filtered
+convenience artifact for `low_height_clean_status=eligible` rows and has the
+same non-product limitation. It must not be consumed by a product writer until a
+separate oracle packet passes and this spec adds an explicit scoped writer
+contract.
 
 #### `narrow_activation_expected_diff_acceptance.tsv/json`
 
@@ -1275,6 +1312,18 @@ is `standard_peak_low_scan_activation_expected_diff_acceptance_v1` and
 gate is sufficient to say the 42-row subset has delta-level expected-diff
 acceptance; production behavior still requires the explicit scoped writer.
 
+#### `low_height_clean_activation_expected_diff_acceptance.tsv/json`
+
+One-row acceptance artifact for the diagnostic low-height-clean activation
+subset. It uses the same fields and acceptance expectations as
+`narrow_activation_expected_diff_acceptance.tsv/json`, except `schema_version`
+is `standard_peak_low_height_activation_expected_diff_acceptance_v1` and
+`expected_scope` must be `low_height_clean_eligible_activation_rows`. Passing
+this gate is sufficient only to say the 57-row subset has delta-level
+expected-diff cleanliness. It is not sufficient for production behavior because
+the matching heldout trace oracle failed one selected case and no scoped writer
+flag exists for low-height.
+
 #### Scoped `standard_peak_backfill_productization.py` writer flags
 
 Explicit opt-in writer contract for named Backfill release slices.
@@ -1285,6 +1334,10 @@ Explicit opt-in writer contract for named Backfill release slices.
 - `--low-scan-clean-activation-scope-audit-tsv` filters to
   `low_scan_clean_status=eligible` and writes
   `expected_scope=low_scan_clean_eligible_activation_rows`.
+
+There is intentionally no low-height scoped writer flag in this spec version.
+The low-height audit/expected-diff artifacts are candidate evidence only until
+the heldout oracle failure is resolved.
 
 Only one scoped audit flag may be supplied at a time. When a scoped flag is
 supplied, the productization bridge reads
