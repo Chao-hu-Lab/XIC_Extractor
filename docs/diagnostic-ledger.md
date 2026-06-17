@@ -41,10 +41,12 @@ known, where the evidence lives, and when a rerun is justified.
 
 ### 2026-06-16 5-hmdC Own-Max Support Explicit Opt-In Smoke
 
-Verdict: `production_candidate` for the explicit opt-in
-`targeted_ms1_shape_identity_support_tsv` ingestion path. This is not full
-product `production_ready`: the support TSV is still a reviewed diagnostic
-artifact, GUI is not connected, and the default extraction path remains off.
+Verdict: `production_ready` for the headless explicit limited
+`targeted_ms1_shape_identity_support_tsv` workflow only. The ready claim is
+limited to `limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and
+`detected_flagged` output. This is not default automatic rescue: GUI is not
+connected, the default extraction path remains off, and broader targets still
+need separate expected-diff evidence.
 
 Update on the same date: the original five-row TSV was a handpicked review
 surface, not a product limitation. A generic RAW-backed support producer now
@@ -54,6 +56,12 @@ ratio, and then passes Gaussian-smoothed own-max same-peak identity.
 
 Generic producer smoke:
 `output/ms1_shape_identity_generic_support_85raw_20260616/`
+
+2026-06-17 support key-set gate update: the limited expected-diff gate now reads
+the actual `targeted_ms1_shape_identity_v0.tsv` with `--support-tsv` and fails
+closed unless accepted support keys exactly match product long-row diff keys.
+The existing 85RAW generic artifact rerun passed with `long_changed_rows=11`,
+`matrix_changed_cells=66`, and `support_tsv_supported_rows=11`.
 
 Current 8RAW smoke:
 `output/ms1_shape_identity_optin_8raw_20260616/`

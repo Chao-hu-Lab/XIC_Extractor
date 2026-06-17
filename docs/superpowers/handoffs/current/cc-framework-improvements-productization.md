@@ -22,20 +22,68 @@ envelope；新的 explicit opt-in writer 再用
 真正可 release-claim 的是「explicit 72-row high-signal-clean scoped
 Backfill writer」，不是 default extraction，也不是 4613-row broad activation。
 
+本輪繼續推進後，Targeted MS1 shape identity 也有一個很窄但可講清楚的
+`production_ready` slice：headless explicit support-TSV workflow，且必須使用
+`limited_5hmdc_5medc_v1`，只允許 `5-hmdC + 5-medC`，產品輸出只能從
+`not_counted/FALSE` 變成 `detected_flagged/TRUE`。新的 gate 會把實際
+`targeted_ms1_shape_identity_v0.tsv` support rows 和產品 expected-diff keys
+做 key-set equality；既有 85RAW generic artifact 重跑通過，11 個 support
+rows 對 11 個 changed long rows、66 個 matrix cells。這不是 default
+automatic rescue；normal extraction 不會自動產 support TSV，GUI 也仍 out of
+scope。
+
+Subagent reviewer `Cicero` 找到一個 P2：同一個 production-ready gate 原本
+仍允許省略 `--support-tsv`，會退化成 output-only pass。這已修成
+fail-closed：CLI 現在必須帶 `--support-tsv`，package evaluator 缺 support
+rows 也會直接 raise；focused test 新增缺 support 的紅燈案例，Targeted MS1
+gate suite 變成 `9 passed`。所以 ready claim 現在真的綁在 actual support TSV
+key-set equality 上。
+
+本輪後續自我判斷：使用者已接受 `NL_FAIL` limited default 的產品方向，但目前
+可安全宣稱的仍只有 explicit support-TSV workflow。原因是 default automatic
+rescue 不是把 default policy 改成 `limited_5hmdc_5medc_v1` 就結束；normal
+extraction 需要有自動 support TSV producer 或等價的 default input contract，
+而那會新增 RAW/call-cost 行為和 activation expected-diff gate。這輪重跑
+focused settings/extractor/projection tests 與既有 85RAW expected-diff gate，
+結論是 explicit limited slice 仍可保持 `production_ready`，default automatic
+rescue 繼續 `blocked`，直到自動 producer/call-cost/expected-diff packet 完整。
+
+另外盤點了 `Provisional production-candidate gate`：沒有新 code change；現有
+CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
+`alignment_matrix.tsv`，summary 也固定 `production_ready=false` /
+`matrix_contract_changed=false`。所以它不再是 active productization gap；
+未來只有 UX rename 需求時才需要再碰。
+
 接手狀態:
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD: `3b10731`
-- Dirty scope: 多個 modified/new paths，沒有 staged file；請以
-  `git status --short` 為準；主要是本輪
-  productization 實作、tests、control plane、handoff/spec/index 更新。
+- HEAD: `4058734`
+- Dirty scope: 沒有 staged file；請以 `git status --short` 為準。本輪目前
+  主要是 Targeted MS1 expected-diff support key-set gate、focused tests、
+  control plane、handoff/spec/index/report 更新。
 - 本地 gate 已跑完:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 343 source files`)
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3704 passed, 1 skipped`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3707 passed, 1 skipped`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py` -> `87 entry points, 166 total files`
   - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
+- 本輪後續 focused gate:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` -> `9 passed`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_backfill_productization.py -q` -> `5 passed`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_provisional_backfill_candidate_gate_cli.py -q` -> `8 passed`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_settings_new_fields.py tests\test_extractor_run.py::test_run_applies_targeted_ms1_shape_identity_support_tsv tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_activation_policy_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_activation_policy_override tests\test_targeted_ms1_shape_identity_projection.py -q` -> `18 passed`
+  - existing 85RAW generic support expected-diff gate rerun with `--support-tsv` -> `pass`, 11 long rows, 66 matrix cells, 11 supported support rows
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\diagnostics\targeted_ms1_shape_identity_expected_diff.py tools\diagnostics\targeted_ms1_shape_identity_expected_diff_gate.py tests\test_targeted_ms1_shape_identity_expected_diff_gate.py` -> pass
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\diagnostics\targeted_ms1_shape_identity_expected_diff.py` -> pass
+- 2026-06-17 subagent review: reviewer `Cicero` found the Targeted MS1
+  expected-diff CLI/package gate could still pass without `--support-tsv`.
+  Fixed by making `--support-tsv` required and by making the package evaluator
+  raise when support rows are missing; added focused red/green coverage.
+- 2026-06-17 subagent review: reviewer `Dirac` found one P3 docs drift where
+  the shared peak-identity spec still used old output-only support-gate wording.
+  Fixed the wording to require the actual support TSV; focused gate remains
+  `9 passed`.
 - 2026-06-17 subagent review: reviewer `Maxwell` 驗收目前 dirty diff，
   沒有發現 blocking issue。Reviewer 實際重跑 `git diff --check`，抽查
   8RAW/85RAW opt-in artifact path 存在；ruff/mypy/full pytest/diagnostics
@@ -250,6 +298,17 @@ Backfill writer」，不是 default extraction，也不是 4613-row broad activa
   `production_ready` 或 default automatic rescue。它建議的 key-set equality
   與 policy-alone no-output-change hardening 已補，focused tests `7 passed`，
   既有 85RAW gate 重跑仍 `pass`。
+- 2026-06-17 繼續推進: Targeted MS1 limited expected-diff gate 現在必須帶
+  `--support-tsv`，會重用正式 support TSV loader，要求 accepted support
+  sample/target keys 和 long-row product diff keys 完全一致。既有
+  85RAW generic artifact 以 no-RAW 方式重跑通過：
+  `long_changed_rows=11`、`matrix_changed_cells=66`、
+  `support_tsv_supported_rows=11`、target split
+  `5-hmdC=10;5-medC=1`。這把 headless explicit limited support-TSV
+  workflow 從 `production_candidate` 推到 `production_ready`；default
+  automatic rescue 仍 `blocked`。本輪 full local gate 也已重跑通過：
+  ruff、mypy、full pytest `3705 passed, 1 skipped`、diagnostics index、
+  `git diff --check`。
 
 目前 tier 結論:
 
@@ -266,11 +325,12 @@ Backfill writer」，不是 default extraction，也不是 4613-row broad activa
   injection-based reference lookup 也可 consume `sample_metadata_v1`；
   roles/batch/matrix/exclusion 不改 quant output 或 normalized values。
 - Targeted MS1 shape identity / `NL_FAIL` explicit support TSV workflow:
-  `production_candidate` only；limited opt-in policy
+  `production_ready` for headless explicit limited support-TSV workflow only。
   `limited_5hmdc_5medc_v1` 已有 settings/CLI guard、manifest provenance、
-  replay override rejection、以及 85RAW expected-diff gate。default
-  extraction/GUI rescue 仍沒有啟用，還缺把 support producer/consumer 接進
-  正式 default path 的產品決策與 evidence。
+  replay override rejection、85RAW expected-diff gate，以及 support TSV
+  key-set equality gate；範圍只限 `5-hmdC + 5-medC` 且只能寫
+  `detected_flagged`。Default extraction/GUI automatic rescue 仍沒有啟用，
+  broader targets 也還沒有 expected-diff evidence。
 - Standard-path backfill seed guard: broad lane 仍是 `production_candidate`；
   high-signal clean standard trace heldout oracle slice 已有可重跑 passing
   evidence。既有能力包含
@@ -304,10 +364,13 @@ Backfill writer」，不是 default extraction，也不是 4613-row broad activa
    clean subset 的 writer 已收窄並通過 expected-diff；如果要承認目前
    consolidated bridge 的 4613 writes，就需要
    broader masked/product-writer observed oracle，而不是用這 20 筆代表全部。
-3. 若要推 `NL_FAIL` default 行為，先決定是否讓 normal extraction 自動產生
-   或自動消費 limited support；目前只能 claim opt-in
-   `production_candidate`，不能 claim default rescue。
-4. Sample metadata 的 no-output resolver parity 已接到
+3. 若要推 `NL_FAIL` default 行為，先做新的 activation/call-cost contract：
+   normal extraction 是否可自動產生或自動消費 limited support。現在只能
+   claim headless explicit limited support-TSV workflow `production_ready`；
+   不能 claim default rescue。
+4. `Provisional production-candidate gate` 已記成 guarded `diagnostic_only`；
+   不要把 `alignment_production_candidate_gate.tsv` 當 product authority。
+5. Sample metadata 的 no-output resolver parity 已接到
    extraction、instrument-QC、alignment、RT-normalization anchor diagnostic；
    下一步若碰 QC/blank/batch/matrix role，必須先有 expected-diff gate，
    不能直接改 normalized values 或 matrix values。
@@ -331,9 +394,10 @@ Backfill writer」，不是 default extraction，也不是 4613-row broad activa
     seed-guard candidate，且那兩筆是 `rescued`、不能當 originally detected
     heldout；後續已補 high-signal clean trace 20-case heldout oracle 並
     20/20 pass。Broad activation 仍需 scope decision / expected-diff gate。
-  - Targeted MS1 shape identity 的 explicit support-TSV workflow 可標
-    `production_candidate`，沿用既有 8RAW/85RAW opt-in artifacts；本輪沒有重跑
-    85RAW，因既有 artifact 已足以回答 candidate-tier decision。Default
+  - Targeted MS1 shape identity 的 explicit support-TSV workflow 當時先標
+    `production_candidate`，沿用既有 8RAW/85RAW opt-in artifacts；後續已補
+    `--support-tsv` key-set gate，把 headless explicit
+    `limited_5hmdc_5medc_v1` workflow 升到 `production_ready`。Default
     `NL_FAIL` rescue 和 GUI 仍未啟用。
   - ReviewAction selected-candidate switch 與 manual-boundary area recompute
     已明確 `parked`：它們會改 selected peak/area/workbook/matrix，需要人類產品
@@ -436,7 +500,7 @@ Backfill writer」，不是 default extraction，也不是 4613-row broad activa
 - 共享 own-max evidence 目前仍是 `diagnostic_only`；product projection 端已先 fail-closed。意思是 own-max normalized same-peak similarity 必須和 paired ISTD / area-ratio / boundary policy 一起過，才有資格補進產品矩陣。5-case own-max diagnostic 只證明這五個 NL_FAIL analyte traces 彼此像同一組峰，還不等於 accepted analyte anchor authority。
 - 2026-06-16 已把 owner framing 釘成 shared target/untarget peak identity spine: shared 層只產生峰身份 evidence，targeted/untargeted 各自決定產品輸出；不要把 untargeted backfill authority 原封不動搬成 targeted counted detection。
 - 同日已補第一個 shared helper + no-RAW tests，讓一個既有 overlay diagnostic 使用 shared smoothing helper，並新增 targeted diagnostic adapter 輸出 same-peak evidence rows；接著把 product projection 改成 fail-closed，需要 `own_max_same_peak_support` 才能讓 area-ratio/paired-RT 解除 `NL_FAIL` not-counted policy。現在有 explicit opt-in settings/CLI 入口能把已審閱 TSV support row 投進 projection，但預設仍關閉，所以這還沒有讓 `5-hmdC` 在一般 run 裡自動補值。
-- 8RAW 和 85RAW explicit opt-in smoke 都已跑過，不是只停在 unit test。第一輪 85RAW 5-row 手動 support TSV 只改到 5 個 reviewed rows；後續 generic RAW-backed producer 產出 11 個 support rows，85RAW opt-in 也剛好改到 11 rows。這支持 explicit opt-in workflow 進 `production_candidate`，但 default extraction/GUI 仍未 production-ready。
+- 8RAW 和 85RAW explicit opt-in smoke 都已跑過，不是只停在 unit test。第一輪 85RAW 5-row 手動 support TSV 只改到 5 個 reviewed rows；後續 generic RAW-backed producer 產出 11 個 support rows，85RAW opt-in 也剛好改到 11 rows。這原本支持 explicit opt-in workflow 進 `production_candidate`；2026-06-17 補上 support TSV key-set gate 後，headless explicit limited support-TSV workflow 已可標 `production_ready`。Default extraction/GUI 仍未 production-ready。
 - 這個分支正在補 XIC 的產品化地板，不是在重寫 peak picking 演算法。
 - 最近完成的主軸是 replay executor: `method_manifest.json` + `--replay-manifest`，已跑過 8RAW 和一次 85RAW replay parity。
 - 接著補了三個中期 contract: targeted output schema version、ReviewAction import/application plan/expected-diff/apply-readiness/changeset gate、SampleMetadata schema。

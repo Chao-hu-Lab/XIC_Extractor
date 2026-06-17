@@ -279,9 +279,11 @@ Current state is split:
   It changed exactly 11 eligible rows from not-counted to detected-flagged:
   10 `5-hmdC` rows plus 1 `5-medC` row. This is the current evidence that the
   rule is not hard-coded to the original five manual review cases.
-- This supports `production_candidate` for the explicit opt-in workflow. It is
-  still not full product `production_ready`: GUI is not connected, the default
-  extraction path remains off, and no RAW evidence provider emits
+- The explicit limited headless support-TSV workflow is now
+  `production_ready` for the named scope only: `limited_5hmdc_5medc_v1`,
+  `5-hmdC + 5-medC`, explicit support TSV consumption, and
+  `detected_flagged` output only. GUI is not connected, the default extraction
+  path remains off, and no RAW evidence provider emits
   `own_max_same_peak_support` during normal extraction by default.
 
 Product decision, 2026-06-17: the limited opt-in policy may be designed for
@@ -290,9 +292,12 @@ write `detected_flagged` rather than clean `detected`. This is a scope and
 product label decision. The repo now has an opt-in limited activation policy guard
 (`limited_5hmdc_5medc_v1`), config/CLI wiring, replay override rejection,
 method-manifest provenance, and an expected-diff gate over the existing 85RAW
-generic-support artifact. The default extraction path still remains off:
-normal extraction does not auto-build the support TSV, GUI is not connected, and
-the default activation policy remains `explicit_support_tsv`.
+generic-support artifact. On 2026-06-17 that gate was hardened to require the
+actual `targeted_ms1_shape_identity_v0` support TSV and require the
+accepted support keys to exactly match the long-row product diff keys. The
+default extraction path still remains off: normal extraction does not auto-build
+the support TSV, GUI is not connected, and the default activation policy remains
+`explicit_support_tsv`.
 
 Do not claim:
 
@@ -308,13 +313,13 @@ Allowed claim:
   product activation policies on top.
 - The targeted projection gate now fails closed unless explicit
   `own_max_same_peak_support` is part of the support evidence.
-- The explicit opt-in support-TSV workflow has 8RAW and 85RAW smoke evidence
-  and can be described as `production_candidate`. The first limited opt-in
-  scope is now implemented as an activation policy for
-  `5-hmdC + 5-medC` with `detected_flagged` output only, and the existing 85RAW
-  generic-support expected-diff artifact passes that limited gate. It still
-  needs a separate default-producer/default-extraction activation decision
-  before it can become default behavior.
+- The explicit opt-in support-TSV workflow has 8RAW and 85RAW smoke evidence.
+  The first limited headless scope is `production_ready` for
+  `limited_5hmdc_5medc_v1`: `5-hmdC + 5-medC`, explicit support TSV only, and
+  `detected_flagged` output only. The existing 85RAW generic-support
+  expected-diff artifact passes the limited gate with support TSV key-set
+  equality. It still needs a separate default-producer/default-extraction
+  activation decision before it can become default behavior.
 
 ## Implementation note, 2026-06-16
 
@@ -428,6 +433,11 @@ Seventh limited-policy product-candidate slice added:
   has `gate_status=pass`, `long_changed_rows=11`, `matrix_changed_cells=66`,
   `target_counts=5-hmdC=10;5-medC=1`, and
   `matrix_target_counts=5-hmdC=60;5-medC=6`.
+- 2026-06-17 support key-set hardening: the same gate now requires
+  `--support-tsv` and fails closed unless accepted support TSV sample/target
+  keys exactly match the long-row expected diff. The 85RAW generic-support
+  artifact rerun has `support_tsv_supported_rows=11` and
+  `support_tsv_target_counts=5-hmdC=10;5-medC=1`.
 - This is still opt-in support-TSV behavior. It does not enable default
   automatic rescue, connect GUI, or broaden beyond `5-hmdC` / `5-medC`.
 

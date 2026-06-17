@@ -3,8 +3,24 @@
 更新日期: 2026-06-16
 分支: `cc/framework-improvements`
 狀態: 使用者已接受 8RAW review；85RAW 已跑完。後續已補 generic support
-producer，確認不是只能改 5 rows。建議標成 explicit opt-in
-`production_candidate`，但還不能稱整體 `production_ready`
+producer，確認不是只能改 5 rows。2026-06-17 又補了 support TSV key-set
+gate；目前可標成 headless explicit limited support-TSV workflow
+`production_ready`，但不能稱 default automatic rescue 或整體 GUI
+`production_ready`。
+
+## 2026-06-17 addendum
+
+這份 review packet 原本建議只到 `production_candidate`，主因是 generic
+support TSV 何時能當 durable product input 還不夠硬。現在已補一個明確
+release gate：`targeted_ms1_shape_identity_expected_diff_gate.py --support-tsv`
+會讀實際 `targeted_ms1_shape_identity_v0.tsv`，並要求 accepted support
+sample/target keys 和產品 long-row diff keys 完全一致。
+
+既有 85RAW generic artifact 以 no-RAW 方式重跑通過：
+`long_changed_rows=11`、`matrix_changed_cells=66`、
+`support_tsv_supported_rows=11`、target split `5-hmdC=10;5-medC=1`。
+因此可宣稱的 ready 範圍是 headless explicit `limited_5hmdc_5medc_v1`
+support-TSV workflow；default extraction 仍不會自動補 `NL_FAIL`，GUI 也未接。
 
 ## 先講結論
 
@@ -234,20 +250,22 @@ Observed result:
 - [x] The 8RAW opt-in diff changing exactly one row is acceptable.
 - [x] `detected_flagged` is the right state; this should not become clean
       `detected` without further evidence.
-- [ ] It is acceptable that default extraction remains unchanged unless the
+- [x] It is acceptable that default extraction remains unchanged unless the
       reviewed support TSV is explicitly supplied.
 - [x] Historical decision: run 85RAW after the 8RAW smoke.
 - [x] The first 85RAW result changing exactly the 5 manually reviewed support
       rows is acceptable as a narrow smoke.
 - [x] The generic producer result proves the rule is not limited to the original
       5 rows: it changed exactly 11 eligible rows.
-- [ ] Decision: promote explicit opt-in workflow to `production_candidate`, or
-      hold for more manual EIC/MS2 evidence.
+- [x] Decision: promote headless explicit limited support-TSV workflow to
+      `production_ready` after support TSV key-set gate hardening; keep default
+      automatic rescue blocked.
 
 ## My current recommendation
 
-Approve this as `production_candidate` for explicit opt-in review workflow only.
+Approve this as `production_ready` for the headless explicit limited
+support-TSV workflow only.
 
-Do not call the full product path `production_ready` yet. The missing pieces are
-GUI wiring and a clearer policy for when generic same-peak support TSVs are
-allowed to become durable product inputs rather than diagnostic artifacts.
+Do not call default automatic rescue, GUI rescue, or broader target rescue
+`production_ready`. Those still need a separate activation/call-cost contract
+and expected-diff evidence.

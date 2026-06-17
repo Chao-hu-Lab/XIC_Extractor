@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from xic_extractor.diagnostics.diagnostic_io import read_tsv_required
+from xic_extractor.diagnostics.targeted_ms1_shape_identity import (
+    TARGETED_MS1_SHAPE_IDENTITY_COLUMNS,
+)
+from xic_extractor.extraction.targeted_ms1_shape_identity_projection import (
+    TargetedMs1ShapeIdentitySupport,
+    targeted_ms1_shape_identity_supports_from_rows,
+)
 from xic_extractor.tabular_io import write_tsv
 from xic_extractor.targeted_ms1_shape_identity_policy import (
     LIMITED_HMDC_MEDC_POLICY,
@@ -73,9 +80,11 @@ class TargetedMs1ShapeIdentityExpectedDiffGateSummary:
     matrix_changed_cells: int
     target_counts: Mapping[str, int]
     matrix_target_counts: Mapping[str, int]
+    support_tsv_supported_rows: int | None = None
+    support_tsv_target_counts: Mapping[str, int] | None = None
 
     def to_rows(self) -> tuple[dict[str, str], ...]:
-        return (
+        rows = [
             {"metric": "gate_status", "value": self.gate_status},
             {"metric": "activation_policy", "value": self.activation_policy},
             {
@@ -95,7 +104,23 @@ class TargetedMs1ShapeIdentityExpectedDiffGateSummary:
                 "metric": "matrix_target_counts",
                 "value": _format_counts(self.matrix_target_counts),
             },
-        )
+        ]
+        if self.support_tsv_supported_rows is not None:
+            rows.extend(
+                [
+                    {
+                        "metric": "support_tsv_supported_rows",
+                        "value": str(self.support_tsv_supported_rows),
+                    },
+                    {
+                        "metric": "support_tsv_target_counts",
+                        "value": _format_counts(
+                            self.support_tsv_target_counts or {},
+                        ),
+                    },
+                ]
+            )
+        return tuple(rows)
 
 
 def evaluate_limited_targeted_ms1_shape_identity_expected_diff(
@@ -104,6 +129,7 @@ def evaluate_limited_targeted_ms1_shape_identity_expected_diff(
     *,
     expected_long_row_count: int | None = None,
     expected_matrix_cell_count: int | None = None,
+    support_tsv_rows: Sequence[Mapping[str, str]] | None = None,
 ) -> TargetedMs1ShapeIdentityExpectedDiffGateSummary:
     _require_count(
         "expected-diff long rows",
@@ -132,6 +158,16 @@ def evaluate_limited_targeted_ms1_shape_identity_expected_diff(
         matrix_keys.add((_clean_text(row["row_key"]), target_name))
         matrix_target_counts[target_name] += 1
     _require_matching_key_sets(expected_keys, matrix_keys)
+    if support_tsv_rows is None:
+        raise ValueError(
+            "support TSV rows are required for limited targeted MS1 shape "
+            "identity expected-diff gate",
+        )
+    supports = targeted_ms1_shape_identity_supports_from_rows(
+        support_tsv_rows,
+        activation_policy=LIMITED_HMDC_MEDC_POLICY,
+    )
+    _require_matching_support_keys(expected_keys, supports)
 
     return TargetedMs1ShapeIdentityExpectedDiffGateSummary(
         gate_status="pass",
@@ -142,6 +178,10 @@ def evaluate_limited_targeted_ms1_shape_identity_expected_diff(
             _clean_text(row["target_name"]) for row in expected_diff_rows
         ),
         matrix_target_counts=dict(matrix_target_counts),
+        support_tsv_supported_rows=len(supports),
+        support_tsv_target_counts=Counter(
+            support.target_name for support in supports
+        ),
     )
 
 
@@ -149,6 +189,7 @@ def evaluate_limited_targeted_ms1_shape_identity_expected_diff_paths(
     *,
     expected_diff_summary_tsv: Path,
     matrix_diff_summary_tsv: Path,
+    support_tsv: Path | None = None,
     expected_long_row_count: int | None = None,
     expected_matrix_cell_count: int | None = None,
 ) -> TargetedMs1ShapeIdentityExpectedDiffGateSummary:
@@ -160,11 +201,18 @@ def evaluate_limited_targeted_ms1_shape_identity_expected_diff_paths(
         matrix_diff_summary_tsv,
         MATRIX_DIFF_REQUIRED_COLUMNS,
     )
+    support_tsv_rows = None
+    if support_tsv is not None:
+        support_tsv_rows = read_tsv_required(
+            support_tsv,
+            TARGETED_MS1_SHAPE_IDENTITY_COLUMNS,
+        )
     return evaluate_limited_targeted_ms1_shape_identity_expected_diff(
         expected_diff_rows,
         matrix_diff_rows,
         expected_long_row_count=expected_long_row_count,
         expected_matrix_cell_count=expected_matrix_cell_count,
+        support_tsv_rows=support_tsv_rows,
     )
 
 
@@ -266,6 +314,29 @@ def _require_matching_key_sets(
         raise ValueError(
             "matrix diff contains sample/target keys outside expected diff: "
             f"{joined}",
+        )
+
+
+def _require_matching_support_keys(
+    expected_keys: set[tuple[str, str]],
+    supports: Sequence[TargetedMs1ShapeIdentitySupport],
+) -> None:
+    support_keys = {
+        (support.sample_name, support.target_name) for support in supports
+    }
+    missing_support_keys = expected_keys - support_keys
+    unused_support_keys = support_keys - expected_keys
+    if missing_support_keys:
+        joined = _format_key_set(missing_support_keys)
+        raise ValueError(
+            "support TSV is missing sample/target keys from expected diff: "
+            f"{joined}",
+        )
+    if unused_support_keys:
+        joined = _format_key_set(unused_support_keys)
+        raise ValueError(
+            "support TSV contains supported sample/target keys that did not "
+            f"change output: {joined}",
         )
 
 

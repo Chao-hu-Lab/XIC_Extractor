@@ -17,6 +17,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary = evaluate_limited_targeted_ms1_shape_identity_expected_diff_paths(
         expected_diff_summary_tsv=args.expected_diff_summary_tsv,
         matrix_diff_summary_tsv=args.matrix_diff_summary_tsv,
+        support_tsv=args.support_tsv,
         expected_long_row_count=args.expected_long_row_count,
         expected_matrix_cell_count=args.expected_matrix_cell_count,
     )
@@ -27,6 +28,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Expected-diff gate status: pass")
     print(f"Long changed rows: {summary.long_changed_rows}")
     print(f"Matrix changed cells: {summary.matrix_changed_cells}")
+    if summary.support_tsv_supported_rows is not None:
+        print(f"Support TSV supported rows: {summary.support_tsv_supported_rows}")
     return 0
 
 
@@ -34,6 +37,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-diff-summary-tsv", type=Path, required=True)
     parser.add_argument("--matrix-diff-summary-tsv", type=Path, required=True)
+    parser.add_argument(
+        "--support-tsv",
+        type=Path,
+        required=True,
+        help=(
+            "Required targeted_ms1_shape_identity_v0 support TSV. Supported "
+            "sample/target keys must exactly match the long-row diff."
+        ),
+    )
     parser.add_argument("--summary-tsv", type=Path)
     parser.add_argument("--expected-long-row-count", type=int)
     parser.add_argument("--expected-matrix-cell-count", type=int)

@@ -1103,13 +1103,15 @@ only consumes the TSV through explicit opt-in
 limited `5-hmdC` / `5-medC` activation policy.
 **Topic group**: targeted NL dropout / MS1 shape identity; reuses
 `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff`.
-**Status note**: Reads existing `expected_diff_summary.tsv` and
-`matrix_diff_summary.tsv` only. It fails closed unless every long-row mutation
-is an analyte `NL_FAIL` row moving from `not_counted/FALSE` to
-`detected_flagged/TRUE` with `own_max_same_peak_support`, and every wide-matrix
-cell mutation is an allowed `5-hmdC` or `5-medC` measurement moving from `ND` to
-a populated value. It does not open RAW, build support evidence, run
-extraction, or mutate product outputs.
+**Status note**: Reads existing `expected_diff_summary.tsv`,
+`matrix_diff_summary.tsv`, and the required actual
+`targeted_ms1_shape_identity_v0` `--support-tsv`. It fails closed unless every
+long-row mutation is an analyte `NL_FAIL` row moving from `not_counted/FALSE` to
+`detected_flagged/TRUE` with `own_max_same_peak_support`, every wide-matrix cell
+mutation is an allowed `5-hmdC` or `5-medC` measurement moving from `ND` to a
+populated value, and accepted support TSV sample/target keys exactly match the
+long-row diff keys. It does not open RAW, build
+support evidence, run extraction, or mutate product outputs.
 
 ---
 

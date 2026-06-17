@@ -59,6 +59,11 @@ product matrix-only output，`narrow_product_writer_expected_diff_acceptance.jso
 缺 overlay/trace evidence、3454 個 trace-matched writes 不符合 high-signal
 clean envelope。若要把 broad scope 也推 ready，下一個 checkpoint 必須補
 broader masked/product-writer oracle，不能把 narrow ready 外推到 4613-row。
+Targeted MS1 shape identity limited opt-in 也已收斂成窄範圍
+`production_ready`：只限 headless explicit support-TSV workflow、
+`limited_5hmdc_5medc_v1`、`5-hmdC + 5-medC`、且產品輸出只能變成
+`detected_flagged`。Default automatic rescue、GUI wiring、以及其他 target
+仍是 blocked，不在這個 ready claim 內。
 ReviewAction selected candidate / manual boundary writer 已 parked；sample metadata cross-module
 parity 的 no-output resolver slices 已收斂到 extraction、instrument-QC、
 alignment、RT-normalization anchor diagnostic，不可讓 sample role 直接改
@@ -108,7 +113,7 @@ scope.
 | Lane | Current tier | Current owner / artifact | Product gap | Next checkpoint | WIP owner |
 |---|---:|---|---|---|---|
 | Targeted product projection: `Product State`, `Counted Detection`, `Reason` | `production_surface` | `targeted_product_projection.py`, CSV/workbook writers | schema version 已鎖；缺 canonical projection adapter 文檔 | `canonical_detection_contract_v1` | unassigned |
-| Targeted MS1 shape identity explicit/limited opt-in | `production_candidate` | `targeted_ms1_shape_identity_support_tsv`, `targeted_ms1_shape_identity_activation_policy`, `tools/diagnostics/build_targeted_ms1_shape_identity_supports.py`, `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`, 8RAW/85RAW opt-in artifacts | explicit support TSV workflow 有 generic producer + expected-diff smoke；limited policy `limited_5hmdc_5medc_v1` 已用 config/CLI guard 限 `5-hmdC + 5-medC` 且 expected-diff gate 證明只寫 `detected_flagged`；default automatic producer/extraction/GUI rescue 尚未啟用 | decide whether to wire a default producer/extraction path, or keep opt-in until broader targets have evidence | unassigned |
+| Targeted MS1 shape identity explicit/limited opt-in | `production_ready` for headless explicit limited support-TSV workflow; default automatic rescue `blocked` | `targeted_ms1_shape_identity_support_tsv`, `targeted_ms1_shape_identity_activation_policy`, `tools/diagnostics/build_targeted_ms1_shape_identity_supports.py`, `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py`, 8RAW/85RAW opt-in artifacts | explicit support TSV workflow 有 generic RAW-backed producer、config/CLI consumer、manifest provenance、replay override rejection、support-TSV key-set expected-diff gate；limited policy `limited_5hmdc_5medc_v1` 限 `5-hmdC + 5-medC` 且只能寫 `detected_flagged`；default automatic producer/extraction/GUI rescue 尚未啟用 | keep the ready claim scoped to explicit headless support-TSV activation; default rescue requires a separate activation/call-cost contract and broader target evidence | none; explicit limited slice done |
 | Targeted output schema versioning | `production_surface` | `output/schema.py`, manifest `output_schema`, workbook `Run Metadata` | CSV 欄位形狀未改；version 目前透過 manifest/metadata 暴露，不是每列 CSV 欄位 | schema snapshot / downstream handoff profile | none; slice done |
 | `EvidenceVector` / `PeakHypothesis` / `IntegrationResult` spine | `production_candidate` | `peak_detection/hypotheses.py`, result assembly | 缺 stable detection id、typed `ReviewAction`、durable audit transition | `canonical_detection_contract_v1` | unassigned |
 | `AuditTrail` | `partial_internal` | `PeakHypothesis.audit` | 不是 user-visible operation history | `review_roundtrip_v1` | unassigned |
@@ -127,7 +132,7 @@ scope.
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
 | Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer; `production_candidate` for broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `seed_guard_decisions.tsv`, `standard_peak_heldout_oracle_results.py`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and narrow writer output under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；`heldout_trace_reintegration_oracle/heldout_oracle_results.tsv` 有 20 個 originally detected、sample-local、高訊號 clean standard trace cases，20/20 pass、20/20 included，最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；`high_signal_clean_activation_scope_audit/activation_high_signal_clean_scope_summary.json` 證明目前 4613 writes 只有 72 個符合同一 high-signal clean envelope，3454 個 trace-matched writes 不符合，1087 個 missing overlay path；`narrow_activation_expected_diff_acceptance.json` 對這 72 rows 通過 delta-level acceptance（duplicate/missing/unexpected/non-eligible/unchanged/blank 都是 0，`product_surface_changed=FALSE`）；`narrow_high_signal_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 證明 explicit writer 只寫這 72 rows，72/72 product delta rows 通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`product_surface_changed=TRUE`，`readiness_tier=production_ready`；`heldout_observed_results.tsv` provenance contract 已鎖 product-writer / masked-rerun / independent-reintegration sources，禁止 oracle/manual/review row 自抄，且 observed source 不能 canonical-match 同 case manifest `oracle_source`；manifest 也要求 originally detected cell status；非標準 peak 仍不可自動 promotion | keep 72-row scope explicit in release docs; broad 4613-row readiness still needs broader masked/product-writer observed oracle | none; narrow writer slice done |
-| Provisional production-candidate gate | `diagnostic_only` | production-candidate sidecar | 名稱容易誤導，不是 promotion | wording guard + no-promotion test | unassigned |
+| Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
 
 ## WIP limits
 
@@ -807,6 +812,56 @@ scope.
 - Safe behavior boundary: limited policy accepts supported rows only for `5-hmdC` and `5-medC`; expected-diff gate requires analyte `NL_FAIL` rows to move from `not_counted/FALSE` to `detected_flagged/TRUE` with `own_max_same_peak_support`; matrix diffs are limited to those target measurement columns and must have the same sample/target key set as the long-row diff.
 - Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output -q` (`7 passed`); existing 85RAW generic artifact gate rerun `pass` with 11 long-row changes and 66 matrix cells; checkpoint full local gate `ruff`, `mypy`, `pytest -v --tb=short -x` (`3693 passed, 1 skipped`), diagnostics index, and `git diff --check` passed. Latest repo full gate after the later Backfill source-cross-check guard is recorded above.
 - Remaining blocker: production-ready/default behavior still needs a separate decision and evidence to auto-build or auto-consume supports during normal extraction; GUI remains out of scope; broader targets need their own expected-diff evidence.
+
+### 2026-06-17 - targeted_ms1_shape_identity_support_keyset_gate_v1
+
+- Previous tier: `production_candidate` for explicit/limited opt-in support-TSV workflow.
+- New tier: `production_ready` for the headless explicit limited support-TSV workflow only; default automatic rescue remains `blocked`.
+- Evidence: `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py` now requires `--support-tsv`; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff` validates that accepted support TSV sample/target keys exactly match the long-row expected diff; the existing 85RAW generic support artifact still gates at 11 long rows and 66 matrix cells, with 11 supported support-TSV rows and target counts `5-hmdC=10;5-medC=1`.
+- Product surface changed: additive CLI gate input and additive summary metrics (`support_tsv_supported_rows`, `support_tsv_target_counts`). No default settings, normal extraction behavior, GUI, workbook schema, selected candidate, area recompute, or target scope changed.
+- Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed` after the later support-required hardening); no-RAW 85RAW artifact gate rerun with `--support-tsv output\ms1_shape_identity_generic_support_85raw_20260616\targeted_ms1_shape_identity_v0.tsv`, status `pass`, `long_changed_rows=11`, `matrix_changed_cells=66`, `support_tsv_supported_rows=11`; latest full local gate after support-required hardening passed with `ruff`, `mypy`, `pytest -v --tb=short -x` (`3707 passed, 1 skipped`), diagnostics index, and `git diff --check`.
+- Remaining blocker: default automatic rescue still needs a separate activation/call-cost/product contract before support generation can run inside normal extraction. Broader targets beyond `5-hmdC + 5-medC` need separate expected-diff evidence.
+- Next checkpoint: keep release wording to "headless explicit limited support-TSV workflow"; do not call default extraction, GUI, or broader target rescue production-ready.
+
+### 2026-06-17 - targeted_ms1_shape_identity_default_rescue_blocker_audit_v1
+
+- Previous tier: `blocked` for default automatic `NL_FAIL` rescue; `production_ready` only for the headless explicit limited support-TSV workflow.
+- New tier: still `blocked` for default automatic rescue; explicit limited support-TSV workflow remains `production_ready`.
+- Evidence: user accepted the limited default product direction (`5-hmdC + 5-medC`, `detected_flagged` only), but the current implementation has no automatic support producer or default support input contract. Normal extraction only consumes `targeted_ms1_shape_identity_support_tsv` when explicitly configured, and default settings remain `explicit_support_tsv` with an empty support TSV.
+- Product surface changed: docs/control-plane wording only. No default settings, normal extraction behavior, GUI, workbook schema, matrix identity, counted detection, selected candidate, or manual boundary behavior changed.
+- Validation: focused gates rerun after the audit: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed` after the later support-required hardening); `uv run pytest tests\test_standard_peak_backfill_productization.py -q` (`5 passed`); `uv run pytest tests\test_provisional_backfill_candidate_gate_cli.py -q` (`8 passed`); `uv run pytest tests\test_settings_new_fields.py tests\test_extractor_run.py::test_run_applies_targeted_ms1_shape_identity_support_tsv tests\test_extractor_run.py::test_run_limited_shape_identity_policy_without_support_tsv_keeps_output tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_passes_targeted_ms1_shape_identity_activation_policy_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_support_override tests\test_run_extraction.py::test_cli_replay_rejects_targeted_ms1_shape_identity_activation_policy_override tests\test_targeted_ms1_shape_identity_projection.py -q` (`18 passed`); existing 85RAW generic support expected-diff gate rerun with `--support-tsv` still `pass`, 11 long rows, 66 matrix cells, 11 supported support rows.
+- Remaining blocker: to promote default automatic rescue, implement and review an activation/call-cost contract for automatically producing or selecting support rows during normal extraction, then provide expected-diff evidence for the default path. Do not promote by merely changing the default activation policy.
+- Next checkpoint: design the automatic support producer/default input contract only if it can be bounded by foreground RAW cost, expected-diff evidence, and a user-readable activation packet.
+
+### 2026-06-17 - targeted_ms1_shape_identity_support_tsv_required_gate_review_fix_v1
+
+- Previous tier: `production_ready` for the headless explicit limited support-TSV workflow, but subagent reviewer `Cicero` found the CLI/package gate still allowed an output-only pass when `--support-tsv` was omitted.
+- New tier: still `production_ready` for the same narrow workflow after fail-closed gate hardening; default automatic rescue remains `blocked`.
+- Evidence: `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py --support-tsv` is now required; `xic_extractor.diagnostics.targeted_ms1_shape_identity_expected_diff` raises when support rows are missing, so the release gate cannot pass without proving support TSV key-set equality.
+- Product surface changed: diagnostic gate contract tightened. No default settings, normal extraction behavior, GUI, workbook schema, matrix identity, counted detection, selected candidate, or manual boundary behavior changed.
+- Validation: focused tests added for missing support rows and missing CLI `--support-tsv`; `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed`); focused `ruff` and `mypy` passed; existing 85RAW generic support expected-diff gate rerun with required `--support-tsv` still `pass`; full local gate passed with `ruff`, `mypy`, `pytest -v --tb=short -x` (`3707 passed, 1 skipped`), diagnostics index, and `git diff --check`.
+- Remaining blocker: none for the explicit limited release gate. Default automatic rescue still needs a separate activation/call-cost/default-support contract.
+- Next checkpoint: keep any future output-only diff check under a separate `diagnostic_only` name if it is ever needed; do not share the production-ready gate pass wording.
+
+### 2026-06-17 - targeted_ms1_shape_identity_support_tsv_required_spec_drift_fix_v1
+
+- Previous tier: `production_ready` for the headless explicit limited support-TSV workflow after support-required gate hardening.
+- New tier: unchanged; no product tier movement.
+- Evidence: subagent reviewer `Dirac` found one P3 docs drift in `docs/superpowers/specs/2026-06-16-shared-target-untarget-peak-identity-spine-spec.md` where the gate still used old output-only support-gate wording.
+- Product surface changed: docs wording only; the spec now says the gate requires the actual support TSV.
+- Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed`); support-optional wording grep no longer finds Targeted MS1 support-TSV contract drift; `git diff --check` has only LF/CRLF warnings.
+- Remaining blocker: none for this docs drift. Default automatic rescue remains blocked separately.
+- Next checkpoint: commit this checkpoint after staging only the reviewed 9-file productization diff.
+
+### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
+
+- Previous tier: `diagnostic_only` with wording/no-promotion guard listed as next checkpoint.
+- New tier: still `diagnostic_only`, now recorded as guarded; no product tier promotion.
+- Evidence: existing CLI contract in `tools/diagnostics/provisional_backfill_candidate_gate.py` writes `alignment_production_candidate_gate.tsv/json` only; `tests/test_provisional_backfill_candidate_gate_cli.py` verifies the source matrix hash is unchanged and summary fields stay `readiness_label=diagnostic_only`, `production_ready=false`, and `matrix_contract_changed=false`.
+- Product surface changed: docs/control-plane wording only. No CLI/schema/output behavior changed in this round.
+- Validation: covered by full local gate `pytest -v --tb=short -x` (`3705 passed, 1 skipped`) plus `ruff`, `mypy`, diagnostics index, and `git diff --check`.
+- Remaining blocker: none for diagnostic-only guard status. Any future rename is UX cleanup, not a product promotion.
+- Next checkpoint: do not consume `alignment_production_candidate_gate.tsv` as product authority without a separate activation contract and expected-diff gate.
 
 ### 2026-06-16 - method_manifest_artifact_replay_policy_v1
 
