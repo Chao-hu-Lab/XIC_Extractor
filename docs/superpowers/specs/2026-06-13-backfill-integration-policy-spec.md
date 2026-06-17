@@ -342,6 +342,19 @@ Implementation closeout, 2026-06-16:
   `0.25-0.27 min`, so a simple broad apex-delta threshold is not sufficient
   evidence for automatic matrix writes. There is no apex-delta scoped writer
   flag and no `production_ready` claim is allowed for this class.
+- Heldout width trace reintegration probe, 2026-06-17:
+  `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
+  `standard_width_clean_trace`, where supported trace status, shape `>=0.95`,
+  local/global `>=0.95`, height `>=2e6`, apex delta `<=0.15 min`, and `>=10`
+  scans remain in force, but boundary width falls outside `0.30-0.65 min`.
+  This probe is not a writer contract. The no-RAW 85RAW packet under
+  `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_width_clean_probe/`
+  found 4 eligible candidates across 3 families, selected 3
+  family-representative cases, and failed with 1/3 pass. The failures include
+  one area failure and one boundary failure, with max boundary error
+  `1.86561 min` and max area relative error `0.599229`. There is no
+  width-only scoped writer flag and no `production_ready` claim is allowed for
+  this class.
 - Product direction update, 2026-06-17:
   the 72-row high-signal scope and 42-row low-scan scope are safe
   demonstrators, not the intended ceiling.

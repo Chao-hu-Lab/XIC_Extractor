@@ -7,8 +7,8 @@
 ## 2026-06-17 白話結論
 
 目前這個分支的非 GUI productization goal 有兩個已經往前推到
-`production_ready` 的結論，外加一個剛收斂成 `production_candidate` /
-blocked-ready 的 Backfill probe。
+`production_ready` 的結論，外加幾個已收斂成 `production_candidate` /
+blocked-ready 的 Backfill probes。
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
@@ -25,7 +25,7 @@ slice，不是天花板；北極星仍是「只要證據足夠就補」，下一
 evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
 推上去。
 
-最新 probe 是 low-height clean。它問的是：「其他形狀、RT、寬度、scan
+前一個 probe 是 low-height clean。它問的是：「其他形狀、RT、寬度、scan
 count 都乾淨，只是 peak height 低於 2e6 的格子，能不能也自動補？」答案是：
 現在還不能開 writer。Activation scope audit 在 broad 4613 格裡找到 57 格
 low-height clean，expected-diff 57/57 是乾淨的；但同類 heldout trace oracle
@@ -44,6 +44,17 @@ boundary error `2.19621 min`、最大 area relative error `0.424518`。更重要
 apex delta 上限收窄到 0.5 min 就能解決。這個 probe 同樣只能記成
 `production_candidate` / blocked-ready：它幫我們知道 apex-offset 類別有風險，
 但不能授權自動寫 matrix。
+
+最新 probe 是 width-only clean。它問的是：「形狀、高度、apex 位置、scan
+count 都乾淨，只是 peak boundary width 不在 0.30-0.65 min 內，能不能自動補？」
+答案也是否定。No-RAW 85RAW oracle 只找到 4 個候選、3 個 families，選 3 個代表
+案例後只有 1/3 通過；一個 area fail，另一個 boundary fail。最大 boundary error
+`1.86561 min`，最大 area relative error `0.599229`。所以 width-only 也只能是
+`production_candidate` / blocked-ready，不能新增 writer。
+Subagent code reviewer 後續指出 width selector 測試原本只鎖「太寬」案例，
+沒有鎖「太窄」、0.30/0.65 邊界、以及其他品質條件髒掉時的 fail-closed；已補
+predicate contract test，focused oracle suite 現在是 `5 passed`，full local gate
+是 `3727 passed, 1 skipped`。
 
 第二個是 Targeted MS1 shape identity / `NL_FAIL` rescue。原本只有 explicit
 support-TSV workflow ready；本輪新增 headless auto-limited CLI：
@@ -86,12 +97,12 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- HEAD before current uncommitted slice: `51e1d72`
-- Current checkpoint scope: Backfill low-height and apex-delta heldout oracle
-  support, activation scope audit low-height diagnostic expected-diff columns,
-  focused tests, tools index, handoff, spec, and control-plane updates. There
-  is no low-height or apex-delta product writer and no default matrix-writing
-  behavior change.
+- HEAD before current uncommitted width-only slice: `e190553`
+- Current checkpoint scope: Backfill low-height, apex-delta, and width-only
+  heldout oracle support; activation scope audit low-height diagnostic
+  expected-diff columns; focused tests; tools index, handoff, spec, and
+  control-plane updates. There is no low-height, apex-delta, or width-only
+  product writer and no default matrix-writing behavior change.
 - 本輪 Backfill low-scan gate:
   - `standard_peak_heldout_trace_oracle.py` 是新的可重跑 oracle producer；
     low-scan clean 真實 no-RAW 85RAW artifact 在
@@ -171,13 +182,47 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
     flag was added, and no matrix output should be claimed `production_ready`
     for this class. Do not try a quick threshold-only promotion without a new
     oracle packet, because failures include apex delta `0.2493` and `0.273`.
-- 本輪 subagent review:
+- 本輪 Backfill width-only probe:
+  - `standard_peak_heldout_trace_oracle.py` now supports
+    `standard_width_clean_trace` as a diagnostic/oracle target class. This
+    class keeps supported trace status, shape >=0.95, local/global >=0.95,
+    height >=2e6, apex delta <=0.15 min, and at least 10 boundary scans, but
+    requires boundary width outside 0.30-0.65 min.
+  - no-RAW 85RAW heldout artifact:
+    `output/productization_realdata_seed_guard_85raw_20260617/heldout_trace_reintegration_oracle_width_clean_probe/`;
+    summary status is `fail`, with 4 eligible candidate rows / 3 families,
+    3 selected family cases, 1 pass, 2 fail. The max boundary error is
+    `1.86561 min` and max area relative error is `0.599229`.
+  - Tier decision: `production_candidate` only. No width-only product writer,
+    activation scope audit column, or matrix output should be claimed
+    `production_ready` for this class.
+- 本輪 Backfill width-only subagent review:
+  - Reviewer `Ohm` checked code/tests/contracts and found one P2 test-strength
+    issue: the width-only test proved the over-wide happy path, but did not
+    lock the narrow-width branch, inclusive `0.30` / `0.65` boundaries, or
+    dirty shape/local-global/height/apex/scan sentinels. Fixed by adding
+    `test_width_target_shape_class_matches_only_outside_clean_width_band`.
+  - Reviewer `Hubble` checked handoff/control-plane/spec/index and found no
+    P1/P2 docs/product-claim blocker.
+- 本輪 Backfill width-only final gate:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py -q`
+    -> `5 passed`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts`
+    -> pass
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass
+    (`Success: no issues found in 346 source files`)
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` ->
+    `3727 passed, 1 skipped`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py`
+    -> `88 entry points, 167 total files`
+  - `git diff --check` -> no whitespace errors; only Windows LF/CRLF warnings
+- 前一輪 Backfill low-scan subagent review:
   - `Mendel` / `Meitner` 沒有找到 P1/P2 blocking issue。
   - P3 docs drift 已修：control-plane/spec/handoff 現在都明講 72-row
     high-signal 與 42-row low-scan 是兩個 explicit scoped
     `production_ready` slices，broad 4613-row 仍只是
     `production_candidate`。
-- 本輪完整 local gate 已跑完:
+- 前一輪完整 local gate 已跑完:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests tools scripts` -> pass
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor` -> pass (`Success: no issues found in 346 source files`)
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x` -> `3721 passed, 1 skipped`
@@ -1149,8 +1194,9 @@ RAW-backed 驗證:
      broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
      observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
-     應該挑下一個 named evidence class，例如 height-only 或 apex-delta-only，
-     但前提是能產生對應 heldout oracle packet。
+     不應再直接押 low-height、apex-delta 或 width-only，因為三者的
+     heldout oracle 都已 fail closed；應該改找更窄的可解釋 rule，或先把
+     失敗案例分類成可排除的風險族群。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。

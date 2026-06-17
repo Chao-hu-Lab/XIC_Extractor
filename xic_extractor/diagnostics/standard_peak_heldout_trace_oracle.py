@@ -35,11 +35,13 @@ HIGH_SIGNAL_CLEAN_SCOPE = "standard_high_signal_clean_trace"
 LOW_SCAN_CLEAN_SCOPE = "standard_low_scan_clean_trace"
 LOW_HEIGHT_CLEAN_SCOPE = "standard_low_height_clean_trace"
 APEX_DELTA_CLEAN_SCOPE = "standard_apex_delta_clean_trace"
+WIDTH_CLEAN_SCOPE = "standard_width_clean_trace"
 SUPPORTED_TARGET_SHAPE_CLASSES = (
     HIGH_SIGNAL_CLEAN_SCOPE,
     LOW_SCAN_CLEAN_SCOPE,
     LOW_HEIGHT_CLEAN_SCOPE,
     APEX_DELTA_CLEAN_SCOPE,
+    WIDTH_CLEAN_SCOPE,
 )
 
 MIN_SHAPE_SIMILARITY = 0.95
@@ -480,6 +482,17 @@ def _target_shape_class_matches(
             and scan_count >= MIN_HIGH_SIGNAL_SCAN_COUNT
         )
         return clean_except_apex_delta and apex_delta > MAX_APEX_DELTA_ABS_MIN
+    if target_shape_class == WIDTH_CLEAN_SCOPE:
+        clean_except_width = (
+            shape >= MIN_SHAPE_SIMILARITY
+            and local_global >= MIN_LOCAL_GLOBAL_RATIO
+            and height >= MIN_CELL_HEIGHT
+            and apex_delta <= MAX_APEX_DELTA_ABS_MIN
+            and scan_count >= MIN_HIGH_SIGNAL_SCAN_COUNT
+        )
+        return clean_except_width and not (
+            MIN_BOUNDARY_WIDTH_MIN <= width <= MAX_BOUNDARY_WIDTH_MIN
+        )
     return False
 
 
