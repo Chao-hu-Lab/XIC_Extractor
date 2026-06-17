@@ -130,11 +130,14 @@ explicit
 duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 全為 0。
 這個 fifth ready slice 新增 199 個不在前四個 writer scope 的 ready cells，
 目前五個 ready scope 的 cell-level union 是 439 cells。
-This is a release-safety boundary, not a product north-star limit: the product
-direction is to backfill automatically whenever evidence is sufficient, using
-the 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row
-low-height-low-scan, and 220-row low-height reintegration-stable slices as
-demonstrators before broadening evidence.
+This is a release-safety boundary and a historical evidence trail, not a
+license to keep broadening Backfill writer scope. The product direction is now
+mechanical adjudication plus structured approval coverage, with automatic matrix
+writes allowed only for explicitly authorized, expected-diff-passing scopes. The
+72-row high-signal, 42-row low-scan, 57-row low-height, 69-row
+low-height-low-scan, and 220-row low-height reintegration-stable slices remain
+demonstrators for approved evidence classes, not templates for mining broader
+writer predicates.
 Shape-clean reintegration-stable is now a cleaner candidate evidence class, but
 not a writer promotion. Formal target
 `standard_shape_clean_reintegration_stable_candidate_family_trace` requires
@@ -162,8 +165,10 @@ optionally joins reintegration-stability evidence, writes
 `standard_peak_backfill_policy.tsv`, and classifies every supplied candidate as
 `write_ready`, `detected_flagged`, or `blocked`. The writer only replays
 generated `write_ready` rows through the existing matrix-only activation and
-expected-diff gate. This removes the manual-TSV/white-list failure mode and is
-the preferred path for broadening. The first generated-policy replay over the
+expected-diff gate. This removes the manual-TSV/white-list failure mode for
+already-approved evidence classes; it is not a broadening mechanism and must not
+grant authority to new predicates without a later authority manifest update,
+independent truth basis, and expected-diff contract. The first generated-policy replay over the
 existing 4613-row consolidated source audit passed with 439 generated
 `write_ready` rows, 72 `detected_flagged`, and 4102 `blocked`; the product
 writer wrote exactly the 439 then-approved evidence rows and
@@ -238,6 +243,10 @@ independent truth source is named. The current next asset is
 `mechanical_adjudication_schema_v1` / `mechanical_adjudication_index_v1`: a
 fail-closed authority and classification layer that makes all 4613 rows
 machine-adjudicated without granting new writer authority.
+The next checkpoint adds Review Packet / Approval Workflow v1 as a structured
+human-review asset, not ProductWriter authority: the 3015 trace-matched
+unresolved rows become review packets, the 1087 missing-overlay rows remain
+evidence-recovery work, and reviewer approval can only write a decision log.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -2110,6 +2119,67 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: superseded for broad Backfill. Future evidence classes may be
   considered only under a new independent truth-source / expected-diff goal;
   this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - productization_review_packet_v1
+
+- Lane: Backfill product-authority control plane /
+  low-manual review workflow.
+- Previous tier: Goal 0/1 authority/adjudication contract existed as a
+  `production_candidate` control asset, but unresolved rows had no structured
+  human approval packet.
+- New tier: `production_candidate` for Review Packet / Approval Workflow v1 as
+  a non-mutating review contract. This does not change writer authority.
+- Evidence: `docs/superpowers/specs/review_packet_schema.v1.json` defines
+  packet/log schemas and forbids free-form value entry, matrix touch, and
+  product authority from review approval.
+  `docs/superpowers/validation/review_queue_v1.tsv` contains 3015
+  trace-matched unresolved rows as `review_ready`; each row has candidate value,
+  area/height/RT fields, trace JSON path, overlay PNG path, one review question,
+  and allowed actions
+  `approve_candidate;reject_candidate;escalate_unresolved`.
+  `docs/superpowers/validation/review_decision_log_v1.tsv` is a structured
+  header-only decision log template. The 1087 missing-overlay rows are not in
+  this review queue and remain Goal 4 evidence-recovery work.
+- Product surface changed: docs/spec/validation/test only. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, or GUI behavior changed.
+- Validation: focused checkpoint shard passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_review_packet_contract.py tests/test_check_productization_authority.py tests/test_productization_authority_mechanical_adjudication.py -v --tb=short`
+  (`12 passed`); focused ruff passed for the checker/tests; authority checker
+  passed; review packet schema JSON parse passed. Full local gate passed:
+  `ruff check xic_extractor tests`, `mypy xic_extractor`,
+  `pytest -v --tb=short -x` (`3792 passed, 1 skipped`), and
+  `scripts/check_diagnostics_index.py`.
+- Remaining blocker: this checkpoint does not implement truth labels, review UI,
+  ProductWriter integration, or trace overlay recovery.
+- Next checkpoint: after review/commit, proceed to Peak-Choice Truth Set /
+  Lockbox v1. Do not treat review approval as ProductWriter authority.
+
+### 2026-06-18 - productization_authority_checker_v1
+
+- Lane: Productization authority firewall / Goal 0-1 hardening.
+- Previous tier: `productization_authority_manifest_v1` and
+  `mechanical_adjudication_index_v1` were `production_candidate` control
+  assets validated by focused pytest only.
+- New tier: unchanged, but the authority firewall now has a reusable checker
+  entry point.
+- Evidence: `scripts/check_productization_authority.py` validates the manifest,
+  mechanical adjudication schema, and 4613-row index. It checks fail-closed
+  unregistered scope behavior, the 511/4102 authority split, 3015/1087 evidence
+  classes, parked broad Backfill, negative-evidence scopes, explanation-only
+  sources, and source hashes. `tests/test_check_productization_authority.py`
+  adds a forbidden-scope regression test by mutating a non-write row to
+  `all_stability`.
+- Product surface changed: checker/test only. It does not modify or call
+  ProductWriter.
+- Validation: focused checker tests passed and
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  returned `Productization authority contract is fail-closed.` Full local gate
+  passed with the review-packet checkpoint.
+- Remaining blocker: none for the current non-mutating checker contract; it must
+  be kept in future productization authority gates.
+- Next checkpoint: keep this checker in the PR/local gate set for future
+  productization authority changes.
 
 ### 2026-06-18 - productization_authority_mechanical_adjudication_v1
 
