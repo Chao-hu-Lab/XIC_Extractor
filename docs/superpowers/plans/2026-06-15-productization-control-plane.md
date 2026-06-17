@@ -96,6 +96,15 @@ Broad 4613-row consolidated activation 仍只有 `production_candidate`，因為
 下一個 checkpoint 必須補 broader masked/product-writer oracle，不能把 narrow
 ready 外推到 4613-row，也不能把 low-height diagnostic expected-diff 當成
 writer approval。
+新的 boundary-stability / reintegration-agreement diagnostic 已補上第一個
+broader evidence class：`standard_peak_reintegration_stability_audit.py` 對同一
+stored trace 做 full-trace 與 expected-window-bounded 兩種再積分，兩者都必須
+在 `0.1 min / 10% area` 內吻合才算 eligible。既有 85RAW no-RAW consolidated
+scope 實跑得到 299 eligible written rows、3227 ineligible、1087 missing
+evidence，其中 271 eligible rows 不在四個既有 ready scoped writer envelope
+內。這把 broad scope 的 evidence 往前推到更強的 `production_candidate`，但仍
+不是 writer approval：它是 stored-trace self-consistency，還缺 masked/product-
+writer oracle 與 expected-diff。
 This is a release-safety boundary, not a product north-star limit: the product
 direction is to backfill automatically whenever evidence is sufficient, using
 the 72-row high-signal and 42-row low-scan slices as demonstrators before
@@ -123,7 +132,7 @@ main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, and 69-row low-height-low-scan narrow writer ready slices done; apex-delta, width-only, and shape-margin probes are candidate only | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if apex-delta/width-only/shape-margin is promoted without resolving heldout oracle failures, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, and 69-row low-height-low-scan narrow writer ready slices done; apex-delta, width-only, and shape-margin probes are candidate only; reintegration-stability audit now adds 299 broader `production_candidate` rows but no writer | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if apex-delta/width-only/shape-margin is promoted without resolving heldout oracle failures, or if a RAW rerun would not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim | candidate sidecar and manual boundary area recompute remain blocked until stable IDs, sidecar contract, and expected-diff gate exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -209,6 +218,19 @@ writer run
 passes 69/69 with `readiness_tier=production_ready`. This authorizes only the
 explicit 69-row low-height-low-scan scoped writer, not broad 4613-row activation
 or default extraction behavior.
+
+Backfill row update, 2026-06-17: boundary-stability / reintegration-agreement is
+now a named broader diagnostic evidence class. The first full no-RAW 85RAW run
+`reintegration_stability_audit/` scans the committed 4613-row activation scope
+and reports 299 eligible written rows, 3227 ineligible written rows, and 1087
+missing-evidence rows. Of those 299 eligible rows, 271 are outside the four
+currently production-ready scoped writer envelopes. This is stronger broad
+`production_candidate` evidence only: no writer flag exists, no matrix output is
+changed, and masked/product-writer oracle plus expected-diff approval are still
+required before any activation claim. Subagent review caught that `status=pass`
+was too easy to misread as writer approval; the summary now fails closed with
+`status=candidate_pool_blocked`, `writer_authority_status=blocked`, and upstream
+activation-scope schema/source_run_id/SHA provenance.
 
 ## WIP limits
 
@@ -1517,6 +1539,50 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: design and test that next evidence class. Do not rerun
   85RAW or add another writer until the new gate can change the broad-scope
   decision.
+
+### 2026-06-17 - standard_peak_reintegration_stability_audit_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad 4613-row standard-path activation was
+  `production_candidate`, blocked on a new named evidence class beyond the four
+  explicit scoped writers.
+- New tier: still `production_candidate` for broad activation, now with a
+  boundary-stability / reintegration-agreement candidate pool. No
+  `production_ready` writer is claimed.
+- Evidence: new package/CLI diagnostic
+  `standard_peak_reintegration_stability_audit.py` consumes
+  `activation_high_signal_clean_scope_audit.tsv`, reloads referenced trace
+  JSON, and reintegrates each written trace twice: full trace and
+  expected-window-bounded (`padding=0.5 min`). A row is eligible only if both
+  reintegration views match the stored reference boundary within `0.1 min`,
+  match area within `10%`, and agree with each other within the same boundary
+  and area tolerances. The real no-RAW 85RAW run under
+  `output/productization_realdata_seed_guard_85raw_20260617/reintegration_stability_audit/`
+  reports 4613 written rows, 299 eligible, 3227 ineligible, and 1087 missing
+  trace/overlay evidence. 271 eligible rows are outside the existing four ready
+  scoped writer envelopes. The summary is intentionally not pass-like:
+  `status=candidate_pool_blocked`, `writer_authority_status=blocked`, and
+  `production_ready=FALSE`; it also records the upstream activation scope TSV
+  SHA and source run id.
+- Product surface changed: additive diagnostic CLI/package and additive
+  diagnostic TSV/JSON output only. No writer flag, default extraction behavior,
+  workbook schema, broad Backfill activation, GUI wiring, selected peak/area,
+  or non-standard peak policy changed.
+- Validation: TDD red/green focused tests
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_reintegration_stability_audit.py -q`
+  now pass `8`; related Backfill shard
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_reintegration_stability_audit.py tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+  passes `47`; focused ruff and focused mypy passed; subagent reviewer `Hypatia`
+  flagged status/provenance/padding fail-closed gaps and they were fixed; real
+  no-RAW 85RAW artifact command exited `0` in about 31 seconds.
+- Remaining blocker: this is stored-trace self-consistency evidence, not a
+  masked product-writer oracle. Before any writer or `production_ready` claim,
+  this candidate pool needs masked/product-writer observed results and
+  expected-diff approval.
+- Next checkpoint: build the masked/product-writer oracle for the 299-row
+  candidate pool, or add another independent evidence class before any writer
+  claim.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 

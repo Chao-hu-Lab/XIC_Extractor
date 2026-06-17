@@ -51,6 +51,21 @@ slice，不是天花板；北極星仍是「只要證據足夠就補」，下一
 evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
 推上去。
 
+本輪下一步已先補第一個 broader evidence class：boundary-stability /
+reintegration agreement。新工具
+`standard_peak_reintegration_stability_audit.py` 不讀 RAW、不改 matrix；它對
+activation scope audit 裡的每個 written row 重讀 stored trace，做 full-trace
+和 expected-window-bounded 兩種再積分。只有兩種結果都和 stored reference
+boundary/area 在 `0.1 min / 10% area` 內吻合，且兩種方法彼此也吻合，才標成
+eligible。用既有 85RAW no-RAW artifact 跑完整 4613-row scope 後，結果是
+299 eligible、3227 ineligible、1087 missing evidence；其中 271 eligible rows
+不在目前四個 ready scoped writer 裡。review 後已把 summary 改成
+`status=candidate_pool_blocked`、`writer_authority_status=blocked`，並記錄
+上游 activation scope TSV 的 schema/source_run_id/hash，避免被誤讀成 pass
+gate。白話說，這找到了一批比原本四個 slice 更廣的「邊界穩定候選」，但它
+仍不是 writer approval，因為它只是 stored-trace self-consistency，還缺
+masked/product-writer oracle 和 expected-diff。
+
 low-height clean 問的是：「其他形狀、RT、寬度、scan count 都乾淨，只是
 peak height 低於 2e6 的格子，能不能也自動補？」現在答案是：可以，但只限
 explicit 57-row scoped writer。舊 full-trace heldout oracle 曾經 19/20，失敗的
@@ -1320,6 +1335,11 @@ RAW-backed 驗證:
    - 目前 explicit 57-row low-height-clean scoped writer 也是 `production_ready`。
    - 目前 explicit 69-row low-height-low-scan-clean scoped writer 也是 `production_ready`。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
+   - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
+     scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中
+     271 個不在既有四個 ready scoped writer 內；這只是下一個 candidate pool，
+     不是 writer-ready。Subagent review 已要求它 fail closed；summary 現在寫
+     `status=candidate_pool_blocked` 與 `writer_authority_status=blocked`。
    - High-signal clean 20-case heldout oracle 已通過；low-scan clean 11-case
      heldout oracle 也已通過；low-height bounded-window 20-case oracle 已用
      `padding=0.5 min` 通過；low-height-low-scan bounded-window 20-case oracle
@@ -1328,11 +1348,12 @@ RAW-backed 驗證:
      57 個 low-height clean、69 個 low-height-low-scan clean。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
      observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
-     不應重做已完成的 high-signal/low-scan/low-height scoped writers；apex-delta、
-     width-only、shape-margin 仍要先解 oracle failures。下一個 Backfill gate
-     應先驗證更一般化的 boundary-stability / reintegration agreement、local
-     S/N / selectivity、cohort-anchored expected window，並用預先宣告的 strata
-     + lockbox 防止 cherry-picking。
+     不應重做已完成的 high-signal/low-scan/low-height/low-height-low-scan scoped
+     writers；也不要把 299-row stability candidate pool 直接接 writer。
+     apex-delta、width-only、shape-margin 仍要先解 oracle failures。下一個
+     Backfill gate 應把這 299-row pool 送進 masked/product-writer oracle，或再
+     補 local S/N / selectivity、cohort-anchored expected window，並用預先宣告的
+     strata + lockbox 防止 cherry-picking。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。

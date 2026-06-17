@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-17
-**Total entry-points:** 88
-**Total files (incl. helpers):** 167 Python files under `tools/diagnostics/`
+**Total entry-points:** 89
+**Total files (incl. helpers):** 168 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -26,7 +26,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 3 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 36 tools
+4. [Backfill Reviews](#backfill-reviews) — 37 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -453,6 +453,15 @@ sample order, and output TSV/JSON/Markdown schemas.
 **Topic group**: `standard_peak_activation_scope_audit.py` + `xic_extractor/diagnostics/standard_peak_activation_scope_audit.py`
 **Originating spec/goal/plan**: `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
 **Status note**: Reads an existing matrix-only `activation_value_delta.tsv`, the matching `shadow_production_projection_cells.tsv`, and sibling `*_trace_data.json` artifacts derived from `overlay_png_path`. It writes `activation_high_signal_clean_scope_audit.tsv`, `activation_high_signal_clean_scope_summary.tsv/json`, `eligible_activation_value_delta.tsv`, `narrow_activation_expected_diff_acceptance.tsv/json`, plus additive `low_scan_clean_activation_value_delta.tsv`, `low_scan_clean_activation_expected_diff_acceptance.tsv/json`, `low_height_clean_activation_value_delta.tsv`, `low_height_clean_activation_expected_diff_acceptance.tsv/json`, `low_height_low_scan_clean_activation_value_delta.tsv`, and `low_height_low_scan_clean_activation_expected_diff_acceptance.tsv/json`. The audit joins actual writes to projection rows by `matrix_value_source_row_sha256`, classifies missing projection/trace evidence separately from trace-matched ineligible rows, and applies four named envelopes: high-signal clean requires supported trace status, shape >=0.95, local/global >=0.95, height >=2e6, width 0.30-0.65 min, apex within 0.15 min of family center, and at least 10 boundary scans; low-scan clean uses the same clean envelope but requires height >=2e6 and 7-9 boundary scans; low-height clean keeps the clean trace/width/apex/scan envelope but requires height <2e6 and at least 10 boundary scans; low-height-low-scan clean requires height <2e6 and 7-9 boundary scans while shape/local-global/width/apex remain clean. The current 85RAW no-RAW combined audit covers 4613 broad candidate writes and classifies 72 high-signal clean, 42 low-scan clean, 57 low-height clean, and 69 low-height-low-scan clean rows; all four classes now have explicit scoped product writers with writer expected-diff approval. Each expected-diff acceptance verifies that the filtered eligible delta rows are exactly the eligible audit rows and contain no duplicate, missing, unexpected, non-eligible, non-written, unchanged, or blank-value rows. It does not open RAW, generate evidence, mutate matrices, or authorize product activation. Filtered delta TSVs are convenience artifacts only; product output must come from a separate productization run such as `standard_peak_backfill_productization.py --high-signal-clean-activation-scope-audit-tsv`, `--low-scan-clean-activation-scope-audit-tsv`, `--low-height-clean-activation-scope-audit-tsv`, or `--low-height-low-scan-clean-activation-scope-audit-tsv`, whose writer acceptance must pass before claiming a scoped product behavior.
+
+---
+
+### `standard_peak_reintegration_stability_audit.py`
+
+**Purpose**: Audit whether standard-peak activation writes have boundary-stable stored traces under two no-RAW reintegration views.
+**Topic group**: `standard_peak_reintegration_stability_audit.py` + `xic_extractor/diagnostics/standard_peak_reintegration_stability_audit.py`
+**Originating spec/goal/plan**: `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+**Status note**: Reads `activation_high_signal_clean_scope_audit.tsv` from `standard_peak_activation_scope_audit.py`, reloads the referenced `*_trace_data.json` rows, and reintegrates each written trace twice: full stored trace and an expected-window-bounded trace around the stored reference boundary. It writes `reintegration_stability_audit.tsv` plus `reintegration_stability_summary.tsv/json`. The input scope audit must carry `standard_peak_activation_scope_audit_v1` schema rows with nonblank source run ids; the summary records the upstream TSV SHA/source provenance. `--expected-window-padding-min` must be finite and <=0.5 min so the bounded reintegration remains an independent local check instead of collapsing into full-trace reintegration. A row is `eligible` only when full-trace and bounded-window boundary error are each <=0.1 min, full-trace and bounded-window area relative error are each <=10%, and the two reintegration methods agree within the same boundary/area tolerances. The first real no-RAW 85RAW run over the consolidated 4613-row activation scope found 299 eligible written rows, 3227 ineligible rows, and 1087 missing-evidence rows; 271 eligible rows are outside the four currently production-ready scoped writer envelopes. This is a `production_candidate` evidence class only, and the summary intentionally reports `status=candidate_pool_blocked`, `writer_authority_status=blocked`, and `production_ready=FALSE`: it proves a broader boundary-stability candidate pool exists, but it does not mutate matrices, create a writer flag, replace masked/product-writer oracle evidence, or authorize broad 4613-row activation.
 
 ---
 
