@@ -415,9 +415,15 @@ or default extraction behavior.
 - [ ] Update this board with actual tier, not aspirational tier.
 - [ ] Write one closeout note summarizing what changed in product surface.
 
-## Immediate 2026-06 queue
+## Historical immediate 2026-06 queue snapshot
 
-依照 current capability inventory 與本輪 replay executor closeout，目前順序改成:
+This section is retained as a historical queue from the original 2026-06
+planning pass. It is not the current WIP table; use `Current medium-term active
+lanes` and `Active productization board` above for current owner/tier decisions.
+Items below that say `primary lane` or `supporting lane` describe their status
+at that older checkpoint, not the latest release claim.
+
+依照 current capability inventory 與當時 replay executor closeout，當時順序為:
 
 1. `method_manifest_v1` - done
    - Result: `production_ready` for targeted CLI replay parity.
@@ -429,12 +435,12 @@ or default extraction behavior.
    - Result: `production_surface` for additive schema/version contract.
    - Scope: `output/schema.py` constants, manifest `output_schema`, workbook `Run Metadata`; no CSV data-column changes.
 
-3. `review_action_apply_v1` - primary lane
+3. `review_action_apply_v1` - historical primary lane at this checkpoint
    - Reason: 解決 Review Queue 不能回寫，這是 Skyline parity floor。
    - Current baseline: `production_candidate` for action schema/import validator and dry-run application plan only.
    - Next target: audit/apply loop with expected-diff before touching selected outputs.
 
-4. `sample_metadata_runtime_parity_v1` - supporting lane
+4. `sample_metadata_runtime_parity_v1` - historical supporting lane at this checkpoint
    - Reason: normalization/QC/alignment 都需要 sample type、QC、blank、batch、injection order。
    - Current baseline: `production_candidate` for schema/validator only.
    - Next target: project current legacy injection order behavior into the shared resolver with output parity; do not let sample role change matrix behavior in this slice.
@@ -1468,13 +1474,49 @@ or default extraction behavior.
   or non-standard peak policy changed.
 - Validation: focused Backfill shard
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
-  passed `38`; touched ruff for the Backfill package/CLI/tests passed; formal
-  no-RAW oracle/audit/writer commands exited `0`.
+  passed `39` after the reviewer-requested low-height-low-scan blocker table
+  test was added; full PR gate passed with `ruff`, `mypy`, `pytest -v
+  --tb=short -x` (`3742 passed, 1 skipped`), diagnostics index, and
+  `git diff --check`; formal no-RAW oracle/audit/writer commands exited `0`.
 - Remaining blocker: none for the explicit 69-row low-height-low-scan scoped
   writer. Broad 4613-row activation still needs additional named evidence
   classes and expected-diff approval before it can claim `production_ready`.
-- Next checkpoint: request subagent review of this writer promotion, then run
-  diagnostics index check and the full PR gate before commit.
+- Next checkpoint: done for this scoped writer. Subagent reviewer `Parfit`
+  found no blocking finding; remaining Backfill work should move to a new named
+  evidence class rather than another existing-predicate writer.
+
+### 2026-06-17 - backfill_remaining_scope_evidence_class_blocker_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad 4613-row standard-path activation was
+  `production_candidate`; direct writer work was still tempting because four
+  narrow scoped writers had reached `production_ready`.
+- New tier: unchanged for broad scope: `production_candidate`, with direct
+  promotion from the existing high-signal/low-scan/low-height/apex/width/shape
+  predicates blocked. This is not a kill of the Backfill north star; it means
+  the next promotion packet must introduce a stronger named evidence class.
+- Evidence: read-only Backfill subagent review confirmed the current safe
+  demonstrators are 72 high-signal, 42 low-scan, 57 low-height, and 69
+  low-height-low-scan rows. The broad bridge remains 4613 selected writes out
+  of 7307 seed-guard candidates, with 2694 low-seed no-writes and 1087 writes
+  missing trace/overlay evidence in the activation scope audit. Existing
+  candidate probes are not writer-ready: apex-delta is 17/20 with max boundary
+  error `2.19621 min`, width-only is 1/3 with max boundary error `1.86561 min`
+  and max area relative error `0.599229`, and shape-margin is 6/8 with max
+  area relative error `0.198393`.
+- Product surface changed: docs/control-plane and handoff wording only. No CLI,
+  schema, matrix, workbook, GUI, or extraction default changed.
+- Validation: read-only subagent audits `Galileo` and `Feynman`; artifact
+  spot-checks of the committed no-RAW 85RAW summaries; no RAW rerun because
+  the existing failed probes already answer the direct-writer decision.
+- Remaining blocker: broad activation needs a new named evidence class such as
+  boundary-stability / reintegration agreement, local S/N / selectivity, or
+  cohort-anchored expected-window consistency, followed by a masked/product-
+  writer oracle and expected-diff approval.
+- Next checkpoint: design and test that next evidence class. Do not rerun
+  85RAW or add another writer until the new gate can change the broad-scope
+  decision.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 
