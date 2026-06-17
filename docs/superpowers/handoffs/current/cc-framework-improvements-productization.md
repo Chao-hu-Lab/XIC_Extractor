@@ -31,7 +31,13 @@ replay 已跑過：4613 列全部進 policy，439 列是 current approved eviden
 `detected_flagged`，4102 列是 `blocked`；writer 只寫 439 格，expected-diff
 439/439 pass。所以 generated policy replay 現在可以宣稱
 `production_ready` for current approved evidence classes，但 broad 4613
-仍是 `production_candidate`。
+仍是 `production_candidate`。最新 v2 explanation replay 又把這件事補完整：
+`standard_peak_backfill_policy.tsv` 現在每列都必須有 decision-basis、
+candidate evidence、blocker、next-evidence；4613/4613 都有解釋，沒有空白
+原因。白話說，4102 個 blocked 不是「不知道所以略過」，而是拆成 1087 個
+缺 trace overlay / reintegration evidence、3015 個還缺新 approved evidence
+class 或 passing oracle；72 個 `detected_flagged` 則是有 boundary-stable 訊號，
+但還缺 masked/product-writer oracle，所以不能寫 matrix。
 `AGENTS.md`、`docs/agent-subagent-routing.md`、`docs/agent/planning-workflows.md`
 和 repo-local skills 已補規則：工具、plugins、subagents、CodeGraph、GitHub/gh
 都要積極用；token/cost 不是主要限制。限制的是盲跑：每個長工具鏈或昂貴驗證
@@ -53,6 +59,10 @@ policy 會 blocked 而不寫 matrix。修完後 full local gate 也過：
 `scripts\check_diagnostics_index.py`。後續真實 no-RAW replay command 也過，
 輸出在
 `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_no_raw_productization/`。
+本輪又新增 policy v2 explanation replay，輸出在
+`output/productization_realdata_seed_guard_85raw_20260617/generated_policy_explained_no_raw_productization/`；
+`pytest tests\test_standard_peak_backfill_productization.py -q` 為 `22 passed`，
+no-RAW replay exit `0`，約 2.36 秒。
 
 2026-06-17 規則檢討結果：三個 read-only subagent review 已完成。strategy
 reviewer 和 implementation/contract reviewer 都無 blocker；docs-handoff
@@ -1434,6 +1444,12 @@ RAW-backed 驗證:
      85RAW replay 已證明 current approved evidence classes 可用這條路徑一次
      寫出 439 格且 expected-diff 439/439 pass；但這仍不是 broad 4613-row
      ready 宣稱。
+   - 這輪最新補強是 policy v2 explanation contract：每列都有
+     `backfill_policy_decision_basis`、`backfill_policy_next_evidence`、和
+     candidate-evidence 欄位。最新 no-RAW replay 中 `missing_explanation_rows=0`；
+     4102 blocked 被拆成 1087 個缺 trace evidence、3015 個缺新
+     evidence/oracle。這代表產品規則已能「解釋為什麼不補」，不是把 row
+     輕易放過。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
      scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中

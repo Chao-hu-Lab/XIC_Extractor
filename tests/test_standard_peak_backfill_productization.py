@@ -939,14 +939,47 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
     assert policy_by_family["FAM_READY"]["backfill_policy_evidence_class"] == (
         "high_signal_clean"
     )
+    assert policy_by_family["FAM_READY"]["backfill_policy_decision_basis"] == (
+        "approved_writer_scope"
+    )
+    assert policy_by_family["FAM_READY"]["backfill_policy_next_evidence"] == (
+        "none_current_scope_writer_approved"
+    )
     assert policy_by_family["FAM_STABLE"]["backfill_policy_decision"] == "write_ready"
     assert policy_by_family["FAM_STABLE"]["backfill_policy_evidence_class"] == (
         "low_height_reintegration_stable"
     )
+    assert (
+        policy_by_family["FAM_STABLE"]["backfill_policy_candidate_evidence_class"]
+        == "reintegration_stable"
+    )
     assert policy_by_family["FAM_FLAG"]["backfill_policy_decision"] == (
         "detected_flagged"
     )
+    assert policy_by_family["FAM_FLAG"]["backfill_policy_decision_basis"] == (
+        "candidate_signal_without_writer_oracle"
+    )
+    assert policy_by_family["FAM_FLAG"]["backfill_policy_next_evidence"] == (
+        "masked_or_product_writer_oracle_required"
+    )
+    assert policy_by_family["FAM_FLAG"]["backfill_policy_blockers"] == (
+        "missing_writer_approved_oracle"
+    )
     assert policy_by_family["FAM_BLOCK"]["backfill_policy_decision"] == "blocked"
+    assert policy_by_family["FAM_BLOCK"]["backfill_policy_decision_basis"] == (
+        "no_writer_approved_evidence_class"
+    )
+    assert policy_by_family["FAM_BLOCK"]["backfill_policy_next_evidence"] == (
+        "approved_evidence_class_or_passing_oracle_required"
+    )
+    assert policy_by_family["FAM_BLOCK"]["backfill_policy_blockers"] == (
+        "no_writer_approved_evidence_class;"
+        "high_signal_clean_status:ineligible;"
+        "low_scan_clean_status:ineligible;"
+        "low_height_clean_status:ineligible;"
+        "low_height_low_scan_clean_status:ineligible;"
+        "reintegration_stability_status:missing_or_ineligible"
+    )
 
     policy_summary = json.loads(
         (output_dir / "standard_peak_backfill_policy_summary.json").read_text(
@@ -957,6 +990,11 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
     assert policy_summary["write_ready_row_count"] == "2"
     assert policy_summary["detected_flagged_row_count"] == "1"
     assert policy_summary["blocked_row_count"] == "1"
+    assert json.loads(policy_summary["policy_next_evidence_counts_json"]) == {
+        "approved_evidence_class_or_passing_oracle_required": 1,
+        "masked_or_product_writer_oracle_required": 1,
+        "none_current_scope_writer_approved": 2,
+    }
 
     summary = json.loads(
         (
@@ -1045,6 +1083,20 @@ def test_generated_backfill_policy_blocks_trace_mismatch_clean_status(
     policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
     assert policy_rows[0]["backfill_policy_decision"] == "blocked"
     assert policy_rows[0]["backfill_policy_reason"] == "missing_trace_evidence"
+    assert policy_rows[0]["backfill_policy_decision_basis"] == (
+        "missing_trace_evidence"
+    )
+    assert policy_rows[0]["backfill_policy_candidate_evidence_class"] == (
+        "high_signal_clean"
+    )
+    assert policy_rows[0]["backfill_policy_next_evidence"] == (
+        "trace_overlay_or_reintegration_evidence_required"
+    )
+    assert policy_rows[0]["backfill_policy_blockers"] == (
+        "missing_trace_evidence;"
+        "trace_match_status:not_matched;"
+        "approved_evidence_classes_require_matched_trace"
+    )
     assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
 
 

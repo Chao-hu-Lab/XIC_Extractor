@@ -368,19 +368,26 @@ Implementation closeout, 2026-06-16:
   `standard_peak_backfill_policy.tsv` for every supplied source-audit row and
   classifies each candidate as `write_ready`, `detected_flagged`, or `blocked`.
   The product writer then replays only generated `write_ready` rows through the
-  existing matrix-only activation writer and expected-diff acceptance. This is
-  now `production_ready` for replaying the current approved evidence classes:
-  the real no-RAW 85RAW run under
-  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_no_raw_productization/`
+  existing matrix-only activation writer and expected-diff acceptance. The
+  generated policy schema is now `standard_peak_backfill_policy_v2`, with
+  mandatory decision-basis and next-evidence fields. This is now
+  `production_ready` for replaying the current approved evidence classes: the
+  real no-RAW 85RAW run under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_explained_no_raw_productization/`
   classified all 4613 source-audit rows into 439 `write_ready`, 72
   `detected_flagged`, and 4102 `blocked`, wrote exactly 439 matrix cells, and
   passed `backfill_policy_write_ready_rows` writer expected-diff with zero
   duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
-  blockers. This is not a new production-ready claim for broad 4613-row
-  activation: the current ready evidence classes still come from the five
-  approved writer envelopes. The purpose is to stop proliferating manual/nested
-  scoped writer flags and make future broadening happen by adding evidence
-  classes to a single auditable policy engine.
+  blockers. It also proved `0` missing explanation rows; next-evidence counts
+  are 439 `none_current_scope_writer_approved`, 72
+  `masked_or_product_writer_oracle_required`, 1087
+  `trace_overlay_or_reintegration_evidence_required`, and 3015
+  `approved_evidence_class_or_passing_oracle_required`. This is not a new
+  production-ready claim for broad 4613-row activation: the current ready
+  evidence classes still come from the five approved writer envelopes. The
+  purpose is to stop proliferating manual/nested scoped writer flags and make
+  future broadening happen by adding evidence classes to a single auditable
+  policy engine.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
@@ -1480,6 +1487,11 @@ Explicit opt-in writer contract for named Backfill release slices.
   generated `backfill_policy_decision=write_ready` rows with
   `expected_scope=backfill_policy_write_ready_rows`. Rows classified as
   `detected_flagged` or `blocked` stay audit-only and do not write matrix cells.
+  The current generated TSV schema is `standard_peak_backfill_policy_v2`; every
+  row must carry `backfill_policy_decision_basis`,
+  `backfill_policy_next_evidence`, and
+  `backfill_policy_candidate_evidence_class` so blocked rows are explainable
+  product decisions instead of silent exclusions.
 
 Only one scoped audit flag may be supplied at a time. When a scoped flag is
 supplied, the productization bridge reads
@@ -1510,6 +1522,9 @@ Fail-closed requirements:
   nonblank evidence class, and must have
   `backfill_policy_authority_status=writer_approved`; malformed generated or
   replayed policy rows fail closed before matrix activation.
+- All policy rows must carry nonblank `backfill_policy_reason`,
+  `backfill_policy_decision_basis`, and `backfill_policy_next_evidence`.
+  Missing explanation fields fail closed before matrix activation.
 
 The productization summary records:
 
@@ -1529,9 +1544,11 @@ The productization summary records:
 
 The policy generator also records `source_activation_scope_audit_tsv` and
 artifact SHA in `standard_peak_backfill_policy_summary.json`, plus counts for
-`write_ready`, `detected_flagged`, and `blocked`. This closes the "TSV as human
-white-list" failure mode: every candidate row should receive a machine
-classification, even when only a subset is currently writer-approved.
+`write_ready`, `detected_flagged`, and `blocked`, plus
+`policy_reason_counts_json` and `policy_next_evidence_counts_json`. This closes
+the "TSV as human white-list" failure mode: every candidate row should receive a
+machine classification and a next-evidence reason, even when only a subset is
+currently writer-approved.
 
 #### `narrow_product_writer_expected_diff_acceptance.tsv/json`
 

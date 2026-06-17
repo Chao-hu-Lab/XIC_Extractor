@@ -42,7 +42,7 @@ from xic_extractor.tabular_io import (
 )
 
 SCHEMA_VERSION = "standard_peak_backfill_productization_v1"
-BACKFILL_POLICY_SCHEMA_VERSION = "standard_peak_backfill_policy_v1"
+BACKFILL_POLICY_SCHEMA_VERSION = "standard_peak_backfill_policy_v2"
 BACKFILL_POLICY_DECISION_COLUMN = "backfill_policy_decision"
 BACKFILL_POLICY_WRITE_READY = "write_ready"
 BACKFILL_POLICY_ALLOWED_DECISIONS = frozenset(
@@ -144,6 +144,8 @@ BACKFILL_POLICY_REQUIRED_COLUMNS = (
     "backfill_policy_evidence_class",
     "backfill_policy_authority_status",
     "backfill_policy_reason",
+    "backfill_policy_decision_basis",
+    "backfill_policy_next_evidence",
 )
 BACKFILL_POLICY_OUTPUT_COLUMNS = (
     "schema_version",
@@ -157,6 +159,9 @@ BACKFILL_POLICY_OUTPUT_COLUMNS = (
     "backfill_policy_evidence_class",
     "backfill_policy_authority_status",
     "backfill_policy_reason",
+    "backfill_policy_decision_basis",
+    "backfill_policy_next_evidence",
+    "backfill_policy_candidate_evidence_class",
     "ready_evidence_classes",
     "stability_status",
     "backfill_policy_blockers",
@@ -765,22 +770,29 @@ def _backfill_policy_row(
     )
     if _low_height_stability_ready(row, stability_row):
         ready_evidence.append("low_height_reintegration_stable")
+    candidate_evidence = list(_candidate_evidence_classes(row, stability_row))
 
     if ready_evidence:
         decision = BACKFILL_POLICY_WRITE_READY
         authority = "writer_approved"
         reason = "production_ready_scope:" + ",".join(ready_evidence)
+        decision_basis = "approved_writer_scope"
+        next_evidence = "none_current_scope_writer_approved"
         blockers = ""
     elif stability_row is not None:
         decision = "detected_flagged"
         authority = "review_only"
         reason = "boundary_stable_candidate_needs_masked_or_product_writer_oracle"
+        decision_basis = "candidate_signal_without_writer_oracle"
+        next_evidence = "masked_or_product_writer_oracle_required"
         blockers = "missing_writer_approved_oracle"
     else:
         decision = "blocked"
         authority = "blocked"
         reason = _blocked_policy_reason(row)
-        blockers = reason
+        decision_basis = reason
+        next_evidence = _blocked_policy_next_evidence(row)
+        blockers = ";".join(_blocked_policy_blockers(row))
 
     return {
         "schema_version": BACKFILL_POLICY_SCHEMA_VERSION,
@@ -794,6 +806,9 @@ def _backfill_policy_row(
         "backfill_policy_evidence_class": ",".join(ready_evidence),
         "backfill_policy_authority_status": authority,
         "backfill_policy_reason": reason,
+        "backfill_policy_decision_basis": decision_basis,
+        "backfill_policy_next_evidence": next_evidence,
+        "backfill_policy_candidate_evidence_class": ",".join(candidate_evidence),
         "ready_evidence_classes": ",".join(ready_evidence),
         "stability_status": stability_status,
         "backfill_policy_blockers": blockers,
@@ -814,6 +829,24 @@ def _ready_evidence_classes(row: Mapping[str, str]) -> tuple[str, ...]:
     ):
         if text_value(row.get(column)) == "eligible":
             evidence.append(evidence_class)
+    return tuple(evidence)
+
+
+def _candidate_evidence_classes(
+    row: Mapping[str, str],
+    stability_row: Mapping[str, str] | None,
+) -> tuple[str, ...]:
+    evidence: list[str] = []
+    for column, evidence_class in (
+        ("high_signal_clean_status", "high_signal_clean"),
+        ("low_scan_clean_status", "low_scan_clean"),
+        ("low_height_clean_status", "low_height_clean"),
+        ("low_height_low_scan_clean_status", "low_height_low_scan_clean"),
+    ):
+        if text_value(row.get(column)) == "eligible":
+            evidence.append(evidence_class)
+    if stability_row is not None:
+        evidence.append("reintegration_stable")
     return tuple(evidence)
 
 
@@ -847,6 +880,43 @@ def _blocked_policy_reason(row: Mapping[str, str]) -> str:
     return "no_writer_approved_evidence_class"
 
 
+def _blocked_policy_next_evidence(row: Mapping[str, str]) -> str:
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return "activation_candidate_write_required_before_policy"
+    if text_value(row.get("trace_match_status")) != "matched":
+        return "trace_overlay_or_reintegration_evidence_required"
+    return "approved_evidence_class_or_passing_oracle_required"
+
+
+def _blocked_policy_blockers(row: Mapping[str, str]) -> tuple[str, ...]:
+    reason = _blocked_policy_reason(row)
+    blockers: list[str] = [reason]
+    if reason == "not_written_activation_row":
+        blockers.append(
+            "matrix_value_effect:"
+            + (text_value(row.get("matrix_value_effect")) or "missing"),
+        )
+        return tuple(blockers)
+    if reason == "missing_trace_evidence":
+        blockers.extend(
+            (
+                "trace_match_status:"
+                + (text_value(row.get("trace_match_status")) or "missing"),
+                "approved_evidence_classes_require_matched_trace",
+            ),
+        )
+        return tuple(blockers)
+    for column in (
+        "high_signal_clean_status",
+        "low_scan_clean_status",
+        "low_height_clean_status",
+        "low_height_low_scan_clean_status",
+    ):
+        blockers.append(f"{column}:{text_value(row.get(column)) or 'missing'}")
+    blockers.append("reintegration_stability_status:missing_or_ineligible")
+    return tuple(blockers)
+
+
 def _backfill_policy_summary_row(
     rows: Sequence[Mapping[str, str]],
     *,
@@ -857,6 +927,12 @@ def _backfill_policy_summary_row(
 ) -> dict[str, str]:
     decision_counts = Counter(
         text_value(row.get(BACKFILL_POLICY_DECISION_COLUMN)) for row in rows
+    )
+    reason_counts = Counter(
+        text_value(row.get("backfill_policy_reason")) for row in rows
+    )
+    next_evidence_counts = Counter(
+        text_value(row.get("backfill_policy_next_evidence")) for row in rows
     )
     return {
         "schema_version": BACKFILL_POLICY_SCHEMA_VERSION,
@@ -877,6 +953,10 @@ def _backfill_policy_summary_row(
         "write_ready_row_count": str(decision_counts[BACKFILL_POLICY_WRITE_READY]),
         "detected_flagged_row_count": str(decision_counts["detected_flagged"]),
         "blocked_row_count": str(decision_counts["blocked"]),
+        "policy_reason_counts_json": _compact_json_counts(reason_counts),
+        "policy_next_evidence_counts_json": _compact_json_counts(
+            next_evidence_counts,
+        ),
     }
 
 
@@ -1282,6 +1362,22 @@ def _validate_backfill_policy_rows(
             f"{', '.join(invalid_decisions)}",
         )
 
+    missing_explanation_rows = tuple(
+        row
+        for row in rows
+        if not text_value(row.get("backfill_policy_reason"))
+        or not text_value(row.get("backfill_policy_decision_basis"))
+        or not text_value(row.get("backfill_policy_next_evidence"))
+    )
+    if missing_explanation_rows:
+        bad_keys = tuple(
+            "/".join(_audit_key(row)) for row in missing_explanation_rows
+        )
+        raise ValueError(
+            f"{path}: backfill policy rows missing decision explanations: "
+            f"{';'.join(bad_keys[:10])}",
+        )
+
     invalid_write_ready_rows = tuple(
         row
         for row in rows
@@ -1509,6 +1605,14 @@ def _audit_key(row: Mapping[str, str]) -> tuple[str, str, str]:
 def _duplicates(values: Sequence[str]) -> tuple[str, ...]:
     counts = Counter(value for value in values if value)
     return tuple(value for value, count in counts.items() if count > 1)
+
+
+def _compact_json_counts(counts: Counter[str]) -> str:
+    return json.dumps(
+        {key: counts[key] for key in sorted(counts) if key},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def _seed_guard_write_attribution_failures(

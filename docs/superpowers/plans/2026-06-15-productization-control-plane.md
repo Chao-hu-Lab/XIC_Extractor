@@ -148,7 +148,13 @@ the 439 current approved-evidence rows and `backfill_policy_write_ready_rows`
 expected-diff passed with zero blockers. This makes the generated policy replay
 path `production_ready` for current approved evidence classes only; it is not a
 broad 4613-row `production_ready` claim until additional evidence classes have
-oracle and expected-diff approval.
+oracle and expected-diff approval. The generated policy schema is now
+`standard_peak_backfill_policy_v2`: every row carries decision-basis,
+candidate-evidence, blocker, and next-evidence fields. The latest no-RAW replay
+has `0` rows missing explanation; next-evidence counts are 439 already approved,
+72 needing masked/product-writer oracle, 1087 needing trace overlay or
+reintegration evidence, and 3015 needing a new approved evidence class or
+passing oracle.
 The Backfill Production Gate research input under `docs/deepresearch/` reviewed
 on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
 demonstrator / rollout guardrail, not a product hard gate. Low-height
@@ -232,7 +238,7 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, and broad 4613-row standard-path seed guard | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；real generated policy replay under `generated_policy_no_raw_productization/` classified all 4613 consolidated source-audit rows as 439 `write_ready`, 72 `detected_flagged`, and 4102 `blocked`, wrote exactly 439 matrix cells, and passed writer expected-diff 439/439 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells；all-stability direct promotion remains blocked because a quick 20-family check failed one area case (`FAM000949/NormalBC2261_DNA`, area relative error about 19.6%)；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the broadening control point and current production-ready writer surface for approved evidence classes; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability are only candidate probes, and none of these are the product ceiling; next broadening step needs another named evidence class through the generated policy engine with masked/product-writer observed oracle and expected-diff approval | none for generated policy replay over current approved evidence classes and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; broad 4613 still needs additional evidence class/oracle coverage through generated policy |
+| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, and broad 4613-row standard-path seed guard | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；real generated policy v2 replay under `generated_policy_explained_no_raw_productization/` classified all 4613 consolidated source-audit rows as 439 `write_ready`, 72 `detected_flagged`, and 4102 `blocked`, wrote exactly 439 matrix cells, passed writer expected-diff 439/439 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers, and had `0` missing explanation rows; next-evidence counts are 439 already approved, 72 needing masked/product-writer oracle, 1087 needing trace overlay or reintegration evidence, and 3015 needing a new approved evidence class or passing oracle；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells；all-stability direct promotion remains blocked because a quick 20-family check failed one area case (`FAM000949/NormalBC2261_DNA`, area relative error about 19.6%)；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the broadening control point and current production-ready writer surface for approved evidence classes; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability are only candidate probes, and none of these are the product ceiling; next broadening step needs another named evidence class through the generated policy engine with masked/product-writer observed oracle and expected-diff approval | none for generated policy replay over current approved evidence classes and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; broad 4613 still needs additional evidence class/oracle coverage through generated policy |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
 
 Backfill row update, 2026-06-17: the low-height evidence is no longer only the
@@ -1709,6 +1715,41 @@ at that older checkpoint, not the latest release claim.
   productization slice should broaden by a new evidence class or masked
   product-writer oracle, not by silently widening the new 220-row writer.
 
+### 2026-06-17 - standard_peak_generated_backfill_policy_explanation_v2
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: generated policy replay over current approved evidence classes
+  was `production_ready`, but blocked/detected rows still relied on coarse
+  reason strings and the policy summary did not say what evidence each row
+  still needed.
+- New tier: remains `production_ready` for generated policy replay of current
+  approved evidence classes; the policy explanation contract is now
+  `standard_peak_backfill_policy_v2`. No broad 4613-row tier promotion.
+- Evidence: `standard_peak_backfill_policy.tsv` now requires
+  `backfill_policy_decision_basis`, `backfill_policy_next_evidence`, and
+  `backfill_policy_candidate_evidence_class` for every generated row. Missing
+  explanation fields fail closed before matrix activation. The real no-RAW
+  85RAW replay under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_explained_no_raw_productization/`
+  produced 4613 explained policy rows with `0` missing explanation rows:
+  439 `write_ready`, 72 `detected_flagged`, and 4102 `blocked`. The
+  next-evidence distribution is 439 already current-scope approved, 72 needing
+  masked/product-writer oracle, 1087 needing trace overlay or reintegration
+  evidence, and 3015 needing a new approved evidence class or passing oracle.
+  The writer still wrote exactly 439 matrix cells and expected-diff passed
+  439/439 with zero blockers.
+- Validation: `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_backfill_productization.py -q`
+  passed with `22 passed`; the no-RAW 85RAW generated-policy explanation replay
+  exited `0` in about 2.36 sec.
+- Remaining blocker: the explanation contract makes every current candidate
+  accountable, but broad 4613, all-stability 299, apex-delta, width-only, and
+  shape-margin still need their own oracle/expected-diff evidence before
+  writer authority.
+- Next checkpoint: add one new product evidence class to policy v2 only when it
+  has a passing oracle/expected-diff gate; otherwise leave the row explained as
+  blocked or `detected_flagged`.
+
 ### 2026-06-17 - standard_peak_generated_backfill_policy_path_v1
 
 - Lane: Backfill product-authority sidecars /
@@ -1724,22 +1765,30 @@ at that older checkpoint, not the latest release claim.
 - Evidence: `standard_peak_backfill_productization.py` now accepts
   `--backfill-policy-source-audit-tsv`, generates
   `standard_peak_backfill_policy.tsv` plus summary, and classifies each source
-  audit row as `write_ready`, `detected_flagged`, or `blocked`. The CLI does
-  not expose a human-authored activation policy TSV, and the public package API
-  does not accept `activation_policy_tsv`. `write_ready` rows fail closed unless
-  they are written rows with matched trace evidence, a nonblank evidence class,
-  and `writer_approved` authority. Focused tests prove a four-row broad source
-  audit produces one high-signal `write_ready`, one low-height stability
-  `write_ready`, one `detected_flagged`, and one `blocked`, and only the two
-  `write_ready` rows alter the matrix. Additional negative tests cover
-  trace-mismatch clean-status contradictions and the missing public manual
-  policy TSV entry point. The real no-RAW 85RAW replay under
-  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_no_raw_productization/`
+  audit row as `write_ready`, `detected_flagged`, or `blocked`. The generated
+  policy schema is now `standard_peak_backfill_policy_v2`; every row must carry
+  `backfill_policy_decision_basis`, `backfill_policy_next_evidence`, and
+  `backfill_policy_candidate_evidence_class`. The CLI does not expose a
+  human-authored activation policy TSV, and the public package API does not
+  accept `activation_policy_tsv`. `write_ready` rows fail closed unless they are
+  written rows with matched trace evidence, a nonblank evidence class, and
+  `writer_approved` authority; every policy row fails closed if explanation
+  fields are blank. Focused tests prove a four-row broad source audit produces
+  one high-signal `write_ready`, one low-height stability `write_ready`, one
+  `detected_flagged`, and one `blocked`, and only the two `write_ready` rows
+  alter the matrix. Additional negative tests cover trace-mismatch clean-status
+  contradictions and the missing public manual policy TSV entry point. The real
+  no-RAW 85RAW replay under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_explained_no_raw_productization/`
   consumed the existing 4613-row consolidated source audit plus the
   reintegration-stability audit, generated 439 `write_ready`, 72
   `detected_flagged`, and 4102 `blocked` policy rows, selected/wrote 439 matrix
-  cells, and passed `backfill_policy_write_ready_rows` expected-diff with zero
-  blockers.
+  cells, passed `backfill_policy_write_ready_rows` expected-diff with zero
+  blockers, and had `0` missing explanation rows. Its next-evidence counts are
+  439 `none_current_scope_writer_approved`, 72
+  `masked_or_product_writer_oracle_required`, 1087
+  `trace_overlay_or_reintegration_evidence_required`, and 3015
+  `approved_evidence_class_or_passing_oracle_required`.
 - Validation: `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\diagnostics\standard_peak_backfill_productization.py tools\diagnostics\standard_peak_backfill_productization.py tests\test_standard_peak_backfill_productization.py`
   passed; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_backfill_productization.py -q`
   passed with `22 passed`. Subagent reviewers `Faraday` and `Meitner` found
@@ -1748,7 +1797,8 @@ at that older checkpoint, not the latest release claim.
   then passed: `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
   (`3759 passed, 1 skipped`); `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts\check_diagnostics_index.py`;
-  and the no-RAW generated-policy replay command exited `0` in about 2.55 sec.
+  and the latest no-RAW generated-policy explanation replay command exited `0`
+  in about 2.36 sec.
 - Remaining blocker: generated policy currently only unifies existing approved
   evidence classes. It does not make apex-delta, width-only, shape-margin,
   all-stability, or broad 4613 rows production-ready without their own oracle
