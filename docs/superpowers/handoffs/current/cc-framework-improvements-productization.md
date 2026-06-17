@@ -1,8 +1,8 @@
 # XIC productization handoff
 
-Updated: 2026-06-17
+Updated: 2026-06-18
 Branch: `cc/framework-improvements`
-HEAD after latest productization commit: `a2c7d347`
+HEAD before this docs-only strategy reset: `9ced4d61`
 Purpose: short current-state snapshot for the next agent/session. This file is
 not the product tier authority; use the control plane first.
 
@@ -18,6 +18,13 @@ connected.
 - [scope warning] The goal/rule/handoff-prune dirty diff belongs to a side
   session. Preserve it, do not revert it, and do not mix it into a Backfill
   productization commit unless that side session explicitly owns the commit.
+- [active] Backfill broadening has been reset to one ground-truth gate.
+  Do not continue by mining `quality_blockers` for another nested writer slice.
+  Read
+  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`
+  first. The next Backfill work is one read-only
+  `backfill_ground_truth_gate_v1` packet, not ProductWriter expansion and not a
+  new stack of design docs.
 - [active] Backfill generated policy writer is `production_ready` only for
   current approved evidence classes plus row-specific observed-oracle rows:
   latest no-RAW replay classified 4613 rows as 511 `write_ready`, 0
@@ -33,8 +40,10 @@ connected.
   evidence gaps were fixed by adding focused row-parity tests and
   `backfill_policy_quality_explanation_row_count=4613` in the policy summary.
 - [active] Broad Backfill 4613-row write is still `production_candidate`, not
-  ready. The 4102 blocked rows need trace overlay/reintegration evidence or a
-  new approved evidence class with oracle + expected-diff.
+  ready. The updated framing is not "make all 4613 writable"; it is
+  mechanically adjudicate all 4613, keep 511 approved writes, target the 3015
+  dirty-but-trace-matched rows with independent evidence, and leave the 1087
+  missing-trace rows blocked until trace evidence exists.
 - [active] Backfill ready writer surfaces currently include five scoped slices
   totaling 439 cells before observed-oracle promotion: 72 high-signal clean,
   42 low-scan clean, 57 low-height clean, 69 low-height-low-scan clean, and
@@ -84,6 +93,13 @@ connected.
   `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`, and
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`:
   Backfill quality-explanation sidecar contract/test/code/control-plane entry.
+- `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`,
+  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`,
+  and
+  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`:
+  current Backfill strategy reset inputs and critical review. These supersede
+  any handoff instruction to choose the next writer slice directly from blocker
+  token counts.
 
 ## Active Decisions
 
@@ -95,6 +111,11 @@ connected.
   owns handoff rewrite/prune judgment after reading diff and validation state.
 - Backfill product authority must flow through generated policy, oracle evidence,
   and expected-diff; no manual TSV allowlist.
+- Backfill quality sidecars are explanation-only. `quality_blockers` may decide
+  what evidence to collect next, but they cannot become writer predicates.
+- ISTD degradation/model-based Backfill is optional future work, not the next
+  default. It is allowed only if one compact `backfill_ground_truth_gate_v1`
+  packet first defines a simple numeric gate and family-confusion stop rule.
 - No default extraction behavior, workbook schema, selected peak/area, counted
   detection, or primary matrix semantics may change without explicit
   expected-diff/product contract.
@@ -103,6 +124,12 @@ connected.
 
 - [superseded] Append-only handoff updates. Rewrite/prune this file instead.
 - [blocked] Directly promote broad 4613-row Backfill writes from scoped slices.
+- [blocked] Build another nested Backfill writer slice directly from
+  shape/height/width/scan blocker-token combinations.
+- [blocked] Train or approve Backfill auto-write from the existing round-trip
+  reintegration oracle alone; it does not prove peak-choice correctness.
+- [blocked] Auto-write `missing_overlay_path` rows without regenerated trace
+  evidence.
 - [blocked] Promote all-stability 299-row pool after the 19/20 oracle result.
 - [blocked] Add a shape-clean writer flag while it has 0 new matrix writes.
 - [parked] ReviewAction selected-candidate/manual-boundary product writeback.
@@ -126,6 +153,13 @@ connected.
   existing artifacts answered the decision.
 - RAW policy: do not rerun 85RAW unless a new production-readiness decision
   needs it and existing artifacts cannot answer the question.
+- Strategy reset validation so far is docs/no-RAW artifact inspection only:
+  product activation code confirms Backfill writes only MS1 morphology area;
+  generated-policy replay artifacts confirm 4613/511/0/4102 and 511/511
+  expected-diff; targeted ISTD benchmark artifacts confirm six active ISTDs
+  selected 85/85; a small matrix check found no ISTD family above 3x median and
+  low-side outliers in all six families. This supports the under-estimation
+  hypothesis but is not a ProductWriter gate.
 
 ## Remaining Work
 
@@ -134,16 +168,19 @@ connected.
   repeated mistake.
 - [done] Backfill quality sidecar slice was subagent-reviewed, P3 findings were
   fixed, and commit `a2c7d347` landed.
-- [blocked] Broad Backfill promotion needs broader oracle/product-writer evidence
-  for missing/blocked cells, not another narrow dataset-specific slice.
+- [blocked] Broad Backfill promotion needs one independent
+  `backfill_ground_truth_gate_v1` packet: facts, ISTD truth, dirty-profile
+  comparison, and a numeric acceptance table. If that cannot be short and
+  defensible, park broad Backfill instead of adding diagnostics.
 - [blocked] GUI replay/parity waits for GUI branch reconnection.
 
 ## Next Actions
 
-1. Continue Backfill broadening from the quality sidecar blocker distribution:
-   choose one simple evidence class that can be tested with existing artifacts
-   or a small no-RAW replay.
-2. Do not promote rows directly from `quality_blockers`; any writer expansion
-   still needs generated-policy evidence class, oracle evidence, and
-   expected-diff.
-3. GUI replay/parity remains out of scope until GUI is reconnected.
+1. Read the 2026-06-18 Backfill strategy notes and the critical review note.
+2. Build or review one read-only
+   `docs/superpowers/notes/backfill_ground_truth_gate_v1.md` packet with four
+   sections: facts, ISTD truth, dirty-profile comparison, and numeric
+   acceptance table.
+3. Only after that packet survives review, decide whether to implement a
+   calibrated gate. If it cannot produce a simple gate, park broad Backfill.
+4. GUI replay/parity remains out of scope until GUI is reconnected.

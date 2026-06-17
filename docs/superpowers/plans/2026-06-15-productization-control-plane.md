@@ -221,6 +221,22 @@ evidence. The next broadening checkpoint should pivot to boundary-stability /
 reintegration agreement, local S/N or local selectivity, and cohort-anchored
 expected-window consistency with predeclared strata/lockbox evidence before any
 new writer approval.
+The 2026-06-18 strategy reset under
+`docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`,
+`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`,
+and
+`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`
+supersedes any next step that would choose another writer slice directly from
+`quality_blockers`. The Backfill north star is mechanical adjudication of all
+4613 candidates, not claiming all 4613 as writable. Current writer authority
+stays at 511 approved cells. The 3015 dirty-but-trace-matched rows are the next
+auto-write research target, and the 1087 `missing_overlay_path` rows stay
+blocked until trace evidence exists. The next permitted Backfill work is one
+read-only `backfill_ground_truth_gate_v1` packet: facts, ISTD truth,
+dirty-profile comparison, and a numeric acceptance table. If that packet cannot
+define a short defensible gate, park broad Backfill instead of adding more
+diagnostics. No broader ProductWriter authority should be implemented before
+that packet is reviewed.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -239,7 +255,7 @@ value-changing behavior，不可直接改 quant、counted detection、normalized
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; apex-delta, width-only, and shape-margin probes are candidate only; reintegration-stability audit still leaves the full 299-row pool as `production_candidate` / writer-blocked because only the low-height subset plus the 72 observed-oracle rows have oracle + writer expected-diff approval and the formal all-stability family oracle failed 19/20 due one area error; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts, use the generated policy engine as the future broadening control point, and add broader evidence classes only with observed/masked/product-writer oracle evidence plus expected-diff | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if generated policy rows become a manual allowlist, if apex-delta/width-only/shape-margin or all-stability rows are promoted without resolving heldout oracle failures, if shape-clean stability is promoted without a missing-cell/nonzero-delta product scope, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; broad Backfill expansion is on implementation hold pending the 2026-06-18 ground-truth strategy review; apex-delta, width-only, and shape-margin probes are candidate only; all-stability remains blocked by 19/20 formal oracle; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts; next allowed work is one read-only `backfill_ground_truth_gate_v1` packet, not a writer slice from `quality_blockers` | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if `quality_blockers` become writer predicates, if generated policy rows become a manual allowlist, if round-trip reintegration oracle labels are treated as peak-choice ground truth, if no simple numeric acceptance table exists to fail a bad gate, if `missing_overlay_path` rows enter auto-write without regenerated trace evidence, or if the work is just another diagnostic sidecar that does not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; no-output order projection is `production_ready`; role/value behavior remains `blocked` | release smoke/docs only; no further role/value behavior without expected-diff | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim; candidate-sidecar verifier is now `production_candidate` | selected-candidate writer and manual boundary area recompute remain blocked until expected-diff/product apply contracts exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -2087,6 +2103,39 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: add the next evidence class to the generated policy engine
   only after a focused oracle/expected-diff gate proves it; do not add another
   manual/nested scoped writer path.
+
+### 2026-06-18 - backfill_autowrite_ground_truth_strategy_reset_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: generated policy replay was `production_ready` for 511 current
+  approved-evidence / observed-oracle rows; broad 4613-row Backfill remained
+  `production_candidate`, with handoff wording still nudging the next step
+  toward choosing another evidence class from blocker-token distribution.
+- New tier: unchanged for writer authority. Broad Backfill expansion is on
+  implementation hold until a read-only ground-truth packet is reviewed. This is
+  a strategy reset, not a product behavior change.
+- Evidence: reviewed the 2026-06-18 ChatGPT reset note and Backfill auto-write
+  ground-truth strategy note, then recorded the blocking critique in
+  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`.
+  Revalidated key no-RAW facts: Backfill promotes only MS1 morphology
+  `primary_matrix_area`; existing replay artifacts still report 4613 policy
+  rows, 511 `write_ready`, 0 `detected_flagged`, 4102 `blocked`, and 511/511
+  writer expected-diff pass; targeted ISTD benchmark maps six active ISTDs to
+  selected family IDs with 85/85 untargeted positives; a small matrix check over
+  those six families found no `>3x median` high outliers and low-side outliers
+  in every family.
+- Validation: docs/no-RAW artifact inspection only; no RAW or 85RAW rerun.
+  `git diff --check` passed with only LF/CRLF warnings.
+- Remaining blocker: before any broader ProductWriter authority, produce and
+  review one read-only `backfill_ground_truth_gate_v1` packet with four
+  sections: facts, ISTD truth, dirty-profile comparison, and numeric acceptance
+  table.
+- Next checkpoint: do not derive a writer predicate directly from
+  `quality_blockers`; do not train/approve rows from the current round-trip
+  reintegration oracle alone; do not include `missing_overlay_path` rows without
+  regenerated trace evidence; if the gate cannot stay simple, park broad
+  Backfill instead of adding more diagnostics.
 
 ### 2026-06-17 - sample_metadata_no_output_parity_tier_closeout_v1
 
