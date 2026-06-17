@@ -43,7 +43,7 @@
 | `scripts/` | CLI 入口（`run_*.py`）+ 開發 / 驗證腳本 | 經由 `datas` |
 | `tools/diagnostics/` | 一次性診斷工具，**不打包** | 否 |
 | `tests/` | pytest 測試（扁平結構 + `fixtures/`） | 否，exclude |
-| `docs/` | 文件、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`） | 否 |
+| `docs/` | 文件、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
 | `config/` | runtime 設定；**只 `*.example.csv` 與固定列表（如 `RNA.csv`）被追蹤** | 範本 CSV |
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
@@ -164,6 +164,10 @@ else:
 ├── 規格 / 計畫文件
 │   ├── 設計規格 → docs/superpowers/specs/YYYY-MM-DD-<kebab-description>.md
 │   └── 實作計畫 → docs/superpowers/plans/YYYY-MM-DD-<kebab-description>.md
+│
+├── 可重用解法 / 工作流知識
+│   └→ docs/solutions/<category>/<slug>.md
+│       （完成非直覺修正、產品化決策、validation lesson 後用 xic-compound 產生）
 │
 ├── 執行產物（自動忽略）
 │   └→ output/

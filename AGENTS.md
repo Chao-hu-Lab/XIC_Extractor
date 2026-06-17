@@ -22,6 +22,8 @@ Canonical references:
   [`docs/agent/product-validation-contract.md`](docs/agent/product-validation-contract.md)
 - Productization tier board and maintenance checklist:
   [`docs/superpowers/plans/2026-06-15-productization-control-plane.md`](docs/superpowers/plans/2026-06-15-productization-control-plane.md)
+- Reusable solved-problem notes:
+  [`docs/solutions/README.md`](docs/solutions/README.md)
 - Architecture boundaries, CodeGraph usage, and public contracts:
   [`docs/agent/architecture-public-contracts.md`](docs/agent/architecture-public-contracts.md)
 - Full LC-MS/MS domain evidence contract:

@@ -160,7 +160,7 @@ Reviewer families:
 | Role | Use when | Includes |
 | --- | --- | --- |
 | `strategy-challenger` | High-risk plan/spec, phase design, handoff productization, legacy-path concern | Assumption mapping, product direction, decision ownership, critical challenge |
-| `implementation-contract-reviewer` | Code/public contract change, CLI/config/schema/parser/test behavior, diagnostic entrypoint changes | Code path mapping, contract review, test strategy, diagnostics reuse |
+| `implementation-contract-reviewer` | Code/public contract change, CLI/config/schema/parser/test behavior, diagnostic entrypoint changes | Code path mapping, contract review, test strategy, diagnostics reuse; add the PR-review lenses below when their triggers fire |
 | `validation-evidence-reviewer` | RAW/science/benchmark decision, 8RAW/85RAW preflight or acceptance, timing/performance evidence | Validation ops, gate acceptance, LC-MS/MS evidence, performance profiling |
 | `docs-handoff-reviewer` | Docs/source-of-truth change, output handoff, report/review surface, agent routing/TOML changes | Docs drift, output contract, human review UX, agent workflow regression |
 | `ops-triager` | CI red, Windows/PowerShell/runbook failure, local runner or path problem | CI triage, Windows ops, command reproduction |
@@ -189,6 +189,17 @@ Execution roles:
   add an expensive gate gets `strategy-challenger`.
 - Any public CLI/config/schema/workbook/TSV/downstream handoff change gets
   `implementation-contract-reviewer`.
+- Any diff that adds or changes broad exception handling, fallback/default
+  behavior, fail-open/fail-closed gates, missing-artifact behavior, or
+  user-facing error messages adds the `silent-failure` lens to
+  `implementation-contract-reviewer`.
+- Any diff that adds or materially changes dataclasses, protocols, schema
+  models, domain DTOs, public contract rows, or invariant-bearing state adds
+  the `type-invariant` lens to `implementation-contract-reviewer`.
+- Any PR/update that changes behavior, parser/writer gates, diagnostics,
+  public output contracts, matrix-writing authority, or validation acceptance
+  adds the `test-coverage-quality` lens to `implementation-contract-reviewer`
+  or a verification-only `tester`.
 - Use `implementation-worker` only when the task can be split like a small
   self-contained CL: one reason to change, explicit write scope, related tests,
   and no shared write surface with the main agent or another worker.
@@ -219,6 +230,33 @@ Execution roles:
 `validation-evidence-reviewer` prompts must name a mode. Allowed modes are
 `preflight`, `acceptance`, `science`, and `performance`; use at most two modes in
 one review.
+
+## PR Review Lenses From Claude Plugins
+
+The Claude official `pr-review-toolkit` plugin is useful as a prompt library,
+not as a primary Codex runtime surface. Its agents are Claude-agent/command
+files, not Codex skills in this environment. Do not add parallel XIC role
+families for them. Instead, paste the relevant lens into the existing
+`implementation-contract-reviewer` or `tester` prompt when the trigger fires.
+
+- `silent-failure`: inspect all `try/except`, broad catches, warning-only
+  failures, fallback/default branches, missing-artifact handling, optional
+  suppression, retry exhaustion, and fail-open behavior. For XIC, this is
+  especially important around diagnostics, RAW/TSV loading, activation gates,
+  expected-diff checks, productization tier claims, and user-readable errors.
+- `type-invariant`: inspect new or changed dataclasses, protocols, schema
+  models, public row contracts, and stateful domain objects for invariants,
+  construction-time validation, mutation safety, and whether illegal states are
+  representable. For XIC, focus on `Trace`, `TraceGroup`, `PeakHypothesis`,
+  `EvidenceVector`, `IntegrationResult`, `AuditTrail`, ReviewAction schemas,
+  method manifests, and matrix/value-delta row contracts.
+- `test-coverage-quality`: inspect whether tests protect behavior and public
+  contracts rather than implementation details. Prioritize negative tests,
+  boundary cases, fail-closed behavior, expected-diff/output schema tests,
+  diagnostics index coverage, and real-data validation claims when relevant.
+
+Use these lenses to make Codex subagent prompts sharper. Do not enable
+Claude-only loops or memory systems just to access these ideas.
 
 ## Critical Artifact Review
 
