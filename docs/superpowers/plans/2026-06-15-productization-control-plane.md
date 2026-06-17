@@ -91,25 +91,22 @@ similarity 降成 `0.93 <= shape < 0.95`，其他條件仍要乾淨；85RAW no-R
 heldout trace oracle 有 18 candidates / 8 families，selected 8 cases 只有
 6/8 pass，summary 最大 area relative error `0.198393`，所以也不得新增
 shape-margin writer。
-Broad 4613-row consolidated activation 仍只有 `production_candidate`，因為
-1087 個缺 overlay/trace evidence，其餘 trace-matched writes 還沒有全部落進
-已命名、已 oracle-backed 的 ready envelope。若要把 broad scope 也推 ready，
-下一個 checkpoint 必須補 broader masked/product-writer oracle，不能把 narrow
-ready 外推到 4613-row，也不能把 low-height diagnostic expected-diff 當成
-writer approval。
-Any future Backfill scoped writer must explicitly name the broader evidence
-class it validates and the broad 4613-row decision it advances. If the scope is
-only another nested dataset-specific slice, it may be recorded as
-`production_candidate` evidence but must not be promoted to `production_ready`.
+Broad 4613-row auto-write is now `parked` by
+`backfill_broad_autowrite_feasibility_gate_v1`: 4613 is the candidate/audit
+universe, not a writer pool. The durable next product asset is authority,
+mechanical adjudication, structured review, truth acquisition, or trace-evidence
+recovery. Do not open another broad Backfill scoped writer or diagnostic unless
+a new independent truth source is named and a later goal explicitly adds
+masked/product-writer oracle plus expected-diff.
 新的 boundary-stability / reintegration-agreement diagnostic 已補上第一個
 broader evidence class：`standard_peak_reintegration_stability_audit.py` 對同一
 stored trace 做 full-trace 與 expected-window-bounded 兩種再積分，兩者都必須
 在 `0.1 min / 10% area` 內吻合才算 eligible。既有 85RAW no-RAW consolidated
 scope 實跑得到 299 eligible written rows、3227 ineligible、1087 missing
 evidence，其中 271 eligible rows 不在四個既有 ready scoped writer envelope
-內。這把 broad scope 的 evidence 往前推到更強的 `production_candidate`，但仍
-不是 writer approval：它是 stored-trace self-consistency，還缺 masked/product-
-writer oracle 與 expected-diff。
+內。This remains historical candidate evidence only. It does not reopen broad
+Backfill auto-write after the 2026-06-18 park decision and must not be used as a
+new writer predicate.
 後續 low-height reintegration-stable promotion 把這個 candidate pool 的一個
 可驗證子集合推到 ready：直接把 299 個 stability eligible rows 全部寫入仍被
 formal all-stability family oracle 擋住。該 oracle
@@ -217,10 +214,8 @@ The Backfill Production Gate research input under `docs/deepresearch/` reviewed
 on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
 demonstrator / rollout guardrail, not a product hard gate. Low-height
 `19/20 pass + 1 boundary fail` should be treated as boundary/reintegration risk
-evidence. The next broadening checkpoint should pivot to boundary-stability /
-reintegration agreement, local S/N or local selectivity, and cohort-anchored
-expected-window consistency with predeclared strata/lockbox evidence before any
-new writer approval.
+evidence. This research input is now background for future truth/review design,
+not a prompt to create another broad writer slice.
 The 2026-06-18 strategy reset under
 `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`,
 `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`,
@@ -229,14 +224,20 @@ and
 supersedes any next step that would choose another writer slice directly from
 `quality_blockers`. The Backfill north star is mechanical adjudication of all
 4613 candidates, not claiming all 4613 as writable. Current writer authority
-stays at 511 approved cells. The 3015 dirty-but-trace-matched rows are the next
-auto-write research target, and the 1087 `missing_overlay_path` rows stay
-blocked until trace evidence exists. The next permitted Backfill work is one
-read-only `backfill_ground_truth_gate_v1` packet: facts, ISTD truth,
-dirty-profile comparison, and a numeric acceptance table. If that packet cannot
-define a short defensible gate, park broad Backfill instead of adding more
-diagnostics. No broader ProductWriter authority should be implemented before
-that packet is reviewed.
+stays at 511 approved cells. The 3015 dirty-but-trace-matched rows are now a
+truth/review/adjudication target, not an auto-write pool, and the 1087
+`missing_overlay_path` rows stay blocked until trace evidence exists. The
+read-only
+`backfill_broad_autowrite_feasibility_gate_v1` packet now closes this branch as
+`park_broad_backfill`: existing artifacts do not support a short defensible
+broad auto-write gate, and ISTD evidence cannot prove analyte peak-choice or
+area truth. No broader ProductWriter authority should be implemented, and no
+new broad Backfill sidecars/diagnostics should be added unless a genuinely new
+independent truth source is named. The current next asset is
+`productization_authority_manifest_v1` plus
+`mechanical_adjudication_schema_v1` / `mechanical_adjudication_index_v1`: a
+fail-closed authority and classification layer that makes all 4613 rows
+machine-adjudicated without granting new writer authority.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -255,7 +256,7 @@ value-changing behavior，不可直接改 quant、counted detection、normalized
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; broad Backfill expansion is on implementation hold pending the 2026-06-18 ground-truth strategy review; apex-delta, width-only, and shape-margin probes are candidate only; all-stability remains blocked by 19/20 formal oracle; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts; next allowed work is one read-only `backfill_ground_truth_gate_v1` packet, not a writer slice from `quality_blockers` | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if `quality_blockers` become writer predicates, if generated policy rows become a manual allowlist, if round-trip reintegration oracle labels are treated as peak-choice ground truth, if no simple numeric acceptance table exists to fail a bad gate, if `missing_overlay_path` rows enter auto-write without regenerated trace evidence, or if the work is just another diagnostic sidecar that does not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; broad Backfill auto-write is parked by `backfill_broad_autowrite_feasibility_gate_v1`; apex-delta, width-only, and shape-margin probes are candidate only; all-stability remains blocked by 19/20 formal oracle; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts and current 511-cell authority only; route blocked rows through authority/adjudication, structured review, truth, or evidence-recovery assets; no more broad Backfill sidecars/diagnostics unless a new independent truth source is named | stop if the next step would silently broaden matrix writes, derive predicates from `quality_blockers`, use round-trip reintegration as peak-choice truth, revive all-stability/apex-delta/width-only/shape-margin under a new name, include `missing_overlay_path` rows without trace evidence, or create another broad diagnostic backlog |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; no-output order projection is `production_ready`; role/value behavior remains `blocked` | release smoke/docs only; no further role/value behavior without expected-diff | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim; candidate-sidecar verifier is now `production_candidate` | selected-candidate writer and manual boundary area recompute remain blocked until expected-diff/product apply contracts exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -315,8 +316,14 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes plus 72 row-specific observed-oracle rows, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, shape-clean reintegration-stable 104-row evidence class, and broad 4613-row standard-path seed guard | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, paired `--policy-observed-oracle-tsv` / `--policy-observed-oracle-summary-json`, `standard_peak_backfill_productization.py`, `standard_peak_policy_observed_oracle.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；latest real generated policy replay under `generated_policy_policy_observed_oracle_no_raw_productization/` classified all 4613 consolidated source-audit rows as 511 `write_ready`, 0 `detected_flagged`, and 4102 `blocked`, wrote exactly 511 matrix cells, passed writer expected-diff 511/511 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers, and records 72 accepted `policy_observed_full_trace_reintegration` rows from the SHA-bound `policy_observed_oracle_detected_flagged_full_trace/` packet; policy next-evidence counts are 511 already approved, 1087 needing trace overlay or reintegration evidence, and 3015 needing a new approved evidence class or passing oracle；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells before the policy-observed oracle adds 72 additional writer-approved rows；all-stability direct promotion remains blocked by formal target `standard_reintegration_stable_candidate_family_trace`: `heldout_trace_reintegration_oracle_all_stability_family/summary.json` records 299 audit-intersection rows / 77 families, 1694 available detected trace candidates, selected 20 family cases, and failed 19/20 because `FAM000949/NormalBC2261_DNA` has area relative error `0.19621` above the accepted 10% ceiling；shape-clean reintegration-stable oracle `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/summary.json` records 104 audit-intersection rows / 33 families, 334 available detected trace candidates / 31 families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`, but a temporary writer probe found `matrix_cells_written=0` and `unchanged_delta_row_count=104`, so no public writer flag was retained；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the broadening control point and current production-ready writer surface for approved evidence classes plus accepted observed-oracle rows; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability/shape-clean-stability are only candidate or explanatory probes, and none of these are the product ceiling; next broadening step needs another named evidence class through the generated policy engine with observed/masked/product-writer oracle and expected-diff approval | none for generated policy replay over current approved evidence classes plus the 72 observed-oracle rows and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; shape-clean stability needs a missing-cell product scope or policy-explanation-only contract before writer work; broad 4613 still needs additional evidence class/oracle coverage through generated policy |
+| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes plus 72 row-specific observed-oracle rows, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, and shape-clean reintegration-stable 104-row evidence class; `parked` for broad 4613-row auto-write | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, paired `--policy-observed-oracle-tsv` / `--policy-observed-oracle-summary-json`, `standard_peak_backfill_productization.py`, `standard_peak_policy_observed_oracle.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；latest real generated policy replay under `generated_policy_policy_observed_oracle_no_raw_productization/` classified all 4613 consolidated source-audit rows as 511 `write_ready`, 0 `detected_flagged`, and 4102 `blocked`, wrote exactly 511 matrix cells, passed writer expected-diff 511/511 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers, and records 72 accepted `policy_observed_full_trace_reintegration` rows from the SHA-bound `policy_observed_oracle_detected_flagged_full_trace/` packet; policy next-evidence counts are 511 already approved, 1087 needing trace overlay or reintegration evidence, and 3015 needing a new approved evidence class or passing oracle；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells before the policy-observed oracle adds 72 additional writer-approved rows；all-stability direct promotion remains blocked by formal target `standard_reintegration_stable_candidate_family_trace`: `heldout_trace_reintegration_oracle_all_stability_family/summary.json` records 299 audit-intersection rows / 77 families, 1694 available detected trace candidates, selected 20 family cases, and failed 19/20 because `FAM000949/NormalBC2261_DNA` has area relative error `0.19621` above the accepted 10% ceiling；shape-clean reintegration-stable oracle `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/summary.json` records 104 audit-intersection rows / 33 families, 334 available detected trace candidates / 31 families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`, but a temporary writer probe found `matrix_cells_written=0` and `unchanged_delta_row_count=104`, so no public writer flag was retained；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the current production-ready writer surface for approved evidence classes plus accepted observed-oracle rows; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability/shape-clean-stability are only candidate or explanatory probes; broad 4613 auto-write is parked | none for generated policy replay over current approved evidence classes plus the 72 observed-oracle rows and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; shape-clean stability needs a missing-cell product scope or policy-explanation-only contract before writer work; broad 4613 can reopen only with a new independent truth source plus observed/masked/product-writer oracle and expected-diff approval |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
+
+Backfill row update, 2026-06-18: the long table row above is historical for the
+approved 511-cell writer surface and prior probes. The broad 4613-row
+auto-write branch is now superseded by
+`backfill_broad_autowrite_feasibility_gate_v1` and is `parked`; do not follow
+the older "next broadening step" wording without a new independent truth source.
 
 Backfill row update, 2026-06-17: the low-height evidence is no longer only the
 old full-trace 19/20 failure. The diagnostic heldout oracle now has an
@@ -1158,13 +1165,12 @@ at that older checkpoint, not the latest release claim.
   42 activation-delta rows, and `narrow_product_writer_expected_diff_acceptance.json`
   reports `acceptance_status=pass`, `readiness_tier=production_ready`,
   `expected_scope=low_scan_clean_eligible_activation_rows`, and zero blockers.
-- Remaining blocker: none for the explicit 42-row low-scan release slice. Broad
-  4613-row activation still needs additional named evidence classes and
-  expected-diff approval before broad `production_ready`.
-- Next checkpoint: later low-height, apex-delta, and width-only probes all
-  failed closed, so do not add writers for those classes. The next broadening
-  step needs a narrower explainable rule or failure-family split before another
-  scoped writer can be justified.
+- Remaining blocker: none for the explicit 42-row low-scan release slice. The
+  old broad-scope expansion language is historical and superseded by the later
+  `park_broad_backfill` decision.
+- Next checkpoint: superseded. Later low-height, apex-delta, and width-only
+  probes all failed closed, and broad auto-write is now parked; do not use this
+  entry to justify another scoped writer.
 
 ### 2026-06-17 - standard_peak_low_scan_review_fix_v1
 
@@ -1204,13 +1210,14 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; the next proposed single-blocker class was
-  height-only or apex-delta-only.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; the next proposed single-blocker class
+  was height-only or apex-delta-only.
 - New tier at this checkpoint: low-height clean was `production_candidate` only.
   The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_low_height_clean_trace`, where all clean
@@ -1261,12 +1268,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; apex-delta-only was the next small single-blocker
-  class after low-height failed its oracle.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; apex-delta-only was the next small
+  single-blocker class after low-height failed its oracle.
 - New tier: apex-delta clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_apex_delta_clean_trace`, where supported trace
@@ -1299,12 +1307,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; width-only was the smallest remaining single-blocker
-  class after low-height and apex-delta failed their oracles.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; width-only was the smallest remaining
+  single-blocker class after low-height and apex-delta failed their oracles.
 - New tier: width-only clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_width_clean_trace`, where supported trace
@@ -1348,13 +1357,14 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; high-signal and low-scan scoped writers were already
-  `production_ready`; low-height, apex-delta, and width-only probes were
-  candidate-only after failing heldout oracles.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; high-signal and low-scan scoped writers
+  were already `production_ready`; low-height, apex-delta, and width-only probes
+  were candidate-only after failing heldout oracles.
 - New tier: shape-margin clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_shape_margin_clean_trace`, where supported
@@ -1514,9 +1524,9 @@ at that older checkpoint, not the latest release claim.
 - Remaining blocker: none for headless no-flag limited default after final
   review/gate. GUI rescue and any target beyond `5-hmdC + 5-medC` still need
   separate expected-diff evidence and UX/product contract.
-- Next checkpoint: commit this slice, then broaden Targeted MS1 only with
-  separate evidence for more targets or continue Backfill broadening by named
-  evidence class.
+- Next checkpoint: historical. Targeted MS1 may broaden only with separate
+  evidence for more targets. The Backfill broadening clause is superseded by
+  `park_broad_backfill` and must not be used as a current next step.
 
 ### 2026-06-17 - backfill_production_gate_research_input_v1
 
@@ -1539,20 +1549,19 @@ at that older checkpoint, not the latest release claim.
   schema, CLI flag, workbook, RAW artifact, or expected-diff output changed.
 - Validation: docs-only targeted grep and `git diff --check` for this refresh.
 - Remaining blocker: no new low-height or moderate-height writer may be added
-  just because expected-diff is clean. The next writer claim needs a named
-  evidence class with heldout oracle and full expected-diff approval.
-- Next checkpoint: design the next Backfill broadening packet around
-  boundary-stability / reintegration agreement, local S/N or local selectivity,
-  and cohort-anchored expected-window consistency. Predeclare strata and a
-  lockbox before using the evidence to promote broad 4613-row writes.
+  just because expected-diff is clean. This entry is now background for future
+  truth/review/evidence design, not a writer prompt.
+- Next checkpoint: superseded by the later park decision. Future work should
+  predeclare truth/review/evidence assets before any new writer authority is
+  considered.
 
 ### 2026-06-17 - product_direction_low_manual_intervention_v1
 
-- Previous tier: unchanged. Backfill narrow 72-row writer is
-  `production_ready`; broad 4613-row standard-path activation remains
-  `production_candidate`; headless Targeted MS1 auto-limited CLI is
-  `production_ready`; ReviewAction selected-candidate/manual-boundary apply
-  remains parked for this release claim.
+- Previous tier at the time: unchanged. Backfill narrow 72-row writer was
+  `production_ready`; broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; headless Targeted MS1 auto-limited CLI
+  was `production_ready`; ReviewAction selected-candidate/manual-boundary apply
+  remained parked for this release claim.
 - New tier: unchanged; this entry records product direction, not a new behavior
   promotion.
 - Evidence: user decision on 2026-06-17: Backfill north star is to fill whenever
@@ -1701,13 +1710,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation was
-  `production_candidate`; direct writer work was still tempting because four
-  narrow scoped writers had reached `production_ready`.
-- New tier: unchanged for broad scope: `production_candidate`, with direct
-  promotion from the existing high-signal/low-scan/low-height/apex/width/shape
-  predicates blocked. This is not a kill of the Backfill north star; it means
-  the next promotion packet must introduce a stronger named evidence class.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; direct writer work was tempting because
+  four narrow scoped writers had reached `production_ready`.
+- New tier at the time: direct promotion from the existing
+  high-signal/low-scan/low-height/apex/width/shape predicates was blocked. The
+  stronger-evidence-class framing is superseded by the later
+  `park_broad_backfill` decision and the authority/adjudication contract.
 - Evidence: read-only Backfill subagent review confirmed the current safe
   demonstrators are 72 high-signal, 42 low-scan, 57 low-height, and 69
   low-height-low-scan rows. The broad bridge remains 4613 selected writes out
@@ -1722,13 +1731,12 @@ at that older checkpoint, not the latest release claim.
 - Validation: read-only subagent audits `Galileo` and `Feynman`; artifact
   spot-checks of the committed no-RAW 85RAW summaries; no RAW rerun because
   the existing failed probes already answer the direct-writer decision.
-- Remaining blocker: broad activation needs a new named evidence class such as
-  boundary-stability / reintegration agreement, local S/N / selectivity, or
-  cohort-anchored expected-window consistency, followed by a masked/product-
-  writer oracle and expected-diff approval.
-- Next checkpoint: design and test that next evidence class. Do not rerun
-  85RAW or add another writer until the new gate can change the broad-scope
-  decision.
+- Remaining blocker: superseded for broad auto-write. These ideas can only be
+  background for future truth/review/evidence assets unless a later goal names a
+  new independent truth source.
+- Next checkpoint: historical. Do not design another broad writer evidence
+  class from this entry; use the authority/adjudication index to decide whether
+  a row needs review, truth labels, or recovered trace evidence.
 
 ### 2026-06-17 - standard_peak_reintegration_stability_audit_v1
 
@@ -1948,14 +1956,14 @@ at that older checkpoint, not the latest release claim.
   policy hashes before promotion. The refreshed no-RAW oracle command exited
   `0` in about 2.08 s and the refreshed no-RAW replay command exited `0` in
   about 3.08 s.
-- Remaining blocker: the remaining 4102 blocked rows still need trace overlay /
-  reintegration evidence or another approved evidence class and oracle before
-  they can write. Broad 4613-row Backfill is still `production_candidate`, not
-  full `production_ready`.
-- Next checkpoint: keep broadening through generated policy evidence classes.
-  Do not create a manual allowlist or another nested writer flag; the next class
-  must bring its own observed/masked/product-writer oracle and expected-diff
-  packet.
+- Remaining blocker at the time: the remaining 4102 blocked rows still needed
+  trace overlay / reintegration evidence or another approved evidence class and
+  oracle before they could write. The old broad-scope
+  `production_candidate` framing is superseded by the 2026-06-18
+  `park_broad_backfill` decision.
+- Next checkpoint: superseded. Do not use this entry to continue broad
+  Backfill broadening; route unresolved rows through authority/adjudication,
+  structured review, truth acquisition, or trace-evidence recovery.
 
 ### 2026-06-17 - standard_peak_shape_clean_policy_explanation_v1
 
@@ -1999,18 +2007,17 @@ at that older checkpoint, not the latest release claim.
   missing-cell scope or masked/product-writer oracle proves nonzero product
   delta. It must not become a public writer flag or a ready evidence class from
   this change alone.
-- Next checkpoint: future broadening should keep using generated policy
-  evidence classes rather than new nested writer flags, and should only promote
-  shape-clean from explanation evidence when a missing-cell scope or
-  masked/product-writer oracle produces nonzero expected-diff approval.
+- Next checkpoint: superseded for broad Backfill. Future work should use
+  authority/adjudication, structured review, truth acquisition, or trace
+  evidence recovery rather than new nested writer flags.
 
 ### 2026-06-17 - standard_peak_shape_clean_reintegration_stable_oracle_v1
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: shape-clean stability was not a named Backfill evidence class;
-  all-stability 299 and broad 4613 remained `production_candidate` /
-  writer-blocked.
+- Previous tier at the time: shape-clean stability was not a named Backfill
+  evidence class; all-stability 299 and broad 4613 were still unresolved /
+  writer-blocked under the pre-park framing.
 - New tier: `production_candidate` evidence class only. No public writer flag,
   no matrix write, no workbook/schema/GUI/default extraction behavior change.
 - Evidence: `standard_peak_heldout_trace_oracle.py` now supports
@@ -2043,9 +2050,9 @@ at that older checkpoint, not the latest release claim.
   prove a missing-cell writer effect. To promote it, route it through generated
   policy as explanation-only evidence or build a missing-cell candidate scope
   with nonzero expected-diff and the same oracle/expected-diff acceptance.
-- Next checkpoint: do not add a shape-clean public writer flag. If continuing
-  Backfill broadening, use this oracle as candidate evidence in the generated
-  policy engine or test a missing-cell scope that can write new matrix cells.
+- Next checkpoint: do not add a shape-clean public writer flag. The broadening
+  clause is superseded; shape-clean evidence can remain explanatory candidate
+  context only unless a future authority/truth/expected-diff goal reopens it.
 
 ### 2026-06-17 - standard_peak_generated_backfill_policy_path_v1
 
@@ -2100,9 +2107,74 @@ at that older checkpoint, not the latest release claim.
   evidence classes. It does not make apex-delta, width-only, shape-margin,
   all-stability, or broad 4613 rows production-ready without their own oracle
   and expected-diff approval.
-- Next checkpoint: add the next evidence class to the generated policy engine
-  only after a focused oracle/expected-diff gate proves it; do not add another
-  manual/nested scoped writer path.
+- Next checkpoint: superseded for broad Backfill. Future evidence classes may be
+  considered only under a new independent truth-source / expected-diff goal;
+  this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - productization_authority_mechanical_adjudication_v1
+
+- Lane: Backfill product-authority control plane /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad Backfill auto-write was `parked`; generated policy replay
+  remained `production_ready` only for 511 current `write_ready` cells.
+- New tier: unchanged for writer authority. The authority/adjudication control
+  asset is `production_candidate`: it classifies the current 4613-row
+  candidate/audit universe without adding ProductWriter authority.
+- Evidence:
+  `docs/superpowers/specs/productization_authority_manifest.v1.json` freezes
+  current product authority at `backfill_policy_write_ready_rows` / 511 cells
+  and marks broad Backfill, quality explanations, quality blockers, and known
+  negative-evidence scopes as non-authority. `docs/superpowers/specs/mechanical_adjudication_schema.v1.json`
+  defines fail-closed row decisions. `docs/superpowers/validation/mechanical_adjudication_index_v1.tsv`
+  classifies all 4613 rows as 511 `write_ready`, 3015 requiring independent
+  peak-choice/area truth, and 1087 requiring trace/overlay or reintegration
+  evidence.
+- Product surface changed: docs/spec/validation/test only. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, or GUI behavior changed.
+- Validation: focused contract shard passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_authority_mechanical_adjudication.py -v --tb=short`
+  (`5 passed`), focused ruff passed for the new test file, full ruff passed,
+  mypy passed, diagnostics index passed, `git diff --check` passed with only
+  LF/CRLF warnings, and full pytest passed (`3785 passed, 1 skipped`).
+  Subagent review found stale broad-Backfill wording; current-summary and
+  historical-log entries were fixed so broad auto-write is `parked` and future
+  work routes through authority/adjudication, structured review, truth, or trace
+  evidence.
+- Remaining blocker: none for the authority/adjudication contract itself. This
+  contract does not implement review packets, truth lockbox labels, or trace
+  overlay recovery.
+- Next checkpoint: run review/validation, then build structured review packets
+  or peak-choice truth/lockbox assets. Do not convert the 3015 or 1087 classes
+  into writer pools without a later authority manifest update plus expected-diff
+  gate.
+
+### 2026-06-18 - backfill_broad_autowrite_feasibility_gate_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad Backfill was on implementation hold pending one read-only
+  feasibility gate; current writer authority remained 511 `write_ready` cells.
+- New tier: `parked` for broad Backfill auto-write. Current 511-cell
+  `production_ready` writer authority is unchanged.
+- Evidence:
+  `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
+  revalidated artifact hashes and counts, assessed ISTD reference semantics,
+  compared the 3015 unresolved trace-matched rows against the 511 approved rows,
+  and output exactly `park_broad_backfill`.
+- Product surface changed: docs/control-plane only. No ProductWriter, matrix,
+  workbook, selected area, counted detection, workbook schema, CLI/config, or
+  TSV schema behavior changed.
+- Validation: no-RAW artifact inspection only; no 85RAW rerun because existing
+  artifacts were sufficient to decide the gate. `git diff --check` passed with
+  only LF/CRLF warnings.
+- Remaining blocker: broad Backfill can reopen only with a new independent
+  truth source for peak-choice / family identity. `quality_blockers`,
+  round-trip reintegration, all-stability, apex-delta, width-only, and
+  shape-margin cannot be repackaged as a new broad writer path.
+- Next checkpoint: stop broad Backfill diagnostics. Continue only existing
+  511-cell release hardening or non-broad lanes unless the user approves a new
+  independent truth-source proposal.
 
 ### 2026-06-18 - backfill_autowrite_ground_truth_strategy_reset_v1
 
@@ -2127,10 +2199,9 @@ at that older checkpoint, not the latest release claim.
   in every family.
 - Validation: docs/no-RAW artifact inspection only; no RAW or 85RAW rerun.
   `git diff --check` passed with only LF/CRLF warnings.
-- Remaining blocker: before any broader ProductWriter authority, produce and
-  review one read-only `backfill_ground_truth_gate_v1` packet with four
-  sections: facts, ISTD truth, dirty-profile comparison, and numeric acceptance
-  table.
+- Remaining blocker: superseded by
+  `backfill_broad_autowrite_feasibility_gate_v1`, which outputs
+  `park_broad_backfill`.
 - Next checkpoint: do not derive a writer predicate directly from
   `quality_blockers`; do not train/approve rows from the current round-trip
   reintegration oracle alone; do not include `missing_overlay_path` rows without
@@ -2174,9 +2245,11 @@ at that older checkpoint, not the latest release claim.
 - Previous tier: generated policy replay was `production_ready` for the 511
   current approved-evidence / observed-oracle rows, but the 4102 blocked rows
   were still hard to explain beyond coarse `next_evidence` buckets.
-- New tier: unchanged for writer authority. Generated policy replay remains
-  `production_ready` only for 511 `write_ready` rows; broad 4613-row Backfill
-  remains `production_candidate`. The new sidecar is explanation-only.
+- New tier at the time: unchanged for writer authority. Generated policy replay
+  remained `production_ready` only for 511 `write_ready` rows; broad 4613-row
+  Backfill was still described as `production_candidate`. This broad-scope tier
+  statement is superseded by the 2026-06-18 `park_broad_backfill` decision; the
+  sidecar itself remains explanation-only.
 - Evidence: `standard_peak_backfill_productization.py` now writes
   `standard_peak_backfill_policy_quality_explanations.tsv` beside
   `standard_peak_backfill_policy.tsv` and records its path/SHA/row count in
@@ -2200,11 +2273,12 @@ at that older checkpoint, not the latest release claim.
   passed `31`; focused ruff and mypy passed for the productization module/test;
   the no-RAW real-data replay command exited `0`.
 - Remaining blocker: this sidecar explains blocked rows; it does not make them
-  writable. The next Backfill broadening step still needs a named evidence
-  class with observed/masked/product-writer oracle evidence and expected-diff.
-- Next checkpoint: review the sidecar contract, then use its blocker
-  distribution to choose the next simple evidence class; do not promote rows
-  from `quality_blockers` directly.
+  writable. The old broadening checkpoint is superseded; do not use blocker
+  distribution to choose another writer slice.
+- Next checkpoint: superseded by
+  `backfill_broad_autowrite_feasibility_gate_v1` and
+  `productization_authority_mechanical_adjudication_v1`. Future work should
+  build review/truth/evidence assets, not a new broad Backfill writer.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 
@@ -2232,11 +2306,12 @@ the later low-height writer entry above as the current tier source.
 - Validation: targeted stale-wording grep over the handoff after edit; docs-only
   diff, so no RAW rerun and no matrix/product output validation needed.
 - Remaining blocker: none for this handoff drift. Product blockers remain the
-  same: broad Backfill needs broader oracle/expected-diff approval,
-  ReviewAction mutation needs stable IDs/sidecar/expected-diff approval, and
-  GUI/broader Targeted MS1 rescue remain out of this ready claim.
-- Next checkpoint: if this docs-only refresh is committed, use it as the current
-  handoff baseline before any PR closeout or next Backfill broadening slice.
+  same except broad Backfill is now parked by the later 2026-06-18 feasibility
+  gate; ReviewAction mutation needs stable IDs/sidecar/expected-diff approval,
+  and GUI/broader Targeted MS1 rescue remain out of this ready claim.
+- Next checkpoint: historical. Use the later authority/adjudication handoff as
+  the current baseline; do not treat this entry as a prompt for a Backfill
+  broadening slice.
 
 ### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
 
