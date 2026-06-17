@@ -53,8 +53,9 @@ trust 或沒有載入，本文件和 handoff checklist 仍是人工 closeout gat
 `method_manifest_v1`、`targeted_schema_versioning_v1`、ReviewAction audited
 apply copy、以及 sample metadata injection-order parity 不再佔 active lane。
 Backfill standard-path activation 目前分成多個 release tier：72-row
-high-signal-clean scoped writer、42-row low-scan-clean scoped writer、以及
-57-row low-height-clean scoped writer 都已用 explicit opt-in scope audit
+high-signal-clean scoped writer、42-row low-scan-clean scoped writer、57-row
+low-height-clean scoped writer、以及 69-row low-height-low-scan-clean scoped
+writer 都已用 explicit opt-in scope audit
 filter 寫出 product matrix-only output，且各自的
 `narrow_product_writer_expected_diff_acceptance.json` 通過並標
 `readiness_tier=production_ready`。Low-height promotion 的前提不是降低
@@ -68,6 +69,15 @@ relative error `0.0564106`；再接 explicit
 通過，duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank
 皆為 0。因此 low-height 只可宣稱 explicit 57-row scoped writer ready，不可
 外推到 broad 4613-row 或 default behavior。
+Low-height-low-scan promotion 是低高度與低 scan 的交集，不是 broadening by
+height alone：`standard_low_height_low_scan_clean_trace` 要求
+height <2e6、scan 7-9，且 shape/local-global/width/apex 都維持 clean。
+既有 85RAW trace no-RAW bounded oracle 有 210 eligible rows / 51 families，
+selected 20/20 pass，最大 boundary error `4.80376e-05 min`、最大 area
+relative error `0.00881912`；再接
+`--low-height-low-scan-clean-activation-scope-audit-tsv` writer，69/69
+expected-diff 通過且 duplicate/missing/unexpected/non-eligible/non-written/
+unchanged/blank 皆為 0。因此只能宣稱 explicit 69-row scoped writer ready。
 擦邊的 apex-delta clean 也只到 `production_candidate`：heldout trace oracle
 有 78 candidates / 27 families，selected 20 cases 只有 17/20 pass，最大
 boundary error `2.19621 min`，所以也不得新增 apex-delta writer。
@@ -113,7 +123,7 @@ main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, and 57-row low-height narrow writer ready slices done; apex-delta, width-only, and shape-margin probes are candidate only | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if apex-delta/width-only/shape-margin is promoted without resolving heldout oracle failures, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, and 69-row low-height-low-scan narrow writer ready slices done; apex-delta, width-only, and shape-margin probes are candidate only | maintain the explicit scoped activation writer contracts while actively broadening toward the full evidence-sufficient standard-path scope with broader masked/product-writer oracle evidence | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if apex-delta/width-only/shape-margin is promoted without resolving heldout oracle failures, or if a RAW rerun would not change the broad-scope decision |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim | candidate sidecar and manual boundary area recompute remain blocked until stable IDs, sidecar contract, and expected-diff gate exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -173,7 +183,7 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, and explicit 57-row low-height-clean scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, and broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say 72-row, 42-row, and 57-row scoped writers are current safe demonstrators, apex-delta/width-only/shape-margin are only candidate probes, and none of these are the product ceiling; next broadening step needs another named evidence class with masked/product-writer observed oracle and expected-diff approval | none for the three scoped writers; apex-delta/width-only/shape-margin need narrower rules or passing oracles before writer work; broad 4613 still needs additional evidence class/oracle coverage |
+| Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, and explicit 69-row low-height-low-scan-clean scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, and broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say 72-row, 42-row, 57-row, and 69-row scoped writers are current safe demonstrators, apex-delta/width-only/shape-margin are only candidate probes, and none of these are the product ceiling; next broadening step needs another named evidence class with masked/product-writer observed oracle and expected-diff approval | none for the four scoped writers; apex-delta/width-only/shape-margin need narrower rules or passing oracles before writer work; broad 4613 still needs additional evidence class/oracle coverage |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
 
 Backfill row update, 2026-06-17: the low-height evidence is no longer only the
@@ -186,6 +196,19 @@ That evidence has now been connected to an explicit low-height writer flag:
 passes 57/57 with `readiness_tier=production_ready`. This authorizes only the
 explicit 57-row low-height scoped writer, not broad 4613-row activation or
 default extraction behavior.
+
+Backfill row update, 2026-06-17: the low-height-low-scan intersection is now a
+separate explicit scoped writer. This class requires height <2e6, scan count
+7-9, and otherwise clean shape/local-global/width/apex evidence. The formal
+no-RAW 85RAW bounded heldout oracle
+`heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json`
+passes selected 20/20 from 210 eligible rows / 51 families, with max boundary
+error `4.80376e-05 min` and max area relative error `0.00881912`. The explicit
+writer run
+`narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json`
+passes 69/69 with `readiness_tier=production_ready`. This authorizes only the
+explicit 69-row low-height-low-scan scoped writer, not broad 4613-row activation
+or default extraction behavior.
 
 ## WIP limits
 
@@ -1411,6 +1434,47 @@ default extraction behavior.
   expected-diff approval before it can claim `production_ready`.
 - Next checkpoint: request subagent review of this writer promotion, then run
   the combined Backfill focused shard and PR gate before commit.
+
+### 2026-06-17 - standard_peak_low_height_low_scan_scoped_writer_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: low-height-low-scan clean was not a named product slice; broad
+  4613-row standard-path activation remained `production_candidate`.
+- New tier: `production_ready` for the explicit 69-row
+  low-height-low-scan-clean scoped writer only. Broad 4613-row activation
+  remains `production_candidate`; apex-delta, width-only, and shape-margin
+  remain candidate-only probes.
+- Evidence: `standard_peak_heldout_trace_oracle.py` now supports
+  `standard_low_height_low_scan_clean_trace`, which requires height <2e6,
+  scan count 7-9, shape >=0.95, local/global >=0.95, width 0.30-0.65 min, and
+  apex delta <=0.15 min. The formal no-RAW 85RAW bounded oracle under
+  `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/` found
+  210 eligible rows / 51 families, selected 20 family cases, and passed 20/20
+  with max boundary error `4.80376e-05 min` and max area relative error
+  `0.00881912`. `standard_peak_activation_scope_audit.py` now emits
+  `low_height_low_scan_clean_status` and found 69 eligible writes in the
+  consolidated 4613-row bridge. `standard_peak_backfill_productization.py` now
+  accepts `--low-height-low-scan-clean-activation-scope-audit-tsv`, and the
+  real no-RAW writer run under
+  `narrow_low_height_low_scan_clean_no_raw_productization/` passed 69/69 with
+  `readiness_tier=production_ready`, `product_surface_changed=TRUE`, and
+  duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank all
+  `0`.
+- Product surface changed: additive heldout oracle target class, additive audit
+  TSV/summary/expected-diff fields and sidecars, additive explicit CLI flag,
+  and additive scoped writer behavior. No default extraction behavior,
+  workbook schema, broad Backfill activation, GUI wiring, selected peak/area,
+  or non-standard peak policy changed.
+- Validation: focused Backfill shard
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_heldout_trace_oracle.py tests\test_standard_peak_activation_scope_audit.py tests\test_standard_peak_backfill_productization.py -q`
+  passed `38`; touched ruff for the Backfill package/CLI/tests passed; formal
+  no-RAW oracle/audit/writer commands exited `0`.
+- Remaining blocker: none for the explicit 69-row low-height-low-scan scoped
+  writer. Broad 4613-row activation still needs additional named evidence
+  classes and expected-diff approval before it can claim `production_ready`.
+- Next checkpoint: request subagent review of this writer promotion, then run
+  diagnostics index check and the full PR gate before commit.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 

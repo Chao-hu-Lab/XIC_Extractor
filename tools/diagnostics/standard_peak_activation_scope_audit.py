@@ -54,6 +54,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "Low-height clean diagnostic/candidate-only expected-diff acceptance JSON: "
         f"{outputs.low_height_expected_diff_acceptance_json}",
     )
+    print(
+        "Low-height low-scan clean diagnostic/candidate-only expected-diff "
+        "acceptance JSON: "
+        f"{outputs.low_height_low_scan_expected_diff_acceptance_json}",
+    )
     return 0
 
 

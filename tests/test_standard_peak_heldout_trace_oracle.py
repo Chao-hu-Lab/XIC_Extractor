@@ -475,6 +475,96 @@ def test_shape_margin_target_shape_class_requires_near_threshold_shape() -> None
         )
 
 
+def test_heldout_trace_oracle_cli_writes_low_height_low_scan_packet(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_low_scan_fixture(tmp_path)
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-low-height-low-scan-oracle",
+                "--target-shape-class",
+                "standard_low_height_low_scan_clean_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+                "--expected-window-padding-min",
+                "0.5",
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["target_shape_class"] == (
+        "standard_low_height_low_scan_clean_trace"
+    )
+    assert summary["observed_reintegration_mode"] == "expected_window_bounded"
+    assert summary["available_candidate_rows"] == "1"
+    assert summary["selected_case_count"] == "1"
+    assert summary["oracle_case_status_pass_count"] == "1"
+
+    pool = _read_tsv(output_dir / "heldout_trace_reintegration_full_eligible_pool.tsv")
+    assert pool[0]["selected_for_oracle"] == "TRUE"
+    assert float(pool[0]["cell_height"]) < oracle.MIN_CELL_HEIGHT
+    assert oracle.MIN_LOW_SCAN_COUNT <= int(pool[0]["oracle_scan_count"]) <= (
+        oracle.MAX_LOW_SCAN_COUNT
+    )
+
+
+def test_low_height_low_scan_target_shape_class_requires_both_edges() -> None:
+    clean = {
+        "shape": oracle.MIN_SHAPE_SIMILARITY,
+        "local_global": oracle.MIN_LOCAL_GLOBAL_RATIO,
+        "width": oracle.MIN_BOUNDARY_WIDTH_MIN,
+        "apex_delta": oracle.MAX_APEX_DELTA_ABS_MIN,
+    }
+
+    assert oracle._target_shape_class_matches(
+        oracle.LOW_HEIGHT_LOW_SCAN_CLEAN_SCOPE,
+        height=oracle.MIN_CELL_HEIGHT - 1.0,
+        scan_count=oracle.MIN_LOW_SCAN_COUNT,
+        **clean,
+    )
+    assert oracle._target_shape_class_matches(
+        oracle.LOW_HEIGHT_LOW_SCAN_CLEAN_SCOPE,
+        height=oracle.MIN_CELL_HEIGHT - 1.0,
+        scan_count=oracle.MAX_LOW_SCAN_COUNT,
+        **(clean | {"width": oracle.MAX_BOUNDARY_WIDTH_MIN}),
+    )
+
+    dirty_cases = (
+        {"shape": oracle.MIN_SHAPE_SIMILARITY - 0.0001},
+        {"local_global": oracle.MIN_LOCAL_GLOBAL_RATIO - 0.0001},
+        {"width": oracle.MIN_BOUNDARY_WIDTH_MIN - 0.0001},
+        {"width": oracle.MAX_BOUNDARY_WIDTH_MIN + 0.0001},
+        {"apex_delta": oracle.MAX_APEX_DELTA_ABS_MIN + 0.0001},
+        {"height": oracle.MIN_CELL_HEIGHT},
+        {"scan_count": oracle.MIN_LOW_SCAN_COUNT - 1},
+        {"scan_count": oracle.MAX_LOW_SCAN_COUNT + 1},
+    )
+    for dirty in dirty_cases:
+        candidate = {
+            **clean,
+            "height": oracle.MIN_CELL_HEIGHT - 1.0,
+            "scan_count": oracle.MIN_LOW_SCAN_COUNT,
+            **dirty,
+        }
+        assert not oracle._target_shape_class_matches(
+            oracle.LOW_HEIGHT_LOW_SCAN_CLEAN_SCOPE,
+            **candidate,
+        )
+
+
 def _write_low_scan_fixture(tmp_path: Path) -> tuple[Path, Path]:
     trace_root = tmp_path / "traces"
     trace_root.mkdir()
@@ -523,6 +613,75 @@ def _write_low_scan_fixture(tmp_path: Path) -> tuple[Path, Path]:
         [
             {
                 "feature_family_id": "FAM_LOW_SCAN",
+                "sample_stem": "SampleA",
+                "status": "detected",
+                "production_cell_status": "detected",
+                "write_matrix_value": "TRUE",
+                "include_in_primary_matrix": "TRUE",
+                "primary_matrix_area": f"{integration.area_ms1_morphology:.8f}",
+                "primary_matrix_area_source": (
+                    "gaussian15_positive_asls_residual"
+                ),
+                "peak_start_rt": f"{result.peak.peak_start:.5f}",
+                "peak_end_rt": f"{result.peak.peak_end:.5f}",
+                "reason": (
+                    "source_reason=sample-local MS1 owner with original MS2 "
+                    "evidence"
+                ),
+            },
+        ],
+    )
+    return evidence_tsv, trace_root
+
+
+def _write_low_height_low_scan_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    trace_root = tmp_path / "traces"
+    trace_root.mkdir()
+    rt = np.round(np.arange(0.0, 2.01, 0.05), 4)
+    intensity = 100.0 + 500_000.0 * np.exp(-((rt - 1.0) ** 2) / (2 * 0.08**2))
+    result = find_peak_and_area(rt, intensity, _config())
+    assert result.peak is not None
+    integration = integration_from_peak_trace(
+        result.peak,
+        rt,
+        intensity,
+        boundary_sources=("local_minimum",),
+        integration_method="raw_trapezoid",
+        baseline_integration_method="asls",
+    )
+    assert integration is not None
+    assert integration.area_ms1_morphology is not None
+    trace_json = trace_root / "FAM_LOW_HEIGHT_LOW_SCAN_trace_data.json"
+    trace_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_LOW_HEIGHT_LOW_SCAN",
+                "family_center_rt": 1.0,
+                "traces": [
+                    {
+                        "sample_stem": "SampleA",
+                        "status": "detected",
+                        "cell_area": float(result.peak.area),
+                        "cell_height": float(result.peak.intensity),
+                        "cell_apex_rt": float(result.peak.rt),
+                        "cell_start_rt": 0.84995,
+                        "cell_end_rt": 1.15005,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "apex_aligned_shape_similarity": 0.99,
+                        "rt": [float(value) for value in rt],
+                        "intensity": [float(value) for value in intensity],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    evidence_tsv = tmp_path / "alignment_backfill_cell_evidence.tsv"
+    _write_tsv(
+        evidence_tsv,
+        [
+            {
+                "feature_family_id": "FAM_LOW_HEIGHT_LOW_SCAN",
                 "sample_stem": "SampleA",
                 "status": "detected",
                 "production_cell_status": "detected",

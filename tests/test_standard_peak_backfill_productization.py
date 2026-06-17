@@ -448,11 +448,120 @@ def test_standard_peak_productization_can_limit_writer_to_low_height_clean_scope
     assert acceptance["not_written_delta_row_count"] == "0"
 
 
+def test_standard_peak_productization_can_limit_writer_to_low_height_low_scan_scope(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    _write_tsv(
+        fixture["shadow"],
+        [
+            _shadow_row(
+                "FAM_STD",
+                "S2",
+                "100",
+                standard=True,
+                row_sha="a" * 64,
+            ),
+            _shadow_row(
+                "FAM_NON",
+                "S2",
+                "200",
+                standard=True,
+                row_sha="c" * 64,
+            ),
+        ],
+        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    )
+    scope_audit = tmp_path / "activation_low_height_low_scan_clean_scope_audit.tsv"
+    _write_tsv(
+        scope_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "a" * 64,
+                "ineligible",
+                low_height_low_scan_clean_status="eligible",
+            ),
+            _scope_audit_row(
+                "FAM_NON",
+                "S2",
+                "c" * 64,
+                "ineligible",
+                low_height_low_scan_clean_status="ineligible",
+            ),
+        ],
+        (
+            *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
+            "low_scan_clean_status",
+            "low_height_clean_status",
+            "low_height_low_scan_clean_status",
+        ),
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-narrow-low-height-low-scan-clean-productization",
+                "--low-height-low-scan-clean-activation-scope-audit-tsv",
+                str(scope_audit),
+            ],
+        )
+        == 0
+    )
+
+    summary = json.loads(
+        (
+            output_dir / "standard_peak_backfill_productization_summary.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert summary["status"] == "pass"
+    assert summary["activation_scope_filter_status"] == "applied"
+    assert summary["activation_scope_contract"] == (
+        "low_height_low_scan_clean_eligible_activation_rows"
+    )
+    assert summary["activation_scope_filter_selected_shadow_row_count"] == "1"
+    assert summary["matrix_cells_written"] == "1"
+    assert summary["narrow_product_writer_expected_diff_acceptance_status"] == "pass"
+    assert summary["next_action"] == (
+        "narrow_low_height_low_scan_clean_backfill_production_ready"
+    )
+
+    acceptance = json.loads(
+        (
+            output_dir / "narrow_product_writer_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8"),
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["readiness_tier"] == "production_ready"
+    assert acceptance["expected_scope"] == (
+        "low_height_low_scan_clean_eligible_activation_rows"
+    )
+    assert acceptance["product_surface_changed"] == "TRUE"
+    assert acceptance["product_written_delta_row_count"] == "1"
+    assert acceptance["unexpected_delta_row_count"] == "0"
+    assert acceptance["non_eligible_delta_row_count"] == "0"
+    assert acceptance["not_written_delta_row_count"] == "0"
+
+
 @pytest.mark.parametrize(
     "second_scope_flag",
     (
         "--low-scan-clean-activation-scope-audit-tsv",
         "--low-height-clean-activation-scope-audit-tsv",
+        "--low-height-low-scan-clean-activation-scope-audit-tsv",
     ),
 )
 def test_standard_peak_productization_rejects_multiple_activation_scope_audits(
@@ -469,6 +578,7 @@ def test_standard_peak_productization_rejects_multiple_activation_scope_audits(
             *productization_module.ACTIVATION_SCOPE_AUDIT_REQUIRED_COLUMNS,
             "low_scan_clean_status",
             "low_height_clean_status",
+            "low_height_low_scan_clean_status",
         ),
     )
 
@@ -1154,6 +1264,7 @@ def _scope_audit_row(
     *,
     low_scan_clean_status: str = "missing_evidence",
     low_height_clean_status: str | None = None,
+    low_height_low_scan_clean_status: str | None = None,
 ) -> dict[str, str]:
     row = {
         "schema_version": "standard_peak_activation_scope_audit_v1",
@@ -1167,6 +1278,8 @@ def _scope_audit_row(
     }
     if low_height_clean_status is not None:
         row["low_height_clean_status"] = low_height_clean_status
+    if low_height_low_scan_clean_status is not None:
+        row["low_height_low_scan_clean_status"] = low_height_low_scan_clean_status
     return row
 
 

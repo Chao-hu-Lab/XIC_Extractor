@@ -183,6 +183,7 @@ def run_standard_peak_backfill_productization(
     high_signal_clean_activation_scope_audit_tsv: Path | None = None,
     low_scan_clean_activation_scope_audit_tsv: Path | None = None,
     low_height_clean_activation_scope_audit_tsv: Path | None = None,
+    low_height_low_scan_clean_activation_scope_audit_tsv: Path | None = None,
 ) -> StandardPeakBackfillProductizationOutputs:
     """Apply standard-peak projection accepts and optionally render synced gallery."""
 
@@ -209,6 +210,9 @@ def run_standard_peak_backfill_productization(
         ),
         low_height_clean_activation_scope_audit_tsv=(
             low_height_clean_activation_scope_audit_tsv
+        ),
+        low_height_low_scan_clean_activation_scope_audit_tsv=(
+            low_height_low_scan_clean_activation_scope_audit_tsv
         ),
     )
     (
@@ -569,6 +573,7 @@ def _activation_scope_request(
     high_signal_clean_activation_scope_audit_tsv: Path | None,
     low_scan_clean_activation_scope_audit_tsv: Path | None,
     low_height_clean_activation_scope_audit_tsv: Path | None,
+    low_height_low_scan_clean_activation_scope_audit_tsv: Path | None,
 ) -> _ActivationScopeRequest:
     requested = tuple(
         path
@@ -576,6 +581,7 @@ def _activation_scope_request(
             high_signal_clean_activation_scope_audit_tsv,
             low_scan_clean_activation_scope_audit_tsv,
             low_height_clean_activation_scope_audit_tsv,
+            low_height_low_scan_clean_activation_scope_audit_tsv,
         )
         if path is not None
     )
@@ -609,6 +615,17 @@ def _activation_scope_request(
             label="low-height-clean",
             no_rows_blocker="no_low_height_clean_eligible_audit_rows",
             ready_next_action="narrow_low_height_clean_backfill_production_ready",
+        )
+    if low_height_low_scan_clean_activation_scope_audit_tsv is not None:
+        return _ActivationScopeRequest(
+            audit_tsv=low_height_low_scan_clean_activation_scope_audit_tsv,
+            contract="low_height_low_scan_clean_eligible_activation_rows",
+            status_column="low_height_low_scan_clean_status",
+            label="low-height-low-scan-clean",
+            no_rows_blocker="no_low_height_low_scan_clean_eligible_audit_rows",
+            ready_next_action=(
+                "narrow_low_height_low_scan_clean_backfill_production_ready"
+            ),
         )
     return _ActivationScopeRequest(
         audit_tsv=None,

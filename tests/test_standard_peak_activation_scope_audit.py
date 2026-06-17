@@ -88,6 +88,7 @@ def test_activation_scope_audit_classifies_high_signal_clean_rows(
     assert by_family["FAM_A"]["high_signal_clean_status"] == "eligible"
     assert by_family["FAM_A"]["low_scan_clean_status"] == "ineligible"
     assert by_family["FAM_A"]["low_height_clean_status"] == "ineligible"
+    assert by_family["FAM_A"]["low_height_low_scan_clean_status"] == "ineligible"
     assert by_family["FAM_A"]["integration_scan_count"] == "11"
     assert by_family["FAM_A"]["high_signal_clean_blockers"] == ""
     assert by_family["FAM_B"]["high_signal_clean_status"] == "ineligible"
@@ -95,6 +96,11 @@ def test_activation_scope_audit_classifies_high_signal_clean_rows(
     assert "height_lt_2000000" in by_family["FAM_B"]["low_scan_clean_blockers"]
     assert by_family["FAM_B"]["low_height_clean_status"] == "eligible"
     assert by_family["FAM_B"]["low_height_clean_blockers"] == ""
+    assert by_family["FAM_B"]["low_height_low_scan_clean_status"] == "ineligible"
+    assert (
+        by_family["FAM_B"]["low_height_low_scan_clean_blockers"]
+        == "scan_count_gt_9"
+    )
     assert by_family["FAM_C"]["trace_match_status"] == "missing_overlay_path"
     assert by_family["FAM_C"]["high_signal_clean_status"] == "missing_evidence"
     assert by_family["FAM_D"]["projection_match_status"] == "missing_projection_row"
@@ -105,6 +111,7 @@ def test_activation_scope_audit_classifies_high_signal_clean_rows(
     assert summary["high_signal_clean_eligible_written_count"] == "1"
     assert summary["low_scan_clean_eligible_written_count"] == "0"
     assert summary["low_height_clean_eligible_written_count"] == "1"
+    assert summary["low_height_low_scan_clean_eligible_written_count"] == "0"
     assert summary["high_signal_clean_missing_evidence_written_count"] == "2"
     assert summary["broad_activation_scope_status"] == "not_ready"
 
@@ -308,6 +315,176 @@ def test_activation_scope_audit_classifies_low_height_clean_rows(
     assert summary["low_height_clean_eligible_written_count"] == "1"
     assert summary["low_height_clean_activation_scope_status"] == (
         "candidate_only_pending_low_height_heldout_oracle"
+    )
+
+
+def test_activation_scope_audit_classifies_low_height_low_scan_clean_rows(
+    tmp_path: Path,
+) -> None:
+    overlay = tmp_path / "low_height_low_scan_overlay.png"
+    _write_trace_json(
+        overlay.with_name(f"{overlay.stem}_trace_data.json"),
+        sample_stem="LowHeightLowScanSample",
+        family_center_rt=5.0,
+        cell_height=500_000.0,
+        cell_start_rt=4.85,
+        cell_end_rt=5.15,
+        cell_apex_rt=5.03,
+        shape_similarity=0.97,
+        local_global_ratio=0.99,
+        rt_values=[
+            4.85,
+            4.90,
+            4.95,
+            5.00,
+            5.05,
+            5.10,
+            5.15,
+        ],
+    )
+
+    rows, summary = audit_activation_scope(
+        activation_value_delta_rows=[
+            _delta_row(
+                "FAM_LOW_HEIGHT_LOW_SCAN",
+                "LowHeightLowScanSample",
+                "low-height-low-scan-sha",
+            ),
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                "FAM_LOW_HEIGHT_LOW_SCAN",
+                "LowHeightLowScanSample",
+                "low-height-low-scan-sha",
+                str(overlay),
+            ),
+        ],
+        activation_value_delta_tsv=tmp_path / "activation_value_delta.tsv",
+        shadow_projection_cells_tsv=tmp_path / "shadow_projection_cells.tsv",
+        source_run_id="unit",
+    )
+
+    assert rows[0]["high_signal_clean_status"] == "ineligible"
+    assert rows[0]["low_scan_clean_status"] == "ineligible"
+    assert rows[0]["low_height_clean_status"] == "ineligible"
+    assert rows[0]["low_height_low_scan_clean_status"] == "eligible"
+    assert rows[0]["low_height_low_scan_clean_blockers"] == ""
+    assert summary["low_height_low_scan_clean_eligible_written_count"] == "1"
+    assert summary["low_height_low_scan_clean_activation_scope_status"] == (
+        "candidate_only_pending_low_height_low_scan_heldout_oracle"
+    )
+
+
+def test_activation_scope_audit_reports_low_height_low_scan_blockers(
+    tmp_path: Path,
+) -> None:
+    overlay = tmp_path / "low_height_low_scan_blockers_overlay.png"
+    cases = [
+        ("BadStatus", {"trace_status": "context"}, "unsupported_trace_status"),
+        ("BadShape", {"shape_similarity": 0.94}, "shape_lt_0.95"),
+        ("BadLocal", {"local_global_ratio": 0.94}, "local_global_ratio_lt_0.95"),
+        ("BadHeight", {"cell_height": 2_000_000.0}, "height_gte_2000000"),
+        (
+            "BadWidth",
+            {"cell_start_rt": 4.70, "cell_end_rt": 5.40},
+            "width_outside_0.30_0.65",
+        ),
+        ("BadApex", {"cell_apex_rt": 5.20}, "apex_delta_gt_0.15"),
+        (
+            "TooFewScans",
+            {"rt_values": [4.85, 4.90, 4.95, 5.00, 5.05, 5.10]},
+            "scan_count_lt_7",
+        ),
+        (
+            "TooManyScans",
+            {
+                "rt_values": [
+                    4.85,
+                    4.88,
+                    4.91,
+                    4.94,
+                    4.97,
+                    5.00,
+                    5.03,
+                    5.06,
+                    5.09,
+                    5.12,
+                ]
+            },
+            "scan_count_gt_9",
+        ),
+    ]
+    trace_rows = []
+    for sample_stem, overrides, _expected_blocker in cases:
+        defaults = {
+            "trace_status": "rescued",
+            "cell_height": 500_000.0,
+            "cell_start_rt": 4.85,
+            "cell_end_rt": 5.15,
+            "cell_apex_rt": 5.03,
+            "shape_similarity": 0.97,
+            "local_global_ratio": 0.99,
+            "rt_values": [4.85, 4.90, 4.95, 5.00, 5.05, 5.10, 5.15],
+        }
+        defaults.update(overrides)
+        trace_rows.append(
+            _trace_json_row(
+                sample_stem=sample_stem,
+                trace_status=defaults["trace_status"],
+                cell_height=defaults["cell_height"],
+                cell_start_rt=defaults["cell_start_rt"],
+                cell_end_rt=defaults["cell_end_rt"],
+                cell_apex_rt=defaults["cell_apex_rt"],
+                shape_similarity=defaults["shape_similarity"],
+                local_global_ratio=defaults["local_global_ratio"],
+                rt_values=defaults["rt_values"],
+            )
+        )
+    _write_trace_json(
+        overlay.with_name(f"{overlay.stem}_trace_data.json"),
+        sample_stem="ignored",
+        family_center_rt=5.0,
+        cell_height=500_000.0,
+        cell_start_rt=4.85,
+        cell_end_rt=5.15,
+        cell_apex_rt=5.03,
+        shape_similarity=0.97,
+        local_global_ratio=0.99,
+        rt_values=[4.85, 4.90, 4.95, 5.00, 5.05, 5.10, 5.15],
+        trace_rows=trace_rows,
+    )
+
+    rows, summary = audit_activation_scope(
+        activation_value_delta_rows=[
+            _delta_row(
+                f"FAM_{sample_stem.upper()}",
+                sample_stem,
+                f"{sample_stem}-sha",
+            )
+            for sample_stem, _overrides, _expected_blocker in cases
+        ],
+        shadow_projection_rows=[
+            _projection_row(
+                f"FAM_{sample_stem.upper()}",
+                sample_stem,
+                f"{sample_stem}-sha",
+                str(overlay),
+            )
+            for sample_stem, _overrides, _expected_blocker in cases
+        ],
+        activation_value_delta_tsv=tmp_path / "activation_value_delta.tsv",
+        shadow_projection_cells_tsv=tmp_path / "shadow_projection_cells.tsv",
+        source_run_id="unit",
+    )
+
+    by_sample = {row["sample_id"]: row for row in rows}
+    for sample_stem, _overrides, expected_blocker in cases:
+        row = by_sample[sample_stem]
+        assert row["low_height_low_scan_clean_status"] == "ineligible"
+        assert row["low_height_low_scan_clean_blockers"] == expected_blocker
+    assert summary["low_height_low_scan_clean_eligible_written_count"] == "0"
+    assert summary["low_height_low_scan_clean_ineligible_written_count"] == str(
+        len(cases)
     )
 
 
@@ -600,6 +777,110 @@ def test_activation_scope_audit_cli_writes_low_height_expected_diff(
     assert low_height_delta[0]["feature_family_id"] == "FAM_LOW_HEIGHT"
 
 
+def test_activation_scope_audit_cli_writes_low_height_low_scan_expected_diff(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    from tools.diagnostics import standard_peak_activation_scope_audit as cli
+
+    overlay = tmp_path / "low_height_low_scan_overlay.png"
+    _write_trace_json(
+        overlay.with_name(f"{overlay.stem}_trace_data.json"),
+        sample_stem="LowHeightLowScanSample",
+        family_center_rt=5.0,
+        cell_height=500_000.0,
+        cell_start_rt=4.85,
+        cell_end_rt=5.15,
+        cell_apex_rt=5.03,
+        shape_similarity=0.97,
+        local_global_ratio=0.99,
+        rt_values=[
+            4.85,
+            4.90,
+            4.95,
+            5.00,
+            5.05,
+            5.10,
+            5.15,
+        ],
+    )
+    delta_tsv = tmp_path / "activation_value_delta.tsv"
+    shadow_tsv = tmp_path / "shadow_projection_cells.tsv"
+    output_dir = tmp_path / "audit"
+    write_tsv(
+        delta_tsv,
+        [
+            _delta_row(
+                "FAM_LOW_HEIGHT_LOW_SCAN",
+                "LowHeightLowScanSample",
+                "low-height-low-scan-sha",
+            )
+        ],
+        _DELTA_COLUMNS,
+        lineterminator="\n",
+    )
+    write_tsv(
+        shadow_tsv,
+        [
+            _projection_row(
+                "FAM_LOW_HEIGHT_LOW_SCAN",
+                "LowHeightLowScanSample",
+                "low-height-low-scan-sha",
+                str(overlay),
+            ),
+        ],
+        _SHADOW_COLUMNS,
+        lineterminator="\n",
+    )
+
+    assert cli.main(
+        [
+            "--activation-value-delta-tsv",
+            str(delta_tsv),
+            "--shadow-projection-cells-tsv",
+            str(shadow_tsv),
+            "--output-dir",
+            str(output_dir),
+            "--source-run-id",
+            "unit-low-height-low-scan-cli",
+        ],
+    ) == 0
+    out = capsys.readouterr().out
+    assert "Low-height low-scan clean diagnostic/candidate-only" in out
+
+    summary = json.loads(
+        (output_dir / "activation_high_signal_clean_scope_summary.json").read_text(
+            encoding="utf-8",
+        )
+    )
+    acceptance = json.loads(
+        (
+            output_dir
+            / "low_height_low_scan_clean_activation_expected_diff_acceptance.json"
+        ).read_text(encoding="utf-8")
+    )
+    low_height_low_scan_delta = read_tsv_required(
+        output_dir / "low_height_low_scan_clean_activation_value_delta.tsv",
+        _DELTA_COLUMNS,
+    )
+    assert summary["low_height_low_scan_clean_eligible_written_count"] == "1"
+    assert summary["low_height_low_scan_clean_activation_scope_status"] == (
+        "candidate_only_pending_low_height_low_scan_heldout_oracle"
+    )
+    assert acceptance["acceptance_status"] == "pass"
+    assert acceptance["expected_scope"] == (
+        "low_height_low_scan_clean_eligible_activation_rows"
+    )
+    assert acceptance["product_surface_changed"] == "FALSE"
+    assert acceptance["next_action"] == (
+        "product_decision_required_before_writing_low_height_low_scan_clean_activation_output"
+    )
+    assert len(low_height_low_scan_delta) == 1
+    assert low_height_low_scan_delta[0]["feature_family_id"] == (
+        "FAM_LOW_HEIGHT_LOW_SCAN"
+    )
+
+
 _DELTA_COLUMNS = (
     "activation_value_delta_schema_version",
     "feature_family_id",
@@ -721,6 +1002,8 @@ def _audit_row(
         "low_scan_clean_blockers": "not_tested",
         "low_height_clean_status": "missing_evidence",
         "low_height_clean_blockers": "not_tested",
+        "low_height_low_scan_clean_status": "missing_evidence",
+        "low_height_low_scan_clean_blockers": "not_tested",
     }
 
 

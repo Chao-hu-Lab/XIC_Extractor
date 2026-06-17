@@ -7,7 +7,7 @@
 ## 2026-06-17 白話結論
 
 目前這個分支的非 GUI productization goal 有兩條主線已經能講清楚：
-Backfill 有三個 explicit scoped writer 到 `production_ready`，Targeted MS1
+Backfill 有四個 explicit scoped writer 到 `production_ready`，Targeted MS1
 limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
 probes 仍是 `production_candidate` / blocked-ready。
 
@@ -19,7 +19,10 @@ oracle 新增 `expected_window_bounded` 觀察模式，用既有 85RAW trace 做
 replay；再把通過的 bounded oracle 證據接到 explicit low-height scoped writer。
 這輪沒有改 broad/default behavior、workbook schema、extraction default 或 RAW
 artifact。low-height 現在是 `production_ready` only for the explicit 57-row
-scoped writer。Targeted MS1 headless no-flag limited default 現在是
+scoped writer。再下一步已把 low-height + low-scan 的交集也接成 explicit
+69-row scoped writer：它只限 height <2e6、scan 7-9，且 shape/local/width/apex
+都乾淨；bounded heldout oracle 20/20 pass，writer expected-diff 69/69 pass。
+Targeted MS1 headless no-flag limited default 現在是
 `production_ready` for
 `5-hmdC + 5-medC` / `detected_flagged`。仍 blocked 的是 GUI、broader target
 rescue、Backfill broad 4613-row 全量寫入、以及 ReviewAction
@@ -27,7 +30,7 @@ selected-candidate/manual-boundary 產品寫回。
 
 第一個是 Backfill。`4613 rows` 不是什麼神秘 board 名字；它只是代表目前
 broad standard-path bridge 如果全開，會寫進 matrix 的 4613 個候選格子。
-現在我們仍不能說這 4613 格全部 ready，但這輪已把第三個安全切片推上去了。
+現在我們仍不能說這 4613 格全部 ready，但這輪已把第四個安全切片推上去了。
 原本的 72 格 high-signal clean 仍是 `production_ready`；這輪新增的
 low-scan clean 是「其他證據都乾淨，只是邊界內 scan count 只有 7-9」。
 新的 no-RAW heldout oracle 從既有 85RAW trace 找到 56 個候選、11 個 family
@@ -35,9 +38,14 @@ low-scan clean 是「其他證據都乾淨，只是邊界內 scan count 只有 7
 格裡找到 42 格符合 low-scan clean，expected-diff 42/42 乾淨，opt-in writer
 也只寫這 42 格並得到 `readiness_tier=production_ready`。接著 low-height
 clean 也接到 explicit opt-in writer：它只寫 57 格，writer expected-diff 57/57
-通過，`readiness_tier=production_ready`。所以現在 Backfill 有三個 explicit
+通過，`readiness_tier=production_ready`。接著 low-height + low-scan clean
+也接到 explicit opt-in writer：這是低高度與低 scan 的交集，只寫 69 格；
+bounded heldout oracle 有 210 個 eligible detected cases / 51 families，選
+20 family cases 時 20/20 pass，最大 boundary error `4.80376e-05 min`、
+最大 area relative error `0.00881912`；writer expected-diff 69/69 乾淨，
+`readiness_tier=production_ready`。所以現在 Backfill 有四個 explicit
 scoped ready slices：72 格 high-signal clean + 42 格 low-scan clean + 57 格
-low-height clean。你的產品方向也已落地成工作規則：這三個只是示範/放行
+low-height clean + 69 格 low-height-low-scan clean。你的產品方向也已落地成工作規則：這些只是示範/放行
 slice，不是天花板；北極星仍是「只要證據足夠就補」，下一步要繼續用 named
 evidence class + heldout oracle + expected-diff，把 broad 4613 類似格子逐步
 推上去。
@@ -57,6 +65,15 @@ window 附近重積分，`padding=0.5 min` 時 20/20 通過，最大 boundary er
 的 evidence gate。這也不代表所有低高度、所有 4613 格或所有非標準 peak
 都可以寫；只代表這個已命名且有 oracle/expected-diff 的 57-row low-height
 slice 可以正式當 explicit scoped product behavior。
+
+low-height + low-scan clean 問的是：「如果一格同時低高度、scan count 只有
+7-9，但 shape、local/global、boundary width、apex delta 都乾淨，能不能補？」
+現在答案也是：可以，但只限 explicit 69-row scoped writer。這條沒有重跑 RAW，
+只重用既有 85RAW trace artifact 做 `expected_window_bounded` no-RAW oracle；
+activation scope audit 在 4613 格中找到 69 格，product writer 只吃
+`low_height_low_scan_clean_status=eligible`，duplicate/missing/unexpected/
+non-eligible/non-written/unchanged/blank 全是 0。這不是把「所有低 scan」或
+「所有低高度」放大，而是把兩個已證明方向的交集正式化。
 
 Subagent reviewer `Tesla` 已驗收這個 bounded-oracle diff，沒有 P1/P2 blocker，
 也沒有發現 product overclaim。它提出兩個 P3：handoff 舊句子會讓人以為
