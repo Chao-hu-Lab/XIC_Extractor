@@ -882,6 +882,7 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
                 low_height_clean_status="ineligible",
                 low_height_low_scan_clean_status="ineligible",
                 cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
                 trace_match_status="matched",
             ),
             _scope_audit_row(
@@ -961,6 +962,10 @@ def test_standard_peak_productization_generates_broad_policy_and_writes_ready_ro
     )
     assert policy_by_family["FAM_FLAG"]["backfill_policy_next_evidence"] == (
         "masked_or_product_writer_oracle_required"
+    )
+    assert (
+        policy_by_family["FAM_FLAG"]["backfill_policy_candidate_evidence_class"]
+        == "shape_clean_reintegration_stable,reintegration_stable"
     )
     assert policy_by_family["FAM_FLAG"]["backfill_policy_blockers"] == (
         "missing_writer_approved_oracle"
@@ -1096,6 +1101,200 @@ def test_generated_backfill_policy_blocks_trace_mismatch_clean_status(
         "missing_trace_evidence;"
         "trace_match_status:not_matched;"
         "approved_evidence_classes_require_matched_trace"
+    )
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_shape_clean_requires_trace_match(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "eligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="not_matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", "b" * 64, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-shape-clean-trace-guard",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+
+    policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
+    assert policy_rows[0]["backfill_policy_decision"] == "detected_flagged"
+    assert policy_rows[0]["backfill_policy_evidence_class"] == ""
+    assert policy_rows[0]["ready_evidence_classes"] == ""
+    assert policy_rows[0]["backfill_policy_candidate_evidence_class"] == (
+        "high_signal_clean,reintegration_stable"
+    )
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_shape_clean_requires_similarity_threshold(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.94",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", "b" * 64, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-shape-clean-threshold",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+
+    policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
+    assert policy_rows[0]["backfill_policy_decision"] == "detected_flagged"
+    assert policy_rows[0]["backfill_policy_candidate_evidence_class"] == (
+        "reintegration_stable"
+    )
+    assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
+
+
+def test_generated_backfill_policy_keeps_shape_clean_stability_review_only(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_fixture(tmp_path)
+    source_audit = tmp_path / "broad_activation_scope_audit.tsv"
+    _write_tsv(
+        source_audit,
+        [
+            _scope_audit_row(
+                "FAM_STD",
+                "S2",
+                "b" * 64,
+                "ineligible",
+                low_scan_clean_status="ineligible",
+                low_height_clean_status="ineligible",
+                low_height_low_scan_clean_status="ineligible",
+                cell_height="3000000",
+                apex_aligned_shape_similarity="0.96",
+                trace_match_status="matched",
+            ),
+        ],
+        productization_module.BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS,
+    )
+    stability_audit = tmp_path / "reintegration_stability_audit.tsv"
+    _write_tsv(
+        stability_audit,
+        [_stability_audit_row("FAM_STD", "S2", "b" * 64, "eligible")],
+        productization_module.REINTEGRATION_STABILITY_AUDIT_REQUIRED_COLUMNS,
+    )
+    output_dir = tmp_path / "out"
+
+    assert (
+        cli.main(
+            [
+                "--shadow-projection-cells-tsv",
+                str(fixture["shadow"]),
+                "--alignment-matrix-tsv",
+                str(fixture["matrix"]),
+                "--alignment-matrix-identity-tsv",
+                str(fixture["identity"]),
+                "--alignment-review-tsv",
+                str(fixture["review"]),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-generated-policy-shape-clean-review-only",
+                "--backfill-policy-source-audit-tsv",
+                str(source_audit),
+                "--reintegration-stability-audit-tsv",
+                str(stability_audit),
+            ],
+        )
+        == 2
+    )
+
+    policy_rows = _read_tsv(output_dir / "standard_peak_backfill_policy.tsv")
+    assert policy_rows[0]["backfill_policy_decision"] == "detected_flagged"
+    assert policy_rows[0]["backfill_policy_authority_status"] == "review_only"
+    assert policy_rows[0]["backfill_policy_evidence_class"] == ""
+    assert policy_rows[0]["ready_evidence_classes"] == ""
+    assert policy_rows[0]["backfill_policy_candidate_evidence_class"] == (
+        "shape_clean_reintegration_stable,reintegration_stable"
     )
     assert not (output_dir / "activated_matrix" / "alignment_matrix.tsv").exists()
 
@@ -1954,6 +2153,7 @@ def _scope_audit_row(
     low_height_clean_status: str | None = None,
     low_height_low_scan_clean_status: str | None = None,
     cell_height: str | None = None,
+    apex_aligned_shape_similarity: str | None = None,
     trace_match_status: str | None = None,
 ) -> dict[str, str]:
     row = {
@@ -1972,6 +2172,8 @@ def _scope_audit_row(
         row["low_height_low_scan_clean_status"] = low_height_low_scan_clean_status
     if cell_height is not None:
         row["cell_height"] = cell_height
+    if apex_aligned_shape_similarity is not None:
+        row["apex_aligned_shape_similarity"] = apex_aligned_shape_similarity
     if trace_match_status is not None:
         row["trace_match_status"] = trace_match_status
     return row

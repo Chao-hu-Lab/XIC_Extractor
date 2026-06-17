@@ -380,7 +380,13 @@ Implementation closeout, 2026-06-16:
   (`matrix_cells_written=0`, `unchanged_delta_row_count=104`). Therefore no
   shape-clean product writer flag is part of this spec. It may only be reused as
   generated-policy explanation evidence or as input to a future missing-cell
-  product scope with nonzero expected-diff.
+  product scope with nonzero expected-diff. It is now reused in generated policy
+  explanation only: rows that are reintegration stable, have
+  `matrix_value_effect=written`, are trace matched and family matched, and have
+  `apex_aligned_shape_similarity >=0.95` record
+  `shape_clean_reintegration_stable` in
+  `backfill_policy_candidate_evidence_class`, but never in
+  `ready_evidence_classes` or `backfill_policy_evidence_class` by itself.
 - Generated policy path, 2026-06-17:
   `standard_peak_backfill_productization.py` now has a broad policy-engine
   entry point, `--backfill-policy-source-audit-tsv`. It generates
@@ -392,7 +398,7 @@ Implementation closeout, 2026-06-16:
   mandatory decision-basis and next-evidence fields. This is now
   `production_ready` for replaying the current approved evidence classes: the
   real no-RAW 85RAW run under
-  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_explained_no_raw_productization/`
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_shape_clean_explained_no_raw_productization/`
   classified all 4613 source-audit rows into 439 `write_ready`, 72
   `detected_flagged`, and 4102 `blocked`, wrote exactly 439 matrix cells, and
   passed `backfill_policy_write_ready_rows` writer expected-diff with zero
@@ -406,7 +412,12 @@ Implementation closeout, 2026-06-16:
   evidence classes still come from the five approved writer envelopes. The
   purpose is to stop proliferating manual/nested scoped writer flags and make
   future broadening happen by adding evidence classes to a single auditable
-  policy engine.
+  policy engine. The latest replay also tags 104 rows with candidate evidence
+  `shape_clean_reintegration_stable`: by authority/decision, 30 remain
+  `review_only` / `detected_flagged` and 74 are already `writer_approved` /
+  `write_ready` through current ready scopes. By candidate-evidence string, 76
+  are `shape_clean_reintegration_stable,reintegration_stable`, 21 overlap
+  `low_height_clean`, and 7 overlap `high_signal_clean`.
 - Heldout apex-delta trace reintegration probe, 2026-06-17:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` also supports
   `standard_apex_delta_clean_trace`, where supported trace status, shape
@@ -1521,6 +1532,9 @@ Explicit opt-in writer contract for named Backfill release slices.
   generated `backfill_policy_decision=write_ready` rows with
   `expected_scope=backfill_policy_write_ready_rows`. Rows classified as
   `detected_flagged` or `blocked` stay audit-only and do not write matrix cells.
+  The source audit must include `apex_aligned_shape_similarity`; this lets policy
+  explanation identify shape-clean reintegration-stable candidate evidence
+  without making it writer authority.
   The current generated TSV schema is `standard_peak_backfill_policy_v2`; every
   row must carry `backfill_policy_decision_basis`,
   `backfill_policy_next_evidence`, and

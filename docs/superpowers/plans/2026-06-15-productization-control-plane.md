@@ -151,7 +151,13 @@ probe was intentionally not retained because it found `matrix_cells_written=0`
 and `unchanged_delta_row_count=104`: those rows already have baseline matrix
 values, so this evidence can explain policy decisions but cannot claim a new
 `production_ready` writer until it targets actual missing cells or another
-explicit product contract.
+explicit product contract. The generated policy engine now records this class in
+`backfill_policy_candidate_evidence_class` only: the latest no-RAW replay still
+has 439 `write_ready`, 72 `detected_flagged`, and 4102 `blocked`, with 439/439
+writer expected-diff pass; 104 rows now carry `shape_clean_reintegration_stable`
+candidate evidence. By authority/decision, 30 of those rows remain
+`review_only` / `detected_flagged`, while 74 are already `writer_approved` /
+`write_ready` through existing approved evidence classes.
 The Backfill writer path now has a generated policy-engine entry point:
 `--backfill-policy-source-audit-tsv` consumes a broad activation scope audit,
 optionally joins reintegration-stability evidence, writes
@@ -1821,6 +1827,53 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: add one new product evidence class to policy v2 only when it
   has a passing oracle/expected-diff gate; otherwise leave the row explained as
   blocked or `detected_flagged`.
+
+### 2026-06-17 - standard_peak_shape_clean_policy_explanation_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: shape-clean reintegration-stable was `production_candidate`
+  oracle evidence only; generated policy v2 did not identify it separately from
+  generic `reintegration_stable` candidate evidence.
+- New tier: still `production_candidate` / explanation evidence only. Generated
+  policy replay remains `production_ready` for current approved evidence
+  classes, with no broad 4613-row tier promotion and no shape-clean writer
+  authority.
+- Evidence: `standard_peak_backfill_productization.py` now treats
+  `apex_aligned_shape_similarity` as part of the source activation-scope audit
+  contract and records `shape_clean_reintegration_stable` in
+  `backfill_policy_candidate_evidence_class` when the row is reintegration
+  stable, has `matrix_value_effect=written`, is trace matched and family
+  matched, and shape similarity is `>=0.95`. This class is never added to
+  `backfill_policy_evidence_class` or
+  `ready_evidence_classes` by itself. The real no-RAW 85RAW replay under
+  `output/productization_realdata_seed_guard_85raw_20260617/generated_policy_shape_clean_explained_no_raw_productization/`
+  still classifies 4613 rows as 439 `write_ready`, 72 `detected_flagged`, and
+  4102 `blocked`; the writer still selected/wrote 439 cells and
+  `backfill_policy_write_ready_rows` expected-diff passed 439/439. Candidate
+  evidence distribution now shows 104 rows containing
+  `shape_clean_reintegration_stable`: by authority/decision, 30 are
+  `review_only` / `detected_flagged` and 74 are already `writer_approved` /
+  `write_ready`; by candidate-evidence string, 76 are
+  `shape_clean_reintegration_stable,reintegration_stable`, 21 overlap
+  `low_height_clean`, and 7 overlap `high_signal_clean`.
+- Validation: focused productization tests
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_backfill_productization.py -q`
+  passed after reviewer fixes; focused ruff and mypy passed for the
+  productization module/test; the real no-RAW replay exited `0` in about
+  2.45 sec. Subagent review found no blocker: Erdos requested negative guard
+  tests for trace/shape fail-closed behavior, and Aquinas found the original
+  104-row split wording was wrong; both were fixed. Full local gate passed:
+  ruff, mypy, pytest `3767 passed, 1 skipped`, diagnostics index, and
+  `git diff --check` with Windows LF/CRLF warnings only.
+- Remaining blocker: shape-clean stability is explanation evidence until a
+  missing-cell scope or masked/product-writer oracle proves nonzero product
+  delta. It must not become a public writer flag or a ready evidence class from
+  this change alone.
+- Next checkpoint: future broadening should keep using generated policy
+  evidence classes rather than new nested writer flags, and should only promote
+  shape-clean from explanation evidence when a missing-cell scope or
+  masked/product-writer oracle produces nonzero expected-diff approval.
 
 ### 2026-06-17 - standard_peak_shape_clean_reintegration_stable_oracle_v1
 

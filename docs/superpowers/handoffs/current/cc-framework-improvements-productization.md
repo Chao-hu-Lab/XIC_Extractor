@@ -39,13 +39,22 @@ expected-diff fail。結論：shape-clean stability 是可重跑的
 `production_candidate` evidence class，不是新的 `production_ready` writer；下一個
 agent 不要保留或新增 shape-clean writer public flag，除非它能對真正 missing
 cells 產生非零 expected-diff，或改成只當 policy explanation evidence。
-這個節點已做 subagent review：code/product-surface reviewer 只抓到 P3「缺欄位
-fail-closed 測試要明確鎖住」，已補；docs/evidence reviewer 只抓到 P3「WIP 表
-也要寫 shape-clean stop rule」，已補。最新驗證已過：oracle focused tests
-`19 passed`；full local gate `ruff check xic_extractor tests`、`mypy
-xic_extractor`、`pytest -v --tb=short -x` (`3764 passed, 1 skipped`)、
-`scripts/check_diagnostics_index.py`、`git diff --check` 全部通過，diff-check
-只有 Windows LF/CRLF warning。
+後續已把它接進 generated policy 的「解釋欄位」而不是 writer 欄位：real
+no-RAW replay 仍是 4613 rows -> 439 `write_ready`、72 `detected_flagged`、
+4102 `blocked`，writer 仍只寫 439 格且 expected-diff 439/439 pass；新增的是
+104 rows 的 `backfill_policy_candidate_evidence_class` 會出現
+`shape_clean_reintegration_stable`；按 authority/decision 看，是 30 rows
+仍為 `review_only` / `detected_flagged`，另外 74 rows 已是既有
+`writer_approved` / `write_ready` scope。白話說，產品現在更會解釋「這些 row
+為什麼看起來有希望但還不能寫」，不是偷放行。
+這個節點已做 subagent review：code/product-surface reviewer 沒有 blocker，
+要求補 trace mismatch / shape threshold 的負向 guard tests，已補；docs/evidence
+reviewer 抓到 P2，指出我原本把 104 rows 誤寫成 76 review-only + 28 existing-ready，
+實際 authority split 是 30 `review_only` / `detected_flagged` 加 74
+`writer_approved` / `write_ready`，也要求把 `matrix_value_effect=written` 條件寫清楚，
+已補。focused productization tests `25 passed`；full local gate 也已重跑：
+ruff、mypy、diagnostics index、`git diff --check` 都通過，full pytest 是
+`3767 passed, 1 skipped`，diff-check 只有 Windows LF/CRLF warning。
 
 策略修正：不要再把 `low-height-low-scan-clean-stable` 這類層層切片當成
 長期產品規則。這些切片只證明 writer/audit/expected-diff 管線可以安全放行
@@ -1481,11 +1490,18 @@ RAW-backed 驗證:
      寫出 439 格且 expected-diff 439/439 pass；但這仍不是 broad 4613-row
      ready 宣稱。
    - 這輪最新補強是 policy v2 explanation contract：每列都有
-     `backfill_policy_decision_basis`、`backfill_policy_next_evidence`、和
-     candidate-evidence 欄位。最新 no-RAW replay 中 `missing_explanation_rows=0`；
-     4102 blocked 被拆成 1087 個缺 trace evidence、3015 個缺新
-     evidence/oracle。這代表產品規則已能「解釋為什麼不補」，不是把 row
-     輕易放過。
+      `backfill_policy_decision_basis`、`backfill_policy_next_evidence`、和
+      candidate-evidence 欄位。最新 no-RAW replay 中 `missing_explanation_rows=0`；
+      4102 blocked 被拆成 1087 個缺 trace evidence、3015 個缺新
+      evidence/oracle。這代表產品規則已能「解釋為什麼不補」，不是把 row
+      輕易放過。
+   - shape-clean + stability 已進 generated policy 的 candidate-evidence 欄位，
+     不是 writer 欄位。最新 no-RAW replay 中 row counts 沒變：
+     439 `write_ready`、72 `detected_flagged`、4102 `blocked`，writer expected-diff
+     仍是 439/439 pass；新增的是 104 rows 被標成含
+     `shape_clean_reintegration_stable`，其中 30 rows 仍是
+     `review_only` / `detected_flagged`，74 rows 已由既有 evidence class
+     `writer_approved` / `write_ready`；這方便後續解釋或設計 missing-cell scope。
    - broad 4613-row standard-path seed guard 仍是 `production_candidate`。
    - 新增 boundary-stability / reintegration-agreement diagnostic 後，broad
      scope 有 299 個 written rows 通過 dual-reintegration stability gate，其中
@@ -1507,9 +1523,9 @@ RAW-backed 驗證:
     - shape-clean + stability 目前是更乾淨的 candidate evidence：
       `standard_shape_clean_reintegration_stable_candidate_family_trace` oracle
       20/20 pass，但臨時 writer probe 只有 `0` new writes / `104` unchanged
-      pre-existing values，所以不要新增 shape-clean writer flag。它下一步應該
-      只進 generated policy explanation，或等有真正 missing-cell expected-diff
-      scope 時再談 writer。
+      pre-existing values，所以不要新增 shape-clean writer flag。它已進
+      generated policy explanation；等有真正 missing-cell expected-diff scope 時
+      再談 writer。
     - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
       observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
      不應重做已完成的 high-signal/low-scan/low-height/low-height-low-scan scoped

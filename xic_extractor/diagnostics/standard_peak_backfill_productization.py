@@ -172,12 +172,14 @@ BACKFILL_POLICY_SOURCE_AUDIT_REQUIRED_COLUMNS = (
     "low_height_clean_status",
     "low_height_low_scan_clean_status",
     "cell_height",
+    "apex_aligned_shape_similarity",
     "trace_match_status",
 )
 LOW_HEIGHT_REINTEGRATION_STABLE_STATUS_COLUMN = (
     "low_height_reintegration_stable_status"
 )
 MIN_LOW_HEIGHT_REINTEGRATION_STABLE_HEIGHT = 2_000_000.0
+MIN_SHAPE_CLEAN_REINTEGRATION_STABLE_SIMILARITY = 0.95
 
 NARROW_PRODUCT_WRITER_EXPECTED_DIFF_ACCEPTANCE_COLUMNS = (
     "schema_version",
@@ -845,6 +847,8 @@ def _candidate_evidence_classes(
     ):
         if text_value(row.get(column)) == "eligible":
             evidence.append(evidence_class)
+    if _shape_clean_stability_candidate(row, stability_row):
+        evidence.append("shape_clean_reintegration_stable")
     if stability_row is not None:
         evidence.append("reintegration_stable")
     return tuple(evidence)
@@ -869,6 +873,27 @@ def _low_height_stability_ready(
         height is not None
         and height >= 0.0
         and height < MIN_LOW_HEIGHT_REINTEGRATION_STABLE_HEIGHT
+    )
+
+
+def _shape_clean_stability_candidate(
+    row: Mapping[str, str],
+    stability_row: Mapping[str, str] | None,
+) -> bool:
+    if stability_row is None:
+        return False
+    if text_value(row.get("matrix_value_effect")) != "written":
+        return False
+    if text_value(row.get("trace_match_status")) != "matched":
+        return False
+    if text_value(row.get("feature_family_id")) != text_value(
+        stability_row.get("feature_family_id"),
+    ):
+        return False
+    shape = optional_float(row.get("apex_aligned_shape_similarity"))
+    return (
+        shape is not None
+        and shape >= MIN_SHAPE_CLEAN_REINTEGRATION_STABLE_SIMILARITY
     )
 
 
