@@ -2,7 +2,7 @@
 
 Updated: 2026-06-17
 Branch: `cc/framework-improvements`
-HEAD when pruned: `34cdf61d`
+HEAD after latest productization commit: `a2c7d347`
 Purpose: short current-state snapshot for the next agent/session. This file is
 not the product tier authority; use the control plane first.
 
@@ -29,7 +29,9 @@ connected.
   detections, workbook output, or matrix values. It explains why blocked rows
   stayed blocked: 1087 are missing overlay path, and most of the rest combine
   shape/height/width/scan/apex-delta blockers or still need a new approved
-  evidence class/passing oracle.
+  evidence class/passing oracle. Subagent review found no P1/P2; P3 row-count
+  evidence gaps were fixed by adding focused row-parity tests and
+  `backfill_policy_quality_explanation_row_count=4613` in the policy summary.
 - [active] Broad Backfill 4613-row write is still `production_candidate`, not
   ready. The 4102 blocked rows need trace overlay/reintegration evidence or a
   new approved evidence class with oracle + expected-diff.
@@ -114,14 +116,14 @@ connected.
   gaps; fixes were applied. Second reviewer found no remaining P2/P3 issues and
   confirmed active handoff is 127 lines, archive is phase-summary only, and hook
   fixture/diff-check pass.
-- Latest recorded productization full gates from the prior long handoff included
-  ruff/mypy/diagnostics-index pass and full pytest passes, but the current
-  worktree has dirty productization files. Rerun relevant gates before PR or
-  production-readiness claims.
 - Backfill quality sidecar checkpoint: focused Backfill tests, focused ruff,
   focused mypy, and the no-RAW 85RAW replay under
-  `generated_policy_quality_explained_no_raw_productization/` passed. No RAW or
-  85RAW rerun was needed because existing artifacts answered the decision.
+  `generated_policy_quality_explained_no_raw_productization/` passed after
+  reviewer fixes. Full local gate after the commit scope also passed:
+  `ruff check xic_extractor tests`, `mypy xic_extractor`,
+  `pytest -v --tb=short -x` (`3780 passed, 1 skipped`), and
+  `scripts/check_diagnostics_index.py`. No RAW or 85RAW rerun was needed because
+  existing artifacts answered the decision.
 - RAW policy: do not rerun 85RAW unless a new production-readiness decision
   needs it and existing artifacts cannot answer the question.
 
@@ -130,16 +132,18 @@ connected.
 - [active] Keep this handoff under 200 lines during future checkpoints. Remove
   `[done]` and `[superseded]` items on the next prune unless they prevent a
   repeated mistake.
-- [active] Subagent-review the Backfill quality sidecar slice, fix valid
-  findings, then commit only the Backfill/spec/control-plane scope. Keep the
-  side-session goal/rule dirty diff unstaged.
+- [done] Backfill quality sidecar slice was subagent-reviewed, P3 findings were
+  fixed, and commit `a2c7d347` landed.
 - [blocked] Broad Backfill promotion needs broader oracle/product-writer evidence
   for missing/blocked cells, not another narrow dataset-specific slice.
 - [blocked] GUI replay/parity waits for GUI branch reconnection.
 
 ## Next Actions
 
-1. Run Backfill subagent review on the quality-explanation sidecar only.
-2. Fix valid review findings and rerun focused Backfill tests/ruff/mypy.
-3. Commit only the Backfill productization slice; do not stage the side-session
-   goal/rule/hook/handoff-prune files.
+1. Continue Backfill broadening from the quality sidecar blocker distribution:
+   choose one simple evidence class that can be tested with existing artifacts
+   or a small no-RAW replay.
+2. Do not promote rows directly from `quality_blockers`; any writer expansion
+   still needs generated-policy evidence class, oracle evidence, and
+   expected-diff.
+3. GUI replay/parity remains out of scope until GUI is reconnected.
