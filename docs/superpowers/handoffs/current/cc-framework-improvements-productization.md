@@ -10,10 +10,15 @@
 `production_ready` 的結論，外加幾個已收斂成 `production_candidate` /
 blocked-ready 的 Backfill probes。
 
-本次 handoff refresh 只修「現在狀態」的漂移：shape-margin probe 已提交在
-`3581a9e`；這次 docs-only refresh 前，productization code/output 工作樹是
-乾淨的，目前 dirty scope 只應是 handoff/control-plane refresh。Targeted MS1
-headless no-flag limited default 現在是 `production_ready` for
+本次主線續推有兩個部分。第一，讀完並收進
+`docs/deepresearch/Backfill Production Gate.md` 後，Backfill 的產品方向已
+從「用 `height >= 2e6` 當硬門檻」改成「用 boundary-stability /
+reintegration agreement 等可驗證證據來逐步放大」。第二，low-height heldout
+oracle 新增 `expected_window_bounded` 觀察模式，用既有 85RAW trace 做 no-RAW
+replay。這輪改的是 diagnostic CLI / summary / focused tests，沒有改 product
+writer、primary matrix、workbook schema、extraction default 或 RAW artifact。
+low-height tier 仍是 `production_candidate`，不是 `production_ready`。Targeted
+MS1 headless no-flag limited default 現在是 `production_ready` for
 `5-hmdC + 5-medC` / `detected_flagged`。仍 blocked 的是 GUI、broader target
 rescue、Backfill broad 4613-row 全量寫入、以及 ReviewAction
 selected-candidate/manual-boundary 產品寫回。
@@ -42,6 +47,33 @@ low-height clean，expected-diff 57/57 是乾淨的；但同類 heldout trace or
 `0.1 min`。所以 low-height 不是被殺掉，而是目前只能當下一個
 `production_candidate` slice：證明「可能有東西可補」，但也證明 agent 必須
 自動擋住不穩的低訊號案例，不能為了少人工審查就偷偷寫 matrix。
+
+這輪針對 low-height 的新資訊是：舊 oracle 讓觀察端在整條 trace 上重新找
+boundary，容易被很長的低訊號尾巴拉走；新的 `expected_window_bounded` 模式把
+觀察端限制在 oracle window 附近再重積分。用既有 85RAW artifact 重跑後，
+`padding=0.1/0.2/0.3 min` 都還是 19/20，剩下同一個
+`FAM000883/NormalBC2292_DNA` area error 稍微超過 10%；`padding=0.5 min`
+則 20/20 通過，最大 boundary error `0.0857986 min`、最大 area relative error
+`0.0564106`。白話說，這證明低高度問題更像「怎麼穩定定義要積分的區間」，
+不是「低於 2e6 一律不可信」。但 `0.5 min` padding 還需要 review 和 writer
+expected-diff 才能變成正式產品 gate；現在只能把 low-height 往前推成更強的
+`production_candidate`，不能直接開 low-height writer。
+
+Subagent reviewer `Tesla` 已驗收這個 bounded-oracle diff，沒有 P1/P2 blocker，
+也沒有發現 product overclaim。它提出兩個 P3：handoff 舊句子會讓人以為
+「新 oracle pass」已解除 writer blocker，以及 edge tests 還缺 CLI negative
+padding / no observed peak fail-closed。兩者已修；focused oracle suite 現在
+`10 passed`。
+
+最新 Backfill gate research 也支持這個解讀：低高度不是整類不可用，
+`20 heldout = 19 pass + 1 boundary fail` 更像是 boundary/reintegration
+一致性問題，不是 height 本身足以裁決產品安全。後續不要做「500k-2e6 writer」
+或把 `2e6` 從 rollout guardrail 變成產品定義；下一個 broadening slice 應改用
+三種更可辯證的 evidence：boundary-stability / reintegration agreement、
+local S/N / local selectivity、cohort-anchored expected-window consistency。
+這份 research 已經放進 repo 內 `docs/deepresearch/`，可作為後續 agent
+重複使用的背景資訊；但它本身不是 product authority，真正放行仍要看
+control plane、named spec、focused tests、expected-diff 和 oracle evidence。
 
 再下一個 probe 是 apex-only clean。它問的是：「形狀、高度、寬度、scan count
 都乾淨，只是 peak apex 離 family center 超過 0.15 min，能不能自動補？」
@@ -128,11 +160,12 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 
 - Worktree: `C:\Users\user\Desktop\XIC_Extractor`
 - Branch: `cc/framework-improvements`
-- Current HEAD after committed Backfill shape-margin probe:
-  `3581a9e feat: record shape-margin backfill probe`
-- Git state at this handoff refresh: before this docs-only refresh,
-  productization code/output scope was clean and the branch was ahead of origin
-  by 12 commits; the current dirty scope should be this docs-only refresh.
+- Current HEAD before this Backfill bounded-oracle refresh:
+  `c877ec9 docs: refresh productization handoff state`
+- Git state at this handoff refresh: branch was ahead of origin by 13 commits
+  before this slice. Current dirty scope is intentionally limited to
+  Backfill low-height bounded-oracle diagnostic code/tests/docs plus the
+  repo-local `docs/deepresearch/` research context.
 - Current checkpoint scope: goal-closeout audit after the committed Backfill
   shape-margin probe and Targeted MS1 no-flag limited default. There is no
   shape-margin product writer, no Backfill broad writer, no GUI wiring, no
@@ -175,8 +208,9 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
     unexpected/non-eligible/non-written/unchanged/blank rows.
   - Tier decision: `production_candidate` only. No low-height product writer
     flag was added, and no matrix output should be claimed `production_ready`
-    for this class until the failing boundary case is explained by a narrower
-    evidence rule or a new oracle packet passes.
+    for this class. The later bounded-window oracle packet is useful evidence,
+    but still needs review plus an explicit low-height writer contract and
+    writer expected-diff before it can become product behavior.
 - 本輪 Backfill low-height subagent review:
   - Reviewer `Jason` checked docs/control-plane/spec/index and found no P1/P2
     blocker. It raised a P3 that `tools/diagnostics/INDEX.md` did not carry the
@@ -1263,9 +1297,11 @@ RAW-backed 驗證:
      broad 4613 writes 中有 72 個 high-signal clean、42 個 low-scan clean。
    - 若要承認 broad 4613-row writes，才需要 broader masked/product-writer
      observed oracle 和 full-scope expected-diff gate。若要穩步推進，下一刀
-     不應再直接押 low-height、apex-delta 或 width-only，因為三者的
-     heldout oracle 都已 fail closed；應該改找更窄的可解釋 rule，或先把
-     失敗案例分類成可排除的風險族群。
+     不應再直接押 low-height、apex-delta 或 width-only，也不應把
+     `height >= 2e6` 當產品硬門檻；`2e6` 只是 high-signal demonstrator /
+     rollout guardrail。下一個 Backfill gate 應先驗證 boundary-stability /
+     reintegration agreement、local S/N / selectivity、cohort-anchored expected
+     window，並用預先宣告的 strata + lockbox 防止 cherry-picking。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。

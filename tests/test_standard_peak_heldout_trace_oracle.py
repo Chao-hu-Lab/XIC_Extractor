@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.diagnostics import standard_peak_heldout_trace_oracle as cli
 from xic_extractor.alignment.matrix_handoff import integration_from_peak_trace
@@ -101,6 +102,155 @@ def test_heldout_trace_oracle_cli_writes_low_height_packet(
     assert pool[0]["selected_for_oracle"] == "TRUE"
     assert float(pool[0]["cell_height"]) < 2_000_000.0
     assert int(pool[0]["oracle_scan_count"]) >= 10
+
+
+def test_heldout_trace_oracle_expected_window_bounded_mode_closes_boundary_drift(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_boundary_drift_fixture(tmp_path)
+    full_output_dir = tmp_path / "full_oracle"
+    bounded_output_dir = tmp_path / "bounded_oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(full_output_dir),
+                "--source-run-id",
+                "unit-boundary-drift-full-oracle",
+                "--target-shape-class",
+                "standard_low_height_clean_trace",
+            ],
+        )
+        == 1
+    )
+    full_summary = json.loads(
+        (full_output_dir / "summary.json").read_text(encoding="utf-8"),
+    )
+    assert full_summary["observed_reintegration_mode"] == "full_trace"
+    assert full_summary["expected_window_padding_min"] == ""
+    assert full_summary["status"] == "fail"
+    assert full_summary["oracle_case_status_fail_count"] == "1"
+    assert float(full_summary["max_observed_boundary_error_min"]) > 0.1
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(bounded_output_dir),
+                "--source-run-id",
+                "unit-boundary-drift-bounded-oracle",
+                "--target-shape-class",
+                "standard_low_height_clean_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+                "--expected-window-padding-min",
+                "0.1",
+            ],
+        )
+        == 0
+    )
+    bounded_summary = json.loads(
+        (bounded_output_dir / "summary.json").read_text(encoding="utf-8"),
+    )
+    assert bounded_summary["observed_reintegration_mode"] == "expected_window_bounded"
+    assert bounded_summary["expected_window_padding_min"] == "0.1"
+    assert bounded_summary["status"] == "pass"
+    assert bounded_summary["oracle_case_status_pass_count"] == "1"
+
+    observed = _read_tsv(bounded_output_dir / "heldout_observed_results.tsv")[0]
+    assert observed["observed_result_source"] == (
+        "heldout_trace_reintegration_expected_window_bounded_v1"
+    )
+    assert (
+        "expected_window_padded_0.1min" in observed["observed_boundary_source"]
+    )
+
+
+def test_heldout_trace_oracle_rejects_negative_expected_window_padding(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(tmp_path / "cli_oracle"),
+                "--source-run-id",
+                "unit-negative-padding-cli",
+                "--target-shape-class",
+                "standard_low_height_clean_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+                "--expected-window-padding-min",
+                "-0.01",
+            ],
+        )
+        == 2
+    )
+    with pytest.raises(ValueError, match="expected_window_padding_min"):
+        oracle.run_heldout_trace_oracle(
+            alignment_backfill_cell_evidence_tsv=evidence_tsv,
+            trace_root=trace_root,
+            output_dir=tmp_path / "oracle",
+            source_run_id="unit-negative-padding",
+            target_shape_class="standard_low_height_clean_trace",
+            observed_reintegration_mode="expected_window_bounded",
+            expected_window_padding_min=-0.01,
+        )
+
+
+def test_heldout_trace_oracle_bounded_mode_fails_closed_without_observed_peak(
+    tmp_path: Path,
+) -> None:
+    evidence_tsv, trace_root = _write_flat_bounded_trace_fixture(tmp_path)
+    output_dir = tmp_path / "oracle"
+
+    assert (
+        cli.main(
+            [
+                "--alignment-backfill-cell-evidence-tsv",
+                str(evidence_tsv),
+                "--trace-root",
+                str(trace_root),
+                "--output-dir",
+                str(output_dir),
+                "--source-run-id",
+                "unit-flat-bounded-oracle",
+                "--target-shape-class",
+                "standard_low_height_clean_trace",
+                "--observed-reintegration-mode",
+                "expected_window_bounded",
+            ],
+        )
+        == 1
+    )
+
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["status"] == "fail"
+    assert summary["observed_reintegration_mode"] == "expected_window_bounded"
+    assert summary["oracle_case_status_fail_count"] == "1"
+    assert summary["included_in_product_acceptance_count"] == "0"
+
+    observed_rows = _read_tsv(output_dir / "heldout_observed_results.tsv")
+    assert observed_rows == []
+    result = _read_tsv(output_dir / "heldout_oracle_results.tsv")[0]
+    assert result["oracle_case_status"] == "inconclusive_review_only"
+    assert result["inconclusive_reason"] == "missing_observed_result"
+    assert result["included_in_product_acceptance"] == "FALSE"
 
 
 def test_heldout_trace_oracle_cli_writes_apex_delta_packet(
@@ -661,6 +811,116 @@ def _write_low_height_fixture(tmp_path: Path) -> tuple[Path, Path]:
                 ),
                 "peak_start_rt": f"{result.peak.peak_start:.5f}",
                 "peak_end_rt": f"{result.peak.peak_end:.5f}",
+                "reason": (
+                    "source_reason=sample-local MS1 owner with original MS2 "
+                    "evidence"
+                ),
+            },
+        ],
+    )
+    return evidence_tsv, trace_root
+
+
+def _write_flat_bounded_trace_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    evidence_tsv, trace_root = _write_low_height_fixture(tmp_path)
+    trace_json = trace_root / "FAM_LOW_HEIGHT_trace_data.json"
+    data = json.loads(trace_json.read_text(encoding="utf-8"))
+    trace = data["traces"][0]
+    trace["intensity"] = [100.0 for _ in trace["rt"]]
+    trace_json.write_text(json.dumps(data), encoding="utf-8")
+    return evidence_tsv, trace_root
+
+
+def _write_boundary_drift_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    trace_root = tmp_path / "traces"
+    trace_root.mkdir()
+    rt = np.round(np.arange(0.0, 2.01, 0.05), 4)
+    intensity = (
+        100.0
+        + 500_000.0 * np.exp(-((rt - 1.0) ** 2) / (2 * 0.10**2))
+        + 50_000.0 * np.exp(-((rt - 0.65) ** 2) / (2 * 0.22**2))
+    )
+    oracle_start = 0.70
+    oracle_end = 1.20
+    oracle_apex = 1.0
+    bounded_mask = (rt >= oracle_start - 0.1) & (rt <= oracle_end + 0.1)
+    bounded_rt = rt[bounded_mask]
+    bounded_intensity = intensity[bounded_mask]
+    bounded_result = find_peak_and_area(
+        bounded_rt,
+        bounded_intensity,
+        _config(),
+        preferred_rt=oracle_apex,
+        strict_preferred_rt=True,
+    )
+    assert bounded_result.peak is not None
+    bounded_integration = integration_from_peak_trace(
+        bounded_result.peak,
+        bounded_rt,
+        bounded_intensity,
+        boundary_sources=("local_minimum",),
+        integration_method="raw_trapezoid",
+        baseline_integration_method="asls",
+    )
+    assert bounded_integration is not None
+    assert bounded_integration.area_ms1_morphology is not None
+
+    full_result = find_peak_and_area(rt, intensity, _config())
+    assert full_result.peak is not None
+    assert (
+        max(
+            abs(full_result.peak.peak_start - oracle_start),
+            abs(full_result.peak.peak_end - oracle_end),
+        )
+        > 0.1
+    )
+
+    trace_json = trace_root / "FAM_BOUNDARY_DRIFT_trace_data.json"
+    trace_json.write_text(
+        json.dumps(
+            {
+                "family_id": "FAM_BOUNDARY_DRIFT",
+                "family_center_rt": oracle_apex,
+                "traces": [
+                    {
+                        "sample_stem": "SampleA",
+                        "status": "detected",
+                        "cell_area": float(
+                            bounded_integration.area_ms1_morphology,
+                        ),
+                        "cell_height": 500_000.0,
+                        "cell_apex_rt": oracle_apex,
+                        "cell_start_rt": oracle_start,
+                        "cell_end_rt": oracle_end,
+                        "local_window_to_global_max_ratio": 1.0,
+                        "apex_aligned_shape_similarity": 0.99,
+                        "rt": [float(value) for value in rt],
+                        "intensity": [float(value) for value in intensity],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    evidence_tsv = tmp_path / "alignment_backfill_cell_evidence.tsv"
+    _write_tsv(
+        evidence_tsv,
+        [
+            {
+                "feature_family_id": "FAM_BOUNDARY_DRIFT",
+                "sample_stem": "SampleA",
+                "status": "detected",
+                "production_cell_status": "detected",
+                "write_matrix_value": "TRUE",
+                "include_in_primary_matrix": "TRUE",
+                "primary_matrix_area": (
+                    f"{bounded_integration.area_ms1_morphology:.8f}"
+                ),
+                "primary_matrix_area_source": (
+                    "gaussian15_positive_asls_residual"
+                ),
+                "peak_start_rt": f"{oracle_start:.5f}",
+                "peak_end_rt": f"{oracle_end:.5f}",
                 "reason": (
                     "source_reason=sample-local MS1 owner with original MS2 "
                     "evidence"

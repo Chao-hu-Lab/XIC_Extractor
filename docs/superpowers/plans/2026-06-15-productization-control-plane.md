@@ -5,6 +5,7 @@
 目前 readiness: `diagnostic_only` for this control document
 主要依據: [current capability inventory](../reports/2026-06-15-current-capability-inventory-and-promotion-roadmap.md)
 白話交接: [current productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
+可重用背景研究: [deepresearch notes](../../deepresearch/README.md)
 
 ## Authority
 
@@ -55,11 +56,18 @@ Backfill standard-path activation 目前分成兩個 release tier：72-row
 high-signal-clean scoped writer 與 42-row low-scan-clean scoped writer 都已用
 explicit opt-in scope audit filter 寫出 product matrix-only output，且各自的
 `narrow_product_writer_expected_diff_acceptance.json` 通過並標
-`readiness_tier=production_ready`。Low-height clean 目前只到
+`readiness_tier=production_ready`。Low-height clean 目前仍只到
 `production_candidate`：activation scope audit 找到 57 個 eligible writes，
-且 diagnostic expected-diff 57/57 pass；但同類 heldout trace oracle 只有
+且 diagnostic expected-diff 57/57 pass；舊的 full-trace heldout oracle 只有
 19/20 pass，`FAM008651/TumorBC2312_DNA` boundary error `1.16445 min` 超過
-accepted `0.1 min` ceiling，所以不得新增 low-height writer 或 claim ready。
+accepted `0.1 min` ceiling。這輪新增 diagnostic
+`expected_window_bounded` observed reintegration mode 後，既有 85RAW trace
+no-RAW replay 顯示 `padding=0.5 min` 可讓 selected 20/20 通過，最大
+boundary error `0.0857986 min`、最大 area relative error `0.0564106`；但
+`padding=0.1/0.2/0.3 min` 仍留下 `FAM000883/NormalBC2292_DNA` area fail，
+而且這還沒有連到 product writer expected-diff。因此不得新增 low-height
+writer 或 claim ready，下一步必須先 review bounded-window gate 是否可作為
+產品準則。
 擦邊的 apex-delta clean 也只到 `production_candidate`：heldout trace oracle
 有 78 candidates / 27 families，selected 20 cases 只有 17/20 pass，最大
 boundary error `2.19621 min`，所以也不得新增 apex-delta writer。
@@ -82,6 +90,14 @@ This is a release-safety boundary, not a product north-star limit: the product
 direction is to backfill automatically whenever evidence is sufficient, using
 the 72-row high-signal and 42-row low-scan slices as demonstrators before
 broadening evidence.
+The Backfill Production Gate research input under `docs/deepresearch/` reviewed
+on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
+demonstrator / rollout guardrail, not a product hard gate. Low-height
+`19/20 pass + 1 boundary fail` should be treated as boundary/reintegration risk
+evidence. The next broadening checkpoint should pivot to boundary-stability /
+reintegration agreement, local S/N or local selectivity, and cohort-anchored
+expected-window consistency with predeclared strata/lockbox evidence before any
+new writer approval.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -159,6 +175,15 @@ scope.
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
 | Backfill product-authority sidecars | `production_ready` for explicit 72-row high-signal-clean scoped writer and explicit 42-row low-scan-clean scoped writer; `production_candidate` for the 57-row low-height diagnostic slice, apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, and broad 4613-row standard-path seed guard | allowlist/projection sidecars, `standard_peak_backfill_productization.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height `low_height_clean_activation_expected_diff_acceptance.json` 57/57 pass 但 `product_surface_changed=FALSE`，同類 `heldout_trace_reintegration_oracle_low_height_clean_probe/summary.json` 是 `status=fail`、19/20 pass、max boundary error `1.16445 min`，所以沒有 writer approval；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say 72-row and 42-row scopes are current safe demonstrators, low-height/apex-delta/width-only/shape-margin are only candidate probes, and none of these are the product ceiling; next broadening step needs another named evidence class with masked/product-writer observed oracle and expected-diff approval | none for the two scoped writers; low-height/apex-delta/width-only/shape-margin need narrower rules or passing oracles before writer work; broad 4613 still needs additional evidence class/oracle coverage |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
+
+Backfill row update, 2026-06-17: the low-height evidence is no longer only the
+old full-trace 19/20 failure. The diagnostic heldout oracle now has an
+`expected_window_bounded` observed reintegration mode; no-RAW replay on the
+same 85RAW trace artifacts shows `padding=0.5 min` passes selected 20/20 with
+max boundary error `0.0857986 min` and max area relative error `0.0564106`.
+This strengthens low-height as a `production_candidate`, but it does not by
+itself authorize a low-height product writer because the bounded-window gate
+still needs review plus writer expected-diff approval.
 
 ## WIP limits
 
@@ -1248,6 +1273,34 @@ scope.
   separate evidence for more targets or continue Backfill broadening by named
   evidence class.
 
+### 2026-06-17 - backfill_production_gate_research_input_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: unchanged. Explicit 72-row high-signal-clean and 42-row
+  low-scan-clean scoped writers remain `production_ready`; broad 4613-row
+  standard-path activation plus low-height/apex-delta/width-only/shape-margin
+  probes remain `production_candidate`.
+- New tier: unchanged; this is design input and product-gate framing, not a
+  behavior promotion.
+- Evidence: reviewed
+  `docs/deepresearch/Backfill Production Gate.md`. The conclusion is that
+  absolute `height >= 2e6` should not become a universal Backfill product hard
+  gate because LC-MS height depends on analyte response, matrix effect, batch
+  state, local background, and co-elution. The low-height heldout result
+  `19/20 pass + 1 boundary fail` points to boundary/reintegration consistency,
+  not a proof that low-height cells are globally unusable.
+- Product surface changed: docs/control-plane/handoff only. No writer, matrix,
+  schema, CLI flag, workbook, RAW artifact, or expected-diff output changed.
+- Validation: docs-only targeted grep and `git diff --check` for this refresh.
+- Remaining blocker: no new low-height or moderate-height writer may be added
+  just because expected-diff is clean. The next writer claim needs a named
+  evidence class with heldout oracle and full expected-diff approval.
+- Next checkpoint: design the next Backfill broadening packet around
+  boundary-stability / reintegration agreement, local S/N or local selectivity,
+  and cohort-anchored expected-window consistency. Predeclare strata and a
+  lockbox before using the evidence to promote broad 4613-row writes.
+
 ### 2026-06-17 - product_direction_low_manual_intervention_v1
 
 - Previous tier: unchanged. Backfill narrow 72-row writer is
@@ -1283,6 +1336,46 @@ scope.
   class, extend Targeted MS1 only after separate evidence for more targets, and
   reopen ReviewAction mutation only after the ID/expected-diff contract is
   concrete.
+
+### 2026-06-17 - standard_peak_low_height_bounded_reintegration_probe_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: low-height clean Backfill slice was `production_candidate`.
+  Activation scope audit had 57 eligible low-height writes and diagnostic
+  expected-diff 57/57 pass, but full-trace heldout oracle failed 19/20 because
+  `FAM008651/TumorBC2312_DNA` had boundary drift over the accepted `0.1 min`
+  ceiling.
+- New tier: still `production_candidate`; evidence improved, but no writer
+  approval and no `production_ready` claim.
+- Evidence: `standard_peak_heldout_trace_oracle.py` now supports diagnostic
+  `--observed-reintegration-mode expected_window_bounded` with
+  `--expected-window-padding-min`. Default observed reintegration remains
+  `full_trace`, so existing oracle behavior is preserved unless the new mode is
+  explicit. Existing 85RAW trace artifacts were reused; no RAW files were
+  reopened. Low-height bounded replay at `padding=0.1/0.2/0.3 min` still failed
+  19/20 because `FAM000883/NormalBC2292_DNA` exceeded the 10% area ceiling, but
+  `padding=0.5 min` passed 20/20 with max boundary error `0.0857986 min` and
+  max area relative error `0.0564106`.
+- Product surface changed: diagnostic CLI and summary fields only:
+  `observed_reintegration_mode` and `expected_window_padding_min`. No product
+  writer, primary matrix, workbook schema, selected peak/area, counted
+  detection, extraction default, or RAW artifact changed.
+- Validation: `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest
+  tests\test_standard_peak_heldout_trace_oracle.py -q` passed `10`. Subagent
+  reviewer `Tesla` found no blocking issue and no product overclaim; its P3
+  stale-handoff wording and edge-test findings were fixed by clarifying that
+  bounded oracle pass does not authorize a writer, adding CLI negative-padding
+  coverage, and adding a bounded-mode missing-observed-result fail-closed test.
+- Remaining blocker: low-height writer promotion now depends on review of
+  whether `expected_window_bounded` with the chosen padding is an acceptable
+  product gate, followed by an explicit low-height writer contract and
+  expected-diff run. The passing bounded replay cannot be silently converted
+  into broad matrix writes.
+- Next checkpoint: request subagent review of the bounded-window observed
+  reintegration contract, then either add an explicit low-height writer flag
+  with expected-diff evidence or keep low-height parked as a strong
+  `production_candidate`.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 

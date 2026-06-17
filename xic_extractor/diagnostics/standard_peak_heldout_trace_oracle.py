@@ -45,6 +45,12 @@ SUPPORTED_TARGET_SHAPE_CLASSES = (
     WIDTH_CLEAN_SCOPE,
     SHAPE_MARGIN_CLEAN_SCOPE,
 )
+FULL_TRACE_REINTEGRATION_MODE = "full_trace"
+EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE = "expected_window_bounded"
+SUPPORTED_OBSERVED_REINTEGRATION_MODES = (
+    FULL_TRACE_REINTEGRATION_MODE,
+    EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE,
+)
 
 MIN_SHAPE_SIMILARITY = 0.95
 MIN_SHAPE_MARGIN_SIMILARITY = 0.93
@@ -56,6 +62,7 @@ MAX_APEX_DELTA_ABS_MIN = 0.15
 MIN_HIGH_SIGNAL_SCAN_COUNT = 10
 MIN_LOW_SCAN_COUNT = 7
 MAX_LOW_SCAN_COUNT = 9
+DEFAULT_EXPECTED_WINDOW_PADDING_MIN = 0.1
 
 CANDIDATE_COLUMNS = (
     "oracle_case_id",
@@ -88,6 +95,8 @@ SUMMARY_COLUMNS = (
     "schema_version",
     "source_run_id",
     "target_shape_class",
+    "observed_reintegration_mode",
+    "expected_window_padding_min",
     "status",
     "readiness_scope",
     "source_alignment_backfill_cell_evidence_tsv",
@@ -169,6 +178,8 @@ def run_heldout_trace_oracle(
     output_dir: Path,
     source_run_id: str,
     target_shape_class: str = HIGH_SIGNAL_CLEAN_SCOPE,
+    observed_reintegration_mode: str = FULL_TRACE_REINTEGRATION_MODE,
+    expected_window_padding_min: float = DEFAULT_EXPECTED_WINDOW_PADDING_MIN,
     max_cases: int = 20,
     max_cases_per_family: int = 1,
 ) -> HeldoutTraceOracleOutputs:
@@ -180,6 +191,14 @@ def run_heldout_trace_oracle(
             f"unsupported target_shape_class {target_shape_class!r}; "
             f"must be one of {allowed}",
         )
+    if observed_reintegration_mode not in SUPPORTED_OBSERVED_REINTEGRATION_MODES:
+        allowed = ", ".join(SUPPORTED_OBSERVED_REINTEGRATION_MODES)
+        raise ValueError(
+            "unsupported observed_reintegration_mode "
+            f"{observed_reintegration_mode!r}; must be one of {allowed}",
+        )
+    if expected_window_padding_min < 0.0:
+        raise ValueError("expected_window_padding_min must be non-negative")
     if max_cases <= 0:
         raise ValueError("max_cases must be positive")
     if max_cases_per_family <= 0:
@@ -210,7 +229,11 @@ def run_heldout_trace_oracle(
         source_run_id=source_run_id,
         target_shape_class=target_shape_class,
     )
-    observed_rows, observed_errors_by_case = _observed_rows(selected)
+    observed_rows, observed_errors_by_case = _observed_rows(
+        selected,
+        observed_reintegration_mode=observed_reintegration_mode,
+        expected_window_padding_min=expected_window_padding_min,
+    )
     write_tsv(
         observed_tsv,
         observed_rows,
@@ -254,6 +277,8 @@ def run_heldout_trace_oracle(
     summary = _summary_row(
         source_run_id=source_run_id,
         target_shape_class=target_shape_class,
+        observed_reintegration_mode=observed_reintegration_mode,
+        expected_window_padding_min=expected_window_padding_min,
         alignment_backfill_cell_evidence_tsv=alignment_backfill_cell_evidence_tsv,
         trace_root=trace_root,
         candidates=candidates,
@@ -570,15 +595,30 @@ def _manifest_rows(
 
 def _observed_rows(
     candidates: Sequence[_TraceCandidate],
+    *,
+    observed_reintegration_mode: str,
+    expected_window_padding_min: float,
 ) -> tuple[tuple[dict[str, str], ...], dict[str, tuple[float, float]]]:
     rows: list[dict[str, str]] = []
     errors_by_case: dict[str, tuple[float, float]] = {}
     config = _trace_reintegration_config()
     for index, candidate in enumerate(candidates, start=1):
         case_id = _oracle_case_id(index, candidate)
-        rt = np.asarray(candidate.rt, dtype=float)
-        intensity = np.asarray(candidate.intensity, dtype=float)
-        result = find_peak_and_area(rt, intensity, config)
+        rt, intensity = _observed_reintegration_arrays(
+            candidate,
+            observed_reintegration_mode=observed_reintegration_mode,
+            expected_window_padding_min=expected_window_padding_min,
+        )
+        if observed_reintegration_mode == EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE:
+            result = find_peak_and_area(
+                rt,
+                intensity,
+                config,
+                preferred_rt=candidate.oracle_apex_rt,
+                strict_preferred_rt=True,
+            )
+        else:
+            result = find_peak_and_area(rt, intensity, config)
         if result.peak is None:
             continue
         integration = integration_from_peak_trace(
@@ -611,10 +651,13 @@ def _observed_rows(
                 "observed_end_rt": _float_text(result.peak.peak_end),
                 "observed_area": _float_text(observed_area),
                 "observed_result_source": (
-                    "heldout_trace_reintegration_local_minimum_v1"
+                    _observed_result_source(observed_reintegration_mode)
                 ),
                 "observed_boundary_source": (
-                    "find_peak_and_area_local_minimum_stored_trace_arrays"
+                    _observed_boundary_source(
+                        observed_reintegration_mode,
+                        expected_window_padding_min=expected_window_padding_min,
+                    )
                 ),
                 "observed_area_source": (
                     "integration_from_peak_trace_gaussian15_positive_asls_residual"
@@ -625,6 +668,43 @@ def _observed_rows(
             }
         )
     return tuple(rows), errors_by_case
+
+
+def _observed_reintegration_arrays(
+    candidate: _TraceCandidate,
+    *,
+    observed_reintegration_mode: str,
+    expected_window_padding_min: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    rt = np.asarray(candidate.rt, dtype=float)
+    intensity = np.asarray(candidate.intensity, dtype=float)
+    if observed_reintegration_mode != EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE:
+        return rt, intensity
+
+    lower = candidate.oracle_start_rt - expected_window_padding_min
+    upper = candidate.oracle_end_rt + expected_window_padding_min
+    mask = (rt >= lower) & (rt <= upper)
+    return rt[mask], intensity[mask]
+
+
+def _observed_result_source(observed_reintegration_mode: str) -> str:
+    if observed_reintegration_mode == EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE:
+        return "heldout_trace_reintegration_expected_window_bounded_v1"
+    return "heldout_trace_reintegration_local_minimum_v1"
+
+
+def _observed_boundary_source(
+    observed_reintegration_mode: str,
+    *,
+    expected_window_padding_min: float,
+) -> str:
+    if observed_reintegration_mode == EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE:
+        padding = _float_text(expected_window_padding_min)
+        return (
+            "find_peak_and_area_local_minimum_stored_trace_arrays_"
+            f"expected_window_padded_{padding}min"
+        )
+    return "find_peak_and_area_local_minimum_stored_trace_arrays"
 
 
 def _candidate_output_rows(
@@ -722,6 +802,8 @@ def _summary_row(
     *,
     source_run_id: str,
     target_shape_class: str,
+    observed_reintegration_mode: str,
+    expected_window_padding_min: float,
     alignment_backfill_cell_evidence_tsv: Path,
     trace_root: Path,
     candidates: Sequence[_TraceCandidate],
@@ -760,6 +842,12 @@ def _summary_row(
         "schema_version": SCHEMA_VERSION,
         "source_run_id": source_run_id,
         "target_shape_class": target_shape_class,
+        "observed_reintegration_mode": observed_reintegration_mode,
+        "expected_window_padding_min": (
+            _float_text(expected_window_padding_min)
+            if observed_reintegration_mode == EXPECTED_WINDOW_BOUNDED_REINTEGRATION_MODE
+            else ""
+        ),
         "status": status,
         "readiness_scope": f"{target_shape_class}_heldout_oracle",
         "source_alignment_backfill_cell_evidence_tsv": str(

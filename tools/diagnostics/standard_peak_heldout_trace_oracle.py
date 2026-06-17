@@ -11,7 +11,10 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from xic_extractor.diagnostics.standard_peak_heldout_trace_oracle import (
+    DEFAULT_EXPECTED_WINDOW_PADDING_MIN,
+    FULL_TRACE_REINTEGRATION_MODE,
     HIGH_SIGNAL_CLEAN_SCOPE,
+    SUPPORTED_OBSERVED_REINTEGRATION_MODES,
     SUPPORTED_TARGET_SHAPE_CLASSES,
     run_heldout_trace_oracle,
 )
@@ -28,6 +31,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             source_run_id=args.source_run_id,
             target_shape_class=args.target_shape_class,
+            observed_reintegration_mode=args.observed_reintegration_mode,
+            expected_window_padding_min=args.expected_window_padding_min,
             max_cases=args.max_cases,
             max_cases_per_family=args.max_cases_per_family,
         )
@@ -63,6 +68,25 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--target-shape-class",
         choices=SUPPORTED_TARGET_SHAPE_CLASSES,
         default=HIGH_SIGNAL_CLEAN_SCOPE,
+    )
+    parser.add_argument(
+        "--observed-reintegration-mode",
+        choices=SUPPORTED_OBSERVED_REINTEGRATION_MODES,
+        default=FULL_TRACE_REINTEGRATION_MODE,
+        help=(
+            "How to reintegrate stored trace arrays for observed heldout results. "
+            "Default full_trace preserves existing oracle behavior; "
+            "expected_window_bounded clips to oracle_start/end plus padding."
+        ),
+    )
+    parser.add_argument(
+        "--expected-window-padding-min",
+        type=float,
+        default=DEFAULT_EXPECTED_WINDOW_PADDING_MIN,
+        help=(
+            "RT padding used only by --observed-reintegration-mode "
+            "expected_window_bounded."
+        ),
     )
     parser.add_argument("--max-cases", type=int, default=20)
     parser.add_argument("--max-cases-per-family", type=int, default=1)
