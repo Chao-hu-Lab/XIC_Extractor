@@ -25,6 +25,15 @@ targeted `peak_candidates.tsv`，確認 candidate id 唯一存在，並寫
 `production_candidate`，仍不會切換 selected peak、不會重算 area、不會改
 counted detection、workbook 或 primary matrix；manual boundary 仍 parked。
 
+Sample metadata 也已收斂 tier：`sample_metadata_v1` 的 shared resolver 現在是
+`production_ready` for no-output order projection only。白話說，同一份
+metadata 可以餵 extraction 的 `injection_order_source`、alignment 的
+sample-column ordering、RT-normalization anchor lookup，也可以由 instrument-QC
+輸出 sidecar；但 `sample_role`、blank/QC、batch、matrix、exclusion 仍只是
+metadata，不能改 quant、counted detection、normalized value、workbook 或
+primary matrix。這些 value-changing role behavior 仍是 `blocked`，需要新的
+expected-diff gate 和產品決策。
+
 本輪最新推進是把原本 72 個 `detected_flagged` 補上逐列 oracle。白話說，
 這 72 列不是靠人工 TSV 白名單放行，而是每列拿自己的 stored trace 重新跑
 `find_peak_and_area` + area integration，必須在你接受的 `0.1 min / 10% area`
@@ -818,12 +827,15 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
 - `ReviewAction` audited apply copy: usable as audited output copy；selected
   candidate switch 與 manual-boundary area recompute 已 `parked`，因為會改
   selected peak/area/counting，需要產品決策和 expected-diff。
-- `sample_metadata_v1`: extraction injection-order parity 已可用；
+- `sample_metadata_v1`: `production_ready` for no-output injection-order
+  parity / order projection only。Extraction injection-order parity 已可用；
   instrument-QC method-doc workflow 會輸出 additive
   `instrument_qc_sample_metadata.tsv`；alignment sample-column ordering 也可
   consume `sample_metadata_v1`；RT-normalization anchor diagnostic 的
   injection-based reference lookup 也可 consume `sample_metadata_v1`；
-  roles/batch/matrix/exclusion 不改 quant output 或 normalized values。
+  roles/batch/matrix/exclusion 仍 `blocked` for value-changing behavior，
+  不改 quant output、counted detection、normalized values、workbook 或 matrix
+  values。
 - Targeted MS1 shape identity / `NL_FAIL` explicit support TSV workflow:
   `production_ready` for headless explicit limited support-TSV workflow、
   explicit auto-limited CLI、以及 canonical no-flag normal CLI default。
@@ -872,9 +884,10 @@ CLI/tests 已證明它是 guarded `diagnostic_only` sidecar，不改
    或 broader target default rescue。
 4. `Provisional production-candidate gate` 已記成 guarded `diagnostic_only`；
    不要把 `alignment_production_candidate_gate.tsv` 當 product authority。
-5. Sample metadata 的 no-output resolver parity 已接到
+5. Sample metadata 的 no-output resolver parity 已是 `production_ready`，
+   且已接到
    extraction、instrument-QC、alignment、RT-normalization anchor diagnostic；
-   下一步若碰 QC/blank/batch/matrix role，必須先有 expected-diff gate，
+   下一步若碰 QC/blank/batch/matrix/exclusion role，必須先有 expected-diff gate，
    不能直接改 normalized values 或 matrix values。
 
 ## 目前可接手狀態

@@ -217,14 +217,17 @@ ReviewAction selected candidate / manual boundary writer 已 parked for current
 release claim；產品方向仍是減少人工審查，之後要用 stable IDs、
 expected-diff、audit gate 重新開 lane，而不是要求使用者審完所有案例。
 sample metadata cross-module
-parity 的 no-output resolver slices 已收斂到 extraction、instrument-QC、
-alignment、RT-normalization anchor diagnostic，不可讓 sample role 直接改
-main matrix。
+parity 的 no-output resolver slices 已收斂到 `production_ready` for
+order projection only：extraction、instrument-QC、alignment、RT-normalization
+anchor diagnostic 都可用同一個 `sample_metadata_v1` resolver 或 sidecar；
+sample roles / blank / QC / batch / matrix / exclusion 仍 `blocked` for any
+value-changing behavior，不可直接改 quant、counted detection、normalized value
+或 main matrix。
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
 | Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; apex-delta, width-only, and shape-margin probes are candidate only; reintegration-stability audit still leaves the full 299-row pool as `production_candidate` / writer-blocked because only the low-height subset plus the 72 observed-oracle rows have oracle + writer expected-diff approval and the formal all-stability family oracle failed 19/20 due one area error; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts, use the generated policy engine as the future broadening control point, and add broader evidence classes only with observed/masked/product-writer oracle evidence plus expected-diff | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if generated policy rows become a manual allowlist, if apex-delta/width-only/shape-margin or all-stability rows are promoted without resolving heldout oracle failures, if shape-clean stability is promoted without a missing-cell/nonzero-delta product scope, or if a RAW rerun would not change the broad-scope decision |
-| Supporting | `sample_metadata_cross_module_parity_v1` | none; extraction/instrument-QC/alignment/RT-normalization projection slices done | no further role/value behavior without expected-diff; release smoke/docs only | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
+| Supporting | `sample_metadata_cross_module_parity_v1` | none; no-output order projection is `production_ready`; role/value behavior remains `blocked` | release smoke/docs only; no further role/value behavior without expected-diff | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim; candidate-sidecar verifier is now `production_candidate` | selected-candidate writer and manual boundary area recompute remain blocked until expected-diff/product apply contracts exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
 | Frozen queue | calibration/normalization activation | none | classification and planning only | unfreeze only after active lanes are promoted, killed, or explicitly parked |
@@ -276,8 +279,8 @@ scope.
 | `method_manifest.json` | `production_ready` for targeted CLI replay parity | `xic_extractor.output.method_manifest`, `output/method_manifest.json` | 8RAW/85RAW CSV + normalized workbook replay parity passed；artifact policy says CSV exact, workbook normalized compare, manifest provenance-only | full byte-exact workbook replay only if a future release needs it | unassigned |
 | Headless targeted CLI | `production_ready` for targeted CLI replay parity | `xic-extractor-cli`, `--replay-manifest`, method manifest invocation context | replay rejects runtime overrides；GUI replay 未接主線 | GUI parity after mainline wiring | unassigned |
 | GUI/CLI parity | `partial_internal` | shared `load_config` / `extractor.run` | 缺 fixture-level parity diff | narrow parity smoke | unassigned |
-| `injection_order_source` | `production_surface` | settings/config/extraction pipeline | 只處理 order，不是 sample metadata universe | `sample_metadata_contract_v1` | unassigned |
-| Sample metadata roles | `production_surface` for extraction/alignment/RT-normalization injection-order parity and instrument-QC manifest projection; `production_candidate` for roles | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py`, `resolve_injection_order`, `run_alignment --sample-column-injection-order`, `instrument_qc_sample_metadata.tsv`, `analyze_rt_normalization_anchors.py --sample-info` | extraction 可用 `sample_metadata_v1` 當 injection-order source；alignment 可用 `sample_metadata_v1` 排 final matrix sample columns；instrument-QC method-doc manifest 可輸出 `sample_metadata_v1` sidecar；RT-normalization anchor diagnostic 可用 `sample_metadata_v1` 投影 injection order；roles/batch/matrix/exclusion 尚不改 product values 或 normalized values | role-aware QC/blank/batch behavior only with expected-diff gate | none; cross-module projection slices done |
+| `injection_order_source` | `production_ready` for order only | settings/config/extraction pipeline | 只處理 order，不是 sample metadata universe；role/value behavior 仍 blocked | `sample_metadata_contract_v1` | unassigned |
+| Sample metadata roles | `production_ready` for no-output injection-order projection and instrument-QC manifest projection; `blocked` for role-aware value behavior | `xic_extractor.sample_metadata`, `scripts/validate_sample_metadata.py`, `resolve_injection_order`, `run_alignment --sample-column-injection-order`, `instrument_qc_sample_metadata.tsv`, `analyze_rt_normalization_anchors.py --sample-info` | extraction 可用 `sample_metadata_v1` 當 injection-order source；alignment 可用 `sample_metadata_v1` 排 final matrix sample columns；instrument-QC method-doc manifest 可輸出 `sample_metadata_v1` sidecar；RT-normalization anchor diagnostic 可用 `sample_metadata_v1` 投影 injection order；roles/batch/matrix/exclusion 仍不得改 product values、counted detection 或 normalized values | role-aware QC/blank/batch/matrix/exclusion behavior only with expected-diff gate and product decision | none; cross-module projection slices done |
 | Instrument-QC trend sidecar | `production_surface` sidecar | `run_instrument_qc.py`, instrument_qc package, `instrument_qc_sample_metadata.tsv` | 不改 main matrix；sample metadata sidecar 只做 metadata projection | release smoke / downstream docs | none; projection slice done |
 | Calibration preview | `shadow_ready` / `diagnostic_only` | instrument-QC calibration preview | 不可寫 main matrix；response transfer blocked | `normalization_calibration_activation_v1` | unassigned |
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
@@ -2071,6 +2074,36 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: add the next evidence class to the generated policy engine
   only after a focused oracle/expected-diff gate proves it; do not add another
   manual/nested scoped writer path.
+
+### 2026-06-17 - sample_metadata_no_output_parity_tier_closeout_v1
+
+- Lane: `sample_metadata_cross_module_parity_v1`.
+- Previous tier: `production_surface` for extraction/alignment/
+  RT-normalization injection-order parity and instrument-QC sidecar projection;
+  `production_candidate` wording for roles.
+- New tier: `production_ready` for no-output injection-order projection and
+  additive instrument-QC metadata sidecar; `blocked` for any role/batch/matrix/
+  exclusion behavior that would change quant output, counted detection,
+  normalized values, workbook values, or primary matrix values.
+- Evidence: the existing shared resolver in `xic_extractor.sample_metadata` is
+  consumed by extraction `injection_order_source`, alignment
+  `--sample-column-injection-order`, RT-normalization anchor `--sample-info`,
+  and instrument-QC method-doc sidecar projection. The latest full local gate
+  after the ReviewAction sidecar slice passed with `3779 passed, 1 skipped`,
+  covering these parity tests without changing product values.
+- Product surface changed: docs/tier wording only in this closeout. No CLI flag,
+  schema column, workbook sheet, matrix schema, selected peak, selected area, or
+  counted detection behavior changed.
+- Validation: focused sample-metadata parity tests were rerun for this docs
+  closeout:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py tests\test_instrument_qc_sequence_manifest.py tests\test_run_instrument_qc.py tests\test_alignment_pipeline_outputs.py::test_pipeline_orders_sample_columns_by_sample_metadata_v1 tests\test_alignment_pipeline_outputs.py::test_pipeline_orders_sample_columns_by_injection_order tests\test_alignment_pipeline_outputs.py::test_pipeline_keeps_input_sample_order_without_injection_source tests\test_rt_normalization_anchors.py::test_injection_reference_accepts_sample_metadata_without_value_effect -q`
+  (`63 passed`). No RAW/85RAW rerun is needed because this lane only projects
+  metadata into existing order lookup behavior.
+- Remaining blocker: role-aware QC/blank/batch/matrix/exclusion behavior still
+  needs a separate expected-diff gate and product decision before any value can
+  change.
+- Next checkpoint: keep role metadata as pass-through context only unless a new
+  product contract names the exact output values allowed to change.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 

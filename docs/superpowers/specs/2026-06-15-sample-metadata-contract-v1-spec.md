@@ -2,19 +2,20 @@
 
 日期: 2026-06-15
 狀態: runtime_parity_adapter
-目標 tier: `partial_internal` -> `production_surface` for injection-order parity; `production_candidate` for roles
+目標 tier: `partial_internal` -> `production_ready` for no-output injection-order parity; `blocked` for role-aware value behavior
 控制台: [productization control plane](../plans/2026-06-15-productization-control-plane.md)
 
 ## Productization intake
 
 - Feature/lane: `sample_metadata_contract_v1`
 - Current tier:
-  - `injection_order_source`: `production_surface` for order only
-  - sample metadata roles: `partial_internal`
+  - `injection_order_source`: `production_ready` for no-output order projection
+  - sample metadata roles: `blocked` for value-changing behavior
 - Desired tier this slice:
-  - `production_surface` for using `sample_metadata_v1` as an
-    `injection_order_source` parity input.
-  - `production_candidate` for role/batch/matrix schema only.
+  - `production_ready` for using `sample_metadata_v1` as an
+    `injection_order_source` / sample-column / anchor-lookup parity input.
+  - `blocked` for role/batch/matrix/exclusion behavior that would alter
+    extraction, QC, alignment, normalized, counted, or matrix values.
 - Product surface touched:
   - `xic_extractor.sample_metadata`
   - `scripts/validate_sample_metadata.py`
@@ -130,11 +131,14 @@ Identity rules:
     CSV/TSV through `--sample-info`, they project the same mapping and use it
     only for `injection-local-median` / `injection-loess` reference lookup.
 - Tier after runtime parity slice:
-  - `production_surface` for injection-order parity through
+  - `production_ready` for no-output injection-order parity through
     `injection_order_source`, alignment sample-column ordering, and
     RT-normalization anchor diagnostic reference lookup.
-  - `production_candidate` for roles/batch/matrix/exclusion metadata; those
-    fields still do not affect product values.
+  - `production_ready` for additive instrument-QC `sample_metadata_v1`
+    sidecar projection from method-doc rows.
+  - `blocked` for roles/batch/matrix/exclusion behavior that would change
+    product values; those fields remain metadata only until a separate
+    expected-diff gate and product decision exist.
 - Expected-diff: not required; this slice does not mutate extraction outputs.
 - Validation:
   - `python -m pytest tests\test_sample_metadata.py tests\test_injection_rolling.py tests\test_extractor_run.py -q`
@@ -144,7 +148,7 @@ Identity rules:
   `sample_name`/`raw_stem` alias collisions before projection to
   injection-order mapping.
 - Residual blocker before full shared runtime adoption:
-  - role-aware QC/blank/batch/matrix behavior remains blocked
+  - role-aware QC/blank/batch/matrix/exclusion behavior remains blocked
   - calibration/normalization must not write back to main matrix until an
     expected-diff gate and product decision exist
   - no product behavior may use sample roles for exclusion or correction until expected-diff gates exist
@@ -207,3 +211,16 @@ Identity rules:
   - touched-file ruff/mypy recorded in the control-plane closeout
   - subagent reviewer `Descartes` found no P1/P2 blocker; the P3 request to
     cover `injection-loess` parity was fixed in the same focused suite
+
+## Tier closeout, 2026-06-17
+
+- The no-output resolver parity lane is now treated as `production_ready` for
+  order projection only. This means the shared `sample_metadata_v1` parser may
+  feed existing injection-order behavior in extraction, alignment sample-column
+  ordering, and RT-normalization anchor lookup, and instrument-QC may emit the
+  additive metadata sidecar.
+- This does not authorize sample roles, blank/QC labels, batch, matrix type,
+  group, or exclusion fields to change quant output, counted detection,
+  normalized values, workbook values, or primary matrix values.
+- Role-aware behavior remains `blocked` until there is an explicit
+  expected-diff gate and a product decision describing how values may change.
