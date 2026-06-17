@@ -258,6 +258,18 @@ Missing-Overlay Evidence Recovery v1 now links the 1087
 artifacts and sample-level trace fields across 114 families. This moves the
 evidence explanation from "artifact link missing" to "trace recovered but still
 needs review/truth/reintegration decision"; it does not grant write authority.
+Goal 5 machine status lane ids are tracked in
+`docs/superpowers/validation/productization_status_index_v1.tsv`:
+`backfill_current_write_ready_scope`, `broad_backfill_autowrite`,
+`productization_authority_firewall_v1`, `mechanical_adjudication_contract_v1`,
+`review_packet_workflow_v1`, `peak_choice_truth_lockbox_v1`,
+`missing_overlay_evidence_recovery_v1`, `quality_explanation_sidecar_v1`,
+`targeted_ms1_shape_identity_limited_rescue_v1`,
+`targeted_ms1_shape_identity_broader_targets`,
+`sample_metadata_order_projection_v1`, `sample_metadata_role_value_behavior`,
+`review_action_candidate_sidecar_v1`, `review_action_selected_candidate_switch`,
+`review_action_manual_boundary_area_writer`,
+`calibration_normalization_activation`, and `gui_replay_parity`.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -2130,6 +2142,51 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: superseded for broad Backfill. Future evidence classes may be
   considered only under a new independent truth-source / expected-diff goal;
   this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - productization_status_index_v1
+
+- Lane: Productization control-plane cleanup / machine-checkable lane status.
+- Previous tier: the handoff and control plane contained current lane status in
+  prose, but there was no compact machine-readable index that could reject
+  authority drift.
+- New tier: `production_candidate` control-plane guard. This does not change
+  product behavior or writer authority.
+- Evidence: `docs/superpowers/specs/productization_control_plane_schema.v1.json`
+  defines the status-index schema and allowed readiness states.
+  `docs/superpowers/validation/productization_status_index_v1.tsv` records each
+  current lane exactly once, including parked broad Backfill, the 511-cell
+  current writer scope, review/truth/recovery assets, targeted MS1 limited
+  rescue, sample metadata no-output projection, ReviewAction parked writebacks,
+  calibration freeze, and GUI out-of-scope state.
+  `scripts/check_productization_state.py` validates lane uniqueness, required
+  lanes, artifact hashes, doc anchors, authority-manifest alignment, and that
+  parked/blocked/diagnostic/frozen/out-of-scope/review/truth/evidence lanes
+  cannot write.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  returned `Productization state index is consistent and fail-closed.` Focused
+  tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  (`9 passed`). Focused ruff passed for `scripts/check_productization_state.py`
+  and `tests/test_productization_state_index.py`. Subagent review findings were
+  fixed by adding workbook/selected-peak/selected-area flags, rejecting
+  non-writer authority scopes and product-output changes, and requiring
+  handoff/control-plane anchors. Full local gate also passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3813 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `git diff --check` passed with LF/CRLF warnings only.
+- Remaining blocker: this is a guardrail, not product behavior. It does not
+  collect lockbox labels, recover new RAW evidence, or promote any parked lane.
+- Next checkpoint: Goal 6 bounded non-broad lane hardening. Keep the status
+  index in future productization gates.
 
 ### 2026-06-18 - missing_overlay_evidence_recovery_v1
 
