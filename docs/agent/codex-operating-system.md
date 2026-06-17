@@ -2,7 +2,8 @@
 
 This repo uses a small Codex operating system: root rules, nested docs, focused
 skills, minimal hooks, and explicit subagent routing. The goal is to catch
-high-cost mistakes early without turning every task into ceremony.
+high-cost mistakes early while keeping tooling aggressive, explicit, and
+decision-directed. The problem to avoid is blind ceremony, not useful tool use.
 
 ## Placement Model
 
@@ -82,9 +83,12 @@ least one condition:
 - it improves reuse of an existing owner/helper;
 - it closes a validation or contract decision earlier;
 - it reduces noisy manual review without hiding product risk.
+- it lets the agent use an official plugin, subagent, or existing tool to avoid
+  serial guessing.
 
-Do not add one just because a feature exists. Prefer improving an existing hook
-or skill over adding a parallel one.
+Do not add one just because a feature exists. Prefer improving an existing hook,
+skill, or routing rule over adding a parallel one. Do use already-available
+tools generously when they answer a named question.
 
 ## Self-Improvement Rule
 

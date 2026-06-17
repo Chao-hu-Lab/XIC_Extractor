@@ -76,6 +76,9 @@ when any answer is weak:
   behavior change, PR/CI, or release? Mixed phase types need explicit ordering.
 - **Decision closure**: What decision can this goal close? If the proposed gate
   cannot change the next action, shrink or remove it.
+- **Tool leverage**: Which available tools, subagents, plugins, diagnostics, or
+  existing artifacts can close the decision fastest and with the strongest
+  evidence? Do not choose a weaker route only to save tokens or cost.
 - **Verification fit**: Does verification match the phase type: focused tests,
   artifact parity, 8RAW, 85RAW, targeted benchmark, manual EIC/MS2 review, or
   CI? Do not overclaim a weaker tier.
@@ -85,8 +88,9 @@ when any answer is weak:
 - **Architecture risk**: Does it add diagnostics, RAW-backed evidence, preset
   performance work, matrix activation, HCD-PI, Delta Mass, CID-NL expansion, or
   a new evidence provider? If yes, use `xic-architecture-preflight` first.
-- **Stop rules**: Are there concrete conditions that require user decision
-  instead of more tool calls?
+- **Stop rules**: Are there concrete conditions that require user decision,
+  a different evidence source, or stopping the current loop instead of blind
+  continuation?
 - **Handoff**: Will a later agent know what changed, what was verified, what
   remains risky, and where the artifacts are?
 
@@ -99,8 +103,9 @@ bounded surface and verification gate.
 While executing:
 
 - Keep the active goal visible in decisions; do not drift into adjacent cleanup.
-- Prefer existing diagnostics, specs, and validation outputs before rerunning
-  expensive RAW jobs.
+- Use tools aggressively but with a decision map. Prefer existing diagnostics,
+  specs, and validation outputs before rerunning expensive RAW jobs when those
+  artifacts answer the same question; otherwise use the stronger tool or run.
 - If the work uncovers a larger backlog, record it as follow-up instead of
   silently expanding the goal.
 - If a reviewer finding, CI failure, or new data invalidates the goal contract,

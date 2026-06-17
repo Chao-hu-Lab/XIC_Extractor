@@ -9,6 +9,10 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
   is still blocked, and the next recommended step.
 - Use plain language before implementation detail. Say what changed, where, how
   it was checked, what was skipped, and what risk remains.
+- During long, tool-heavy work, explain what question the current tools are
+  answering and how the result changes the next action. Do not rely on internal
+  artifact names such as board row counts, slice labels, or TSV filenames
+  without translating what they mean for the product decision.
 - Final answers for implementation or validation work should include, when
   applicable: conclusion, changed files or artifact paths, verification run,
   remaining risk, and next action.

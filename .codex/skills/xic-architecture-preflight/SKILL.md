@@ -45,14 +45,18 @@ Answer these before implementation:
      existing package modules before adding a local helper.
    - Prefer `xic_extractor/tabular_io.py` before new TSV/parser/scalar helpers.
    - Prefer shared overlay/evidence selectors before one-off row selection.
-4. What call-cost model changes?
+4. What is the simplest human-explainable product rule?
+   - If the rule needs nested dataset-specific qualifiers, treat it as a
+     temporary validation slice, not product policy.
+   - Name the simple gate it is trying to approximate or prove.
+5. What call-cost model changes?
    - RAW opens;
    - XIC extraction calls;
    - batch size and locality;
    - repeated TSV scans;
    - repeated smoothing/curve normalization;
    - per-row vs per-family/per-sample cache boundaries.
-5. What public contract could drift?
+6. What public contract could drift?
    - CLI flags;
    - config keys;
    - TSV/CSV/workbook schema;
@@ -60,7 +64,7 @@ Answer these before implementation:
    - activation decisions;
    - value delta;
    - output path and artifact naming.
-6. What validation tier can close the decision?
+7. What validation tier can close the decision?
    - synthetic/focused tests;
    - no-RAW artifact parity;
    - 8RAW parity;
@@ -77,6 +81,7 @@ Goal:
 Existing owner/helper to reuse:
 New code location:
 Evidence provider role:
+Simplest product rule:
 Call-cost model:
 Public contracts at risk:
 Validation gate:
@@ -96,6 +101,8 @@ Stop and rethink when:
 - a writer computes domain evidence or reads RAW;
 - a diagnostic sidecar starts to look like production behavior without an exit
   rule;
+- a product gate grows by adding dataset-specific adjectives instead of a
+  domain-meaningful rule and evidence test;
 - 85RAW shape or CID-NL assumptions appear in core models as permanent product
   boundaries;
 - correctness is preserved but RAW calls, TSV scans, or smoothing operations

@@ -9,6 +9,9 @@ The role set was informed by public Codex subagent catalogs, including
 `https://github.com/VoltAgent/awesome-codex-subagents`, but collapsed for this
 repo. The goal is not to preserve every concern as a separate identity. The
 goal is to keep a small set of reviewer families with explicit triggers.
+This is not a cost-saving or token-minimizing policy. For this repo, use tools,
+plugins, and subagents generously when they make the work less blind, more
+parallel, or better evidenced.
 
 The routing also absorbs the parts of Google's engineering practices that fit
 this repo: favor changes that improve code health without chasing perfection,
@@ -51,10 +54,14 @@ when their trigger threshold applies before recreating process instructions:
 - `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
   output levels, heartbeat, timing, and benchmark acceptance are XIC-specific.
 
-Every skill, role, or workflow route needs a visible adoption reason. If it does
-not offer a clearer decision, lower repeat-failure risk, better recovery, or
-repo-specific capability that an existing owner lacks, improve the existing
-owner instead of adding a parallel entry.
+Every skill, role, plugin, or workflow route needs a visible adoption reason.
+This is a decision-map rule, not a scarcity rule. Use available official
+capabilities such as Superpowers workflows, multi-agent reviewers, CodeGraph,
+GitHub/gh, official docs/search, and focused real-data validation when they can
+answer a concrete question faster or with stronger evidence than local manual
+work. If a new route does not offer a clearer decision, lower repeat-failure
+risk, better recovery, or repo-specific capability that an existing owner lacks,
+improve the existing owner instead of adding a parallel entry.
 
 This repo owns only XIC-specific overlays and routing docs. Global skills are
 environment-level workflow dependencies outside this repo diff. If a named
@@ -71,9 +78,12 @@ specific lesson into the local skill or explicitly switch the route.
 ## Dispatch Rules
 
 - Default is main agent only.
-- Normal maximum dispatch is two reviewers.
-- Use three reviewers only when surfaces are genuinely independent and the
-  findings can change the next action.
+- Normal review is one or two reviewers, but broad rule audits, workflow
+  rewrites, productization gates, or user-requested debate may use three or more
+  reviewers when each reviewer has a distinct decision to challenge.
+- Do not downgrade reviewer count, model strength, or useful tooling only to
+  save tokens or cost. Downgrade only when the task is clearly mechanical or a
+  runtime/tool limit forces it, and report the reason.
 - When the user explicitly says to use subagents to review a spec, plan, goal,
   or workflow rule, use the critical artifact review flow below. Do not satisfy
   that request with one generic reviewer unless a thread limit blocks the
@@ -98,6 +108,21 @@ specific lesson into the local skill or explicitly switch the route.
   agents before downgrading a required multi-angle review. If the review still
   cannot fit, run reviewers sequentially rather than silently collapsing to one
   angle.
+
+## Tool And Plugin Posture
+
+- Tools are first-class engineering leverage. Use `rg`/targeted reads for text,
+  CodeGraph for structural ownership/impact questions, GitHub/gh for PR and CI
+  state, Superpowers/global skills for reusable workflows, and subagents for
+  independent review or implementation slices.
+- Before a long tool chain or expensive run, write the one-line decision map:
+  `question -> tool/evidence -> action if pass -> action if fail`.
+- If the question is exploratory, use parallel subagents or bounded outside
+  research instead of serially guessing.
+- If a tool result cannot change the next action, skip that specific run; do
+  not use this as a reason to avoid other useful tools.
+- For user-facing updates, translate internal artifact names into plain
+  language before relying on them as evidence.
 
 ## Reviewer Output Contract
 
@@ -378,7 +403,7 @@ Validation summaries must keep these separate:
 Use `outside-frame-researcher` only when one of these is true:
 
 - Existing local oracles cannot discriminate between credible design options.
-- Two local low-cost iterations failed to change the decision.
+- Two bounded local iterations failed to change the decision.
 - The method family itself is uncertain and an external guideline, paper, or
   mature implementation could change the gate design.
 
@@ -388,11 +413,14 @@ implementing.
 
 ## Anti-Patterns
 
-- Do not dispatch all agents just because a task is important.
+- Do not dispatch agents without distinct questions or non-overlapping review
+  angles. It is fine to dispatch several agents for a broad audit when each one
+  can change the decision.
 - Do not use subagents to avoid reading the repo yourself.
 - Do not let reviewer findings become new scope without checking whether they
   close the current decision.
 - Do not create a new role for a one-off concern. Add a role only after the
   concern recurs and cannot fit an existing family.
-- Do not treat orchestration as the product. The purpose of subagents is to
-  improve decisions and reduce repeated mistakes, not to add ceremony.
+- Do not treat orchestration as the product. The purpose of tools and subagents
+  is to improve decisions, expose evidence, and reduce repeated mistakes, not to
+  add ceremony or hide uncertainty.

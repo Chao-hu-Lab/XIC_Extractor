@@ -97,6 +97,10 @@ Broad 4613-row consolidated activation 仍只有 `production_candidate`，因為
 下一個 checkpoint 必須補 broader masked/product-writer oracle，不能把 narrow
 ready 外推到 4613-row，也不能把 low-height diagnostic expected-diff 當成
 writer approval。
+Any future Backfill scoped writer must explicitly name the broader evidence
+class it validates and the broad 4613-row decision it advances. If the scope is
+only another nested dataset-specific slice, it may be recorded as
+`production_candidate` evidence but must not be promoted to `production_ready`.
 新的 boundary-stability / reintegration-agreement diagnostic 已補上第一個
 broader evidence class：`standard_peak_reintegration_stability_audit.py` 對同一
 stored trace 做 full-trace 與 expected-window-bounded 兩種再積分，兩者都必須

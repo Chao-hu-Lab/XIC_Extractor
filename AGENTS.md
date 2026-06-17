@@ -53,6 +53,14 @@ Canonical references:
 - Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
   outputs before inventing a new diagnostic workflow. Search
   `docs/diagnostic-ledger.md` before rerunning known targets or failure modes.
+- Use tools aggressively when they reduce uncertainty, parallelize review,
+  expose evidence, or close a product decision. Token/cost minimization is not
+  the primary objective; avoiding blind, decision-free tool loops is.
+- Prefer the simplest rule, implementation, and validation path that preserves
+  the same product safety and evidence. Added filters, abstractions, test
+  shards, subagents, plugins, or long runs must name the product evidence or
+  decision they add; dataset-specific slices are staging evidence, not durable
+  product policy.
 - Treat `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, hook
   scripts, execpolicy, and subagent TOML as execution-affecting config. Changes
   need docs/handoff review, smoke check, and secret/local-path scan.
@@ -89,6 +97,9 @@ approval instead of substituting a narrower check.
   explicit activation/export contract.
 - Diagnostic TSVs, shadow reports, wrappers, and sidecars prove observability,
   not product usability.
+- Product rules must be short, human-explainable, and domain-meaningful. If a
+  rule reads like nested dataset-specific qualifiers, treat it as a temporary
+  validation slice until it is collapsed into a simpler gate or killed.
 - Public safety rules apply whenever selected peak, selected area, confidence,
   reason, matrix identity, workbook schema, TSV schema, or config behavior
   would change: require expected-diff contract and focused output tests.
@@ -118,6 +129,11 @@ approval instead of substituting a narrower check.
   matrix activation, or evidence-provider work, use `xic-architecture-preflight`
   and name owner/helper reuse, call-cost model, public contract risk, validation
   gate, and stop rule.
+- For broad audits, workflow-rule changes, structural questions, PR/CI work, or
+  requested review gates, use the relevant available capabilities instead of
+  self-limiting: repo skills, subagents, CodeGraph, GitHub/gh, diagnostics
+  indexes, official docs/search, and focused real-data validation where they
+  directly improve the decision.
 - For large XIC PR review, use `xic-large-pr-review` and review by blast radius:
   shared helpers, public contracts, diagnostics boundaries, RAW locality,
   product-vs-diagnostic claims, then parity evidence.

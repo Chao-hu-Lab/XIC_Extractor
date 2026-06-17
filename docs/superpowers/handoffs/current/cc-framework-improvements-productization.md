@@ -12,6 +12,25 @@ limited rescue 的 headless default 也到 `production_ready`。其他 Backfill
 probes 仍是正式的 `production_candidate`，但 writer 被 heldout oracle failure
 或 expected-diff 缺口擋住。
 
+策略修正：不要再把 `low-height-low-scan-clean-stable` 這類層層切片當成
+長期產品規則。這些切片只證明 writer/audit/expected-diff 管線可以安全放行
+一個小範圍；下一步應把 Backfill 收斂成短、可解釋、domain-meaningful 的
+通用 gate，例如 standard-seeded family、預期 RT window、`0.1 min / 10% area`
+oracle、write-ready / detected-flagged / blocked 分類，而不是繼續無限拆小。
+`AGENTS.md`、`docs/agent-subagent-routing.md`、`docs/agent/planning-workflows.md`
+和 repo-local skills 已補規則：工具、plugins、subagents、CodeGraph、GitHub/gh
+都要積極用；token/cost 不是主要限制。限制的是盲跑：每個長工具鏈或昂貴驗證
+都要有 `question -> tool/evidence -> action if pass -> action if fail` 的
+decision map。同等安全與證據下，一律走最簡單、最短、最容易維護的產品規則、
+實作與驗證路徑。
+
+2026-06-17 規則檢討結果：三個 read-only subagent review 已完成。strategy
+reviewer 和 implementation/contract reviewer 都無 blocker；docs-handoff
+reviewer 找到 handoff PR/CI 狀態過期，已在「下一步建議」改成目前實況。
+control plane 也補了硬 gate：未來新增 Backfill scoped writer 必須說明它驗證的
+broader evidence class，以及它如何推進 broad 4613-row decision；否則只能留
+`production_candidate`，不能宣稱 `production_ready`。
+
 本次主線續推有兩個部分。第一，讀完並收進
 `docs/deepresearch/Backfill Production Gate.md` 後，Backfill 的產品方向已
 從「用 `height >= 2e6` 當硬門檻」改成「用 boundary-stability /
@@ -1358,8 +1377,14 @@ RAW-backed 驗證:
 優先順序:
 
 1. 若要進 PR/merge，下一步是處理 remote/PR 層級。
-   - Local PR closeout gate 已在 2026-06-16 跑過。
-   - 尚未 push、尚未看 GitHub CI、尚未開或更新 PR。
+   - PR #85 已存在：`https://github.com/Chao-hu-Lab/XIC_Extractor/pull/85`，
+     base 是 `master`，head 是 `cc/framework-improvements`。
+   - Remote CI 對 pushed head `3b10731745865731482a9da62cd49e951f7dcc65`
+     是綠的：lint、typecheck、Python 3.11 tests、Python 3.12 tests 都
+     success。
+   - Local `HEAD` 是 `a5828392`，branch 目前 ahead 19，且還有本輪
+     workflow-rule / handoff docs dirty diff。下一步若要 closeout，是先審完、
+     commit、push 這批 intended docs changes，再重看 PR CI。
 
 2. 若繼續推 productization，第一順位是 Backfill broad-scope evidence，而不是再做已完成 scoped writer。
    - 目前 explicit 72-row high-signal-clean scoped writer 是 `production_ready`。
@@ -1394,6 +1419,9 @@ RAW-backed 驗證:
      Backfill gate 應把這 299-row pool 送進 masked/product-writer oracle，或再
      補 local S/N / selectivity、cohort-anchored expected window，並用預先宣告的
      strata + lockbox 防止 cherry-picking。
+   - 新 scoped writer 不能只靠再加一層資料集形容詞來宣稱 ready。它必須說明
+     自己驗證的 broader evidence class、如何推進 broad 4613-row decision，
+     以及通過哪個 heldout/masked/product-writer oracle 和 expected-diff。
    - 非標準 peak automatic promotion 仍不可啟用。
 
 3. 第二順位原本是 sample metadata cross-module parity；no-output resolver slices 已收斂。
