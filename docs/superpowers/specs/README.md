@@ -18,6 +18,12 @@ automatic implementation goals.
   `ProductionAcceptanceManifest v1` contract. This defines/checks the only
   future Backfill row artifact that may grant `write_authority=true`; it does
   not activate ProductWriter or the default quant matrix.
+- `quant_matrix_version_schema.v1.json`: Phase 3 explicit
+  `QuantMatrixVersion v1` activation output contract. It defines
+  `quant_matrix`, `cell_provenance`, `row_summary`, expected-diff, and source
+  summary invariants for manifest-authorized Backfill values; it does not
+  change ProductWriter default extraction, workbook, GUI, selected peak/area,
+  or counted-detection behavior.
 
 ## Rule
 

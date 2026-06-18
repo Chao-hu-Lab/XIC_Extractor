@@ -93,6 +93,25 @@ def test_control_plane_production_acceptance_manifest_contract_is_current() -> N
     assert "Phase 3 QuantMatrixVersion Activation" in section
 
 
+def test_control_plane_quant_matrix_version_activation_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrixVersion Activation v1",
+        "### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker",
+    )
+
+    assert "quant_matrix_version_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_version.py" in section
+    assert "quant_matrix.tsv" in section
+    assert "cell_provenance.tsv" in section
+    assert "row_summary.tsv" in section
+    assert "expected-diff" in section
+    assert "detected-only view is reconstructable" in section
+    assert "No ProductWriter default extraction" in section
+    assert "Phase 4 Gallery/Report Alignment" in section
+
+
 def test_control_plane_current_summary_routes_to_phase3() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
@@ -103,9 +122,24 @@ def test_control_plane_current_summary_routes_to_phase3() -> None:
 
     assert "Phase 2" in summary
     assert "`ProductionAcceptanceManifest v1` is now defined" in summary
-    assert "Next checkpoint is Phase 3" in summary
+    assert "Phase 3" in summary
+    assert "Phase 3 `QuantMatrixVersion Activation`" in summary
+    assert "is now implemented as an explicit manifest-driven activation" in summary
+    assert "Next checkpoint is Phase 4" in summary
     assert "`QuantMatrixVersion Activation`" in summary
     assert "Next checkpoint is Phase 2" not in summary
+    assert "Next checkpoint is Phase 3" not in summary
+
+
+def test_specs_readme_lists_quant_matrix_version_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_version_schema.v1.json" in text
+    assert "cell_provenance" in text
+    assert "row_summary" in text
+    assert "expected-diff" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

@@ -290,8 +290,11 @@ unclear or right-peak reference cases stay flagged. This is still
 `ProductionAcceptanceManifest v1` is now defined as an additive schema/checker
 precursor; it is not a scorer run and writes no ProductWriter input, matrix,
 workbook, selected peak/area, counted detection, reviewer slot2, GUI, default
-extraction, or broad Backfill authority. Next checkpoint is Phase 3
-`QuantMatrixVersion Activation`.
+extraction, or broad Backfill authority. Phase 3 `QuantMatrixVersion Activation`
+is now implemented as an explicit manifest-driven activation surface with
+expected-diff, `cell_provenance`, and `row_summary`; it still does not wire
+ProductWriter default extraction, workbooks, GUI, selected peak/area, counted
+detection, reviewer slot2, or broad Backfill authority. Next checkpoint is Phase 4 `Gallery/Report Alignment`.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2810,6 +2813,34 @@ at that older checkpoint, not the latest release claim.
   owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
+
+### 2026-06-19 - QuantMatrixVersion Activation v1
+
+- Lane: Backfill quant-matrix activation / Phase 3.
+- Previous tier: Phase 2 `ProductionAcceptanceManifest v1` schema/checker was
+  an authority precursor and did not write matrix outputs.
+- New tier: unchanged. This is an explicit activation adapter and public output
+  schema for manifest-authorized Backfill values, not a maturity-tier
+  promotion and not ProductWriter default extraction.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_version_schema.v1.json`,
+  `scripts/build_quant_matrix_version.py`, and
+  `xic_extractor/alignment/quant_matrix_version.py`.
+- Product surface changed: additive explicit outputs only:
+  `quant_matrix.tsv`, `cell_provenance.tsv`, `row_summary.tsv`,
+  `expected_diff_summary.tsv`, and `source_summary.tsv`.
+- Evidence: focused tests cover writing detected plus accepted Backfill values
+  from a validated `ProductionAcceptanceManifest`, expected-diff enforcement,
+  provenance completeness, row summary counts, detected-only view is reconstructable
+  from `quant_matrix + cell_provenance`, missing expected-diff
+  rejection, and detected-value overwrite rejection.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: gallery/report surfaces still need to align with
+  `cell_provenance`, `row_summary`, source hashes, and prevalence uncertainty
+  before this is a complete user-facing Backfill story.
+- Next checkpoint: Phase 4 Gallery/Report Alignment.
 
 ### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker
 
