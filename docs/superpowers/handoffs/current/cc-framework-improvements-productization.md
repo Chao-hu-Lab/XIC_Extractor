@@ -4,6 +4,7 @@ Updated: 2026-06-18
 Branch: `cc/framework-improvements`
 Baseline before this six-goal sequence: `87c51c05`
 Previous committed checkpoint before Goal 9: `dcd8878a`
+Latest committed Goal 9 checkpoint: `84b4f423`
 
 This file is a short continuation snapshot. The control plane remains the tier
 authority; generated validation/spec artifacts own their schemas and row counts.
@@ -16,10 +17,11 @@ matrix, workbook, selected peak/area, counted-detection, default extraction, or
 GUI authority.
 
 Goal 0/1 through Goal 7 are complete for this sequence and committed through
-`dcd8878a`. Goal 9 Lockbox Static Review UX v1 is the active checkpoint: it
-adds a static HTML review bundle with Gaussian15-smoothed plots so the 72-case
-lockbox can be labeled without opening raw TSV/Markdown artifacts by hand. It
-does not collect labels and does not add writer authority.
+`dcd8878a`. Goal 9 Lockbox Static Review UX v1 was committed at `84b4f423` and
+is now receiving a follow-up boundary-display fix: the review plot must use the
+Gaussian15-derived review boundary as the primary shaded window, with the older
+candidate/raw boundary shown only as a reference. It does not collect labels and
+does not add writer authority.
 
 ## Current State
 
@@ -40,9 +42,10 @@ does not collect labels and does not add writer authority.
   are ready for independent labels. Goal 7 now adds a structured
   label-collection pack around those cases: 72 Markdown packets, a 144-row
   empty label template with two reviewer slots per case, and a validator.
-  Goal 9 adds a static review UX with 54 Gaussian15-smoothed plots for cases
-  with trace evidence and 18 explicitly missing-evidence pages. Labels cannot
-  write matrix values and empty template rows are not truth.
+  Goal 9 adds a static review UX with 53 Gaussian15-smoothed plots that have
+  Gaussian-derived review boundaries, 18 explicitly missing-evidence pages, and
+  1 trace-present boundary-unavailable page. Labels cannot write matrix values
+  and empty template rows are not truth.
 - `missing_overlay_evidence_recovery_v1`: `production_candidate`; all 1087
   missing-overlay rows now link to existing trace/overlay/hypothesis evidence,
   but remain `evidence_required`.
@@ -131,9 +134,10 @@ does not collect labels and does not add writer authority.
 - Lockbox label packets are collection infrastructure only. Codex must not
   invent labels, treat blank template rows as labels, or use reviewer labels as
   immediate ProductWriter authority.
-- Static review UX plots are Gaussian15 review/morphology views only. They help
-  humans label peak choice/area/boundary, but they are not area truth,
-  ProductWriter input, or matrix authority.
+- Static review UX plots are Gaussian15 review/morphology views only. The teal
+  shaded boundary is now Gaussian-derived; candidate/raw boundaries are orange
+  reference lines only. The plots help humans label peak choice/area/boundary,
+  but they are not area truth, ProductWriter input, or matrix authority.
 - Recovered trace/overlay links reduce evidence gaps but do not make the 1087
   rows writable.
 - ISTD is a limited reference anchor only. It is not analyte peak-choice truth
@@ -155,6 +159,8 @@ does not collect labels and does not add writer authority.
   expected-diff authority update.
 - Treating Goal 9 Gaussian15 plots as product integration, matrix area, or
   automatic peak-choice truth.
+- Treating the older candidate/raw boundary as the primary review boundary in
+  Goal 9 plots.
 - Treating the status index itself as authority beyond the scope it records.
 
 ## Tests / Validation
@@ -249,22 +255,27 @@ Latest Goal 7 focused verification:
 Latest Goal 9 focused verification:
 
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py`
-  built 72 case pages and 54 Gaussian15 review plots. The 18 remaining cases
-  are explicit `missing_evidence_recorded` pages.
+  built 72 case pages and 53 Gaussian15 review plots with Gaussian-derived
+  boundaries. The remaining cases are 18 explicit `missing_evidence_recorded`
+  pages and 1 `gaussian_review_boundary_unavailable` page for a trace file with
+  no positive signal.
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
   returned `Lockbox static review bundle is valid and non-authoritative.`
   The checker now binds the bundle to the current packet index hash, label
   template hash, source artifact hashes, and visible row identity fields so
   stale HTML/PNG review surfaces fail closed.
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_static_review_bundle.py -v --tb=short`
-  passed `8`, including stale packet-index, label-template, and source-hash
-  regression tests.
+  passed `11`, including stale packet-index, label-template, source-hash,
+  browser-case Gaussian-boundary, and synthetic zero-signal regression tests.
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_static_review_bundle.py tests/test_lockbox_static_review_bundle.py`
   passed.
 - Subagent review: Lagrange found one P2 stale-bundle checker gap and one P3
   stale control-plane checkpoint wording. Both were fixed. Lagrange found no
   product-authority drift, no label-collection behavior in the HTML, and no
   alternate smoothing path.
+- Follow-up subagent review: Wegener found no P1/P2/P3 findings for the
+  Gaussian-boundary display fix. Its residual suggestion to add a synthetic
+  zero-signal regression was implemented.
 - Final local gate passed:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_static_review_bundle.py`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
@@ -274,14 +285,15 @@ Latest Goal 9 focused verification:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
-    (`3848 passed, 1 skipped`)
+    (`3851 passed, 1 skipped`)
   - `git diff --check` passed with LF/CRLF warnings only.
-- Commit is the remaining Goal 9 closeout step.
+- This closes the Goal 9 boundary-display fix.
 
 ## Remaining Work
 
-- Goal 9 subagent review findings are fixed and the final local gate passed. It
-  still needs a commit.
+- Goal 9 has a committed checkpoint at `84b4f423` plus this follow-up
+  boundary-display fix. Review windows are now Gaussian-derived rather than
+  raw/candidate-derived.
 - No new writer authority, GUI work, matrix/workbook mutation, selected
   peak/area mutation, counted-detection mutation, or broad Backfill revival was
   added.
@@ -296,7 +308,6 @@ Latest Goal 9 focused verification:
 
 ## Next Actions
 
-1. Commit Goal 9.
-2. After commit, use the static review UX to fill a small first batch of labels
+1. Use the static review UX to fill a small first batch of labels
    before starting Goal 8 label import and truth summary. Do not return to broad
    Backfill heuristic mining.

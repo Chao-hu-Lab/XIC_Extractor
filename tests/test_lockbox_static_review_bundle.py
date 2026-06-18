@@ -22,14 +22,30 @@ def test_current_static_review_bundle_counts_and_authority() -> None:
     missing = [
         row for row in rows if row["plot_status"] == "missing_evidence_recorded"
     ]
+    boundary_unavailable = [
+        row
+        for row in rows
+        if row["plot_status"] == "gaussian_review_boundary_unavailable"
+    ]
 
     assert len(rows) == 72
-    assert len(plotted) == 54
+    assert len(plotted) == 53
     assert len(missing) == 18
+    assert len(boundary_unavailable) == 1
     assert {row["gaussian_smoothing_method"] for row in rows} == {"gaussian_15"}
     assert {row["gaussian_window_points"] for row in rows} == {"15"}
     assert {row["may_touch_matrix"] for row in rows} == {"FALSE"}
     assert {row["may_grant_product_authority"] for row in rows} == {"FALSE"}
+    assert {
+        row["gaussian_review_area_source"] for row in plotted
+    } == {"gaussian15_positive_asls_residual"}
+    assert all(row["gaussian_review_boundary_start_rt"] for row in plotted)
+    assert all(row["gaussian_review_boundary_end_rt"] for row in plotted)
+    assert all(not row["gaussian_review_boundary_start_rt"] for row in missing)
+    assert all(
+        not row["gaussian_review_boundary_start_rt"]
+        for row in boundary_unavailable
+    )
     first_plot = Path(plotted[0]["review_plot_png_path"])
     assert first_plot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     html = (OUTPUT_DIR / "index.html").read_text(encoding="utf-8")
@@ -53,14 +69,60 @@ def test_static_review_builder_generates_synthetic_gaussian_bundle(
     assert result["plot_count"] == 1
     assert rows[0]["plot_status"] == "plotted_gaussian15"
     assert rows[0]["review_plot_png_path"]
+    assert rows[0]["gaussian_review_boundary_start_rt"]
+    assert rows[0]["gaussian_review_boundary_end_rt"]
+    assert rows[0]["gaussian_review_area_source"] == (
+        "gaussian15_positive_asls_residual"
+    )
     assert Path(rows[0]["review_plot_png_path"]).read_bytes().startswith(
         b"\x89PNG\r\n\x1a\n",
     )
     assert rows[1]["plot_status"] == "missing_evidence_recorded"
     assert rows[1]["review_plot_png_path"] == ""
+    assert rows[1]["gaussian_review_boundary_start_rt"] == ""
     case_html = Path(rows[0]["case_html_path"]).read_text(encoding="utf-8")
     assert "Gaussian15 Review Plot" in case_html
+    assert "Gaussian review boundary" in case_html
     assert "packet_trace_overlay_hypothesis" in case_html
+
+
+def test_static_review_builder_marks_zero_signal_trace_boundary_unavailable(
+    tmp_path: Path,
+) -> None:
+    packet_index, label_template = _write_synthetic_inputs(tmp_path)
+    trace_path = tmp_path / "trace.json"
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    payload["traces"][0]["intensity"] = [0 for _ in payload["traces"][0]["rt"]]
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = build_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        output_dir=tmp_path / "bundle",
+    )
+    rows = _read_tsv(Path(result["bundle_index"]))
+
+    assert result["plot_count"] == 0
+    assert rows[0]["plot_status"] == "gaussian_review_boundary_unavailable"
+    assert rows[0]["review_plot_png_path"] == ""
+    assert rows[0]["gaussian_review_boundary_start_rt"] == ""
+    assert "not assessable" in Path(rows[0]["case_html_path"]).read_text(
+        encoding="utf-8",
+    )
+
+
+def test_current_browser_case_uses_gaussian_boundary_not_raw_candidate_window() -> None:
+    rows = _read_tsv(OUTPUT_DIR / "bundle_index.tsv")
+    row = next(
+        item
+        for item in rows
+        if item["lockbox_case_id"] == "LOCKBOXV1_030FE0B6917F8D9F8B9D8ADC"
+    )
+
+    assert float(row["gaussian_review_boundary_start_rt"]) < 32.7987
+    assert float(row["gaussian_review_boundary_end_rt"]) > 33.0894
+    assert row["gaussian_review_boundary_source"] == "baseline_return"
+    assert row["gaussian_review_segment_class"] == "isolated_peak"
 
 
 def test_static_review_checker_rejects_missing_plot(tmp_path: Path) -> None:
@@ -106,6 +168,32 @@ def test_static_review_checker_rejects_authority_flags(tmp_path: Path) -> None:
     assert any("may_touch_matrix must be FALSE" in problem for problem in problems)
     assert any(
         "may_grant_product_authority must be FALSE" in problem
+        for problem in problems
+    )
+
+
+def test_static_review_checker_rejects_missing_gaussian_boundary(
+    tmp_path: Path,
+) -> None:
+    packet_index, label_template = _write_synthetic_inputs(tmp_path)
+    build_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        output_dir=tmp_path / "bundle",
+    )
+    header, rows = _read_tsv_with_header(tmp_path / "bundle" / "bundle_index.tsv")
+    rows[0]["gaussian_review_boundary_start_rt"] = ""
+    _write_tsv(tmp_path / "bundle" / "bundle_index.tsv", header, rows)
+
+    problems = check_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        output_dir=tmp_path / "bundle",
+        expected_case_count=2,
+    )
+
+    assert any(
+        "gaussian_review_boundary_start_rt missing" in problem
         for problem in problems
     )
 

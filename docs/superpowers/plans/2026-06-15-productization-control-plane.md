@@ -261,10 +261,13 @@ or write authority. Blank template rows are not labels; future reviewer labels
 remain evidence inputs until a later import/summary gate and separate
 expected-diff authority update say otherwise.
 Lockbox Static Review UX v1 now adds a human-readable HTML bundle on top of the
-same label package: 72 case pages, 54 Gaussian15-smoothed review plots for rows
-with trace evidence, and 18 explicit missing-evidence pages. Gaussian15 is a
-review/morphology view only; it is not a ProductWriter input, matrix area,
-selected peak switch, counted-detection decision, or automatic truth label.
+same label package: 72 case pages, 53 Gaussian15-smoothed review plots with
+Gaussian-derived review boundaries, 18 explicit missing-evidence pages, and 1
+trace-present boundary-unavailable page. Gaussian15 is a review/morphology view
+only; it is not a ProductWriter input, matrix area, selected peak switch,
+counted-detection decision, or automatic truth label. The teal shaded review
+window is Gaussian-derived; older candidate/raw boundaries are reference lines
+only.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2300,28 +2303,34 @@ at that older checkpoint, not the latest release claim.
 - Evidence: `scripts/build_lockbox_static_review_bundle.py` reads the existing
   `lockbox_review_packets_v1/packet_index.tsv`, selects the matching sample
   trace from each trace JSON, applies the existing
-  `gaussian15_morphology_trace` (`gaussian_15`, 15 points), and writes
+  `gaussian15_morphology_trace` (`gaussian_15`, 15 points), derives the
+  primary review boundary from the existing chromatographic peak-segment
+  baseline-return logic, and writes
   `docs/superpowers/validation/lockbox_static_review_v1/`. The generated bundle
-  contains `index.html`, `bundle_index.tsv`, 72 case HTML pages, and 54 PNG
-  review plots. The 18 rows without trace evidence are rendered as explicit
-  missing-evidence pages instead of synthetic plots.
+  contains `index.html`, `bundle_index.tsv`, 72 case HTML pages, and 53 PNG
+  review plots with Gaussian-derived boundaries. The 18 rows without trace
+  evidence are rendered as explicit missing-evidence pages, and one trace file
+  with no positive signal is rendered as
+  `gaussian_review_boundary_unavailable`, instead of synthetic plots.
 - Product surface changed: docs/validation/helper script/test only. No
   ProductWriter, matrix, workbook, selected peak/area, counted detection,
   workbook schema, CLI/config, extraction default, broad Backfill, or GUI
   behavior changed.
 - Validation:
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py`
-  built 72 cases and 54 Gaussian15 plots;
+  built 72 cases and 53 Gaussian15 plots;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
   returned `Lockbox static review bundle is valid and non-authoritative.`
   after checking the current packet-index hash, label-template hash, source
   artifact hashes, and visible row identity fields;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_static_review_bundle.py -v --tb=short`
-  passed `8`, including stale packet-index, label-template, and source-hash
-  regression tests;
+  passed `11`, including stale packet-index, label-template, source-hash,
+  browser-case Gaussian-boundary, and synthetic zero-signal regression tests;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_static_review_bundle.py tests/test_lockbox_static_review_bundle.py`
   passed. Subagent review found one stale-bundle checker gap and one stale
-  historical-checkpoint wording gap; both were fixed. Final local gate passed:
+  historical-checkpoint wording gap; both were fixed. Follow-up subagent review
+  found no P1/P2/P3 findings for the Gaussian-boundary display fix. Final local
+  gate passed:
   `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_static_review_bundle.py`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
@@ -2330,13 +2339,13 @@ at that older checkpoint, not the latest release claim.
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
-  (`3848 passed, 1 skipped`); `git diff --check` passed with LF/CRLF
+  (`3851 passed, 1 skipped`); `git diff --check` passed with LF/CRLF
   warnings only.
 - Remaining blocker: no human labels have been collected. The UX reduces manual
   review friction but does not replace independent reviewer labels or the later
   label import / truth summary gate.
-- Next checkpoint: commit Goal 9. Then use the HTML bundle for a small first
-  labeling batch before starting label import.
+- Next checkpoint: use the HTML bundle for a small first labeling batch before
+  starting label import.
 
 ### 2026-06-18 - productization_status_index_v1
 

@@ -20,8 +20,15 @@ from typing import Any
 
 import numpy as np
 
+from xic_extractor.peak_detection.chrom_peak_segments import (
+    ChromPeakSegment,
+    ChromPeakSegmentPolicy,
+    enumerate_chrom_peak_segments,
+    select_segment_by_apex_rt,
+)
 from xic_extractor.peak_detection.ms1_morphology import (
     DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+    MS1_MORPHOLOGY_AREA_SOURCE,
     MS1_MORPHOLOGY_TRACE_METHOD,
     gaussian15_morphology_trace,
 )
@@ -42,6 +49,7 @@ OUTPUT_DIR = ROOT / "docs/superpowers/validation/lockbox_static_review_v1"
 
 SCHEMA_VERSION = "lockbox_static_review_bundle_v1"
 PLOT_STATUS_PLOTTED = "plotted_gaussian15"
+PLOT_STATUS_BOUNDARY_UNAVAILABLE = "gaussian_review_boundary_unavailable"
 NO_AUTHORITY = "FALSE"
 
 BUNDLE_INDEX_HEADER = [
@@ -54,6 +62,13 @@ BUNDLE_INDEX_HEADER = [
     "plotted_trace_sample_stem",
     "gaussian_smoothing_method",
     "gaussian_window_points",
+    "gaussian_review_boundary_start_rt",
+    "gaussian_review_boundary_end_rt",
+    "gaussian_review_apex_rt",
+    "gaussian_review_area",
+    "gaussian_review_area_source",
+    "gaussian_review_boundary_source",
+    "gaussian_review_segment_class",
     "source_stratum",
     "current_machine_decision",
     "evidence_status",
@@ -200,6 +215,13 @@ def _bundle_index_row(
         "plotted_trace_sample_stem": plot_result.sample_stem,
         "gaussian_smoothing_method": MS1_MORPHOLOGY_TRACE_METHOD,
         "gaussian_window_points": str(DEFAULT_GAUSSIAN15_WINDOW_POINTS),
+        "gaussian_review_boundary_start_rt": plot_result.boundary_start_rt,
+        "gaussian_review_boundary_end_rt": plot_result.boundary_end_rt,
+        "gaussian_review_apex_rt": plot_result.apex_rt,
+        "gaussian_review_area": plot_result.area,
+        "gaussian_review_area_source": plot_result.area_source,
+        "gaussian_review_boundary_source": plot_result.boundary_source,
+        "gaussian_review_segment_class": plot_result.segment_class,
         "source_stratum": packet.get("source_stratum", ""),
         "current_machine_decision": packet.get("current_machine_decision", ""),
         "evidence_status": packet.get("evidence_status", ""),
@@ -218,10 +240,33 @@ def _bundle_index_row(
 
 
 class _PlotResult:
-    def __init__(self, status: str, path: Path | None, sample_stem: str = "") -> None:
+    def __init__(
+        self,
+        status: str,
+        path: Path | None,
+        sample_stem: str = "",
+        segment: ChromPeakSegment | None = None,
+    ) -> None:
         self.status = status
         self.path = path
         self.sample_stem = sample_stem
+        self.boundary_start_rt = _format_optional_float(
+            None if segment is None else segment.interval.rt_start_min,
+        )
+        self.boundary_end_rt = _format_optional_float(
+            None if segment is None else segment.interval.rt_end_min,
+        )
+        self.apex_rt = _format_optional_float(
+            None if segment is None else segment.apex_rt_min,
+        )
+        self.area = _format_optional_float(
+            None if segment is None else segment.morphology_area_shadow,
+        )
+        self.area_source = MS1_MORPHOLOGY_AREA_SOURCE if segment is not None else ""
+        self.boundary_source = (
+            "" if segment is None else segment.boundary_stop_reason
+        )
+        self.segment_class = "" if segment is None else segment.segment_class
 
 
 def _write_review_plot(packet: Mapping[str, str], png_path: Path) -> _PlotResult:
@@ -246,8 +291,38 @@ def _write_review_plot(packet: Mapping[str, str], png_path: Path) -> _PlotResult
         return _PlotResult("invalid_trace_arrays", None)
     if not (np.all(np.isfinite(rt)) and np.all(np.isfinite(intensity))):
         return _PlotResult("invalid_trace_arrays", None)
-    _plot_gaussian_review(packet, trace, rt, intensity, png_path)
-    return _PlotResult(PLOT_STATUS_PLOTTED, png_path, str(trace.get("sample_stem", "")))
+    try:
+        baseline = _baseline_values(trace, intensity)
+    except ValueError:
+        return _PlotResult("invalid_trace_arrays", None)
+    gaussian_segment = _select_gaussian_review_segment(
+        packet,
+        trace,
+        rt,
+        intensity,
+        baseline,
+    )
+    if gaussian_segment is None:
+        return _PlotResult(
+            PLOT_STATUS_BOUNDARY_UNAVAILABLE,
+            None,
+            str(trace.get("sample_stem", "")),
+        )
+    _plot_gaussian_review(
+        packet,
+        trace,
+        rt,
+        intensity,
+        baseline,
+        gaussian_segment,
+        png_path,
+    )
+    return _PlotResult(
+        PLOT_STATUS_PLOTTED,
+        png_path,
+        str(trace.get("sample_stem", "")),
+        gaussian_segment,
+    )
 
 
 def _plot_gaussian_review(
@@ -255,6 +330,8 @@ def _plot_gaussian_review(
     trace: Mapping[str, Any],
     rt: np.ndarray,
     intensity: np.ndarray,
+    baseline: np.ndarray,
+    gaussian_segment: ChromPeakSegment | None,
     png_path: Path,
 ) -> None:
     import matplotlib
@@ -262,10 +339,12 @@ def _plot_gaussian_review(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    smoothed = gaussian15_morphology_trace(
-        intensity,
+    residual = np.maximum(intensity - baseline, 0.0)
+    smoothed_residual = gaussian15_morphology_trace(
+        residual,
         window_points=DEFAULT_GAUSSIAN15_WINDOW_POINTS,
     )
+    smoothed = baseline + smoothed_residual
     peak = _parse_candidate_peak_summary(packet.get("candidate_peak_summary", ""))
     fig, axes = plt.subplots(
         2,
@@ -293,13 +372,15 @@ def _plot_gaussian_review(
     )
     norm_ax.plot(
         rt,
-        _normalize(smoothed),
+        _normalize(smoothed_residual),
         color="#0f766e",
         linewidth=1.5,
         label="Gaussian15 normalized",
     )
-    _draw_candidate_marks(raw_ax, peak)
-    _draw_candidate_marks(norm_ax, peak)
+    _draw_gaussian_boundary_marks(raw_ax, gaussian_segment)
+    _draw_gaussian_boundary_marks(norm_ax, gaussian_segment)
+    _draw_candidate_reference_marks(raw_ax, peak)
+    _draw_candidate_reference_marks(norm_ax, peak)
     trace_apex = optional_float(trace.get("trace_apex_rt"))
     if trace_apex is not None:
         for ax in axes:
@@ -339,12 +420,87 @@ def _plot_gaussian_review(
     plt.close(fig)
 
 
-def _draw_candidate_marks(ax: Any, peak: Mapping[str, float]) -> None:
+def _select_gaussian_review_segment(
+    packet: Mapping[str, str],
+    trace: Mapping[str, Any],
+    rt: np.ndarray,
+    intensity: np.ndarray,
+    baseline: np.ndarray,
+) -> ChromPeakSegment | None:
+    enumeration = enumerate_chrom_peak_segments(
+        rt,
+        intensity,
+        baseline,
+        policy=ChromPeakSegmentPolicy(
+            morphology_trace_window_points=DEFAULT_GAUSSIAN15_WINDOW_POINTS,
+        ),
+    )
+    if enumeration.status != "OK" or not enumeration.segments:
+        return None
+    peak = _parse_candidate_peak_summary(packet.get("candidate_peak_summary", ""))
+    target_apex = peak.get("apex_rt_min")
+    if target_apex is None:
+        target_apex = optional_float(trace.get("trace_apex_rt"))
+    if target_apex is not None:
+        return select_segment_by_apex_rt(enumeration.segments, target_apex)
+    return max(enumeration.segments, key=lambda segment: segment.morphology_area_shadow)
+
+
+def _baseline_values(trace: Mapping[str, Any], intensity: np.ndarray) -> np.ndarray:
+    baseline_payload = trace.get("baseline")
+    if baseline_payload is None:
+        baseline_payload = trace.get("baseline_values")
+    if baseline_payload is None:
+        return np.zeros_like(intensity, dtype=float)
+    baseline = np.asarray(baseline_payload, dtype=float)
+    if (
+        baseline.ndim != 1
+        or len(baseline) != len(intensity)
+        or not np.all(np.isfinite(baseline))
+    ):
+        raise ValueError("invalid baseline")
+    return baseline
+
+
+def _draw_gaussian_boundary_marks(
+    ax: Any,
+    segment: ChromPeakSegment | None,
+) -> None:
+    if segment is None:
+        return
+    start = segment.interval.rt_start_min
+    end = segment.interval.rt_end_min
+    apex = segment.apex_rt_min
+    if end > start:
+        ax.axvspan(
+            start,
+            end,
+            color="#14b8a6",
+            alpha=0.14,
+            label="Gaussian15 review boundary",
+        )
+    ax.axvline(
+        apex,
+        color="#0f766e",
+        linestyle="--",
+        linewidth=1.2,
+        label="Gaussian15 segment apex",
+    )
+
+
+def _draw_candidate_reference_marks(ax: Any, peak: Mapping[str, float]) -> None:
     start = peak.get("start_rt_min")
     end = peak.get("end_rt_min")
     apex = peak.get("apex_rt_min")
     if start is not None and end is not None and end > start:
-        ax.axvspan(start, end, color="#14b8a6", alpha=0.13, label="candidate window")
+        for value in (start, end):
+            ax.axvline(
+                value,
+                color="#b45309",
+                linestyle=":",
+                linewidth=0.9,
+                label="candidate/raw boundary reference",
+            )
     if apex is not None:
         ax.axvline(
             apex,
@@ -414,6 +570,10 @@ def _write_index_html(
         _metric("Cases", str(len(rows))),
         _metric("Gaussian15 plots", str(status_counts[PLOT_STATUS_PLOTTED])),
         _metric("Missing evidence", str(status_counts["missing_evidence_recorded"])),
+        _metric(
+            "Boundary unavailable",
+            str(status_counts[PLOT_STATUS_BOUNDARY_UNAVAILABLE]),
+        ),
         _metric("Authority", "no matrix/write authority"),
         "</section>",
         '<table class="case-table">',
@@ -463,6 +623,14 @@ def _write_case_html(
         _fact("Machine decision", packet.get("current_machine_decision", "")),
         _fact("Evidence", packet.get("evidence_status", "")),
         _fact("Plot status", bundle_row.get("plot_status", "")),
+        _fact(
+            "Gaussian review boundary",
+            _gaussian_boundary_summary(bundle_row),
+        ),
+        _fact(
+            "Gaussian review area source",
+            bundle_row.get("gaussian_review_area_source", ""),
+        ),
         "</section>",
         "<h2>Gaussian15 Review Plot</h2>",
     ]
@@ -472,10 +640,7 @@ def _write_case_html(
             f'alt="{_a(case_id)} Gaussian15 review plot">'
         )
     else:
-        lines.append(
-            '<p class="missing">沒有可畫 trace；請依 packet 標成 insufficient '
-            "evidence 或 not assessable，除非你另有獨立證據。</p>"
-        )
+        lines.append(_missing_plot_message(bundle_row))
     lines.extend(
         [
             "<h2>Review Question</h2>",
@@ -487,7 +652,9 @@ def _write_case_html(
             "<li><strong>area_label</strong>: acceptable / unacceptable / "
             "not_assessable</li>",
             "<li><strong>boundary_label</strong>: acceptable / too_wide / "
-            "too_narrow / shifted / not_assessable</li>",
+            "too_narrow / shifted / not_assessable. Judge this against the "
+            "Gaussian15 review boundary, not the candidate/raw boundary "
+            "reference lines.</li>",
             "<li><strong>evidence_viewed</strong>: "
             f"{_e(_evidence_viewed_suggestion(packet))}</li>",
             "</ul>",
@@ -518,9 +685,7 @@ def _write_case_html(
 def _index_row_html(row: Mapping[str, str], *, output_dir: Path) -> str:
     case_href = _relative_link(row["case_html_path"], output_dir)
     label_href = _relative_link(row["label_template_path"], output_dir)
-    plot_value = (
-        "Gaussian15" if row["plot_status"] == PLOT_STATUS_PLOTTED else "missing"
-    )
+    plot_value = _plot_status_label(row["plot_status"])
     return (
         "<tr>"
         f'<td><a href="{_a(case_href)}">{_e(row["lockbox_case_id"])}</a></td>'
@@ -530,6 +695,28 @@ def _index_row_html(row: Mapping[str, str], *, output_dir: Path) -> str:
         f"<td>{_e(plot_value)}</td>"
         f'<td><a href="{_a(label_href)}">template</a></td>'
         "</tr>"
+    )
+
+
+def _plot_status_label(status: str) -> str:
+    if status == PLOT_STATUS_PLOTTED:
+        return "Gaussian15 boundary"
+    if status == PLOT_STATUS_BOUNDARY_UNAVAILABLE:
+        return "boundary unavailable"
+    return "missing"
+
+
+def _missing_plot_message(row: Mapping[str, str]) -> str:
+    if row.get("plot_status") == PLOT_STATUS_BOUNDARY_UNAVAILABLE:
+        return (
+            '<p class="missing">Trace exists but Gaussian15 review boundary is '
+            "unavailable, usually because there is no positive signal in the "
+            "trace. Mark boundary/area as not assessable unless independent "
+            "evidence resolves it.</p>"
+        )
+    return (
+        '<p class="missing">沒有可畫 trace；請依 packet 標成 insufficient '
+        "evidence 或 not assessable，除非你另有獨立證據。</p>"
     )
 
 
@@ -552,6 +739,20 @@ def _artifact_link(label: str, path_value: str) -> str:
     path = _resolve_path(path_value)
     href = path.resolve().as_uri() if path.is_absolute() else str(path)
     return f'<li>{_e(label)}: <a href="{_a(href)}">{_e(path_value)}</a></li>'
+
+
+def _gaussian_boundary_summary(row: Mapping[str, str]) -> str:
+    start = row.get("gaussian_review_boundary_start_rt", "")
+    end = row.get("gaussian_review_boundary_end_rt", "")
+    apex = row.get("gaussian_review_apex_rt", "")
+    source = row.get("gaussian_review_boundary_source", "")
+    segment_class = row.get("gaussian_review_segment_class", "")
+    if not start or not end:
+        return "not available"
+    return (
+        f"start={start}; end={end}; apex={apex}; "
+        f"source={source}; segment={segment_class}"
+    )
 
 
 def _badge(value: object) -> str:
@@ -638,7 +839,14 @@ def _check_bundle_row(
             )
     plot_status = row.get("plot_status", "")
     plot_path_value = row.get("review_plot_png_path", "")
+    if plot_status not in {
+        PLOT_STATUS_PLOTTED,
+        PLOT_STATUS_BOUNDARY_UNAVAILABLE,
+        "missing_evidence_recorded",
+    }:
+        problems.append(f"bundle row {row_number}: unknown plot_status")
     if plot_status == PLOT_STATUS_PLOTTED:
+        _check_gaussian_review_boundary(row, row_number, problems)
         plot_path = _resolve_path(plot_path_value)
         if not plot_path.exists():
             problems.append(f"bundle row {row_number}: plot PNG missing")
@@ -649,6 +857,63 @@ def _check_bundle_row(
                 problems.append(f"bundle row {row_number}: plot_sha256 mismatch")
     elif plot_path_value:
         problems.append(f"bundle row {row_number}: non-plotted row must not have plot")
+    elif _has_gaussian_review_boundary(row):
+        problems.append(
+            f"bundle row {row_number}: non-plotted row must not have Gaussian boundary",
+        )
+
+
+def _check_gaussian_review_boundary(
+    row: Mapping[str, str],
+    row_number: int,
+    problems: list[str],
+) -> None:
+    required_fields = (
+        "gaussian_review_boundary_start_rt",
+        "gaussian_review_boundary_end_rt",
+        "gaussian_review_apex_rt",
+        "gaussian_review_area",
+        "gaussian_review_area_source",
+        "gaussian_review_boundary_source",
+        "gaussian_review_segment_class",
+    )
+    for field in required_fields:
+        if not row.get(field, ""):
+            problems.append(f"bundle row {row_number}: {field} missing")
+    start = optional_float(row.get("gaussian_review_boundary_start_rt", ""))
+    end = optional_float(row.get("gaussian_review_boundary_end_rt", ""))
+    apex = optional_float(row.get("gaussian_review_apex_rt", ""))
+    area = optional_float(row.get("gaussian_review_area", ""))
+    if start is not None and end is not None and end <= start:
+        problems.append(f"bundle row {row_number}: Gaussian boundary is empty")
+    if (
+        start is not None
+        and end is not None
+        and apex is not None
+        and not (start <= apex <= end)
+    ):
+        problems.append(f"bundle row {row_number}: Gaussian apex outside boundary")
+    if area is not None and area <= 0.0:
+        problems.append(f"bundle row {row_number}: Gaussian review area not positive")
+    if row.get("gaussian_review_area_source") != MS1_MORPHOLOGY_AREA_SOURCE:
+        problems.append(
+            f"bundle row {row_number}: Gaussian review area source mismatch",
+        )
+
+
+def _has_gaussian_review_boundary(row: Mapping[str, str]) -> bool:
+    return any(
+        row.get(field, "")
+        for field in (
+            "gaussian_review_boundary_start_rt",
+            "gaussian_review_boundary_end_rt",
+            "gaussian_review_apex_rt",
+            "gaussian_review_area",
+            "gaussian_review_area_source",
+            "gaussian_review_boundary_source",
+            "gaussian_review_segment_class",
+        )
+    )
 
 
 def _checked_file_sha256(path: Path, label: str, problems: list[str]) -> str:
@@ -685,6 +950,12 @@ def _normalize(values: np.ndarray) -> np.ndarray:
     if maximum <= 0:
         return np.zeros_like(values)
     return values / maximum
+
+
+def _format_optional_float(value: float | None) -> str:
+    if value is None or not np.isfinite(float(value)):
+        return ""
+    return f"{float(value):.6g}"
 
 
 def _relative_link(path_value: str | Path, base: Path) -> str:
