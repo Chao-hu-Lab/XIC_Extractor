@@ -253,6 +253,13 @@ unresolved review rows, missing-overlay evidence gaps, failed-oracle negatives,
 and manual wrong-peak/no-peak fixtures. It is `production_candidate` as a
 non-mutating truth/review asset only; no labels have been collected, agreement
 metrics are null, and lockbox membership cannot grant ProductWriter authority.
+Lockbox Label Collection Pack v1 now materializes that lockbox as a
+human-labelable package: 72 Markdown review packets, a 144-row empty label
+template with two reviewer slots per case, a strict label schema, a validator,
+and a plain-language labeling README. This still does not create truth labels
+or write authority. Blank template rows are not labels; future reviewer labels
+remain evidence inputs until a later import/summary gate and separate
+expected-diff authority update say otherwise.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2206,6 +2213,73 @@ at that older checkpoint, not the latest release claim.
   candidate / manual-boundary writeback.
 - Next checkpoint: commit this Goal 6 slice. Future non-broad lane changes must
   update this guard or explicitly supersede it.
+
+### 2026-06-18 - lockbox_label_collection_pack_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: `production_candidate` truth-lockbox protocol and 72-case
+  sampling manifest existed, but the lockbox was not yet packaged for
+  structured human labeling.
+- New tier: unchanged for product authority. The label-collection pack is a
+  `production_candidate` truth/approval substrate: it can collect independent
+  labels later, but it does not grant ProductWriter authority.
+- Evidence: `docs/superpowers/specs/lockbox_label_schema_v1.json` defines
+  legal labels for peak choice, area, boundary, reviewer confidence, reason
+  code, notes, source hashes, and no-authority flags.
+  `scripts/build_lockbox_label_collection_pack.py` generates 72 Markdown
+  packets under
+  `docs/superpowers/validation/lockbox_review_packets_v1/`, the paired
+  `packet_index.tsv`, and
+  `docs/superpowers/validation/lockbox_label_template_v1.tsv` with 144 blank
+  reviewer rows. Each packet records row identity, candidate peak/area summary,
+  trace/overlay/hypothesis paths and hashes when available, recovered-evidence
+  context or an explicit missing-evidence reason, current machine decision, and
+  the exact review question. `scripts/check_lockbox_label_schema.py` validates
+  schema, packets, hashes, template structure, enum values, duplicate completed
+  reviewer IDs, label identity fields, source-hash binding, canonical packet
+  paths, and no-authority flags. Its default mode is hermetic for clean
+  checkouts and does not require ignored local `output/` artifacts;
+  `--verify-evidence-files` performs the stronger local file-existence/hash
+  check on machines that have the referenced evidence files. `--require-complete`
+  is reserved for the later completed-label import gate.
+- Product surface changed: docs/spec/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`
+  built 72 packets and 144 template rows;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  returned `Lockbox label collection pack is structurally valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`
+  also passed on the current machine;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_label_collection_pack.py -v --tb=short`
+  passed `15`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py tests/test_lockbox_label_collection_pack.py`
+  passed. Subagent review found no authority-boundary findings, then identified
+  data-contract gaps for non-hermetic evidence validation, completed-label
+  evidence/hash binding, free-form reason codes, noncanonical packet paths, and
+  label identity drift. All were fixed with focused regression tests; final
+  post-fix review found no P0/P1/P2/P3 findings. Final full local gate is still
+  passed before committing this checkpoint:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3840 passed, 1 skipped`); `git diff --check` passed with LF/CRLF warnings
+  only.
+- Remaining blocker: no human labels have been collected. The next gate must
+  import completed labels and summarize independent peak-choice / area truth;
+  it must not treat round-trip oracle, ISTD, empty template rows, or lockbox
+  membership as ground truth.
+- Next checkpoint: commit Goal 7. Then proceed to a label import / truth
+  summary gate only after completed labels exist.
 
 ### 2026-06-18 - productization_status_index_v1
 

@@ -3,7 +3,7 @@
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
 Baseline before this six-goal sequence: `87c51c05`
-Previous committed checkpoint before Goal 6: `1ba884a7`
+Previous committed checkpoint before Goal 7: `1ba884a7`
 
 This file is a short continuation snapshot. The control plane remains the tier
 authority; generated validation/spec artifacts own their schemas and row counts.
@@ -15,9 +15,11 @@ reviewable, non-black-box decisions, without granting new ProductWriter,
 matrix, workbook, selected peak/area, counted-detection, default extraction, or
 GUI authority.
 
-Goal 0/1 through Goal 6 are complete for this sequence. Goal 6 bounded
-non-broad lane hardening has subagent review, post-fix review, focused tests,
-and full local gate evidence.
+Goal 0/1 through Goal 6 are complete for this sequence. Goal 7 Lockbox Label
+Collection Pack v1 is implemented and post-fix subagent reviewed: it turns the
+existing 72-case lockbox into human-reviewable packets, an empty two-reviewer
+label template, a strict label schema, and a validator. It does not collect
+labels and does not add writer authority.
 
 ## Current State
 
@@ -35,7 +37,10 @@ and full local gate evidence.
   trace-matched rows have structured review packets. Review approval is not
   ProductWriter approval.
 - `peak_choice_truth_lockbox_v1`: `production_candidate`; 72 stratified cases
-  are ready for independent labels. Labels cannot write matrix values.
+  are ready for independent labels. Goal 7 now adds a structured
+  label-collection pack around those cases: 72 Markdown packets, a 144-row
+  empty label template with two reviewer slots per case, and a validator.
+  Labels cannot write matrix values and empty template rows are not truth.
 - `missing_overlay_evidence_recovery_v1`: `production_candidate`; all 1087
   missing-overlay rows now link to existing trace/overlay/hypothesis evidence,
   but remain `evidence_required`.
@@ -86,6 +91,13 @@ and full local gate evidence.
   - `docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv`
   - `docs/superpowers/validation/reviewer_label_log_v1.tsv`
   - `docs/superpowers/validation/inter_reviewer_agreement_summary_v1.json`
+  - `docs/superpowers/specs/lockbox_label_schema_v1.json`
+  - `docs/superpowers/validation/lockbox_review_packets_v1/packet_index.tsv`
+  - `docs/superpowers/validation/lockbox_review_packets_v1/`
+  - `docs/superpowers/validation/lockbox_label_template_v1.tsv`
+  - `docs/superpowers/validation/lockbox_label_readme_v1.md`
+  - `scripts/build_lockbox_label_collection_pack.py`
+  - `scripts/check_lockbox_label_schema.py`
 - Missing-overlay recovery:
   - `docs/superpowers/specs/trace_overlay_recovery_contract.v1.json`
   - `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv`
@@ -109,6 +121,9 @@ and full local gate evidence.
   shape-margin, and shape-clean variants cannot be renamed into a writer rule.
 - Review packets and future truth labels are approval/evidence surfaces, not
   automatic matrix write authority.
+- Lockbox label packets are collection infrastructure only. Codex must not
+  invent labels, treat blank template rows as labels, or use reviewer labels as
+  immediate ProductWriter authority.
 - Recovered trace/overlay links reduce evidence gaps but do not make the 1087
   rows writable.
 - ISTD is a limited reference anchor only. It is not analyte peak-choice truth
@@ -125,6 +140,9 @@ and full local gate evidence.
 - Letting review approval, lockbox membership, or recovered overlays directly
   mutate ProductWriter, matrix, workbook, selected peak/area, or counted
   detection.
+- Treating Goal 7 packets, the empty label template, or future reviewer labels
+  as direct write approval without a later import/summary gate plus
+  expected-diff authority update.
 - Treating the status index itself as authority beyond the scope it records.
 
 ## Tests / Validation
@@ -178,20 +196,62 @@ Latest Goal 6 focused verification:
   - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
   - `git diff --check` passed with LF/CRLF warnings only.
 
+Latest Goal 7 focused verification:
+
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`
+  built 72 case packets and 144 empty label-template rows.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  returned `Lockbox label collection pack is structurally valid and non-authoritative.`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`
+  also passed on this machine, confirming the referenced local `output/`
+  evidence files still match recorded hashes. The default checker remains
+  hermetic for clean checkouts and does not require ignored `output/` files.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_label_collection_pack.py -v --tb=short`
+  passed `15`.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py tests/test_lockbox_label_collection_pack.py`
+  passed.
+- Subagent review: Jason found no product-authority or lane-boundary findings.
+  Ptolemy found one P1 and three P2 data-contract findings: non-hermetic
+  evidence-file validation, completed-label evidence/hash binding gap,
+  free-form reason codes, and noncanonical packet path acceptance. Those were
+  fixed by adding structural vs `--verify-evidence-files` modes, binding
+  completed labels to source hashes, adding reason/evidence enums, enforcing
+  canonical packet paths, and adding regression tests. A follow-up P3 identity
+  drift finding was fixed by requiring label `row_id`, `family_id`,
+  `sample_id`, and `analyte` to match the packet row. Final post-fix subagent
+  review found no P0/P1/P2/P3 findings.
+- Final full local gate passed:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+    (`3840 passed, 1 skipped`)
+  - `git diff --check` passed with LF/CRLF warnings only.
+
 ## Remaining Work
 
-- None for the six-goal control sequence. No new writer authority, GUI work,
-  matrix/workbook mutation, selected peak/area mutation, counted-detection
-  mutation, or broad Backfill revival was added.
-- Remaining product decisions are still separate future goals: collect lockbox
-  labels, turn review packets into structured human approval UX, decide if and
-  when bounded Targeted MS1 can expand beyond 5-hmdC/5-medC, decide if
-  SampleMetadata roles may ever change values, and decide whether ReviewAction
-  selected-candidate/manual-boundary writeback gets an expected-diff writer.
+- Goal 7 still needs a commit.
+- No new writer authority, GUI work, matrix/workbook mutation, selected
+  peak/area mutation, counted-detection mutation, or broad Backfill revival was
+  added.
+- The next real product decision is not another Backfill rule. It is whether
+  humans complete the 72-case lockbox label template so a later Goal 8 import
+  can summarize independent peak-choice / area truth.
+- Other remaining decisions stay separate future goals: turn review packets
+  into structured human approval UX, decide if and when bounded Targeted MS1
+  can expand beyond 5-hmdC/5-medC, decide if SampleMetadata roles may ever
+  change values, and decide whether ReviewAction selected-candidate/
+  manual-boundary writeback gets an expected-diff writer.
 
 ## Next Actions
 
-1. Commit Goal 6.
-2. Next product goal should start from `review_queue_v1.tsv`,
-   `lockbox_sampling_manifest_v1.tsv`, or bounded non-broad lane evidence, not
-   broad Backfill.
+1. Commit Goal 7.
+2. After commit, the next product goal should be Goal 8 label import and truth
+   summary only after humans complete labels. Do not return to broad Backfill
+   heuristic mining.
