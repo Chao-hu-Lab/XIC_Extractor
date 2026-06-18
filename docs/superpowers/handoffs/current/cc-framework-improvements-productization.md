@@ -2,9 +2,12 @@
 
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
-Latest committed checkpoint: `c000d59a Add lockbox next-action gate`
-Active checkpoint: `lockbox_second_review_pack_v1` is implemented,
-subagent-reviewed, fully locally verified, and ready to commit.
+Latest committed checkpoint: `9723008d Add lockbox second review pack`
+Active checkpoint: `lockbox_reviewer_identity_guard_v1` is in the working tree.
+Current decision boundary: the sole developer/user is the domain truth source;
+subagents may perform adversarial QA and implementation review, but the checker
+and import gate now accept human truth labels only from the explicit schema
+reviewer registry and require valid slot 1/2 semantics.
 
 This is the current-state snapshot only. The tier authority is
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -16,10 +19,13 @@ Continue the low-manual productization path by making every candidate reviewable
 and auditable, without turning labels, diagnostics, quality blockers, ISTD, or
 round-trip oracle evidence into ProductWriter authority.
 
-Current focus: finish and verify the second independent review collection pack
-for the 53 plotted Gaussian15 lockbox cases. This is truth acquisition only; it
-does not change matrix, workbook, selected peak, selected area, counted
-detection, default extraction, GUI, or broad Backfill.
+Current focus: finish the reviewer-identity guard after subagent QA. The 53
+plotted Gaussian15 cases already have one owner/domain review pass. A subagent
+can challenge the artifacts and flag cases for owner re-review, but an AI
+challenge pass is not the same evidence grade as a second independent human
+label batch. This remains truth/review acquisition only; it does not change
+matrix, workbook, selected peak, selected area, counted detection, default
+extraction, GUI, or broad Backfill.
 
 ## What Changed This Round
 
@@ -35,6 +41,17 @@ detection, default extraction, GUI, or broad Backfill.
 - Updated `bounded_non_broad_lane_acceptance_v1.tsv` only to refresh the source
   status-index hash.
 - Updated `lockbox_label_readme_v1.md` and the control-plane maintenance log.
+- Clarified after user review that subagent review is allowed as QA/challenge
+  review, not as a fake second human truth source.
+- Added `scripts/lockbox_reviewer_identity.py` and wired it into
+  `scripts/check_lockbox_label_schema.py` and `scripts/import_lockbox_labels.py`
+  so unregistered reviewer IDs cannot satisfy human truth labels. The truth
+  import gate also rejects malformed reviewer slots.
+- Added `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`
+  to record the owner's Gaussian15 boundary confirmation and the subagent QA
+  boundary as no-authority structured evidence.
+- Added regression tests for the reviewer identity guard and owner boundary
+  confirmation artifact.
 
 ## Current Lane State
 
@@ -47,8 +64,9 @@ detection, default extraction, GUI, or broad Backfill.
   Current artifact is
   `docs/superpowers/validation/lockbox_second_review_summary_v1.json`.
   It says 53 cases are ready for reviewer slot 2, 19 non-ready cases stay out
-  of this collection pack, labels are blank, and no product authority is
-  granted.
+  of this collection pack, labels are blank, no product authority is granted,
+  and only registry-approved human reviewer IDs with slot 1/2 semantics can
+  satisfy the human truth slot.
 - `review_packet_workflow_v1`: `production_candidate`, structured review only.
   Review approval is not ProductWriter approval.
 - `missing_overlay_evidence_recovery_v1`: `production_candidate`, evidence link
@@ -101,6 +119,17 @@ detection, default extraction, GUI, or broad Backfill.
   static review bundle.
 - Authority: all ProductWriter/matrix/workbook/selected peak/selected
   area/counted detection/broad Backfill flags remain false.
+- Single-developer rule: if no second human reviewer exists, do not prefill
+  `reviewer_slot=2` with Codex/subagent labels. Use subagents to inspect
+  implementation, evidence hashes, HTML/PNG links, and obvious visual
+  contradictions, then route only flagged cases back to the owner.
+- Structured owner confirmation:
+  `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`.
+  This records that the 53 plotted cases use Gaussian15-smoothed boundaries as
+  the review basis, the raw trace boundary is reference only, 19 cases are not
+  assessable/excluded, and subagent review cannot grant writer authority,
+  matrix/workbook changes, selected peak/area changes, counted-detection
+  changes, default extraction changes, GUI changes, or broad Backfill unpark.
 
 ## Validation So Far
 
@@ -115,6 +144,12 @@ Passed:
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
 - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_second_review_pack.py -v --tb=short`
   (`21 passed`)
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_owner_boundary_confirmation.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py -v --tb=short`
+  (`30 passed`)
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/check_lockbox_label_schema.py scripts/import_lockbox_labels.py scripts/lockbox_reviewer_identity.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py tests/test_lockbox_owner_boundary_confirmation.py`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
 - Full gate: `ruff check xic_extractor tests scripts/build_lockbox_second_review_pack.py`,
   `mypy xic_extractor`, `pytest -v --tb=short -x` (`3884 passed, 1 skipped`),
   diagnostics index, productization authority, productization state, bounded
@@ -122,6 +157,12 @@ Passed:
 - Subagent review found and we fixed: actual linked PNG hash anchoring, plus
   the broken HTML template link. Post-fix re-review found no P0/P1/P2/P3
   findings.
+- Current reviewer-identity guard subagent review found the initial denylist and
+  loose slot semantics were insufficient; both were fixed with an explicit
+  human reviewer registry and import-side slot validation. Final subagent
+  re-review found no P1/P2 lockbox correctness findings; only unrelated
+  `AGENTS.md` / `docs/agents/` / installer artifacts must be excluded from the
+  lockbox commit.
 
 ## Rejected Paths
 
@@ -137,7 +178,9 @@ Passed:
 
 ## Next Actions
 
-1. Commit the second-review pack checkpoint.
-2. Later: have a second independent reviewer fill
-   `docs/superpowers/validation/lockbox_second_review_template_v1.tsv`, then
-   import those labels and rerun the truth summary gate.
+1. Commit the reviewer-identity guard checkpoint without staging
+   unrelated `AGENTS.md`, `docs/agents/`, or `docs/solutions/Codex Installer.exe`
+   changes.
+2. Next product step: design a non-authoritative AI challenge packet, or
+   explicitly approve a downgraded single-owner + AI-challenge evidence
+   contract before rerunning the truth summary gate.

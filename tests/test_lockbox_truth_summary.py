@@ -106,7 +106,7 @@ def test_two_reviewer_clean_labels_can_support_next_automation_experiment(
         clean_rows.append(dict(row))
         second = dict(row)
         second["reviewer_slot"] = "2"
-        second["reviewer_id"] = "second_lockbox_reviewer"
+        second["reviewer_id"] = "second_human_lockbox_reviewer_v1"
         clean_rows.append(second)
     _write_tsv(label_log, header, clean_rows)
 
@@ -125,6 +125,97 @@ def test_two_reviewer_clean_labels_can_support_next_automation_experiment(
     assert not any(
         row["failure_mode"] == "second_independent_reviewer_missing"
         for row in failures
+    )
+
+
+def test_truth_import_rejects_subagent_second_reviewer(
+    tmp_path: Path,
+) -> None:
+    label_log = tmp_path / "labels.tsv"
+
+    build_user_batch_label_log(label_log_path=label_log)
+    header, rows = _read_tsv_with_header(label_log)
+    second_rows: list[dict[str, str]] = list(rows)
+    for row in rows:
+        second = dict(row)
+        second["reviewer_slot"] = "2"
+        second["reviewer_id"] = "codex_subagent_challenge_review"
+        second["peak_choice_label"] = "correct"
+        second["area_label"] = "acceptable"
+        second["boundary_label"] = "acceptable"
+        second_rows.append(second)
+    _write_tsv(label_log, header, second_rows)
+
+    result = build_lockbox_truth_summary(
+        label_log_path=label_log,
+        summary_path=tmp_path / "summary.json",
+        confusion_table_path=tmp_path / "confusion.tsv",
+        failure_modes_path=tmp_path / "failures.tsv",
+    )
+
+    assert any(
+        "reviewer_id is not human truth" in problem
+        for problem in result["problems"]
+    )
+
+
+def test_truth_import_rejects_unregistered_human_looking_reviewer(
+    tmp_path: Path,
+) -> None:
+    label_log = tmp_path / "labels.tsv"
+
+    build_user_batch_label_log(label_log_path=label_log)
+    header, rows = _read_tsv_with_header(label_log)
+    second_rows: list[dict[str, str]] = list(rows)
+    for row in rows:
+        second = dict(row)
+        second["reviewer_slot"] = "2"
+        second["reviewer_id"] = "reviewer_two"
+        second["peak_choice_label"] = "correct"
+        second["area_label"] = "acceptable"
+        second["boundary_label"] = "acceptable"
+        second_rows.append(second)
+    _write_tsv(label_log, header, second_rows)
+
+    result = build_lockbox_truth_summary(
+        label_log_path=label_log,
+        summary_path=tmp_path / "summary.json",
+        confusion_table_path=tmp_path / "confusion.tsv",
+        failure_modes_path=tmp_path / "failures.tsv",
+    )
+
+    assert any(
+        "allowed human truth reviewer registry" in problem
+        for problem in result["problems"]
+    )
+
+
+def test_truth_import_rejects_malformed_reviewer_slots(tmp_path: Path) -> None:
+    label_log = tmp_path / "labels.tsv"
+
+    build_user_batch_label_log(label_log_path=label_log)
+    header, rows = _read_tsv_with_header(label_log)
+    malformed_rows: list[dict[str, str]] = list(rows)
+    for row in rows:
+        second = dict(row)
+        second["reviewer_slot"] = "3"
+        second["reviewer_id"] = "second_human_lockbox_reviewer_v1"
+        second["peak_choice_label"] = "correct"
+        second["area_label"] = "acceptable"
+        second["boundary_label"] = "acceptable"
+        malformed_rows.append(second)
+    _write_tsv(label_log, header, malformed_rows)
+
+    result = build_lockbox_truth_summary(
+        label_log_path=label_log,
+        summary_path=tmp_path / "summary.json",
+        confusion_table_path=tmp_path / "confusion.tsv",
+        failure_modes_path=tmp_path / "failures.tsv",
+    )
+
+    assert any(
+        "reviewer slots must be 1 or 1..2" in problem
+        for problem in result["problems"]
     )
 
 

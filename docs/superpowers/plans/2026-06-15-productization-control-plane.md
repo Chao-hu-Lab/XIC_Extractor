@@ -2512,13 +2512,60 @@ at that older checkpoint, not the latest release claim.
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`.
-- Remaining blocker: a second independent reviewer still has to fill the 53
-  blank slot-2 rows before the truth summary can move beyond review-only. These
-  labels still cannot become write authority without a later expected-diff
-  product goal.
-- Next checkpoint: complete/import reviewer-slot-2 labels for the 53 cases, then
-  rerun the truth summary gate. Do not route the 19 excluded cases into broad
-  Backfill heuristics.
+- Remaining blocker: a second independent human reviewer is not currently
+  available because the user is the sole domain owner. Subagents may perform
+  adversarial QA and visual contradiction checks, but they must not be recorded
+  as `reviewer_slot=2` human truth labels. These labels still cannot become
+  write authority without a later expected-diff product goal.
+- Next checkpoint: finish subagent QA and route any flagged cases back to the
+  owner. If no second human reviewer exists, create a separate
+  non-authoritative AI-challenge record or an explicitly approved downgraded
+  single-owner + AI-challenge evidence contract before rerunning the truth
+  summary gate. Do not route the 19 excluded cases into broad Backfill
+  heuristics.
+
+### 2026-06-18 - lockbox_reviewer_identity_guard_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` second-review collection
+  packet. Docs said subagents could only do QA/challenge review, but the
+  completed-label checker and truth-summary import gate still only required
+  distinct reviewer IDs.
+- New tier: unchanged `production_candidate`. This is a fail-closed review
+  identity guard and owner-boundary record; it does not grant ProductWriter,
+  matrix, workbook, selected peak/area, counted-detection, default extraction,
+  GUI, or broad Backfill authority.
+- Evidence: `scripts/lockbox_reviewer_identity.py` enforces the explicit human
+  truth reviewer registry in `lockbox_label_schema_v1.json`; unregistered
+  reviewer IDs, including agent/subagent/model-looking IDs, cannot satisfy
+  human truth labels. The guard is enforced by
+  `scripts/check_lockbox_label_schema.py --require-complete` and
+  `scripts/import_lockbox_labels.py --check-only`. The truth-summary import gate
+  also now rejects malformed reviewer-slot logs and requires valid slot 1/2
+  semantics before the automation-experiment decision can be reached. The label
+  schema records that AI challenge review must be stored outside human truth
+  slots. The owner boundary confirmation is recorded in
+  `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`,
+  with hashes for the static bundle, label log, truth summary, next-action
+  summary, and second-review summary; it explicitly forbids ProductWriter,
+  matrix, workbook, selected peak/area, counted-detection, default extraction,
+  GUI, and broad Backfill authority.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_owner_boundary_confirmation.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py -v --tb=short`
+  passed `30`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/check_lockbox_label_schema.py scripts/import_lockbox_labels.py scripts/lockbox_reviewer_identity.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py tests/test_lockbox_owner_boundary_confirmation.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  passed.
+- Remaining blocker: no second independent human reviewer exists. Subagents may
+  flag contradictions and implementation issues, but cannot satisfy
+  `reviewer_slot=2`.
+- Next checkpoint: run the owner-boundary artifact test, get subagent
+  re-review of this guard fix, then commit if clean.
 
 ### 2026-06-18 - productization_status_index_v1
 

@@ -98,6 +98,10 @@ labels for them.
 - Do not change matrix, workbook, selected peak, selected area, counted
   detection, default extraction, or GUI behavior from this package.
 - Disagreement is expected evidence. Do not force consensus in the label sheet.
+- In the current single-developer setting, subagents may be used for
+  adversarial QA, link/hash checks, and obvious visual contradiction checks.
+  They must not be entered into `reviewer_slot=2` as if they were a second
+  independent human truth reviewer.
 
 ## Current Imported Batch
 
@@ -119,6 +123,27 @@ quality in this first pass; the 18 missing-evidence cases plus 1 unusable
 Gaussian-boundary case remain not assessable. This supports the review workflow
 and records the evidence gap, but it still does not grant ProductWriter or
 matrix write authority.
+
+## Single-Developer Review Boundary
+
+The first imported label batch is a valid owner/domain review pass. It is not a
+completed two-human lockbox. If no second human reviewer is available, the next
+safe move is to use a subagent as a non-authoritative challenge reviewer that
+flags cases for owner re-review. That AI challenge output can reduce manual
+work, but it must be stored separately from `reviewer_slot=2` unless a future
+goal explicitly approves a downgraded single-owner + AI-challenge evidence
+contract. The completed-label checker and truth-summary import gate now accept
+human truth labels only from the explicit reviewer registry in
+`docs/superpowers/specs/lockbox_label_schema_v1.json`; agent/subagent-looking or
+unregistered reviewer IDs are rejected. Either way, labels still cannot become
+ProductWriter authority without a later authority manifest update and
+expected-diff product goal.
+
+The owner confirmation for this boundary is recorded in:
+
+```text
+docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json
+```
 
 ## Validation
 

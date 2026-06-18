@@ -41,6 +41,26 @@ def test_lockbox_label_schema_matches_pack_headers() -> None:
     ]
     assert schema["authority_rules"]["label_grants_product_authority"] is False
     assert schema["authority_rules"]["may_touch_matrix"] is False
+    assert (
+        schema["review_contract"][
+            "completed_labels_reject_agent_or_subagent_reviewer_ids"
+        ]
+        is True
+    )
+    assert (
+        schema["review_contract"]["completed_labels_require_reviewer_slots_1_and_2"]
+        is True
+    )
+    assert schema["review_contract"]["allowed_human_truth_reviewer_ids"] == [
+        "user_batch_review_2026_06_18",
+        "second_human_lockbox_reviewer_v1",
+    ]
+    assert (
+        schema["review_contract"][
+            "ai_challenge_review_must_be_stored_outside_human_truth_slots"
+        ]
+        is True
+    )
 
 
 def test_label_collection_builder_is_deterministic_and_non_authoritative(
@@ -100,10 +120,10 @@ def test_empty_label_template_fails_complete_mode() -> None:
 
 def test_completed_label_template_can_pass_complete_mode(tmp_path: Path) -> None:
     header, rows = _read_tsv_with_header(LABEL_TEMPLATE)
-    for index, row in enumerate(rows):
+    for row in rows:
         row.update(
             {
-                "reviewer_id": f"reviewer_{index % 2}",
+                "reviewer_id": _human_reviewer_id(row),
                 "reviewed_at_utc": "2026-06-18T00:00:00Z",
                 "peak_choice_label": "correct",
                 "area_label": "acceptable",
@@ -154,10 +174,10 @@ def test_checker_rejects_completed_label_without_evidence_binding(
     tmp_path: Path,
 ) -> None:
     header, rows = _read_tsv_with_header(LABEL_TEMPLATE)
-    for index, row in enumerate(rows):
+    for row in rows:
         row.update(
             {
-                "reviewer_id": f"reviewer_{index % 2}",
+                "reviewer_id": _human_reviewer_id(row),
                 "reviewed_at_utc": "2026-06-18T00:00:00Z",
                 "peak_choice_label": "correct",
                 "area_label": "acceptable",
@@ -228,6 +248,68 @@ def test_checker_rejects_duplicate_completed_reviewer_ids(tmp_path: Path) -> Non
     )
 
     assert any("reviewer IDs must be distinct" in problem for problem in problems)
+
+
+def test_checker_rejects_subagent_as_human_truth_reviewer(
+    tmp_path: Path,
+) -> None:
+    header, rows = _read_tsv_with_header(LABEL_TEMPLATE)
+    for index, row in enumerate(rows):
+        row.update(
+            {
+                "reviewer_id": (
+                    "codex_subagent_review" if index % 2 else "owner_reviewer"
+                ),
+                "reviewed_at_utc": "2026-06-18T00:00:00Z",
+                "peak_choice_label": "correct",
+                "area_label": "acceptable",
+                "boundary_label": "acceptable",
+                "reviewer_confidence": "medium",
+                "reviewer_reason_code": "visual_trace_overlay_review",
+                "evidence_viewed": "packet",
+            },
+        )
+    labels = _write_tsv(tmp_path / "subagent_truth.tsv", header, rows)
+
+    problems = check_lockbox_label_schema(
+        label_template_path=labels,
+        require_complete=True,
+    )
+
+    assert any("reviewer_id is not human truth" in problem for problem in problems)
+
+
+def test_checker_rejects_unregistered_human_looking_reviewer(
+    tmp_path: Path,
+) -> None:
+    header, rows = _read_tsv_with_header(LABEL_TEMPLATE)
+    for row in rows:
+        row.update(
+            {
+                "reviewer_id": (
+                    "reviewer_two"
+                    if row["reviewer_slot"] == "2"
+                    else "user_batch_review_2026_06_18"
+                ),
+                "reviewed_at_utc": "2026-06-18T00:00:00Z",
+                "peak_choice_label": "correct",
+                "area_label": "acceptable",
+                "boundary_label": "acceptable",
+                "reviewer_confidence": "medium",
+                "reviewer_reason_code": "visual_trace_overlay_review",
+                "evidence_viewed": "packet",
+            },
+        )
+    labels = _write_tsv(tmp_path / "unregistered_truth.tsv", header, rows)
+
+    problems = check_lockbox_label_schema(
+        label_template_path=labels,
+        require_complete=True,
+    )
+
+    assert any(
+        "allowed human truth reviewer registry" in problem for problem in problems
+    )
 
 
 def test_checker_rejects_missing_packet_file(tmp_path: Path) -> None:
@@ -325,3 +407,9 @@ def _write_tsv(path: Path, header: list[str], rows: list[dict[str, str]]) -> Pat
         writer.writeheader()
         writer.writerows(rows)
     return path
+
+
+def _human_reviewer_id(row: dict[str, str]) -> str:
+    if row["reviewer_slot"] == "1":
+        return "user_batch_review_2026_06_18"
+    return "second_human_lockbox_reviewer_v1"

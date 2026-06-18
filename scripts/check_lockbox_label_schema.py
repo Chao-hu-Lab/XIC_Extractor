@@ -20,6 +20,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from scripts.lockbox_reviewer_identity import (
+    allowed_human_truth_reviewer_ids_from_schema,
+    truth_label_reviewer_id_blocker,
+)
 from xic_extractor.tabular_io import file_sha256, read_tsv_with_header
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -277,6 +281,15 @@ def _check_label_row(
     for field in ("reviewer_id", "reviewed_at_utc"):
         if require_complete and not row.get(field, ""):
             problems.append(f"label row {index}: {field} is required")
+    if require_complete:
+        blocker = truth_label_reviewer_id_blocker(
+            row.get("reviewer_id", ""),
+            allowed_human_truth_reviewer_ids_from_schema(schema),
+        )
+        if blocker:
+            problems.append(
+                f"label row {index}: reviewer_id is not human truth: {blocker}",
+            )
 
 
 def _resolve_path(path_value: str) -> Path:

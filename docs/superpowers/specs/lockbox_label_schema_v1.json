@@ -105,6 +105,13 @@
     "required_reviewer_count_per_case": 2,
     "empty_template_allows_blank_labels": true,
     "completed_labels_require_distinct_reviewer_ids": true,
+    "completed_labels_require_reviewer_slots_1_and_2": true,
+    "allowed_human_truth_reviewer_ids": [
+      "user_batch_review_2026_06_18",
+      "second_human_lockbox_reviewer_v1"
+    ],
+    "completed_labels_reject_agent_or_subagent_reviewer_ids": true,
+    "ai_challenge_review_must_be_stored_outside_human_truth_slots": true,
     "reviewer_must_not_enter_replacement_area_values": true,
     "reviewer_must_not_use_round_trip_oracle_as_truth": true
   },

@@ -20,6 +20,10 @@ from scripts.build_lockbox_label_collection_pack import (
     LABEL_SCHEMA_VERSION,
     LABEL_TEMPLATE_HEADER,
 )
+from scripts.lockbox_reviewer_identity import (
+    allowed_human_truth_reviewer_ids_from_schema,
+    truth_label_reviewer_id_blocker,
+)
 from xic_extractor.tabular_io import (
     file_sha256,
     read_tsv_required,
@@ -310,6 +314,7 @@ def _load_and_validate_labels(
             "label log has duplicate reviewer_id per case: "
             + ", ".join(sorted(duplicate_reviewers)),
         )
+    _validate_reviewer_slots(label_rows, problems)
 
     enum_fields = {
         "peak_choice_label": set(schema["allowed_peak_choice_labels"]),
@@ -328,6 +333,9 @@ def _load_and_validate_labels(
             static_row,
             static_bundle_index_path=static_bundle_index_path,
             enum_fields=enum_fields,
+            allowed_human_truth_reviewer_ids=allowed_human_truth_reviewer_ids_from_schema(
+                schema,
+            ),
             row_number=index,
             problems=problems,
         )
@@ -345,12 +353,31 @@ def _load_and_validate_labels(
     return problems, enriched_rows, static_rows
 
 
+def _validate_reviewer_slots(
+    rows: Sequence[Mapping[str, str]],
+    problems: list[str],
+) -> None:
+    rows_by_case: dict[str, list[Mapping[str, str]]] = defaultdict(list)
+    for row in rows:
+        rows_by_case[row.get("lockbox_case_id", "")].append(row)
+    for case_id, case_rows in rows_by_case.items():
+        slots = [row.get("reviewer_slot", "") for row in case_rows]
+        slot_set = set(slots)
+        if len(case_rows) not in (1, 2):
+            problems.append(f"{case_id}: label log must have one or two reviewer slots")
+        if slot_set not in ({"1"}, {"1", "2"}):
+            problems.append(f"{case_id}: reviewer slots must be 1 or 1..2")
+        if len(slots) != len(slot_set):
+            problems.append(f"{case_id}: reviewer slots must be distinct")
+
+
 def _validate_label_row(
     row: Mapping[str, str],
     static_row: Mapping[str, str] | None,
     *,
     static_bundle_index_path: Path,
     enum_fields: Mapping[str, set[str]],
+    allowed_human_truth_reviewer_ids: Sequence[str],
     row_number: int,
     problems: list[str],
 ) -> None:
@@ -368,6 +395,14 @@ def _validate_label_row(
     ):
         if not row.get(field):
             problems.append(f"label row {row_number}: {field} is required")
+    blocker = truth_label_reviewer_id_blocker(
+        row.get("reviewer_id", ""),
+        allowed_human_truth_reviewer_ids,
+    )
+    if blocker:
+        problems.append(
+            f"label row {row_number}: reviewer_id is not human truth: {blocker}",
+        )
     for field, allowed in enum_fields.items():
         value = row.get(field, "")
         if value and value not in allowed:
@@ -474,12 +509,10 @@ def _summary_json(
 def _gate_decision(rows: Sequence[Mapping[str, str]]) -> tuple[str, list[str]]:
     if not rows:
         return "truth_insufficient_collect_more_labels", ["no labels imported"]
-    reviewers_by_case: dict[str, set[str]] = defaultdict(set)
+    slots_by_case: dict[str, set[str]] = defaultdict(set)
     for row in rows:
-        reviewers_by_case[row["lockbox_case_id"]].add(row["reviewer_id"])
-    has_two_reviewers = all(
-        len(reviewers) >= 2 for reviewers in reviewers_by_case.values()
-    )
+        slots_by_case[row["lockbox_case_id"]].add(row["reviewer_slot"])
+    has_two_reviewers = all(slots == {"1", "2"} for slots in slots_by_case.values())
     insufficient = sum(
         1 for row in rows if row["peak_choice_label"] == "insufficient_evidence"
     )
