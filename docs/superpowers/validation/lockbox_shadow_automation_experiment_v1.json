@@ -1,8 +1,9 @@
 {
-  "allowed_next_step": "implement_shadow_only_scoring_experiment",
+  "allowed_next_step": "define_production_acceptance_manifest_v1",
   "authority_rules": {
     "broad_backfill_unparked": false,
     "manual_negative_controls_grant_write_authority": false,
+    "matrix_write_allowed": false,
     "may_change_counted_detection": false,
     "may_change_default_extraction": false,
     "may_change_gui": false,
@@ -14,7 +15,8 @@
     "may_switch_selected_peak": false,
     "may_touch_matrix": false,
     "round_trip_oracle_used_as_truth": false,
-    "single_owner_evidence_is_truth_completion": false
+    "single_owner_evidence_is_truth_completion": false,
+    "write_authority": false
   },
   "case_counts": {
     "excluded_gaussian_boundary_unavailable_cases": 1,
@@ -25,17 +27,55 @@
     "product_authority_rows": 0,
     "total_manifest_rows": 72
   },
-  "decision": "shadow_automation_experiment_design_ready",
+  "contract_counts": {
+    "doublet_status": {
+      "no_doublet_claim": 59,
+      "not_evaluated": 13
+    },
+    "shadow_decision": {
+      "accept": 53,
+      "not_scored": 13,
+      "reject": 6
+    },
+    "truth_status": {
+      "manual_negative": 6,
+      "not_truth_claimed": 65,
+      "unresolved": 1
+    }
+  },
+  "decision": "shadow_scoring_contract_adapter_v1_ready",
   "decision_reasons": [
-    "53 owner-clean Gaussian15 cases may be used as positive challenge cases for a shadow-only experiment",
-    "6 existing manual wrong-peak/no-peak cases may be used only as manual negative controls",
-    "12 round-trip-oracle negative cases and 1 boundary-unavailable case remain excluded from shadow scoring",
+    "53 owner-clean Gaussian15 cases may be used as positive challenge cases for a shadow-only contract adapter",
+    "6 existing manual wrong-peak/no-peak cases reject the shadow decision and hard-stop any accept drift",
+    "12 round-trip-oracle negative cases and 1 boundary-unavailable case remain not_scored in the shadow contract",
     "single-owner plus AI challenge evidence is not product truth and cannot grant writer authority"
   ],
+  "output_rules": {
+    "matrix_write_allowed": false,
+    "shadow_only": true,
+    "write_authority": false
+  },
   "schema_version": "lockbox_shadow_automation_experiment_v1",
   "shadow_experiment_contract": {
+    "doublet_reference_sides": [
+      "left",
+      "not_applicable",
+      "right",
+      "unclear",
+      "unresolved"
+    ],
+    "doublet_statuses": [
+      "no_doublet_claim",
+      "not_evaluated",
+      "right_reference_blocked",
+      "unclear_reference_blocked",
+      "unresolved_blocked"
+    ],
     "gaussian_boundary_policy": "gaussian15_smoothed_boundary_is_review_basis; raw_doublet_accept_only_when_backfill_detect_reference_is_left_peak; unclear_or_right_peak_reference_stays_flagged",
+    "manual_negative_accept_hard_stop": true,
     "mismatch_handling": "route_to_review_only_not_product_writer",
+    "owner_clean_challenge_status": "non_authoritative_challenge",
+    "owner_clean_truth_status": "not_truth_claimed",
     "promotion_requires": [
       "separate product goal",
       "masked_or_product_writer_oracle",
@@ -43,16 +83,31 @@
       "authority_manifest_update",
       "focused output tests"
     ],
-    "result_is_allowed_to_write": "shadow_scores_and_review_flags_only"
+    "result_is_allowed_to_write": "shadow_scores_and_review_flags_only",
+    "right_unclear_unresolved_doublet_accept_hard_stop": true,
+    "shadow_decisions": [
+      "accept",
+      "flag",
+      "not_scored",
+      "reject"
+    ],
+    "truth_statuses": [
+      "external_truth_negative",
+      "external_truth_positive",
+      "manual_negative",
+      "not_truth_claimed",
+      "unresolved"
+    ]
   },
   "source_artifacts": {
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
     "next_action_plan_sha256": "E980E8CE301F58E5D21B19CBB0D2CECCDDD1E0B5526D695D455C61F67B67C0F8",
     "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
     "next_action_summary_sha256": "B78E3635CE75E9C6E50744DFE58D721E32071CCB091E56390D290DF6A3D36E73",
-    "shadow_case_manifest_sha256": "55752CCF035D7EDEB4A0A86B9BB1B9106959714ED54B2D99E510B11706A1390C",
+    "shadow_case_manifest_sha256": "C5F1D542A91EC6F9827C86DA68C0B923091AB1D23A3B76273E6AC1C0205D2C08",
     "single_owner_gate": "docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json",
-    "single_owner_gate_sha256": "BA0369A6D4CE1564E48D80BF62755E563194892898D78F68DAE515647B20A6D1"
+    "single_owner_gate_sha256": "BA0369A6D4CE1564E48D80BF62755E563194892898D78F68DAE515647B20A6D1",
+    "source_case_manifest": "docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv"
   },
   "upstream_decisions": {
     "next_action_summary": "second_review_ready_for_53_cases",

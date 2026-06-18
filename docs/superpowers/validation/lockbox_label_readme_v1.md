@@ -212,21 +212,22 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_shadow_automa
 $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_shadow_automation_experiment_design.py --check-only
 ```
 
-Current decision: `shadow_automation_experiment_design_ready`.
+Current decision: `shadow_scoring_contract_adapter_v1_ready`.
 
 Plain-language meaning: all 72 lockbox cases now have an explicit shadow
-experiment route. 53 owner-clean Gaussian15 cases plus 6 existing manual
-wrong-peak/no-peak controls may be used in a shadow-only scoring experiment.
-12 round-trip-oracle negative cases and 1 Gaussian-boundary-unavailable case
-remain excluded from shadow scoring. The result may only write shadow scores
-and review flags.
+contract route. 53 owner-clean Gaussian15 cases are non-authoritative accept
+challenges, 6 existing manual wrong-peak/no-peak controls are reject hard
+stops, and 12 round-trip-oracle negative cases plus 1
+Gaussian-boundary-unavailable case remain `not_scored`. The result may only
+write shadow contract fields and review flags.
 
 The review boundary policy is now explicit: Gaussian15-smoothed boundaries are
 the review basis. For raw-trace doublets, accept only when the Backfill/detect
 reference is on the left peak; if the reference is indistinguishable or on the
 right peak, keep the case flagged for review. This policy still does not grant
 ProductWriter, matrix, workbook, selected-peak, selected-area, counted
-detection, GUI, default extraction, or broad Backfill authority.
+detection, reviewer slot2, GUI, default extraction, or broad Backfill
+authority.
 
 ## Validation
 

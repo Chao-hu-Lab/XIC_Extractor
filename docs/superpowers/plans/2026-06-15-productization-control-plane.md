@@ -277,19 +277,19 @@ area truth; and 1 Gaussian boundary-unavailable case needs signal/evidence
 recovery or remains not assessable. This split narrows the next human step
 without granting ProductWriter, matrix, workbook, selected-peak, selected-area,
 counted-detection, GUI, or broad Backfill authority.
-Lockbox Shadow Automation Experiment Design v1 turns that split plus the
-single-owner/AI-challenge closure into a 72-case shadow-only experiment
-manifest: 53 owner-clean Gaussian15 cases and 6 existing manual
-wrong-peak/no-peak controls may be scored only in shadow, while 12
-round-trip-oracle
-nontruth rows and 1 Gaussian-boundary-unavailable row remain excluded from
-shadow scoring. The design records the Gaussian15 boundary policy explicitly:
+Lockbox Shadow Scoring Contract Adapter v1 turns that split plus the
+single-owner/AI-challenge closure into a 72-case shadow-only contract manifest:
+53 owner-clean Gaussian15 cases are non-authoritative accept challenges, 6
+manual wrong-peak/no-peak controls are reject hard stops, and 13 excluded rows
+remain `not_scored`. The adapter records shadow/truth/doublet/source-hash and
+manifest-sha contract fields plus the Gaussian15 boundary policy explicitly:
 Gaussian-smoothed boundaries are the review basis; raw-trace doublets are
 acceptable only when the Backfill/detect reference is on the left peak, and
 unclear or right-peak reference cases stay flagged. This is still
-`production_candidate` evidence/control infrastructure only. It writes no
+`production_candidate` evidence/control infrastructure only. Next checkpoint is
+Phase 2 `ProductionAcceptanceManifest v1`, not a scorer run. It writes no
 ProductWriter input, matrix, workbook, selected peak/area, counted detection,
-GUI, default extraction, or broad Backfill authority.
+reviewer slot2, GUI, default extraction, or broad Backfill authority.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2809,26 +2809,27 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
-### 2026-06-18 - lockbox_shadow_automation_experiment_v1
+### 2026-06-19 - lockbox_shadow_automation_experiment_v1
 
 - Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
 - Previous tier: unchanged `production_candidate` single-owner + AI-challenge
   gate. That packet allowed only a later shadow automation experiment design.
 - New tier: unchanged `production_candidate`. Current active artifact is
   `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`
-  with `decision=shadow_automation_experiment_design_ready`.
+  with `decision=shadow_scoring_contract_adapter_v1_ready` and
+  `allowed_next_step=define_production_acceptance_manifest_v1`.
 - Evidence: `scripts/build_lockbox_shadow_automation_experiment_design.py`
   consumes `lockbox_next_action_plan_v1.tsv`,
   `lockbox_next_action_summary_v1.json`, and
-  `lockbox_single_owner_ai_challenge_gate_v1.json`, then writes a 72-row
-  shadow manifest. It routes 53 owner-clean Gaussian15 cases plus 6 existing
-  manual wrong-peak/no-peak controls into shadow-only scoring, excludes 12
-  round-trip-oracle nontruth rows and 1 Gaussian-boundary-unavailable row, and
-  records the Gaussian15 boundary policy: smoothed boundaries are the review
-  basis; raw-trace doublets are acceptable only when the Backfill/detect
-  reference is on the left peak; unclear or right-peak reference cases stay
-  flagged. After read-only subagent review, the summary also records
-  `may_satisfy_reviewer_slot2=false` as a machine-readable authority rule.
+  `lockbox_single_owner_ai_challenge_gate_v1.json`, then writes a 72-row shadow
+  contract manifest. It routes 53 owner-clean Gaussian15 cases as
+  non-authoritative accept challenges, 6 existing manual wrong-peak/no-peak
+  controls as reject hard stops, and 13 excluded rows as `not_scored`. It
+  records the Gaussian15 boundary policy, shadow/truth/doublet enums, row-level
+  doublet fields, source paths/hashes, manifest sha, `shadow_only=true`,
+  `write_authority=false`, `matrix_write_allowed=false`,
+  `may_satisfy_reviewer_slot2=false`, and
+  `single_owner_evidence_is_truth_completion=false`.
 - Product surface changed: validation decision JSON, case-manifest TSV, helper
   script, focused tests, status index, label README, control plane, and handoff
   only. No ProductWriter, matrix, workbook, selected peak/area, counted
@@ -2840,25 +2841,18 @@ at that older checkpoint, not the latest release claim.
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
   returned `Lockbox shadow automation experiment design is valid.`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
-  passed `9`;
-  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py`
+  passed `14`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py`
   passed;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
   returned `Productization state index is consistent and fail-closed.`;
-  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
-  returned `Bounded non-broad product lanes are consistent and fail-closed.`;
-  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
-  returned `INDEX.md in sync: 90 entry points, 169 total files.`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
-  passed `19`.
-- Remaining blocker: this design only permits a later shadow-only scoring
-  experiment. Any ProductWriter authority expansion still needs a separate
-  masked/product-writer oracle, expected-diff, authority-manifest update, and
-  focused output tests.
-- Next checkpoint: implement the shadow-only scoring experiment over the
-  included 59 rows, writing only shadow scores/review flags and keeping the 13
-  excluded rows out of scoring. Do not promote shadow results to writer
-  authority.
+  passed `25`.
+- Remaining blocker: this adapter cannot grant writer authority. Any
+  ProductWriter authority expansion still needs Phase 2
+  `ProductionAcceptanceManifest v1`, expected-diff, and focused output tests.
+- Next checkpoint: define `ProductionAcceptanceManifest v1` in a separate goal.
+  Do not promote shadow results to writer authority.
 
 ### 2026-06-18 - productization_status_index_v1
 

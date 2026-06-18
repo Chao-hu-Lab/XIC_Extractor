@@ -52,7 +52,8 @@ SHADOW_EXPERIMENT_SUMMARY = (
 
 SCHEMA_VERSION = "lockbox_shadow_automation_cases_v1"
 SUMMARY_SCHEMA_VERSION = "lockbox_shadow_automation_experiment_v1"
-DECISION_READY = "shadow_automation_experiment_design_ready"
+DECISION_READY = "shadow_scoring_contract_adapter_v1_ready"
+ALLOWED_NEXT_STEP = "define_production_acceptance_manifest_v1"
 NO_AUTHORITY = "FALSE"
 YES = "TRUE"
 
@@ -60,6 +61,57 @@ ROLE_OWNER_CLEAN = "owner_clean_positive_challenge"
 ROLE_MANUAL_NEGATIVE = "manual_negative_control"
 ROLE_EXCLUDED_ORACLE = "excluded_roundtrip_oracle_nontruth"
 ROLE_EXCLUDED_BOUNDARY = "excluded_gaussian_boundary_unavailable"
+
+SHADOW_DECISION_ACCEPT = "accept"
+SHADOW_DECISION_FLAG = "flag"
+SHADOW_DECISION_REJECT = "reject"
+SHADOW_DECISION_NOT_SCORED = "not_scored"
+SHADOW_DECISIONS = {
+    SHADOW_DECISION_ACCEPT,
+    SHADOW_DECISION_FLAG,
+    SHADOW_DECISION_REJECT,
+    SHADOW_DECISION_NOT_SCORED,
+}
+
+TRUTH_STATUS_NOT_TRUTH = "not_truth_claimed"
+TRUTH_STATUS_MANUAL_NEGATIVE = "manual_negative"
+TRUTH_STATUS_EXTERNAL_POSITIVE = "external_truth_positive"
+TRUTH_STATUS_EXTERNAL_NEGATIVE = "external_truth_negative"
+TRUTH_STATUS_UNRESOLVED = "unresolved"
+TRUTH_STATUSES = {
+    TRUTH_STATUS_NOT_TRUTH,
+    TRUTH_STATUS_MANUAL_NEGATIVE,
+    TRUTH_STATUS_EXTERNAL_POSITIVE,
+    TRUTH_STATUS_EXTERNAL_NEGATIVE,
+    TRUTH_STATUS_UNRESOLVED,
+}
+
+OWNER_CLEAN_CHALLENGE_NON_AUTHORITY = "non_authoritative_challenge"
+OWNER_CLEAN_CHALLENGE_NOT_APPLICABLE = "not_applicable"
+
+MANUAL_NEGATIVE_NONE = "not_manual_negative"
+MANUAL_NEGATIVE_EXISTING = "existing_manual_negative_control"
+
+DOUBLET_STATUS_NO_CLAIM = "no_doublet_claim"
+DOUBLET_STATUS_NOT_EVALUATED = "not_evaluated"
+DOUBLET_STATUS_RIGHT_BLOCKED = "right_reference_blocked"
+DOUBLET_STATUS_UNCLEAR_BLOCKED = "unclear_reference_blocked"
+DOUBLET_STATUS_UNRESOLVED_BLOCKED = "unresolved_blocked"
+DOUBLET_STATUSES = {
+    DOUBLET_STATUS_NO_CLAIM,
+    DOUBLET_STATUS_NOT_EVALUATED,
+    DOUBLET_STATUS_RIGHT_BLOCKED,
+    DOUBLET_STATUS_UNCLEAR_BLOCKED,
+    DOUBLET_STATUS_UNRESOLVED_BLOCKED,
+}
+DOUBLET_ACCEPT_BLOCKED_STATUSES = {
+    DOUBLET_STATUS_RIGHT_BLOCKED,
+    DOUBLET_STATUS_UNCLEAR_BLOCKED,
+    DOUBLET_STATUS_UNRESOLVED_BLOCKED,
+}
+DOUBLET_REFERENCE_SIDES = {"left", "right", "unclear", "unresolved", "not_applicable"}
+DOUBLET_ACCEPT_BLOCKED_REFERENCE_SIDES = {"right", "unclear", "unresolved"}
+DOUBLET_SOURCE = "gaussian_boundary_policy_v1"
 
 GAUSSIAN_BOUNDARY_POLICY = (
     "gaussian15_smoothed_boundary_is_review_basis; "
@@ -84,6 +136,19 @@ CASES_HEADER = [
     "next_action",
     "shadow_experiment_role",
     "included_in_shadow_experiment",
+    "shadow_decision",
+    "truth_status",
+    "owner_clean_challenge_status",
+    "manual_negative_status",
+    "shadow_only",
+    "write_authority",
+    "matrix_write_allowed",
+    "may_satisfy_reviewer_slot2",
+    "single_owner_evidence_is_truth_completion",
+    "doublet_status",
+    "doublet_reference_side",
+    "doublet_allowed",
+    "doublet_source",
     "shadow_oracle_basis",
     "expected_shadow_behavior",
     "future_action_if_mismatch",
@@ -136,6 +201,7 @@ def build_lockbox_shadow_automation_experiment_design(
         next_action_plan_path=next_action_plan_path,
         next_action_summary_path=next_action_summary_path,
         single_owner_gate_path=single_owner_gate_path,
+        shadow_cases_path=shadow_cases_path,
     )
     if write_outputs:
         write_tsv(
@@ -297,6 +363,7 @@ def _shadow_case_row(
     single_owner_gate_path: Path,
 ) -> dict[str, str]:
     role, included, basis, expected, mismatch = _role_contract(row)
+    row_contract = _shadow_row_contract(role)
     return {
         "schema_version": SCHEMA_VERSION,
         "lockbox_case_id": row["lockbox_case_id"],
@@ -314,6 +381,7 @@ def _shadow_case_row(
         "next_action": row["next_action"],
         "shadow_experiment_role": role,
         "included_in_shadow_experiment": included,
+        **row_contract,
         "shadow_oracle_basis": basis,
         "expected_shadow_behavior": expected,
         "future_action_if_mismatch": mismatch,
@@ -380,6 +448,62 @@ def _role_contract(row: Mapping[str, str]) -> tuple[str, str, str, str, str]:
     raise ValueError(f"unexpected next_action for shadow design: {action}")
 
 
+def _shadow_row_contract(role: str) -> dict[str, str]:
+    base = {
+        "shadow_only": YES,
+        "write_authority": NO_AUTHORITY,
+        "matrix_write_allowed": NO_AUTHORITY,
+        "may_satisfy_reviewer_slot2": NO_AUTHORITY,
+        "single_owner_evidence_is_truth_completion": NO_AUTHORITY,
+        "doublet_source": DOUBLET_SOURCE,
+    }
+    if role == ROLE_OWNER_CLEAN:
+        return {
+            **base,
+            "shadow_decision": SHADOW_DECISION_ACCEPT,
+            "truth_status": TRUTH_STATUS_NOT_TRUTH,
+            "owner_clean_challenge_status": OWNER_CLEAN_CHALLENGE_NON_AUTHORITY,
+            "manual_negative_status": MANUAL_NEGATIVE_NONE,
+            "doublet_status": DOUBLET_STATUS_NO_CLAIM,
+            "doublet_reference_side": "not_applicable",
+            "doublet_allowed": YES,
+        }
+    if role == ROLE_MANUAL_NEGATIVE:
+        return {
+            **base,
+            "shadow_decision": SHADOW_DECISION_REJECT,
+            "truth_status": TRUTH_STATUS_MANUAL_NEGATIVE,
+            "owner_clean_challenge_status": OWNER_CLEAN_CHALLENGE_NOT_APPLICABLE,
+            "manual_negative_status": MANUAL_NEGATIVE_EXISTING,
+            "doublet_status": DOUBLET_STATUS_NO_CLAIM,
+            "doublet_reference_side": "not_applicable",
+            "doublet_allowed": NO_AUTHORITY,
+        }
+    if role == ROLE_EXCLUDED_ORACLE:
+        return {
+            **base,
+            "shadow_decision": SHADOW_DECISION_NOT_SCORED,
+            "truth_status": TRUTH_STATUS_NOT_TRUTH,
+            "owner_clean_challenge_status": OWNER_CLEAN_CHALLENGE_NOT_APPLICABLE,
+            "manual_negative_status": MANUAL_NEGATIVE_NONE,
+            "doublet_status": DOUBLET_STATUS_NOT_EVALUATED,
+            "doublet_reference_side": "not_applicable",
+            "doublet_allowed": NO_AUTHORITY,
+        }
+    if role == ROLE_EXCLUDED_BOUNDARY:
+        return {
+            **base,
+            "shadow_decision": SHADOW_DECISION_NOT_SCORED,
+            "truth_status": TRUTH_STATUS_UNRESOLVED,
+            "owner_clean_challenge_status": OWNER_CLEAN_CHALLENGE_NOT_APPLICABLE,
+            "manual_negative_status": MANUAL_NEGATIVE_NONE,
+            "doublet_status": DOUBLET_STATUS_NOT_EVALUATED,
+            "doublet_reference_side": "not_applicable",
+            "doublet_allowed": NO_AUTHORITY,
+        }
+    raise ValueError(f"unexpected shadow role: {role}")
+
+
 def _summary_json(
     rows: Sequence[Mapping[str, str]],
     next_action_summary: Mapping[str, Any],
@@ -388,6 +512,7 @@ def _summary_json(
     next_action_plan_path: Path,
     next_action_summary_path: Path,
     single_owner_gate_path: Path,
+    shadow_cases_path: Path,
 ) -> dict[str, Any]:
     role_counts = Counter(row["shadow_experiment_role"] for row in rows)
     included_count = sum(
@@ -399,23 +524,25 @@ def _summary_json(
         if row["may_feed_product_writer"] == YES
         or row["may_touch_matrix"] == YES
         or row["may_grant_product_authority"] == YES
+        or row["write_authority"] == YES
+        or row["matrix_write_allowed"] == YES
     )
     return {
         "schema_version": SUMMARY_SCHEMA_VERSION,
         "decision": DECISION_READY,
-        "allowed_next_step": "implement_shadow_only_scoring_experiment",
+        "allowed_next_step": ALLOWED_NEXT_STEP,
         "decision_reasons": [
             (
                 "53 owner-clean Gaussian15 cases may be used as positive "
-                "challenge cases for a shadow-only experiment"
+                "challenge cases for a shadow-only contract adapter"
             ),
             (
-                "6 existing manual wrong-peak/no-peak cases may be used only "
-                "as manual negative controls"
+                "6 existing manual wrong-peak/no-peak cases reject the shadow "
+                "decision and hard-stop any accept drift"
             ),
             (
                 "12 round-trip-oracle negative cases and 1 boundary-unavailable "
-                "case remain excluded from shadow scoring"
+                "case remain not_scored in the shadow contract"
             ),
             (
                 "single-owner plus AI challenge evidence is not product truth "
@@ -435,11 +562,30 @@ def _summary_json(
             ],
             "product_authority_rows": product_authority_rows,
         },
+        "contract_counts": {
+            "shadow_decision": dict(
+                sorted(Counter(row["shadow_decision"] for row in rows).items())
+            ),
+            "truth_status": dict(
+                sorted(Counter(row["truth_status"] for row in rows).items())
+            ),
+            "doublet_status": dict(
+                sorted(Counter(row["doublet_status"] for row in rows).items())
+            ),
+        },
         "upstream_decisions": {
             "next_action_summary": next_action_summary.get("decision", ""),
             "single_owner_ai_challenge_gate": single_owner_gate.get("decision", ""),
         },
         "shadow_experiment_contract": {
+            "shadow_decisions": sorted(SHADOW_DECISIONS),
+            "truth_statuses": sorted(TRUTH_STATUSES),
+            "doublet_statuses": sorted(DOUBLET_STATUSES),
+            "doublet_reference_sides": sorted(DOUBLET_REFERENCE_SIDES),
+            "owner_clean_truth_status": TRUTH_STATUS_NOT_TRUTH,
+            "owner_clean_challenge_status": OWNER_CLEAN_CHALLENGE_NON_AUTHORITY,
+            "manual_negative_accept_hard_stop": True,
+            "right_unclear_unresolved_doublet_accept_hard_stop": True,
             "gaussian_boundary_policy": GAUSSIAN_BOUNDARY_POLICY,
             "result_is_allowed_to_write": "shadow_scores_and_review_flags_only",
             "mismatch_handling": "route_to_review_only_not_product_writer",
@@ -455,6 +601,8 @@ def _summary_json(
             "may_feed_product_writer": False,
             "may_touch_matrix": False,
             "may_grant_product_authority": False,
+            "write_authority": False,
+            "matrix_write_allowed": False,
             "may_change_workbook": False,
             "may_switch_selected_peak": False,
             "may_change_selected_area": False,
@@ -467,6 +615,11 @@ def _summary_json(
             "manual_negative_controls_grant_write_authority": False,
             "round_trip_oracle_used_as_truth": False,
         },
+        "output_rules": {
+            "shadow_only": True,
+            "write_authority": False,
+            "matrix_write_allowed": False,
+        },
         "source_artifacts": {
             "next_action_plan": _repo_relative(next_action_plan_path),
             "next_action_plan_sha256": file_sha256(next_action_plan_path),
@@ -474,6 +627,7 @@ def _summary_json(
             "next_action_summary_sha256": file_sha256(next_action_summary_path),
             "single_owner_gate": _repo_relative(single_owner_gate_path),
             "single_owner_gate_sha256": file_sha256(single_owner_gate_path),
+            "source_case_manifest": _repo_relative(shadow_cases_path),
             "shadow_case_manifest_sha256": _rows_sha256(rows),
         },
     }
@@ -496,6 +650,10 @@ def _check_case_rows(
         problems.append("shadow automation role counts drifted")
     for row_number, row in enumerate(rows, start=2):
         for field in (
+            "write_authority",
+            "matrix_write_allowed",
+            "may_satisfy_reviewer_slot2",
+            "single_owner_evidence_is_truth_completion",
             "may_feed_product_writer",
             "may_touch_matrix",
             "may_grant_product_authority",
@@ -511,11 +669,84 @@ def _check_case_rows(
                 problems.append(f"shadow row {row_number}: {field} must be FALSE")
         role = row.get("shadow_experiment_role", "")
         included = row.get("included_in_shadow_experiment", "")
+        shadow_decision = row.get("shadow_decision", "")
+        truth_status = row.get("truth_status", "")
+        doublet_status = row.get("doublet_status", "")
+        doublet_reference_side = row.get("doublet_reference_side", "")
+        if row.get("schema_version") != SCHEMA_VERSION:
+            problems.append(f"shadow row {row_number}: schema_version mismatch")
+        if row.get("shadow_only") != YES:
+            problems.append(f"shadow row {row_number}: shadow_only must be TRUE")
+        if shadow_decision not in SHADOW_DECISIONS:
+            problems.append(f"shadow row {row_number}: invalid shadow_decision")
+        if truth_status not in TRUTH_STATUSES:
+            problems.append(f"shadow row {row_number}: invalid truth_status")
+        if doublet_status not in DOUBLET_STATUSES:
+            problems.append(f"shadow row {row_number}: invalid doublet_status")
+        if doublet_reference_side not in DOUBLET_REFERENCE_SIDES:
+            problems.append(
+                f"shadow row {row_number}: invalid doublet_reference_side"
+            )
+        if not row.get("doublet_source"):
+            problems.append(f"shadow row {row_number}: doublet_source is required")
+        if not row.get("source_artifacts") or not row.get("source_hashes"):
+            problems.append(f"shadow row {row_number}: source paths/hashes required")
+        if "row_source_hashes=" not in row.get("source_hashes", ""):
+            problems.append(f"shadow row {row_number}: row source hashes required")
+        if shadow_decision == SHADOW_DECISION_ACCEPT and (
+            row.get("write_authority") == YES
+            or row.get("matrix_write_allowed") == YES
+            or row.get("may_feed_product_writer") == YES
+            or row.get("may_touch_matrix") == YES
+            or row.get("may_grant_product_authority") == YES
+        ):
+            problems.append(
+                f"shadow row {row_number}: accept cannot grant write authority"
+            )
+        if (
+            shadow_decision == SHADOW_DECISION_ACCEPT
+            and truth_status == TRUTH_STATUS_MANUAL_NEGATIVE
+        ):
+            problems.append(
+                f"shadow row {row_number}: manual negative cannot be accepted"
+            )
+        if shadow_decision == SHADOW_DECISION_ACCEPT and (
+            doublet_status in DOUBLET_ACCEPT_BLOCKED_STATUSES
+            or doublet_reference_side in DOUBLET_ACCEPT_BLOCKED_REFERENCE_SIDES
+            or row.get("doublet_allowed") != YES
+        ):
+            problems.append(
+                f"shadow row {row_number}: doublet state cannot be accepted"
+            )
         if role in {ROLE_OWNER_CLEAN, ROLE_MANUAL_NEGATIVE}:
             if included != YES:
                 problems.append(f"shadow row {row_number}: included flag drifted")
         elif included != NO_AUTHORITY:
             problems.append(f"shadow row {row_number}: excluded row is included")
+        if role == ROLE_OWNER_CLEAN:
+            if truth_status != TRUTH_STATUS_NOT_TRUTH:
+                problems.append(
+                    f"shadow row {row_number}: owner-clean cannot claim truth"
+                )
+            if row.get("owner_clean_challenge_status") != (
+                OWNER_CLEAN_CHALLENGE_NON_AUTHORITY
+            ):
+                problems.append(
+                    f"shadow row {row_number}: owner-clean must be challenge only"
+                )
+        if role == ROLE_MANUAL_NEGATIVE:
+            if truth_status != TRUTH_STATUS_MANUAL_NEGATIVE:
+                problems.append(
+                    f"shadow row {row_number}: manual negative status drifted"
+                )
+            if shadow_decision == SHADOW_DECISION_ACCEPT:
+                problems.append(
+                    f"shadow row {row_number}: manual negative accepted"
+                )
+        if role in {ROLE_EXCLUDED_ORACLE, ROLE_EXCLUDED_BOUNDARY} and (
+            shadow_decision != SHADOW_DECISION_NOT_SCORED
+        ):
+            problems.append(f"shadow row {row_number}: excluded row must not score")
 
 
 def _check_summary(summary: Mapping[str, Any], problems: list[str]) -> None:
@@ -523,7 +754,7 @@ def _check_summary(summary: Mapping[str, Any], problems: list[str]) -> None:
         problems.append("shadow automation summary schema_version mismatch")
     if summary.get("decision") != DECISION_READY:
         problems.append("shadow automation summary decision mismatch")
-    if summary.get("allowed_next_step") != "implement_shadow_only_scoring_experiment":
+    if summary.get("allowed_next_step") != ALLOWED_NEXT_STEP:
         problems.append("shadow automation summary allowed_next_step mismatch")
     counts = summary.get("case_counts", {})
     if not isinstance(counts, Mapping):
@@ -533,8 +764,41 @@ def _check_summary(summary: Mapping[str, Any], problems: list[str]) -> None:
     contract = summary.get("shadow_experiment_contract", {})
     if not isinstance(contract, Mapping):
         problems.append("shadow automation summary contract must be an object")
-    elif contract.get("gaussian_boundary_policy") != GAUSSIAN_BOUNDARY_POLICY:
-        problems.append("shadow automation Gaussian boundary policy drifted")
+    else:
+        if contract.get("gaussian_boundary_policy") != GAUSSIAN_BOUNDARY_POLICY:
+            problems.append("shadow automation Gaussian boundary policy drifted")
+        if contract.get("shadow_decisions") != sorted(SHADOW_DECISIONS):
+            problems.append("shadow automation shadow_decisions drifted")
+        if contract.get("truth_statuses") != sorted(TRUTH_STATUSES):
+            problems.append("shadow automation truth_statuses drifted")
+        if contract.get("owner_clean_truth_status") != TRUTH_STATUS_NOT_TRUTH:
+            problems.append("shadow automation owner-clean truth drifted")
+        if contract.get("manual_negative_accept_hard_stop") is not True:
+            problems.append("shadow automation manual-negative hard stop drifted")
+        doublet_hard_stop = contract.get(
+            "right_unclear_unresolved_doublet_accept_hard_stop"
+        )
+        if doublet_hard_stop is not True:
+            problems.append("shadow automation doublet hard stop drifted")
+    outputs = summary.get("output_rules", {})
+    if not isinstance(outputs, Mapping):
+        problems.append("shadow automation summary output_rules must be an object")
+    else:
+        if outputs.get("shadow_only") is not True:
+            problems.append("shadow automation output must be shadow_only")
+        if outputs.get("write_authority") is not False:
+            problems.append("shadow automation output grants write authority")
+        if outputs.get("matrix_write_allowed") is not False:
+            problems.append("shadow automation output allows matrix write")
+    sources = summary.get("source_artifacts", {})
+    if not isinstance(sources, Mapping):
+        problems.append("shadow automation summary source_artifacts must be an object")
+    else:
+        if not sources.get("source_case_manifest"):
+            problems.append("shadow automation source case manifest missing")
+        manifest_hash = sources.get("shadow_case_manifest_sha256", "")
+        if not isinstance(manifest_hash, str) or len(manifest_hash) != 64:
+            problems.append("shadow automation manifest sha mismatch")
     authority = summary.get("authority_rules", {})
     if not isinstance(authority, Mapping):
         problems.append("shadow automation summary authority_rules must be an object")

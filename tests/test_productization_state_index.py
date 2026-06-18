@@ -49,13 +49,29 @@ def test_peak_choice_lockbox_status_points_to_shadow_automation_design() -> None
         == "docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json"
     )
     assert row["public_surface"] == "lockbox_shadow_automation_experiment_v1"
-    assert row["product_effect"] == "shadow_only_experiment_design_manifest"
+    assert row["product_effect"] == "shadow_only_contract_adapter_manifest"
     assert row["row_count"] == "72"
-    assert "shadow_automation_experiment_design_ready" in row["notes"]
-    assert "53 owner-clean Gaussian15 cases plus 6 manual negative controls" in row[
-        "notes"
-    ]
+    assert "shadow_scoring_contract_adapter_v1_ready" in row["notes"]
+    assert "53 owner-clean Gaussian15 cases as non-authoritative accept challenges" in (
+        row["notes"]
+    )
+    assert "6 manual negative controls as reject hard stops" in row["notes"]
     assert row["write_authority"] == "FALSE"
+
+
+def test_control_plane_lockbox_shadow_adapter_route_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - lockbox_shadow_automation_experiment_v1",
+        "### 2026-06-18 - productization_status_index_v1",
+    )
+
+    assert "shadow_scoring_contract_adapter_v1_ready" in section
+    assert "define_production_acceptance_manifest_v1" in section
+    assert "ProductionAcceptanceManifest v1" in section
+    assert "implement the shadow-only scoring experiment" not in section
+    assert "No ProductWriter, matrix, workbook" in section
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:
@@ -190,3 +206,9 @@ def _read_tsv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         return list(reader.fieldnames or []), list(reader)
+
+
+def _section(text: str, start: str, end: str) -> str:
+    start_index = text.index(start)
+    end_index = text.index(end, start_index)
+    return text[start_index:end_index]
