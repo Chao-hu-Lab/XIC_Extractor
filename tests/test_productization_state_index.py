@@ -127,10 +127,30 @@ def test_control_plane_quant_matrix_review_report_is_current() -> None:
     assert "quant_matrix_review_report.html" in section
     assert "review-only report adapter" in section
     assert "No ProductWriter default extraction" in section
-    assert "Phase 5 Validation/Promotion Readiness" in section
+    assert "QuantMatrix Promotion Readiness v1" in section
 
 
-def test_control_plane_current_summary_routes_to_phase5() -> None:
+def test_control_plane_quant_matrix_promotion_readiness_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Promotion Readiness v1",
+        "### 2026-06-19 - QuantMatrixVersion Review Report v1",
+    )
+
+    assert "quant_matrix_promotion_readiness_schema.v1.json" in section
+    assert "scripts/check_quant_matrix_promotion_readiness.py" in section
+    assert "quant_matrix_promotion_readiness_summary.json" in section
+    assert "quant_matrix_promotion_readiness_checks.tsv" in section
+    assert "contract-ready/science-inconclusive" in section
+    assert "focused tests prove the gate behavior only" in section
+    assert "artifact-bound passing large-cohort" in section
+    assert "No ProductWriter default extraction" in section
+    assert "broad Backfill authority changed" in section
+    assert "Do not run RAW/85RAW unless an active goal names that tier" in section
+
+
+def test_control_plane_current_summary_routes_to_validation_packet() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
         text,
@@ -145,12 +165,21 @@ def test_control_plane_current_summary_routes_to_phase5() -> None:
     assert "is now implemented as an explicit manifest-driven activation" in summary
     assert "Phase 4" in summary
     assert "`Gallery/Report Alignment` is now implemented" in summary
-    assert "Next checkpoint is Phase 5" in summary
+    assert "Phase 5" in summary
+    assert "`Validation/Promotion Readiness` is now" in summary
+    assert "contract correctness" in summary
+    assert "scientific confidence" in summary
+    assert "Phase 0-5 product spine is complete" in summary
+    assert "unbound" in summary
+    assert "tier/status strings" in summary
+    assert "large-cohort" in summary
+    assert "heldout-oracle/manual-review" in summary
     assert "`Validation/Promotion Readiness`" in summary
     assert "`QuantMatrixVersion Activation`" in summary
     assert "Next checkpoint is Phase 2" not in summary
     assert "Next checkpoint is Phase 3" not in summary
     assert "Next checkpoint is Phase 4" not in summary
+    assert "Next checkpoint is Phase 5" not in summary
 
 
 def test_specs_readme_lists_quant_matrix_version_schema() -> None:
@@ -174,6 +203,19 @@ def test_specs_readme_lists_quant_matrix_review_report_schema() -> None:
     assert "summary JSON" in text
     assert "HTML report" in text
     assert "does not grant ProductWriter or matrix authority" in text
+
+
+def test_specs_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_promotion_readiness_schema.v1.json" in text
+    assert "readiness summary JSON" in text
+    assert "checks" in text
+    assert "contract correctness from scientific confidence" in text
+    assert "focused tests and 8RAW smoke evidence cannot claim" in text
+    assert "artifact-bound large-cohort" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

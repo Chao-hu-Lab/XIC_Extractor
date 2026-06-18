@@ -301,8 +301,16 @@ accepted Backfill versus detected cells, prevalence risk, manual-negative and
 doublet closure, source paths/hashes, manifest sha, and the Gaussian-smoothed
 trace-primary/raw-trace-auxiliary convention without granting ProductWriter,
 matrix, workbook, GUI, selected peak/area, counted detection, reviewer slot2,
-or broad Backfill authority. Next checkpoint is Phase 5
-`Validation/Promotion Readiness`.
+or broad Backfill authority. Phase 5 `Validation/Promotion Readiness` is now
+implemented as a read-only promotion checker: it separates contract correctness
+from scientific confidence, writes readiness summary/check sidecars, and cannot
+claim `production_ready` from focused tests, 8RAW smoke evidence, or unbound
+tier/status strings alone. Required science pass rows must bind artifact relpath,
+SHA, and tier-specific provenance such as cohort/run, oracle packet, or
+downstream scope. The Phase 0-5 product spine is complete. Next checkpoint is
+an explicitly named validation packet with large-cohort,
+heldout-oracle/manual-review, and downstream-impact evidence, not a scorer
+revival or broad Backfill writer.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2822,6 +2830,41 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrix Promotion Readiness v1
+
+- Lane: Backfill validation/promotion readiness / Phase 5.
+- Previous tier: Phase 4 `QuantMatrixVersion Review Report v1` provided a
+  review-only surface but did not define when contract correctness can be
+  separated from scientific production readiness.
+- New tier: unchanged. This is a read-only readiness checker and public output
+  schema, not a maturity-tier promotion, ProductWriter default extraction, or
+  new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_promotion_readiness_schema.v1.json`,
+  `scripts/check_quant_matrix_promotion_readiness.py`, and
+  `xic_extractor/alignment/quant_matrix_promotion.py`.
+- Product surface changed: additive readiness sidecars only:
+  `quant_matrix_promotion_readiness_summary.json` and
+  `quant_matrix_promotion_readiness_checks.tsv`.
+- Evidence: focused tests cover schema-column parity, contract-ready but
+  science-inconclusive behavior, focused-test/8RAW-only no-promotion guard,
+  unbound tier/status-string no-promotion guard, duplicate validation tier
+  fail-closed behavior, artifact-bound synthetic large-cohort + oracle +
+  downstream pass behavior, invalid accepted-cell hash format, contract-failure
+  dominance, script entrypoint, and `--require-production-ready` nonzero exit
+  when science evidence is missing.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Production-ready claim: the focused tests prove the gate behavior only.
+  Current status is contract-ready/science-inconclusive unless a later explicit
+  validation packet supplies artifact-bound passing large-cohort,
+  heldout-oracle or manual review, and downstream-impact evidence.
+- Remaining blocker: actual promotion still needs a named validation tier and
+  evidence packet. Do not run RAW/85RAW unless an active goal names that tier.
+- Next checkpoint: build or review an explicit validation packet; do not revive
+  scoring or broad Backfill as the promotion path.
+
 ### 2026-06-19 - QuantMatrixVersion Review Report v1
 
 - Lane: Backfill gallery/report alignment / Phase 4.
@@ -2845,10 +2888,11 @@ at that older checkpoint, not the latest release claim.
 - Product surface not changed: No ProductWriter default extraction, workbook,
   GUI, selected peak, selected area, counted detection, review/replay behavior,
   current 511-cell writer authority, or broad Backfill authority changed.
-- Remaining blocker: Phase 5 still needs validation/promotion readiness
-  separation so contract correctness is not overclaimed as scientific
-  production readiness.
-- Next checkpoint: Phase 5 Validation/Promotion Readiness.
+- Remaining blocker: none for the review-only report adapter itself. Phase 5
+  readiness separation is represented by `QuantMatrix Promotion Readiness v1`
+  above.
+- Next checkpoint: historical. Use the Phase 5 readiness checker above before
+  any promotion packet.
 
 ### 2026-06-19 - QuantMatrixVersion Activation v1
 

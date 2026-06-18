@@ -30,6 +30,12 @@ automatic implementation goals.
   prevalence uncertainty, manifest/source hashes, manual-negative closure,
   doublet closure, and Gaussian-smoothed trace-primary/raw-trace-auxiliary
   display; it does not grant ProductWriter or matrix authority.
+- `quant_matrix_promotion_readiness_schema.v1.json`: Phase 5 read-only
+  promotion readiness contract. It defines readiness summary JSON and checks
+  TSV outputs that separate contract correctness from scientific confidence;
+  focused tests and 8RAW smoke evidence cannot claim `production_ready` without
+  artifact-bound large-cohort, heldout-oracle/manual-review, and
+  downstream-impact evidence.
 
 ## Rule
 

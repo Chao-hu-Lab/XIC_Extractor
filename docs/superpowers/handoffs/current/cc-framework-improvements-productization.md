@@ -2,10 +2,10 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Current checkpoint: Phase 4 `Gallery/Report Alignment` implemented; Phase 5
-`Validation/Promotion Readiness` is next.
+Checkpoint: Phase 0-5 Backfill quant-matrix product spine is complete.
 
-This is the short current-state snapshot. Tier authority lives in
+Next work is an explicit validation packet, not another scoring/backlog loop.
+Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
 machine-readable validation indexes.
 
@@ -13,42 +13,44 @@ machine-readable validation indexes.
 
 Backfill productization is moving toward a default quant matrix that includes
 detected values plus accepted Backfill values, while keeping detection claims,
-truth claims, and write authority separate.
+truth claims, scientific confidence, and write authority separate.
 
-Completed spine so far:
+Completed spine:
 
+- Phase 0: cleanup map and blueprint alignment.
 - Phase 1: shadow-only lockbox contract adapter.
 - Phase 2: `ProductionAcceptanceManifest v1` schema/checker.
 - Phase 3: explicit `QuantMatrixVersion v1` activation outputs.
 - Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
+- Phase 5: read-only promotion readiness checker separating contract
+  correctness from scientific confidence.
 
-Phase 5 must separate contract correctness from scientific promotion readiness.
-No RAW/85RAW has been run in this sequence.
+No scorer was run. No RAW/85RAW was run in this Phase 0-5 sequence.
 
-## Active Blueprint
+## Active References
 
-- Active roadmap:
+- Product blueprint:
   `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`.
 - Cleanup map:
   `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md`.
-- Phase 2 schema:
-  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
-- Phase 3 schema:
-  `docs/superpowers/specs/quant_matrix_version_schema.v1.json`.
-- Phase 4 schema:
-  `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`.
+- Schemas:
+  `production_acceptance_manifest_schema.v1.json`,
+  `quant_matrix_version_schema.v1.json`,
+  `quant_matrix_review_report_schema.v1.json`,
+  `quant_matrix_promotion_readiness_schema.v1.json`.
 
-## Product Direction
+## Product Contract
 
-- Backfill values are accepted quantification values.
-- Backfill values are not detections and not truth claims.
+- Backfill values are accepted quantification values, not detections or truth
+  claims.
 - Future default `quant_matrix` should include detected plus accepted Backfill
   values.
 - Detection claims remain based on detected cells only.
 - `quant_available_count = detected_count + accepted_backfilled_count`.
 - Production write authority must come from `ProductionAcceptanceManifest`
   keyed by `peak_hypothesis_id + sample_stem`.
-- Shadow/report/gallery/candidate artifacts remain non-authority.
+- Shadow/report/gallery/readiness/candidate artifacts remain non-authority
+  unless a later expected-diff promotion packet explicitly grants authority.
 
 ## Lane State
 
@@ -59,7 +61,7 @@ No RAW/85RAW has been run in this sequence.
 - `1087` missing-overlay rows remain evidence gaps, not negative truth.
 - Lockbox/owner-clean evidence remains non-authoritative challenge evidence.
 - Manual wrong-peak/no-peak controls remain negative controls.
-- No scorer was run. No RAW/85RAW was run.
+- Contract-ready does not mean science-ready.
 
 Status-index anchors retained for `check_productization_state.py`:
 
@@ -77,114 +79,95 @@ Status-index anchors retained for `check_productization_state.py`:
 - manual-boundary area recompute remain parked.
 - classification and planning only.
 
-## Phase Results
+## Phase Artifacts
 
-Phase 1 `lockbox_shadow_automation_experiment_v1`:
+- Phase 1:
+  `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`,
+  `scripts/build_lockbox_shadow_automation_experiment_design.py`, and
+  `tests/test_lockbox_shadow_automation_experiment_design.py`.
+- Phase 2:
+  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`,
+  `scripts/check_production_acceptance_manifest.py`, and
+  `tests/test_production_acceptance_manifest_contract.py`.
+- Phase 3:
+  `xic_extractor/alignment/quant_matrix_version.py`,
+  `scripts/build_quant_matrix_version.py`, and
+  `tests/test_quant_matrix_version_activation.py`.
+- Phase 4:
+  `xic_extractor/alignment/quant_matrix_report.py`,
+  `scripts/build_quant_matrix_version_report.py`, and
+  `tests/test_quant_matrix_version_report.py`.
+- Phase 5:
+  `xic_extractor/alignment/quant_matrix_promotion.py`,
+  `scripts/check_quant_matrix_promotion_readiness.py`, and
+  `tests/test_quant_matrix_promotion_readiness.py`.
 
-- `shadow_decision={accept,flag,reject,not_scored}`;
-- owner-clean rows are non-authoritative accept challenges;
-- manual negatives are reject hard stops;
-- row-level doublet/source/hash/manifest-sha fields are present;
-- `shadow_only=true`, `write_authority=false`,
-  `matrix_write_allowed=false`, `may_satisfy_reviewer_slot2=false`, and
-  `single_owner_evidence_is_truth_completion=false`.
+## Phase 5 Contract
 
-Phase 2 `ProductionAcceptanceManifest v1`:
+`QuantMatrix Promotion Readiness v1` writes
+`quant_matrix_promotion_readiness_summary.json` and
+`quant_matrix_promotion_readiness_checks.tsv`.
 
-- schema: `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`;
-- checker: `scripts/check_production_acceptance_manifest.py`;
-- tests: `tests/test_production_acceptance_manifest_contract.py`;
-- authority key is `peak_hypothesis_id + sample_stem`;
-- `feature_family_id` is context/provenance only;
-- manual-negative and blocked doublet states are hard stops.
+Required guards:
 
-Phase 3 `QuantMatrixVersion v1`:
-
-- module: `xic_extractor/alignment/quant_matrix_version.py`;
-- CLI: `scripts/build_quant_matrix_version.py`;
-- tests: `tests/test_quant_matrix_version_activation.py`;
-- schema: `docs/superpowers/specs/quant_matrix_version_schema.v1.json`;
-- outputs: `quant_matrix.tsv`, `cell_provenance.tsv`,
-  `row_summary.tsv`, `expected_diff_summary.tsv`, `source_summary.tsv`;
-- fills only blank sample cells and rejects detected-value overwrite;
-- detected-only view is reconstructable from `quant_matrix + cell_provenance`.
-
-Phase 4 `QuantMatrixVersion Review Report v1`:
-
-- module: `xic_extractor/alignment/quant_matrix_report.py`;
-- CLI: `scripts/build_quant_matrix_version_report.py`;
-- tests: `tests/test_quant_matrix_version_report.py`;
-- schema: `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`;
-- outputs: `quant_matrix_review_rows.tsv`,
-  `quant_matrix_review_summary.json`, and
-  `quant_matrix_review_report.html`;
-- exposes accepted Backfill versus detected cells, prevalence uncertainty,
-  manifest/source hashes, manual-negative closure, doublet closure, and the
-  Gaussian-smoothed trace-primary/raw-trace-auxiliary convention;
-- fails closed when accepted Backfill cells cannot join back to the manifest;
-- accepted-cell manifest join is hash/authority-bound: `manifest_sha256`,
-  `source_row_sha256`, accepted decision, `write_authority=TRUE`,
-  `matrix_write_allowed=TRUE`, and `shadow_only=FALSE` must agree;
-- `source_summary.production_acceptance_manifest_sha256` must also match the
-  current manifest file hash before report enrichment;
-- review/report only, no authority promotion.
+- separate `contract_correctness_status` from
+  `scientific_confidence_status`;
+- focused tests and 8RAW smoke evidence cannot claim `production_ready`;
+- required science pass rows must bind artifact relpath, artifact SHA, and
+  tier-specific provenance such as cohort/run, oracle packet, or downstream
+  scope;
+- duplicate validation tiers fail closed;
+- accepted-cell source/row/manifest hashes must be 64-hex;
+- no ProductWriter, workbook, GUI, selected peak/area, counted detection,
+  review/replay behavior, broad Backfill, or matrix-authority change.
 
 ## Rejected Paths
 
 - Do not run or revive a scorer as productization authority.
 - Do not create a second independent lockbox case manifest.
 - Do not treat owner-clean challenge rows, AI challenge evidence, manual
-  negative controls, missing-overlay rows, or summary scores as truth completion.
-- Do not let shadow/report/gallery/candidate artifacts feed ProductWriter,
-  matrix/workbook output, selected peak/area, counted detection, GUI, default
-  extraction, reviewer slot 2, or broad Backfill authority.
+  negative controls, missing-overlay rows, or summary scores as truth
+  completion.
+- Do not let shadow/report/gallery/readiness/candidate artifacts feed
+  ProductWriter, matrix/workbook output, selected peak/area, counted detection,
+  GUI, default extraction, reviewer slot 2, or broad Backfill authority.
 - Do not treat low detected support or high Backfill dependency as standalone
   matrix-value blockers; they are prevalence/claim uncertainty flags.
 - Do not overwrite detected values with Backfill values.
 
 ## Validation Status
 
-Latest completed Phase 4 checks:
+Latest Phase 5 final checks:
 
-- `uv run pytest tests/test_quant_matrix_version_report.py -v --tb=short`
-  - 9 passed.
-- `uv run pytest tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py -v --tb=short`
-  - 26 passed.
-- `uv run ruff check xic_extractor/alignment/quant_matrix_report.py scripts/build_quant_matrix_version_report.py tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py`
-  - pass before the final hash-bound join regression addition.
-- `uv run python scripts/check_productization_state.py`
-  - pass.
-- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_production_acceptance_manifest_contract.py tests/test_quant_matrix_version_activation.py tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py -v --tb=short`
-  - 61 passed.
-- `uv run python scripts/build_quant_matrix_version_report.py --help`
-  - pass.
-- `git diff --check`
-  - pass; only Git CRLF warnings.
-- Scoped secret/local-path scan over changed Phase 4 files
-  - no matches.
-
-Latest completed Phase 3/contract checks retained as baseline:
-
-- `uv run python scripts/check_production_acceptance_manifest.py`
-  - pass before Phase 4 updates.
+- Shadow design check-only: pass.
+- Phase 1-5 focused shard: 73 passed.
+- Phase 3-5 focused shard after typing cleanup: 43 passed.
+- Changed-file ruff: pass.
+- `uv run mypy xic_extractor/alignment/quant_matrix_promotion.py`: pass.
+- `uv run python scripts/check_productization_state.py`: pass.
+- `uv run python scripts/check_quant_matrix_promotion_readiness.py --help`:
+  pass.
+- `git diff --check`: pass with only Git CRLF warnings.
+- Scoped changed-files secret/local-path scan: no matches after excluding the
+  literal verification phrase.
 
 Sub-agent review:
 
-- Docs/control-plane reviewer found no blockers and confirmed Phase 4 is
-  additive review/report surface only.
-- Implementation-contract reviewer found a stale same-key manifest join blocker;
-  fixed with source-summary manifest file-hash validation plus hash/authority-
-  bound join validation and regression tests. The reviewer re-checked both P1
-  findings closed with no new blocker.
+- Docs/control-plane reviewer found no blockers and confirmed Phase 5 does not
+  overclaim production readiness.
+- Implementation reviewer found three blockers, all fixed and re-checked:
+  unauthenticated tier/status strings, duplicate validation tiers, and
+  non-validated accepted-cell hash formats.
 
 ## Control Plane Note
 
-Control plane was updated because Phase 4 adds a public review/report schema and
-explicit report script. No maturity tier, active lane, current matrix authority,
+Control plane was updated because Phase 5 adds a public readiness schema and
+checker script. No maturity tier, active lane, current matrix authority,
 selected peak/area, counted detection, ProductWriter default extraction,
 review/replay behavior, or broad Backfill state changed.
 
 ## Next Actions
 
-1. Commit Phase 4 by purpose.
-2. Proceed directly to Phase 5 `Validation/Promotion Readiness`.
+1. Commit Phase 5 by purpose.
+2. Prepare the next goal as a named validation packet only if it names the
+   validation tier and evidence source up front.

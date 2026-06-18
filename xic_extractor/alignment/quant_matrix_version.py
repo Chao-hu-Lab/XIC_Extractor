@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from xic_extractor.tabular_io import numeric_equal, optional_float
@@ -440,7 +440,7 @@ def _row_summary_rows(
     return rows
 
 
-def _prevalence_flags(rows: object) -> str:
+def _prevalence_flags(rows: Iterable[Mapping[str, str] | None]) -> str:
     flags: list[str] = []
     for row in rows:
         if row is None:

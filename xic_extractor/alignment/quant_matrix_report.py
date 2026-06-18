@@ -4,6 +4,7 @@ import html
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from xic_extractor.alignment.quant_matrix_version import (
     CELL_PROVENANCE_COLUMNS,
@@ -421,7 +422,7 @@ def _render_html(
         + "</code>: "
         + _escape(value)
         + "</li>"
-        for label, value in dict(summary["input_artifacts"]).items()
+        for label, value in _summary_input_artifacts(summary).items()
     )
     return f"""<!doctype html>
 <html lang="zh-Hant">
@@ -509,6 +510,13 @@ def _render_row(row: Mapping[str, str]) -> str:
 
 def _escape(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _summary_input_artifacts(summary: Mapping[str, object]) -> Mapping[str, object]:
+    value = summary.get("input_artifacts", {})
+    if isinstance(value, Mapping):
+        return cast(Mapping[str, object], value)
+    return {}
 
 
 def _manual_negative_label(row: Mapping[str, str]) -> str:
