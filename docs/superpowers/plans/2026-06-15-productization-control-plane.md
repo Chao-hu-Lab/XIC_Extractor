@@ -286,10 +286,12 @@ manifest-sha contract fields plus the Gaussian15 boundary policy explicitly:
 Gaussian-smoothed boundaries are the review basis; raw-trace doublets are
 acceptable only when the Backfill/detect reference is on the left peak, and
 unclear or right-peak reference cases stay flagged. This is still
-`production_candidate` evidence/control infrastructure only. Next checkpoint is
-Phase 2 `ProductionAcceptanceManifest v1`, not a scorer run. It writes no
-ProductWriter input, matrix, workbook, selected peak/area, counted detection,
-reviewer slot2, GUI, default extraction, or broad Backfill authority.
+`production_candidate` evidence/control infrastructure only. Phase 2
+`ProductionAcceptanceManifest v1` is now defined as an additive schema/checker
+precursor; it is not a scorer run and writes no ProductWriter input, matrix,
+workbook, selected peak/area, counted detection, reviewer slot2, GUI, default
+extraction, or broad Backfill authority. Next checkpoint is Phase 3
+`QuantMatrixVersion Activation`.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2809,6 +2811,45 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker
+
+- Lane: Backfill quant-matrix authority contract / Phase 2.
+- Previous tier: Phase 1 lockbox shadow adapter was
+  `shadow_only=true`, `write_authority=false`, and allowed only
+  `define_production_acceptance_manifest_v1`.
+- New tier: unchanged. This is an additive contract/checker surface and a
+  precursor to Phase 3 activation, not ProductWriter authority and not a
+  maturity-tier promotion.
+- Current artifact:
+  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
+  It defines `ProductionAcceptanceManifest v1`, where the authority key is
+  `peak_hypothesis_id + sample_stem`; `feature_family_id is context/provenance only`.
+- Evidence: `scripts/check_production_acceptance_manifest.py` validates the
+  schema and any candidate manifest TSV. The checker enforces acceptance
+  vocabulary, source/doublet artifact path containment, existence, and
+  file-hash match, source row hash and canonical manifest sha, finite
+  non-negative accepted quant values, Backfill-fraction consistency,
+  manual-negative hard stop, blocked doublet hard stop, authority-lane
+  contradictions, primary-key uniqueness, report-only prevalence risks, and
+  strict risk-specific closure.
+- Product surface changed: additive schema JSON, checker script, focused tests,
+  control-plane section, and handoff only. No ProductWriter, matrix, workbook,
+  selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_production_acceptance_manifest.py`
+  returned `ProductionAcceptanceManifest schema is valid.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_production_acceptance_manifest_contract.py -v --tb=short`
+  passed `16`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  passed `13`.
+- Remaining blocker: this checker can validate write-authority rows, but it does
+  not write the default matrix. Any matrix behavior still requires Phase 3
+  QuantMatrixVersion Activation with expected-diff, `cell_provenance`, and
+  focused output tests.
+- Next checkpoint: Phase 3 QuantMatrixVersion Activation, not default matrix
+  activation from a shadow/report/gallery/candidate artifact.
+
 ### 2026-06-19 - lockbox_shadow_automation_experiment_v1
 
 - Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
@@ -2848,11 +2889,12 @@ at that older checkpoint, not the latest release claim.
   returned `Productization state index is consistent and fail-closed.`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
   passed `25`.
-- Remaining blocker: this adapter cannot grant writer authority. Any
-  ProductWriter authority expansion still needs Phase 2
-  `ProductionAcceptanceManifest v1`, expected-diff, and focused output tests.
-- Next checkpoint: define `ProductionAcceptanceManifest v1` in a separate goal.
-  Do not promote shadow results to writer authority.
+- Remaining blocker: this adapter cannot grant writer authority. Phase 2 now
+  defines the separate `ProductionAcceptanceManifest v1` schema/checker; any
+  ProductWriter authority expansion still needs Phase 3 QuantMatrixVersion
+  Activation with expected-diff and focused output tests.
+- Next checkpoint: Phase 3 QuantMatrixVersion Activation. Do not promote shadow
+  results to writer authority.
 
 ### 2026-06-18 - productization_status_index_v1
 

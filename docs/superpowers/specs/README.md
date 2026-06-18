@@ -12,6 +12,13 @@ automatic implementation goals.
 3. Current roadmap/blueprint for phase order.
 4. The specific spec named by the active goal.
 
+## Current Public Schemas
+
+- `production_acceptance_manifest_schema.v1.json`: Phase 2 Backfill
+  `ProductionAcceptanceManifest v1` contract. This defines/checks the only
+  future Backfill row artifact that may grant `write_authority=true`; it does
+  not activate ProductWriter or the default quant matrix.
+
 ## Rule
 
 If a spec conflicts with the control plane, current handoff, or current

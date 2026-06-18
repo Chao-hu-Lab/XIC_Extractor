@@ -3,7 +3,8 @@
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
 Recent committed checkpoints: `239d5e52` blueprint; `7c229332` Phase 1 adapter.
-Current checkpoint: Phase 1 closed; Phase 2 not started.
+Current checkpoint: Phase 2 `ProductionAcceptanceManifest v1` implemented;
+Phase 3 not started.
 
 This is the short current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -11,14 +12,13 @@ machine-readable validation indexes.
 
 ## Current Objective
 
-Phase 1 is implemented: the lockbox shadow automation artifact is now a
-shadow-only contract adapter/checker, not a scorer run and not product writer
-authority.
+Phase 2 is implemented: `ProductionAcceptanceManifest v1` now has an additive
+schema artifact and fail-closed checker. This defines the only future Backfill
+row artifact that may grant `write_authority=true`, but it still does not write
+the default matrix.
 
-Next executable productization phase is Phase 2:
-`ProductionAcceptanceManifest v1`. Phase 2 must define the only future
-Backfill `write_authority=true` decision artifact, still without writing the
-default matrix until Phase 3 expected-diff activation exists.
+Next executable productization phase is Phase 3: QuantMatrixVersion Activation
+with expected-diff, `cell_provenance`, and focused output tests.
 
 ## Active Blueprint
 
@@ -56,34 +56,49 @@ default matrix until Phase 3 expected-diff activation exists.
 - Manual wrong-peak/no-peak controls remain negative controls.
 - No scorer was run. No RAW/85RAW was run.
 - No ProductWriter, matrix, workbook, selected peak/area, counted detection,
-  GUI, default extraction, authority manifest, or broad Backfill behavior
-  changed in Phase 1.
+  GUI, default extraction, actual authority rows, or broad Backfill behavior
+  changed in Phases 1-2.
 
 ## Phase 1 Result
 
-Updated artifact:
-`docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`.
-
-Updated source manifest:
-`docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv`.
-
-The single 72-case manifest now carries:
+Updated artifact: `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`.
+Source manifest: `docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv`.
+The single 72-case manifest carries:
 
 - `shadow_decision={accept,flag,reject,not_scored}`;
-- truth/status enum with owner-clean as `not_truth_claimed` and
-  `non_authoritative_challenge`;
-- manual negative controls as `reject` hard stops;
-- row-level doublet status, reference side, allowed flag, and source;
-- source paths/hashes and manifest sha in the JSON summary;
-- `shadow_only=true`, `write_authority=false`, and
-  `matrix_write_allowed=false`;
-- `may_satisfy_reviewer_slot2=false`;
-- `single_owner_evidence_is_truth_completion=false`.
+- owner-clean as `not_truth_claimed` / `non_authoritative_challenge`;
+- manual negatives as `reject` hard stops;
+- row-level doublet/source/hash/manifest-sha fields;
+- `shadow_only=true`, `write_authority=false`,
+  `matrix_write_allowed=false`, `may_satisfy_reviewer_slot2=false`, and
+  `single_owner_evidence_is_truth_completion=false`.
 
 `lockbox_shadow_automation_experiment_v1` remains a shadow-only public surface.
 It does not feed ProductWriter, matrix/workbook output, selected peak/area,
 counted detection, GUI, default extraction, reviewer slot 2, or broad Backfill
 authority.
+
+## Phase 2 Result
+
+New schema: `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
+New checker: `scripts/check_production_acceptance_manifest.py`.
+
+The checker enforces:
+
+- primary key `peak_hypothesis_id + sample_stem`;
+- `feature_family_id` as context/provenance only;
+- acceptance vocabulary and basis rules;
+- `shadow_only=false`, `write_authority=true`, and
+  `matrix_write_allowed=true` only for accepted production rows;
+- manual-negative, hard-blocker, blocked-doublet, and missing-provenance stops;
+- source path/hash, source row hash, and canonical manifest sha;
+- source/doublet artifact path containment, existence, and file-hash match;
+- finite non-negative accepted quant value and matching Backfill fraction;
+- low seed / high Backfill dependency as report-only prevalence risk;
+- strict risk closure via `closure_rule_ids`.
+
+It does not create production rows from the lockbox shadow manifest and does not
+write ProductWriter/default matrix outputs.
 
 ## Current Lane State
 
@@ -128,36 +143,17 @@ Status-index anchors retained for `check_productization_state.py`:
   2, or broad Backfill authority.
 - Do not treat low detected support or high Backfill dependency as a standalone
   matrix-value blocker; they are prevalence/claim uncertainty flags.
-- Do not write accepted Backfill into the default matrix before Phase 2
-  production acceptance manifest and Phase 3 expected-diff activation exist.
+- Do not write accepted Backfill into the default matrix before Phase 3
+  expected-diff activation exists.
 
-## Files Changed In Phase 1
+## Current Files Changed
 
-- `scripts/build_lockbox_shadow_automation_experiment_design.py`
-  - upgraded the existing builder/checker to a Phase 1 shadow contract adapter.
-- `docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv`
-  - same 72-case source manifest, enriched with shadow/truth/doublet/authority
-    contract fields.
-- `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`
-  - updated decision, source/hash/manifest-sha, enum, and authority contract.
-- `tests/test_lockbox_shadow_automation_experiment_design.py`
-  - added focused checker tests for hard stops and authority invariants.
-- `docs/superpowers/validation/productization_status_index_v1.tsv` and
-  `tests/test_productization_state_index.py`
-  - synchronized artifact hash, non-authority status-index wording, and
-    control-plane freshness assertion.
-- `docs/superpowers/validation/lockbox_label_readme_v1.md`
-  - updated the plain-language lockbox shadow contract description.
-- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-  - refreshed lockbox wording to Phase 1 contract-adapter status and Phase 2
-    `ProductionAcceptanceManifest v1` next checkpoint without changing tier or
-    authority.
-- `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md` and
-  `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md`
-  - marked Phase 1 adapter work as complete/current and removed stale
-    future-Phase-1 wording.
-- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
-  - pruned to this current-state snapshot.
+- Phase 1: lockbox shadow adapter script/tests and generated 72-case shadow
+  artifact remain current.
+- Phase 2: production acceptance manifest schema/checker/tests were added.
+- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+  `docs/superpowers/specs/README.md`, `tests/test_productization_state_index.py`,
+  and this handoff were updated for the Phase 2 contract surface.
 
 Phase 0 blueprint and Phase 1 adapter changes are committed. User-provided
 deepresearch inputs and separate cleanup inventory notes remain untracked and
@@ -174,12 +170,16 @@ Latest completed checks:
 - `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -k "manual_negative_accept or blocked_doublet or owner_clean_truth_completion or missing_source_hashes or actual_case_manifest_path" -v --tb=short`
   - 5 passed, 9 deselected.
 - `uv run pytest tests/test_productization_state_index.py -v --tb=short`
-  - 11 passed.
-- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py -v --tb=short`
-  - 25 passed.
+  - 13 passed.
+- `uv run python scripts/check_production_acceptance_manifest.py`
+  - pass.
+- `uv run pytest tests/test_production_acceptance_manifest_contract.py -v --tb=short`
+  - 16 passed.
 - `uv run python scripts/check_productization_state.py`
-  - pass after productization status index hash update.
-- `uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py`
+  - pass.
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_production_acceptance_manifest_contract.py tests/test_productization_state_index.py -v --tb=short`
+  - 43 passed.
+- `uv run ruff check scripts/check_production_acceptance_manifest.py tests/test_production_acceptance_manifest_contract.py tests/test_productization_state_index.py`
   - pass.
 - `git diff --check`;
   - pass; only Git CRLF warnings.
@@ -188,13 +188,13 @@ Latest completed checks:
 
 ## Control Plane Note
 
-No control-plane tier or authority update is needed for Phase 1 because
+No control-plane tier or authority update is needed for Phase 2 because
 maturity tier, active lane, matrix authority, selected area/counting behavior,
 review/replay behavior, ProductWriter authority, and broad uncontracted
-Backfill state did not change. The control-plane prose was refreshed only to
-remove stale scorer wording and point the next checkpoint to Phase 2.
+Backfill state did not change. The control-plane prose was updated only because
+Phase 2 adds a public schema/checker surface.
 
 ## Next Actions
 
-Next goal: Phase 2, `ProductionAcceptanceManifest v1`; do not start default
-quant matrix activation until Phase 3.
+Next goal: Phase 3 QuantMatrixVersion Activation; do not start default quant
+matrix writing without an expected-diff contract and focused output tests.

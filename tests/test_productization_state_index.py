@@ -72,6 +72,40 @@ def test_control_plane_lockbox_shadow_adapter_route_is_current() -> None:
     assert "ProductionAcceptanceManifest v1" in section
     assert "implement the shadow-only scoring experiment" not in section
     assert "No ProductWriter, matrix, workbook" in section
+    assert "Phase 2 `ProductionAcceptanceManifest v1`, expected-diff" not in section
+    assert "define `ProductionAcceptanceManifest v1` in a separate goal" not in section
+    assert "Phase 3 QuantMatrixVersion Activation" in section
+
+
+def test_control_plane_production_acceptance_manifest_contract_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker",
+        "### 2026-06-19 - lockbox_shadow_automation_experiment_v1",
+    )
+
+    assert "production_acceptance_manifest_schema.v1.json" in section
+    assert "scripts/check_production_acceptance_manifest.py" in section
+    assert "peak_hypothesis_id + sample_stem" in section
+    assert "feature_family_id is context/provenance only" in section
+    assert "No ProductWriter, matrix, workbook" in section
+    assert "Phase 3 QuantMatrixVersion Activation" in section
+
+
+def test_control_plane_current_summary_routes_to_phase3() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    summary = _section(
+        text,
+        "Lockbox Shadow Scoring Contract Adapter v1 turns",
+        "Missing-Overlay Evidence Recovery v1",
+    )
+
+    assert "Phase 2" in summary
+    assert "`ProductionAcceptanceManifest v1` is now defined" in summary
+    assert "Next checkpoint is Phase 3" in summary
+    assert "`QuantMatrixVersion Activation`" in summary
+    assert "Next checkpoint is Phase 2" not in summary
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:
