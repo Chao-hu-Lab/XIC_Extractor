@@ -1,5 +1,10 @@
 # Backfill Evidence Gate Productization Implementation Plan
 
+> Historical product-candidate slice as of 2026-06-18. Keep for provenance and
+> validation context. Do not use this plan to reopen broad Backfill or derive a
+> new writer slice; current Backfill authority and next work live in the
+> productization control plane and evidence lifecycle blueprint.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Backfill may still enumerate and render review candidates, but high-risk rescue promotion must stop depending on scan support or owner-backfill labels alone. A rescued cell can support matrix promotion only when typed evidence explains RT, MS1 pattern/QC, and chemical/MS2 context.

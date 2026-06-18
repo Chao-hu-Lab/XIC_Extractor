@@ -1,5 +1,11 @@
 # Backfill Evidence Reconciliation Productization Implementation Plan
 
+> Superseded for active Backfill roadmap execution as of 2026-06-18.
+> Keep this plan as historical diagnostic/gallery implementation provenance
+> because `tools/diagnostics/INDEX.md` cites it as an originating plan. Do not
+> use it to reopen broad Backfill promotion or to bypass the current evidence
+> lifecycle blueprint.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the backfill evidence reconciliation index and gallery, then conditionally promote only allowlisted backfill slices when product-grade evidence passes reviewed 8RAW and 85RAW gates.

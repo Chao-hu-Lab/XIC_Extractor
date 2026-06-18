@@ -1,5 +1,9 @@
 # Product Authority Reconciliation v1 Implementation Addendum
 
+> Historical authority-hygiene addendum as of 2026-06-18. Keep for provenance
+> and prior validation context. The productization control plane is the current
+> authority source for tier, active lane, and writer authority.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development for code changes. This plan is intentionally narrow: close active product-authority leaks first, then add exit-rule diagnostics for scientific policy changes.
 
 **Goal:** Product outputs must not be decided by stale legacy score/fallback semantics when typed projection/evidence is required.
