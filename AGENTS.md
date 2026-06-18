@@ -6,6 +6,10 @@ influence every turn; nested docs carry the longer contracts.
 
 Canonical references:
 
+These are routing targets, not a per-turn preflight checklist. Read only the
+file(s) directly relevant to the current task unless a hard default below names
+a required preflight.
+
 - Directory layout and scratch hygiene: [`docs/project-layout.md`](docs/project-layout.md)
 - Stable domain glossary and product lane vocabulary: [`CONTEXT.md`](CONTEXT.md)
 - Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
