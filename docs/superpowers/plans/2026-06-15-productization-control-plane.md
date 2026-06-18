@@ -2460,8 +2460,65 @@ at that older checkpoint, not the latest release claim.
   remain parked as non-truth; the 6 manual negatives are controls only; the 1
   boundary-unavailable case needs signal/evidence recovery or remains
   not-assessable.
-- Next checkpoint: commit this packet, then collect second-review labels for
-  the 53 plotted clean cases. Do not mine another broad Backfill heuristic.
+- Next checkpoint: superseded by `lockbox_second_review_pack_v1`, which creates
+  the blank reviewer-slot-2 collection surface for the 53 plotted clean cases.
+  Do not mine another broad Backfill heuristic.
+
+### 2026-06-18 - lockbox_second_review_pack_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` next-action routing packet.
+  The current gate had 53 plotted Gaussian15 cases ready for a second
+  independent reviewer, plus 19 cases excluded from that route.
+- New tier: unchanged `production_candidate`. This is a second-review
+  collection packet only; it does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, default extraction, GUI, or broad
+  Backfill authority.
+- Evidence: `scripts/build_lockbox_second_review_pack.py` reads
+  `lockbox_next_action_plan_v1.tsv`, the static Gaussian15 review bundle, and
+  the first reviewer label log. It writes
+  `docs/superpowers/validation/lockbox_second_review_queue_v1.tsv`,
+  `docs/superpowers/validation/lockbox_second_review_template_v1.tsv`,
+  `docs/superpowers/validation/lockbox_second_review_summary_v1.json`, and
+  `docs/superpowers/validation/lockbox_second_review_v1/index.html`.
+  Current split: 53 reviewer-slot-2 rows are blank and linked to existing
+  Gaussian15 overlay pages; 19 non-ready cases are excluded from this collection
+  pack. Every queue/template row keeps no-authority flags false.
+- Product surface changed: docs/validation/helper script/test only. It adds a
+  review-collection TSV/HTML surface, not a writer surface. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, broad Backfill, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py`
+  built the second-review artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`
+  returned `Lockbox second-review pack is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_second_review_pack.py -v --tb=short`
+  passed `11`, including exact 53-case routing, blank slot-2 template,
+  Gaussian15 contract, HTML link smoke, actual PNG hash anchoring,
+  no-authority flags, stale-summary, stale-template, and queue-authority
+  regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_second_review_pack.py tests/test_lockbox_second_review_pack.py`
+  passed. Subagent review found one P2 stale plot-hash anchoring gap and one P3
+  broken HTML template link; both were fixed before commit. Post-fix subagent
+  re-review found no P0/P1/P2/P3 findings. Final full local gate after those
+  fixes passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_second_review_pack.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3884 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`.
+- Remaining blocker: a second independent reviewer still has to fill the 53
+  blank slot-2 rows before the truth summary can move beyond review-only. These
+  labels still cannot become write authority without a later expected-diff
+  product goal.
+- Next checkpoint: complete/import reviewer-slot-2 labels for the 53 cases, then
+  rerun the truth summary gate. Do not route the 19 excluded cases into broad
+  Backfill heuristics.
 
 ### 2026-06-18 - productization_status_index_v1
 

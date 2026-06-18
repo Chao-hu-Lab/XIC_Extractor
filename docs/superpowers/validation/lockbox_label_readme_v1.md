@@ -176,3 +176,20 @@ cases are existing negative controls; 12 round-trip-oracle negative cases remain
 parked because that oracle is not independent peak-choice or area truth; 1
 Gaussian boundary-unavailable case needs signal/evidence recovery or remains
 not assessable. None of these routes grants write authority.
+
+Second-review collection pack:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only
+```
+
+This writes `lockbox_second_review_queue_v1.tsv`,
+`lockbox_second_review_template_v1.tsv`,
+`lockbox_second_review_summary_v1.json`, and
+`lockbox_second_review_v1/index.html`. Current meaning: only the 53 plotted
+Gaussian15 cases enter reviewer slot 2. The template intentionally leaves all
+label fields blank; Codex must not invent the second review. The remaining 19
+cases stay outside this collection pack. The linked static pages and plots use
+the Gaussian15-smoothed boundary as the review basis. This packet still cannot
+feed ProductWriter, touch matrices, alter workbooks, or unpark broad Backfill.
