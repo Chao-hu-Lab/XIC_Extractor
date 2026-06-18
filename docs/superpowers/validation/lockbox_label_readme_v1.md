@@ -99,6 +99,27 @@ labels for them.
   detection, default extraction, or GUI behavior from this package.
 - Disagreement is expected evidence. Do not force consensus in the label sheet.
 
+## Current Imported Batch
+
+`docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv` records the
+first 2026-06-18 user batch review over the static Gaussian15 review UX. It is
+one reviewer pass, not the completed two-reviewer lockbox template.
+
+The generated truth summary is:
+
+```text
+docs/superpowers/validation/lockbox_truth_summary_v1.json
+```
+
+Current decision: `truth_supports_review_only`.
+
+Meaning in plain language: the 53 cases with usable Gaussian15 static review
+plots were visually accepted for peak choice, area usability, and boundary
+quality in this first pass; the 18 missing-evidence cases plus 1 unusable
+Gaussian-boundary case remain not assessable. This supports the review workflow
+and records the evidence gap, but it still does not grant ProductWriter or
+matrix write authority.
+
 ## Validation
 
 Structural check:
@@ -130,3 +151,13 @@ The completed-label check requires two distinct non-empty reviewer IDs per
 case, legal enum labels, legal reason codes, legal `evidence_viewed` values,
 and unchanged source artifact hashes. It still does not grant product
 authority.
+
+Truth-summary import/check:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --generate-user-batch-log
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only
+```
+
+The import gate checks static-bundle hash binding, row identity, legal labels,
+and no-authority flags. Its output is a decision packet, not a writer input.

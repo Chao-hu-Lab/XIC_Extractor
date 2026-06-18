@@ -2347,6 +2347,60 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: use the HTML bundle for a small first labeling batch before
   starting label import.
 
+### 2026-06-18 - lockbox_truth_summary_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: `production_candidate` label-collection and static-review
+  substrate existed, but no reviewer labels had been imported into a truth
+  summary.
+- New tier: unchanged for product authority. The truth-summary gate is a
+  `production_candidate` review-only evidence packet. It does not grant
+  ProductWriter authority and does not reopen broad Backfill.
+- Evidence: `scripts/import_lockbox_labels.py` imports the user's first
+  2026-06-18 visual pass over
+  `docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv`.
+  It writes
+  `docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv`,
+  `docs/superpowers/validation/lockbox_truth_summary_v1.json`,
+  `docs/superpowers/validation/lockbox_truth_confusion_table_v1.tsv`, and
+  `docs/superpowers/validation/lockbox_failure_modes_v1.tsv`. The import binds
+  each label to the static bundle hash, case HTML hash, plot hash or plot
+  status, source artifact hashes, row identity, legal label enums, and
+  no-authority flags. Current summary: 72 one-reviewer labels imported; 53
+  assessable Gaussian15 static review plots are labeled `correct` /
+  `acceptable` / `acceptable`; 19 cases are `insufficient_evidence` /
+  `not_assessable`; decision is `truth_supports_review_only`.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --generate-user-batch-log`
+  built the label log and truth-summary artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  returned `Lockbox truth summary gate is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_truth_summary.py -v --tb=short`
+  passed `8`, including stale static-hash, authority-flag,
+  duplicate-reviewer, and two-reviewer clean-label future-path regression
+  tests;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  passed with `peak_choice_truth_lockbox_v1` bound to
+  `lockbox_truth_summary_v1.json`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/import_lockbox_labels.py tests/test_lockbox_truth_summary.py`
+  passed. Subagent review found one P2 status-index binding gap and one P3
+  future two-reviewer import-path gap; both were fixed by updating the status
+  index/checker coverage and allowing multiple reviewer rows per case while
+  rejecting duplicate reviewer IDs.
+- Remaining blocker: this is one reviewer pass, not the completed two-reviewer
+  lockbox. The 19 not-assessable cases still need recovered visual evidence or
+  explicit park/insufficient-evidence handling. This gate cannot support an
+  automation or writer experiment until independent truth coverage and
+  expected-diff authority exist.
+- Next checkpoint: collect a second independent reviewer pass and handle the 19
+  evidence gaps, not broad Backfill heuristic mining. Any later automation or
+  writer experiment still needs independent truth coverage plus expected-diff
+  authority.
+
 ### 2026-06-18 - productization_status_index_v1
 
 - Lane: Productization control-plane cleanup / machine-checkable lane status.

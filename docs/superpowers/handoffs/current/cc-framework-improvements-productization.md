@@ -5,6 +5,7 @@ Branch: `cc/framework-improvements`
 Baseline before this six-goal sequence: `87c51c05`
 Previous committed checkpoint before Goal 9: `dcd8878a`
 Latest committed Goal 9 checkpoint: `84b4f423`
+Latest committed Goal 9 boundary checkpoint: `2460ec4e`
 
 This file is a short continuation snapshot. The control plane remains the tier
 authority; generated validation/spec artifacts own their schemas and row counts.
@@ -17,11 +18,11 @@ matrix, workbook, selected peak/area, counted-detection, default extraction, or
 GUI authority.
 
 Goal 0/1 through Goal 7 are complete for this sequence and committed through
-`dcd8878a`. Goal 9 Lockbox Static Review UX v1 was committed at `84b4f423` and
-is now receiving a follow-up boundary-display fix: the review plot must use the
-Gaussian15-derived review boundary as the primary shaded window, with the older
-candidate/raw boundary shown only as a reference. It does not collect labels and
-does not add writer authority.
+`dcd8878a`. Goal 9 Lockbox Static Review UX v1 was committed at `84b4f423`; its
+Gaussian-boundary follow-up was committed at `2460ec4e`. The active checkpoint
+now imports the user's first manual pass over the static review UX as a
+one-reviewer lockbox label log and truth summary. This is review evidence only:
+it does not add writer authority.
 
 ## Current State
 
@@ -44,8 +45,12 @@ does not add writer authority.
   empty label template with two reviewer slots per case, and a validator.
   Goal 9 adds a static review UX with 53 Gaussian15-smoothed plots that have
   Gaussian-derived review boundaries, 18 explicitly missing-evidence pages, and
-  1 trace-present boundary-unavailable page. Labels cannot write matrix values
-  and empty template rows are not truth.
+  1 trace-present boundary-unavailable page. The current Goal 8 import adds a
+  one-reviewer label log from the user's 2026-06-18 visual pass: 53 assessable
+  Gaussian plots are labeled `correct` / `acceptable` / `acceptable`, and 19
+  cases remain `insufficient_evidence` / `not_assessable`. The truth-summary
+  decision is `truth_supports_review_only`, not automation or writer authority.
+  Labels cannot write matrix values and empty template rows are not truth.
 - `missing_overlay_evidence_recovery_v1`: `production_candidate`; all 1087
   missing-overlay rows now link to existing trace/overlay/hypothesis evidence,
   but remain `evidence_required`.
@@ -108,6 +113,11 @@ does not add writer authority.
   - `docs/superpowers/validation/lockbox_static_review_v1/cases/`
   - `docs/superpowers/validation/lockbox_static_review_v1/plots/`
   - `scripts/build_lockbox_static_review_bundle.py`
+  - `docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv`
+  - `docs/superpowers/validation/lockbox_truth_summary_v1.json`
+  - `docs/superpowers/validation/lockbox_truth_confusion_table_v1.tsv`
+  - `docs/superpowers/validation/lockbox_failure_modes_v1.tsv`
+  - `scripts/import_lockbox_labels.py`
 - Missing-overlay recovery:
   - `docs/superpowers/specs/trace_overlay_recovery_contract.v1.json`
   - `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv`
@@ -138,6 +148,9 @@ does not add writer authority.
   shaded boundary is now Gaussian-derived; candidate/raw boundaries are orange
   reference lines only. The plots help humans label peak choice/area/boundary,
   but they are not area truth, ProductWriter input, or matrix authority.
+- The first imported lockbox label log is a one-reviewer user batch review. It
+  supports review workflow confidence for the 53 assessable plots and records
+  19 evidence gaps, but it is not enough to run an automation/writer gate.
 - Recovered trace/overlay links reduce evidence gaps but do not make the 1087
   rows writable.
 - ISTD is a limited reference anchor only. It is not analyte peak-choice truth
@@ -161,6 +174,8 @@ does not add writer authority.
   automatic peak-choice truth.
 - Treating the older candidate/raw boundary as the primary review boundary in
   Goal 9 plots.
+- Treating the one-reviewer Goal 8 batch labels as complete lockbox truth,
+  expected-diff evidence, ProductWriter input, or broad Backfill reactivation.
 - Treating the status index itself as authority beyond the scope it records.
 
 ## Tests / Validation
@@ -289,17 +304,58 @@ Latest Goal 9 focused verification:
   - `git diff --check` passed with LF/CRLF warnings only.
 - This closes the Goal 9 boundary-display fix.
 
+Latest Goal 8 focused verification:
+
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --generate-user-batch-log`
+  built `docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv`,
+  `lockbox_truth_summary_v1.json`,
+  `lockbox_truth_confusion_table_v1.tsv`, and
+  `lockbox_failure_modes_v1.tsv`. The summary imports 72 one-reviewer labels:
+  53 assessable Gaussian15 static review plots are `correct` /
+  `acceptable` / `acceptable`; 19 are `insufficient_evidence` /
+  `not_assessable`. The decision is `truth_supports_review_only`.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  returned `Lockbox truth summary gate is valid and non-authoritative.`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_truth_summary.py -v --tb=short`
+  passed `8`, including stale source-hash, authority-flag, duplicate-reviewer,
+  and two-reviewer clean-label future-path regression tests.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  passed with the status index now pointing `peak_choice_truth_lockbox_v1` at
+  `lockbox_truth_summary_v1.json` instead of the older sampling manifest.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/import_lockbox_labels.py tests/test_lockbox_truth_summary.py`
+  passed.
+- Subagent review: Gibbs found one P2 status-index binding gap and one P3
+  two-reviewer import-path gap. Both were fixed by binding the productization
+  status index to `lockbox_truth_summary_v1.json`, adding a status-index
+  regression test, allowing multiple reviewer rows per case while rejecting
+  duplicate reviewer IDs, and adding a two-reviewer clean-label gate test.
+- Final local gate passed:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/import_lockbox_labels.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+    (`3860 passed, 1 skipped`)
+
 ## Remaining Work
 
-- Goal 9 has a committed checkpoint at `84b4f423` plus this follow-up
-  boundary-display fix. Review windows are now Gaussian-derived rather than
-  raw/candidate-derived.
+- Goal 9 has a committed checkpoint at `84b4f423` plus committed
+  boundary-display fix `2460ec4e`. Review windows are now Gaussian-derived
+  rather than raw/candidate-derived.
+- Goal 8 now has a one-reviewer truth-summary gate. It closes the "first manual
+  pass" loop, but the result is explicitly `truth_supports_review_only`.
 - No new writer authority, GUI work, matrix/workbook mutation, selected
   peak/area mutation, counted-detection mutation, or broad Backfill revival was
   added.
-- The next real product decision is not another Backfill rule. It is whether
-  humans complete the 72-case lockbox label template so a later Goal 8 import
-  can summarize independent peak-choice / area truth.
+- The next real product decision is not another Backfill rule. It is whether to
+  collect a second independent reviewer pass for the 53 assessable plots, recover
+  or park the 19 not-assessable cases, then decide if a later truth-backed
+  automation experiment is justified.
 - Other remaining decisions stay separate future goals: turn review packets
   into structured human approval UX, decide if and when bounded Targeted MS1
   can expand beyond 5-hmdC/5-medC, decide if SampleMetadata roles may ever
@@ -308,6 +364,5 @@ Latest Goal 9 focused verification:
 
 ## Next Actions
 
-1. Use the static review UX to fill a small first batch of labels
-   before starting Goal 8 label import and truth summary. Do not return to broad
+1. Next product step should be second-review / evidence-gap handling, not broad
    Backfill heuristic mining.
