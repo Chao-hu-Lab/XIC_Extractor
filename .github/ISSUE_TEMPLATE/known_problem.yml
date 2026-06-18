@@ -1,0 +1,41 @@
+name: Known Problem
+description: Record a known bug, sharp edge, or failing workflow.
+title: "[Known problem] "
+labels:
+  - needs-triage
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong?
+      description: Describe the observed behavior in plain language.
+    validations:
+      required: true
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      options:
+        - shared
+        - targeted
+        - untargeted
+        - workflow-only
+        - unsure
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or reproduction
+      description: Include commands, artifact paths, screenshots, or exact inputs when available.
+  - type: dropdown
+    id: output_risk
+    attributes:
+      label: Product output risk
+      description: Pick the closest current risk. This is a triage signal, not a product decision.
+      options:
+        - Could affect matrix/workbook values, selected peak, selected area, counted detection, CLI/config, or public schema.
+        - Looks diagnostic/workflow-only.
+        - Unsure.
+    validations:
+      required: true

@@ -1,0 +1,53 @@
+name: Decision Request
+description: Ask for a human product or domain decision.
+title: "[Decision] "
+labels:
+  - needs-info
+body:
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision needed
+      description: Ask the decision in one or two plain-language questions.
+    validations:
+      required: true
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      options:
+        - shared
+        - targeted
+        - untargeted
+        - workflow-only
+        - unsure
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: List 2-3 defensible options with tradeoffs.
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: State the current best recommendation and why.
+    validations:
+      required: true
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+      description: Explain what changes if the decision is accepted, rejected, or deferred.
+    validations:
+      required: true
+  - type: textarea
+    id: productization_impact
+    attributes:
+      label: Productization impact and closure
+      description: State the authority/public surface at risk, validation or exit evidence needed, and whether handoff/control-plane updates are required.
+    validations:
+      required: true
