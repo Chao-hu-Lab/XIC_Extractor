@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOCKBOXV1_84F43925154564C1CB26A415</title>
+<style>
+
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --line: #d8dee6;
+  --text: #16202a;
+  --muted: #607080;
+  --teal: #0f766e;
+  --amber: #b45309;
+  --red: #9f2f2f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Segoe UI, Arial, sans-serif;
+  line-height: 1.45;
+}
+main {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px;
+}
+h1 { margin: 0 0 12px; font-size: 28px; }
+h2 { margin: 24px 0 10px; font-size: 18px; }
+a { color: #155e75; }
+.authority {
+  border-left: 5px solid var(--red);
+  background: #fff7f7;
+  padding: 10px 12px;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.metric,
+.details-grid div {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.metric span,
+dt {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.metric strong,
+dd {
+  margin: 3px 0 0;
+  font-weight: 650;
+}
+.case-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.case-table th,
+.case-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.case-table th { background: #edf2f7; }
+.badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: #f8fafc;
+}
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.review-plot {
+  display: block;
+  width: 100%;
+  max-width: 1120px;
+  border: 1px solid var(--line);
+  background: white;
+}
+.missing {
+  border: 1px solid var(--line);
+  background: #fff8e8;
+  padding: 14px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 12px;
+}
+
+</style>
+</head>
+<body>
+<main>
+<p><a href="../index.html">Back to index</a></p>
+<h1>LOCKBOXV1_84F43925154564C1CB26A415</h1>
+<p class="authority">人工 review packet only。不要在這裡輸入 replacement value；不要把 label 當成 ProductWriter authority。</p>
+<section class="details-grid">
+<div><dt>Family</dt><dd>TARGET::dG-C8-MeIQx</dd></div>
+<div><dt>Sample</dt><dd>BenignfatBC1095_DNA</dd></div>
+<div><dt>Stratum</dt><dd>manual_wrong_peak_or_no_peak</dd></div>
+<div><dt>Machine decision</dt><dd>known_manual_negative</dd></div>
+<div><dt>Evidence</dt><dd>missing_evidence_recorded</dd></div>
+<div><dt>Plot status</dt><dd>missing_evidence_recorded</dd></div>
+</section>
+<h2>Gaussian15 Review Plot</h2>
+<p class="missing">沒有可畫 trace；請依 packet 標成 insufficient evidence 或 not assessable，除非你另有獨立證據。</p>
+<h2>Review Question</h2>
+<p>Is there enough evidence to label peak choice? If not, use `insufficient_evidence` and `not_assessable` labels.</p>
+<h2>Label Cheat Sheet</h2>
+<ul>
+<li><strong>peak_choice_label</strong>: correct / wrong_peak / wrong_family / unresolved / insufficient_evidence</li>
+<li><strong>area_label</strong>: acceptable / unacceptable / not_assessable</li>
+<li><strong>boundary_label</strong>: acceptable / too_wide / too_narrow / shifted / not_assessable</li>
+<li><strong>evidence_viewed</strong>: packet_missing_evidence_record</li>
+</ul>
+<h2>Links</h2>
+<ul>
+<li><a href="../../lockbox_label_template_v1.tsv">Label template TSV</a></li>
+<li><a href="../../lockbox_review_packets_v1/LOCKBOXV1_84F43925154564C1CB26A415.md">Markdown packet</a></li>
+<li>Original overlay PNG: not available</li>
+<li>Original hypothesis PNG: not available</li>
+<li>Trace JSON: not available</li>
+</ul>
+<h2>Source Hashes</h2>
+<pre>lockbox_sampling_manifest=6EE391F1689030DB325DEEB7CAA09AA067D189F091A11367ABAB00CFAB0E2D17;manual_negative_fixture=C3B6896653A46DC60281528EAA8B414020D3FBCE8A6A0FD4E0C047E3CA2C5A38</pre>
+</main>
+</body>
+</html>

@@ -3,7 +3,7 @@
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
 Baseline before this six-goal sequence: `87c51c05`
-Previous committed checkpoint before Goal 7: `1ba884a7`
+Previous committed checkpoint before Goal 9: `dcd8878a`
 
 This file is a short continuation snapshot. The control plane remains the tier
 authority; generated validation/spec artifacts own their schemas and row counts.
@@ -15,11 +15,11 @@ reviewable, non-black-box decisions, without granting new ProductWriter,
 matrix, workbook, selected peak/area, counted-detection, default extraction, or
 GUI authority.
 
-Goal 0/1 through Goal 6 are complete for this sequence. Goal 7 Lockbox Label
-Collection Pack v1 is implemented and post-fix subagent reviewed: it turns the
-existing 72-case lockbox into human-reviewable packets, an empty two-reviewer
-label template, a strict label schema, and a validator. It does not collect
-labels and does not add writer authority.
+Goal 0/1 through Goal 7 are complete for this sequence and committed through
+`dcd8878a`. Goal 9 Lockbox Static Review UX v1 is the active checkpoint: it
+adds a static HTML review bundle with Gaussian15-smoothed plots so the 72-case
+lockbox can be labeled without opening raw TSV/Markdown artifacts by hand. It
+does not collect labels and does not add writer authority.
 
 ## Current State
 
@@ -40,7 +40,9 @@ labels and does not add writer authority.
   are ready for independent labels. Goal 7 now adds a structured
   label-collection pack around those cases: 72 Markdown packets, a 144-row
   empty label template with two reviewer slots per case, and a validator.
-  Labels cannot write matrix values and empty template rows are not truth.
+  Goal 9 adds a static review UX with 54 Gaussian15-smoothed plots for cases
+  with trace evidence and 18 explicitly missing-evidence pages. Labels cannot
+  write matrix values and empty template rows are not truth.
 - `missing_overlay_evidence_recovery_v1`: `production_candidate`; all 1087
   missing-overlay rows now link to existing trace/overlay/hypothesis evidence,
   but remain `evidence_required`.
@@ -98,6 +100,11 @@ labels and does not add writer authority.
   - `docs/superpowers/validation/lockbox_label_readme_v1.md`
   - `scripts/build_lockbox_label_collection_pack.py`
   - `scripts/check_lockbox_label_schema.py`
+  - `docs/superpowers/validation/lockbox_static_review_v1/index.html`
+  - `docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv`
+  - `docs/superpowers/validation/lockbox_static_review_v1/cases/`
+  - `docs/superpowers/validation/lockbox_static_review_v1/plots/`
+  - `scripts/build_lockbox_static_review_bundle.py`
 - Missing-overlay recovery:
   - `docs/superpowers/specs/trace_overlay_recovery_contract.v1.json`
   - `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv`
@@ -124,6 +131,9 @@ labels and does not add writer authority.
 - Lockbox label packets are collection infrastructure only. Codex must not
   invent labels, treat blank template rows as labels, or use reviewer labels as
   immediate ProductWriter authority.
+- Static review UX plots are Gaussian15 review/morphology views only. They help
+  humans label peak choice/area/boundary, but they are not area truth,
+  ProductWriter input, or matrix authority.
 - Recovered trace/overlay links reduce evidence gaps but do not make the 1087
   rows writable.
 - ISTD is a limited reference anchor only. It is not analyte peak-choice truth
@@ -143,6 +153,8 @@ labels and does not add writer authority.
 - Treating Goal 7 packets, the empty label template, or future reviewer labels
   as direct write approval without a later import/summary gate plus
   expected-diff authority update.
+- Treating Goal 9 Gaussian15 plots as product integration, matrix area, or
+  automatic peak-choice truth.
 - Treating the status index itself as authority beyond the scope it records.
 
 ## Tests / Validation
@@ -234,9 +246,42 @@ Latest Goal 7 focused verification:
     (`3840 passed, 1 skipped`)
   - `git diff --check` passed with LF/CRLF warnings only.
 
+Latest Goal 9 focused verification:
+
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py`
+  built 72 case pages and 54 Gaussian15 review plots. The 18 remaining cases
+  are explicit `missing_evidence_recorded` pages.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
+  returned `Lockbox static review bundle is valid and non-authoritative.`
+  The checker now binds the bundle to the current packet index hash, label
+  template hash, source artifact hashes, and visible row identity fields so
+  stale HTML/PNG review surfaces fail closed.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_static_review_bundle.py -v --tb=short`
+  passed `8`, including stale packet-index, label-template, and source-hash
+  regression tests.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_static_review_bundle.py tests/test_lockbox_static_review_bundle.py`
+  passed.
+- Subagent review: Lagrange found one P2 stale-bundle checker gap and one P3
+  stale control-plane checkpoint wording. Both were fixed. Lagrange found no
+  product-authority drift, no label-collection behavior in the HTML, and no
+  alternate smoothing path.
+- Final local gate passed:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_static_review_bundle.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+    (`3848 passed, 1 skipped`)
+  - `git diff --check` passed with LF/CRLF warnings only.
+- Commit is the remaining Goal 9 closeout step.
+
 ## Remaining Work
 
-- Goal 7 still needs a commit.
+- Goal 9 subagent review findings are fixed and the final local gate passed. It
+  still needs a commit.
 - No new writer authority, GUI work, matrix/workbook mutation, selected
   peak/area mutation, counted-detection mutation, or broad Backfill revival was
   added.
@@ -251,7 +296,7 @@ Latest Goal 7 focused verification:
 
 ## Next Actions
 
-1. Commit Goal 7.
-2. After commit, the next product goal should be Goal 8 label import and truth
-   summary only after humans complete labels. Do not return to broad Backfill
-   heuristic mining.
+1. Commit Goal 9.
+2. After commit, use the static review UX to fill a small first batch of labels
+   before starting Goal 8 label import and truth summary. Do not return to broad
+   Backfill heuristic mining.

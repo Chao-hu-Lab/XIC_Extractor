@@ -17,6 +17,20 @@ label entry sheet. It has two reviewer slots per case. Fill labels only after
 opening the matching packet under
 `docs/superpowers/validation/lockbox_review_packets_v1/`.
 
+## Review UX
+
+For visual review, open:
+
+```text
+docs/superpowers/validation/lockbox_static_review_v1/index.html
+```
+
+This static bundle has one page per lockbox case and Gaussian15-smoothed review
+plots where trace evidence exists. The plot is a review/morphology view only:
+it does not change matrix values, workbook values, selected peak, selected
+area, counted detection, or ProductWriter authority. Cases without trace
+evidence stay visibly marked as missing evidence; do not infer labels for them.
+
 ## Allowed Labels
 
 `peak_choice_label`:
@@ -87,6 +101,12 @@ Structural check:
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py
+```
+
+Static review UX check:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only
 ```
 
 Local evidence-file hash check, only on a machine with the referenced

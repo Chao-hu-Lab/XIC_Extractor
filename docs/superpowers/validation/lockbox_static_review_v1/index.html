@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lockbox Review UX v1</title>
+<style>
+
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --line: #d8dee6;
+  --text: #16202a;
+  --muted: #607080;
+  --teal: #0f766e;
+  --amber: #b45309;
+  --red: #9f2f2f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Segoe UI, Arial, sans-serif;
+  line-height: 1.45;
+}
+main {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 24px;
+}
+h1 { margin: 0 0 12px; font-size: 28px; }
+h2 { margin: 24px 0 10px; font-size: 18px; }
+a { color: #155e75; }
+.authority {
+  border-left: 5px solid var(--red);
+  background: #fff7f7;
+  padding: 10px 12px;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.metric,
+.details-grid div {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.metric span,
+dt {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.metric strong,
+dd {
+  margin: 3px 0 0;
+  font-weight: 650;
+}
+.case-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.case-table th,
+.case-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.case-table th { background: #edf2f7; }
+.badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: #f8fafc;
+}
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.review-plot {
+  display: block;
+  width: 100%;
+  max-width: 1120px;
+  border: 1px solid var(--line);
+  background: white;
+}
+.missing {
+  border: 1px solid var(--line);
+  background: #fff8e8;
+  padding: 14px;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 12px;
+}
+
+</style>
+</head>
+<body>
+<main>
+<h1>Lockbox Review UX v1</h1>
+<p class="authority">只供人工標註。Gaussian15 是 review/morphology trace，不是 matrix area，也不是 ProductWriter authority。</p>
+<section class="summary" aria-label="summary">
+<div class="metric"><span>Cases</span><strong>72</strong></div>
+<div class="metric"><span>Gaussian15 plots</span><strong>54</strong></div>
+<div class="metric"><span>Missing evidence</span><strong>18</strong></div>
+<div class="metric"><span>Authority</span><strong>no matrix/write authority</strong></div>
+</section>
+<table class="case-table">
+<thead><tr><th>Case</th><th>Stratum</th><th>Decision</th><th>Evidence</th><th>Plot</th><th>Label</th></tr></thead>
+<tbody>
+<tr><td><a href="cases/LOCKBOXV1_030FE0B6917F8D9F8B9D8ADC.html">LOCKBOXV1_030FE0B6917F8D9F8B9D8ADC</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_076AF8256719E8E35B0460FD.html">LOCKBOXV1_076AF8256719E8E35B0460FD</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_08C8FD0E89F6E589773AE1AA.html">LOCKBOXV1_08C8FD0E89F6E589773AE1AA</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_09BD8E7C859E7C59D0F077C7.html">LOCKBOXV1_09BD8E7C859E7C59D0F077C7</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_10F4D981757739EFD7FCB1D5.html">LOCKBOXV1_10F4D981757739EFD7FCB1D5</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_19541A4E5E6D70A6488B6D4C.html">LOCKBOXV1_19541A4E5E6D70A6488B6D4C</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_1B346808EB5F8C1F2B2AB9E4.html">LOCKBOXV1_1B346808EB5F8C1F2B2AB9E4</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_27DA7514FB16E62514570CA7.html">LOCKBOXV1_27DA7514FB16E62514570CA7</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_29015BBF4E30355958452E61.html">LOCKBOXV1_29015BBF4E30355958452E61</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_2A320BBD77688F03855F965E.html">LOCKBOXV1_2A320BBD77688F03855F965E</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_2CC1EDBA6F4D4DE349A821D0.html">LOCKBOXV1_2CC1EDBA6F4D4DE349A821D0</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_2F87DCD6E1EB5802CE88C095.html">LOCKBOXV1_2F87DCD6E1EB5802CE88C095</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_31AB0FFD099C253EAB3F3494.html">LOCKBOXV1_31AB0FFD099C253EAB3F3494</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_31C93C7043EE6D6C9D580611.html">LOCKBOXV1_31C93C7043EE6D6C9D580611</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_3BB186AB11EAEA00D377EBEC.html">LOCKBOXV1_3BB186AB11EAEA00D377EBEC</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_3E62076201772682F39F1ACB.html">LOCKBOXV1_3E62076201772682F39F1ACB</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_4E9735B560071979786E62F0.html">LOCKBOXV1_4E9735B560071979786E62F0</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_516679B5B92D9A405E8F094C.html">LOCKBOXV1_516679B5B92D9A405E8F094C</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_526C00FFB22CDAD34EF69386.html">LOCKBOXV1_526C00FFB22CDAD34EF69386</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_5E855976CC5B80B8E6CBB752.html">LOCKBOXV1_5E855976CC5B80B8E6CBB752</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_60CEB35837FAF38CC4DE9021.html">LOCKBOXV1_60CEB35837FAF38CC4DE9021</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_688611BE242C8B9968D28123.html">LOCKBOXV1_688611BE242C8B9968D28123</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_6F44016503A8AB82A838E054.html">LOCKBOXV1_6F44016503A8AB82A838E054</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_709B67F194EFF0625FE91716.html">LOCKBOXV1_709B67F194EFF0625FE91716</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_7513D61264B6D6BA90652D3B.html">LOCKBOXV1_7513D61264B6D6BA90652D3B</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_755737B290543FF34FC02ECB.html">LOCKBOXV1_755737B290543FF34FC02ECB</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_77A9509B1DFE9369439A40C3.html">LOCKBOXV1_77A9509B1DFE9369439A40C3</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_79097B4615A0ADC7445489D6.html">LOCKBOXV1_79097B4615A0ADC7445489D6</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_7CC3D784ABE0D85987C8C16F.html">LOCKBOXV1_7CC3D784ABE0D85987C8C16F</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_7E145C84A96346F7AB94ED3D.html">LOCKBOXV1_7E145C84A96346F7AB94ED3D</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_84F43925154564C1CB26A415.html">LOCKBOXV1_84F43925154564C1CB26A415</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_87E5236200BB893262C506E3.html">LOCKBOXV1_87E5236200BB893262C506E3</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_98B5861C3170C6866A6C553C.html">LOCKBOXV1_98B5861C3170C6866A6C553C</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_99A5AE28A03E02BA3F6EFA22.html">LOCKBOXV1_99A5AE28A03E02BA3F6EFA22</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_9BF621AB2530A529D7A73E10.html">LOCKBOXV1_9BF621AB2530A529D7A73E10</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_A565AEE60239EBAF128CE8C8.html">LOCKBOXV1_A565AEE60239EBAF128CE8C8</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_A7E2343E8BDBA345BE0FC82C.html">LOCKBOXV1_A7E2343E8BDBA345BE0FC82C</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_A92F2E9C0407C443DC1D4EF6.html">LOCKBOXV1_A92F2E9C0407C443DC1D4EF6</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_AB5DB78FD2906A7C78256E52.html">LOCKBOXV1_AB5DB78FD2906A7C78256E52</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_AB9A938EEF5486B70C6DE267.html">LOCKBOXV1_AB9A938EEF5486B70C6DE267</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_ADABFE404851F7FB01A88750.html">LOCKBOXV1_ADABFE404851F7FB01A88750</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_AF2093E868F6397E5858AA1C.html">LOCKBOXV1_AF2093E868F6397E5858AA1C</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_B0EB1E5865F409C27DCF72D8.html">LOCKBOXV1_B0EB1E5865F409C27DCF72D8</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_B52B2DB0B0D18EB4D122F7E3.html">LOCKBOXV1_B52B2DB0B0D18EB4D122F7E3</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_B5E6E8253DCAC8C30055A12B.html">LOCKBOXV1_B5E6E8253DCAC8C30055A12B</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_B5ED381B33B06A0610A229E9.html">LOCKBOXV1_B5ED381B33B06A0610A229E9</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_B6807E6727D9C94C2B532E13.html">LOCKBOXV1_B6807E6727D9C94C2B532E13</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_BA296B28723340CF898A8A87.html">LOCKBOXV1_BA296B28723340CF898A8A87</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_BFDA624AD272ECE507324215.html">LOCKBOXV1_BFDA624AD272ECE507324215</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_C187DC2D86D080F2C740C384.html">LOCKBOXV1_C187DC2D86D080F2C740C384</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_C7EDE89FB5AA9A49B275957F.html">LOCKBOXV1_C7EDE89FB5AA9A49B275957F</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_C8700AF1594D399CE0D4C407.html">LOCKBOXV1_C8700AF1594D399CE0D4C407</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_CD8EF0941A8EFB742FD0F1AE.html">LOCKBOXV1_CD8EF0941A8EFB742FD0F1AE</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_CFE513D3CCADE84BED1E4A65.html">LOCKBOXV1_CFE513D3CCADE84BED1E4A65</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_D3C2C9F3A4DAB297FCE40232.html">LOCKBOXV1_D3C2C9F3A4DAB297FCE40232</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_D3CD0B461A10C1E9F6E96B91.html">LOCKBOXV1_D3CD0B461A10C1E9F6E96B91</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_D4E6708B69E96ECAF3390203.html">LOCKBOXV1_D4E6708B69E96ECAF3390203</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_D89ED628ED84CEADE7B37A27.html">LOCKBOXV1_D89ED628ED84CEADE7B37A27</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_DDD419CA9B7984000577AA56.html">LOCKBOXV1_DDD419CA9B7984000577AA56</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_DE10F54648B836C5CF8DA4C5.html">LOCKBOXV1_DE10F54648B836C5CF8DA4C5</a></td><td><span class="badge">unresolved_high_signal_dirty</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_E2253CAE496E74BE9B64B268.html">LOCKBOXV1_E2253CAE496E74BE9B64B268</a></td><td><span class="badge">manual_wrong_peak_or_no_peak</span></td><td>known_manual_negative</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_E32D6B3E2CFC30E75E498693.html">LOCKBOXV1_E32D6B3E2CFC30E75E498693</a></td><td><span class="badge">unresolved_low_height</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_EACF27A2B9C66C6011B7F2BF.html">LOCKBOXV1_EACF27A2B9C66C6011B7F2BF</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_EBACE01750E65C4460826A17.html">LOCKBOXV1_EBACE01750E65C4460826A17</a></td><td><span class="badge">unresolved_shape_width_scan</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_EC15E489A76928BB480E78C1.html">LOCKBOXV1_EC15E489A76928BB480E78C1</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_EC93E1CF8A3636F13C1E89FD.html">LOCKBOXV1_EC93E1CF8A3636F13C1E89FD</a></td><td><span class="badge">unresolved_apex_delta</span></td><td>evidence_required</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_ED3DBCC3ABBF959627162DA8.html">LOCKBOXV1_ED3DBCC3ABBF959627162DA8</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_F0EA7A5821BA87D116261EEC.html">LOCKBOXV1_F0EA7A5821BA87D116261EEC</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_F606C2E40077C69C84077753.html">LOCKBOXV1_F606C2E40077C69C84077753</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_F89BB25297526EA9545C3F85.html">LOCKBOXV1_F89BB25297526EA9545C3F85</a></td><td><span class="badge">missing_overlay_evidence_gap</span></td><td>evidence_required</td><td>recovered_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_FB722E7755F2FF2E462CADB3.html">LOCKBOXV1_FB722E7755F2FF2E462CADB3</a></td><td><span class="badge">failed_oracle_negative</span></td><td>oracle_negative_only</td><td>missing_evidence_recorded</td><td>missing</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+<tr><td><a href="cases/LOCKBOXV1_FBAD4622F30BC63EB9C2D5CA.html">LOCKBOXV1_FBAD4622F30BC63EB9C2D5CA</a></td><td><span class="badge">approved_write_ready_control</span></td><td>write_ready</td><td>complete_visual_evidence</td><td>Gaussian15</td><td><a href="../lockbox_label_template_v1.tsv">template</a></td></tr>
+</tbody>
+</table>
+</main>
+</body>
+</html>
