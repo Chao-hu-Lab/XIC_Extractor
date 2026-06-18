@@ -1,0 +1,56 @@
+{
+  "authority_rules": {
+    "ai_challenge_grants_truth_label": false,
+    "broad_backfill_unparked": false,
+    "may_change_counted_detection": false,
+    "may_change_default_extraction": false,
+    "may_change_gui": false,
+    "may_change_selected_area": false,
+    "may_feed_product_writer": false,
+    "may_grant_product_authority": false,
+    "may_satisfy_reviewer_slot2": false,
+    "may_switch_selected_peak": false,
+    "may_touch_matrix": false,
+    "may_touch_workbook": false
+  },
+  "case_counts": {
+    "flagged_cases": 1,
+    "product_authority_rows": 0,
+    "route_or_evidence_integrity_cases": 19,
+    "total_cases": 72,
+    "visual_challenge_cases": 53
+  },
+  "challenge_reason_counts": {
+    "no_obvious_visual_contradiction": 52,
+    "route_integrity_confirmed": 19,
+    "visual_contradiction_suspected": 1
+  },
+  "challenge_result_counts": {
+    "no_issue": 71,
+    "visual_contradiction_suspected": 1
+  },
+  "decision": "ai_challenge_owner_recheck_required",
+  "decision_reasons": [
+    "AI/subagent challenge output is non-authoritative QA only",
+    "challenge findings can only route cases back to owner re-review",
+    "challenge output cannot satisfy reviewer slot 2 or grant writer authority"
+  ],
+  "flagged_cases": [
+    {
+      "challenge_notes": "Boundary cuts off right lobe/competing raw peak.",
+      "challenge_reason_code": "visual_contradiction_suspected",
+      "challenge_result": "visual_contradiction_suspected",
+      "challenge_scope": "visual_contradiction_challenge",
+      "lockbox_case_id": "LOCKBOXV1_60CEB35837FAF38CC4DE9021"
+    }
+  ],
+  "schema_version": "lockbox_ai_challenge_result_summary_v1",
+  "source_artifacts": {
+    "ai_challenge_packet_summary": "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json",
+    "ai_challenge_packet_summary_sha256": "54E236456884EB093E3CCCAA95D951E0948DB6BD88B2C2405DBFB06223FA1D7F",
+    "ai_challenge_queue": "docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv",
+    "ai_challenge_queue_sha256": "C1764CB4CD80285187C9B1514B090381A5F8D3583F1D4A1EBDE41662BDC6A43F",
+    "ai_challenge_result_log": "docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv",
+    "ai_challenge_result_log_sha256": "A2BFED83D4A15ABA34DA58D619C9EDA3933A2F259C8C1F128069238DE3294BD5"
+  }
+}

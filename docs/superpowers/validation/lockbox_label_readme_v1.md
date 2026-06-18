@@ -145,6 +145,24 @@ The owner confirmation for this boundary is recorded in:
 docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json
 ```
 
+## AI Challenge Result
+
+The non-authoritative AI/subagent challenge pass is recorded in:
+
+```text
+docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv
+docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json
+```
+
+Current decision: `ai_challenge_owner_recheck_required`.
+
+Plain-language meaning: the AI/subagent challenge found no obvious issue in 71
+of 72 lockbox cases. It flagged only
+`LOCKBOXV1_60CEB35837FAF38CC4DE9021` for owner re-review because the challenge
+reviewer suspected the Gaussian15 boundary may cut off the right lobe or a
+competing raw peak. This flag is not a truth label, not a reviewer-slot-2 label,
+and not ProductWriter authority.
+
 ## Validation
 
 Structural check:

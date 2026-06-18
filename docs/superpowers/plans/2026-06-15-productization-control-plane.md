@@ -2621,6 +2621,40 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: commit this non-authoritative challenge packet, then run or
   fill challenge results and route only flagged cases back to the owner.
 
+### 2026-06-18 - lockbox_ai_challenge_result_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` challenge packet ready for 72
+  cases, but challenge results were not yet filled.
+- New tier: unchanged `production_candidate`. This is a non-authoritative
+  challenge result log and summary; it does not satisfy reviewer slot 2 and
+  does not grant ProductWriter, matrix, workbook, selected peak/area,
+  counted-detection, default extraction, GUI, truth-label, or broad Backfill
+  authority.
+- Evidence: `docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv`
+  records 72 challenge rows from three read-only subagent chunks plus one main
+  agent chunk. `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`
+  reports `decision=ai_challenge_owner_recheck_required`: 71 rows are
+  `no_issue`; 1 row,
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, is
+  `visual_contradiction_suspected` and must be routed only to owner re-review.
+- Product surface changed: docs/validation/helper script/test/output artifact
+  only. No ProductWriter, matrix, workbook, selected peak/area, counted
+  detection, workbook schema, CLI/config, extraction default, GUI, broad
+  Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py`
+  built the result summary with 72 cases and 1 flagged case;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  focused pytest and ruff for the result checker were added and run.
+- Remaining blocker: the single flagged case needs owner re-review before it can
+  be treated as resolved. Even owner resolution still cannot become writer
+  authority without a later authority manifest and expected-diff product goal.
+- Next checkpoint: build a tiny owner re-review packet for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, or wait for owner review if the current
+  HTML/plot is enough.
+
 ### 2026-06-18 - productization_status_index_v1
 
 - Lane: Productization control-plane cleanup / machine-checkable lane status.

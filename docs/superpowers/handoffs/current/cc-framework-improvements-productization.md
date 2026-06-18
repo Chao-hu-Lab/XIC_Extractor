@@ -2,8 +2,8 @@
 
 Updated: 2026-06-18
 Branch: `cc/framework-improvements`
-Latest committed checkpoint: `bfc180a0 Guard lockbox reviewer truth identity`
-Active checkpoint: `lockbox_ai_challenge_packet_v1` is in the working tree.
+Latest committed checkpoint: `e7e1dfbb Add lockbox AI challenge packet`
+Active checkpoint: `lockbox_ai_challenge_result_v1` is in the working tree.
 
 This is the current-state snapshot only. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -16,10 +16,10 @@ reviewable and auditable, without turning labels, diagnostics, quality blockers,
 ISTD, round-trip oracle evidence, or AI/subagent challenge output into
 ProductWriter authority.
 
-Current focus: finish the non-authoritative AI challenge packet. It covers all
-72 lockbox cases so a subagent can check artifact/link/hash/route integrity and
-obvious visual contradictions, then flag only cases needing owner re-review. It
-is not truth labeling, not reviewer slot 2, and not writer input.
+Current focus: finish the non-authoritative AI challenge result checkpoint. The
+72 lockbox cases have now been challenged by three read-only subagent chunks
+plus one main-agent visual chunk. The result is not truth labeling, not
+reviewer slot 2, and not writer input.
 
 ## What Changed This Round
 
@@ -39,6 +39,13 @@ is not truth labeling, not reviewer slot 2, and not writer input.
   non-visual route/evidence rows no longer allow
   `visual_contradiction_suspected`, and `--check-only` now has stale
   `index.html` plus stale summary-authority regression tests.
+- Ran the AI challenge result pass:
+  - 72 result rows written to
+    `docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv`.
+  - Summary written to
+    `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`.
+  - Outcome: 71 `no_issue`; 1 `visual_contradiction_suspected`.
+  - Flagged case: `LOCKBOXV1_60CEB35837FAF38CC4DE9021`.
 
 ## Current Lane State
 
@@ -64,10 +71,11 @@ is not truth labeling, not reviewer slot 2, and not writer input.
   universe, not writable cells.
 - `peak_choice_truth_lockbox_v1`: `production_candidate`.
   Current artifact:
-  `docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json`.
-  It covers 53 visual contradiction checks and 19 route/evidence integrity
-  checks. AI findings cannot satisfy reviewer slot 2, cannot become truth
-  labels, and cannot grant product authority.
+  `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`.
+  AI challenge result for 72 lockbox cases. It reports 71 `no_issue` rows and
+  1 owner re-review flag:
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`. AI findings cannot satisfy reviewer
+  slot 2, cannot become truth labels, and cannot grant product authority.
 - `review_packet_workflow_v1`, `missing_overlay_evidence_recovery_v1`,
   `productization_authority_firewall_v1`, `mechanical_adjudication_contract_v1`,
   `productization_status_index_v1`, and
@@ -101,6 +109,21 @@ is not truth labeling, not reviewer slot 2, and not writer input.
   area/counted detection/default extraction/GUI/broad Backfill flags remain
   false.
 
+## AI Challenge Result
+
+- Result log:
+  `docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv`.
+- Summary:
+  `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`.
+- Decision: `ai_challenge_owner_recheck_required`.
+- Meaning in plain language: the AI/subagent challenge did not find an obvious
+  issue in 71 cases. It flagged one case for owner re-review only:
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, with note `Boundary cuts off right
+  lobe/competing raw peak.`
+- This is still a review-routing artifact. It does not alter labels, matrix
+  values, selected peak, selected area, counted detection, workbook output, GUI,
+  default extraction, broad Backfill, or ProductWriter authority.
+
 ## Single-Developer Boundary
 
 The owner/user is the only current domain truth source. Subagents may perform
@@ -126,6 +149,13 @@ Passed this round:
 - Subagent review rechecked the packet boundary. Findings were fixed locally:
   visual contradiction outputs are scope-limited, and stale HTML/summary checks
   now have focused regression coverage.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py`
+  built the result summary: 72 cases, 1 flagged.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_ai_challenge_results.py -v --tb=short`
+  (`5 passed`)
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/check_lockbox_ai_challenge_results.py tests/test_lockbox_ai_challenge_results.py`
 
 Broader previous local gate remains from committed checkpoint:
 `ruff`, `mypy`, `pytest -v --tb=short -x` (`3884 passed, 1 skipped`),
@@ -145,8 +175,11 @@ lanes, and second-review `--check-only`.
 
 ## Next Actions
 
-1. Commit this checkpoint without
+1. Build or open a tiny owner re-review packet for
+   `LOCKBOXV1_60CEB35837FAF38CC4DE9021`.
+2. Commit this checkpoint without
    staging unrelated `AGENTS.md`, `.github/`, `CONTEXT.md`, or
    `docs/engineering-skills/` changes.
-2. Next product step: run/fill the non-authoritative challenge packet and route
-   only flagged cases back to the owner.
+3. After owner resolves the single flagged case, rerun the challenge-result
+   checker and update the summary. Do not convert this result into writer
+   authority.

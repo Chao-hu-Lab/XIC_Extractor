@@ -38,7 +38,7 @@ def test_only_current_backfill_scope_has_writer_authority() -> None:
     assert authority["may_touch_matrix"] == "TRUE"
 
 
-def test_peak_choice_lockbox_status_points_to_ai_challenge_pack() -> None:
+def test_peak_choice_lockbox_status_points_to_ai_challenge_results() -> None:
     _, rows = _read_tsv(DEFAULT_STATUS_INDEX)
     row = next(
         item for item in rows if item["lane_id"] == "peak_choice_truth_lockbox_v1"
@@ -46,10 +46,11 @@ def test_peak_choice_lockbox_status_points_to_ai_challenge_pack() -> None:
 
     assert (
         row["current_artifact"]
-        == "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json"
+        == "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json"
     )
-    assert row["public_surface"] == "lockbox_ai_challenge_packet_v1"
-    assert "ai_challenge_packet_ready_for_72_cases" in row["notes"]
+    assert row["public_surface"] == "lockbox_ai_challenge_result_v1"
+    assert "ai_challenge_owner_recheck_required" in row["notes"]
+    assert "LOCKBOXV1_60CEB35837FAF38CC4DE9021" in row["next_checkpoint"]
     assert row["write_authority"] == "FALSE"
 
 
