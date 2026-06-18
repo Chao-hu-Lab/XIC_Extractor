@@ -112,7 +112,25 @@ def test_control_plane_quant_matrix_version_activation_is_current() -> None:
     assert "Phase 4 Gallery/Report Alignment" in section
 
 
-def test_control_plane_current_summary_routes_to_phase3() -> None:
+def test_control_plane_quant_matrix_review_report_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrixVersion Review Report v1",
+        "### 2026-06-19 - QuantMatrixVersion Activation v1",
+    )
+
+    assert "quant_matrix_review_report_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_version_report.py" in section
+    assert "quant_matrix_review_rows.tsv" in section
+    assert "quant_matrix_review_summary.json" in section
+    assert "quant_matrix_review_report.html" in section
+    assert "review-only report adapter" in section
+    assert "No ProductWriter default extraction" in section
+    assert "Phase 5 Validation/Promotion Readiness" in section
+
+
+def test_control_plane_current_summary_routes_to_phase5() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
         text,
@@ -125,10 +143,14 @@ def test_control_plane_current_summary_routes_to_phase3() -> None:
     assert "Phase 3" in summary
     assert "Phase 3 `QuantMatrixVersion Activation`" in summary
     assert "is now implemented as an explicit manifest-driven activation" in summary
-    assert "Next checkpoint is Phase 4" in summary
+    assert "Phase 4" in summary
+    assert "`Gallery/Report Alignment` is now implemented" in summary
+    assert "Next checkpoint is Phase 5" in summary
+    assert "`Validation/Promotion Readiness`" in summary
     assert "`QuantMatrixVersion Activation`" in summary
     assert "Next checkpoint is Phase 2" not in summary
     assert "Next checkpoint is Phase 3" not in summary
+    assert "Next checkpoint is Phase 4" not in summary
 
 
 def test_specs_readme_lists_quant_matrix_version_schema() -> None:
@@ -140,6 +162,18 @@ def test_specs_readme_lists_quant_matrix_version_schema() -> None:
     assert "cell_provenance" in text
     assert "row_summary" in text
     assert "expected-diff" in text
+
+
+def test_specs_readme_lists_quant_matrix_review_report_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_review_report_schema.v1.json" in text
+    assert "review rows" in text
+    assert "summary JSON" in text
+    assert "HTML report" in text
+    assert "does not grant ProductWriter or matrix authority" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

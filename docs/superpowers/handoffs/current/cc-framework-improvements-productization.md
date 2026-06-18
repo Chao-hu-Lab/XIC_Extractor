@@ -2,8 +2,8 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Current checkpoint: Phase 3 `QuantMatrixVersion Activation v1` implemented;
-sub-agent blockers closed and final focused verification passed.
+Current checkpoint: Phase 4 `Gallery/Report Alignment` implemented; Phase 5
+`Validation/Promotion Readiness` is next.
 
 This is the short current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -11,21 +11,19 @@ machine-readable validation indexes.
 
 ## Current Objective
 
-Phase 3 adds an explicit manifest-driven QuantMatrixVersion activation surface:
-validated `ProductionAcceptanceManifest` rows plus an expected-diff TSV can
-write additive activation outputs:
+Backfill productization is moving toward a default quant matrix that includes
+detected values plus accepted Backfill values, while keeping detection claims,
+truth claims, and write authority separate.
 
-- `quant_matrix.tsv`;
-- `cell_provenance.tsv`;
-- `row_summary.tsv`;
-- `expected_diff_summary.tsv`;
-- `source_summary.tsv`.
+Completed spine so far:
 
-It does not wire ProductWriter default extraction, workbooks, GUI, selected
-peak, selected area, counted detection, review/replay behavior, current
-511-cell writer authority, or broad Backfill authority.
+- Phase 1: shadow-only lockbox contract adapter.
+- Phase 2: `ProductionAcceptanceManifest v1` schema/checker.
+- Phase 3: explicit `QuantMatrixVersion v1` activation outputs.
+- Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
 
-Next executable phase after review/commit is Phase 4 Gallery/Report Alignment.
+Phase 5 must separate contract correctness from scientific promotion readiness.
+No RAW/85RAW has been run in this sequence.
 
 ## Active Blueprint
 
@@ -37,8 +35,10 @@ Next executable phase after review/commit is Phase 4 Gallery/Report Alignment.
   `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
 - Phase 3 schema:
   `docs/superpowers/specs/quant_matrix_version_schema.v1.json`.
+- Phase 4 schema:
+  `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`.
 
-## Current Product Direction
+## Product Direction
 
 - Backfill values are accepted quantification values.
 - Backfill values are not detections and not truth claims.
@@ -50,7 +50,7 @@ Next executable phase after review/commit is Phase 4 Gallery/Report Alignment.
   keyed by `peak_hypothesis_id + sample_stem`.
 - Shadow/report/gallery/candidate artifacts remain non-authority.
 
-## Current Lane State
+## Lane State
 
 - Current Backfill product authority remains exactly 511 cells.
 - Broad Backfill auto-write remains parked.
@@ -77,9 +77,9 @@ Status-index anchors retained for `check_productization_state.py`:
 - manual-boundary area recompute remain parked.
 - classification and planning only.
 
-## Phase 1 Result
+## Phase Results
 
-`lockbox_shadow_automation_experiment_v1` is a shadow-only contract adapter:
+Phase 1 `lockbox_shadow_automation_experiment_v1`:
 
 - `shadow_decision={accept,flag,reject,not_scored}`;
 - owner-clean rows are non-authoritative accept challenges;
@@ -89,44 +89,45 @@ Status-index anchors retained for `check_productization_state.py`:
   `matrix_write_allowed=false`, `may_satisfy_reviewer_slot2=false`, and
   `single_owner_evidence_is_truth_completion=false`.
 
-It does not feed ProductWriter, matrix/workbook output, selected peak/area,
-counted detection, GUI, default extraction, reviewer slot 2, or broad Backfill
-authority.
-
-## Phase 2 Result
-
-`ProductionAcceptanceManifest v1` has:
+Phase 2 `ProductionAcceptanceManifest v1`:
 
 - schema: `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`;
 - checker: `scripts/check_production_acceptance_manifest.py`;
-- tests: `tests/test_production_acceptance_manifest_contract.py`.
+- tests: `tests/test_production_acceptance_manifest_contract.py`;
+- authority key is `peak_hypothesis_id + sample_stem`;
+- `feature_family_id` is context/provenance only;
+- manual-negative and blocked doublet states are hard stops.
 
-The checker enforces primary key `peak_hypothesis_id + sample_stem`,
-`feature_family_id` as context only, acceptance vocabulary, authority flags,
-manual-negative and doublet hard stops, source path/hash containment, source
-row hash, manifest sha, finite non-negative quant values, matching Backfill
-fraction, and risk-specific closure.
+Phase 3 `QuantMatrixVersion v1`:
 
-## Phase 3 Result
+- module: `xic_extractor/alignment/quant_matrix_version.py`;
+- CLI: `scripts/build_quant_matrix_version.py`;
+- tests: `tests/test_quant_matrix_version_activation.py`;
+- schema: `docs/superpowers/specs/quant_matrix_version_schema.v1.json`;
+- outputs: `quant_matrix.tsv`, `cell_provenance.tsv`,
+  `row_summary.tsv`, `expected_diff_summary.tsv`, `source_summary.tsv`;
+- fills only blank sample cells and rejects detected-value overwrite;
+- detected-only view is reconstructable from `quant_matrix + cell_provenance`.
 
-New implementation:
+Phase 4 `QuantMatrixVersion Review Report v1`:
 
-- `xic_extractor/alignment/quant_matrix_version.py`;
-- `scripts/build_quant_matrix_version.py`;
-- `tests/test_quant_matrix_version_activation.py`;
-- `docs/superpowers/specs/quant_matrix_version_schema.v1.json`.
-
-The activation surface:
-
-- validates the manifest with the Phase 2 checker;
-- requires exact expected-diff rows for accepted Backfill writes;
-- fills only blank sample cells;
-- rejects detected-value overwrite;
-- emits provenance for every non-empty quant matrix cell;
-- marks detected cells `write_authority=FALSE`;
-- marks accepted Backfill cells `write_authority=TRUE`;
-- emits row-level detected/backfilled/available/missing counts;
-- makes detected-only view reconstructable from `quant_matrix + cell_provenance`.
+- module: `xic_extractor/alignment/quant_matrix_report.py`;
+- CLI: `scripts/build_quant_matrix_version_report.py`;
+- tests: `tests/test_quant_matrix_version_report.py`;
+- schema: `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`;
+- outputs: `quant_matrix_review_rows.tsv`,
+  `quant_matrix_review_summary.json`, and
+  `quant_matrix_review_report.html`;
+- exposes accepted Backfill versus detected cells, prevalence uncertainty,
+  manifest/source hashes, manual-negative closure, doublet closure, and the
+  Gaussian-smoothed trace-primary/raw-trace-auxiliary convention;
+- fails closed when accepted Backfill cells cannot join back to the manifest;
+- accepted-cell manifest join is hash/authority-bound: `manifest_sha256`,
+  `source_row_sha256`, accepted decision, `write_authority=TRUE`,
+  `matrix_write_allowed=TRUE`, and `shadow_only=FALSE` must agree;
+- `source_summary.production_acceptance_manifest_sha256` must also match the
+  current manifest file hash before report enrichment;
+- review/report only, no authority promotion.
 
 ## Rejected Paths
 
@@ -143,44 +144,47 @@ The activation surface:
 
 ## Validation Status
 
-Latest completed checks:
+Latest completed Phase 4 checks:
 
-- `uv run pytest tests/test_quant_matrix_version_activation.py -v --tb=short`
-  - 5 passed.
-- `uv run pytest tests/test_productization_state_index.py -v --tb=short`
-  - 15 passed.
-- `uv run ruff check xic_extractor/alignment/quant_matrix_version.py scripts/build_quant_matrix_version.py tests/test_quant_matrix_version_activation.py tests/test_productization_state_index.py`
-  - pass.
-- `uv run python scripts/build_quant_matrix_version.py --help`
-  - pass.
-- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_production_acceptance_manifest_contract.py tests/test_quant_matrix_version_activation.py tests/test_productization_state_index.py -v --tb=short`
-  - 50 passed.
+- `uv run pytest tests/test_quant_matrix_version_report.py -v --tb=short`
+  - 9 passed.
+- `uv run pytest tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py -v --tb=short`
+  - 26 passed.
+- `uv run ruff check xic_extractor/alignment/quant_matrix_report.py scripts/build_quant_matrix_version_report.py tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py`
+  - pass before the final hash-bound join regression addition.
 - `uv run python scripts/check_productization_state.py`
   - pass.
-- `uv run python scripts/check_production_acceptance_manifest.py`
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_production_acceptance_manifest_contract.py tests/test_quant_matrix_version_activation.py tests/test_quant_matrix_version_report.py tests/test_productization_state_index.py -v --tb=short`
+  - 61 passed.
+- `uv run python scripts/build_quant_matrix_version_report.py --help`
   - pass.
 - `git diff --check`
   - pass; only Git CRLF warnings.
+- Scoped secret/local-path scan over changed Phase 4 files
+  - no matches.
+
+Latest completed Phase 3/contract checks retained as baseline:
+
+- `uv run python scripts/check_production_acceptance_manifest.py`
+  - pass before Phase 4 updates.
 
 Sub-agent review:
 
-- Implementation-contract reviewer found duplicate `matrix_row_index`
-  provenance mislabel risk; fixed with identity validation and regression test.
-- Docs/control-plane reviewer found incomplete public schema for
-  `expected_diff_summary.tsv` and `source_summary.tsv`; fixed with schema
-  columns, module constants, writer reuse, and schema guard test.
-- Both reviewers re-checked blockers closed with no new blockers.
+- Docs/control-plane reviewer found no blockers and confirmed Phase 4 is
+  additive review/report surface only.
+- Implementation-contract reviewer found a stale same-key manifest join blocker;
+  fixed with source-summary manifest file-hash validation plus hash/authority-
+  bound join validation and regression tests. The reviewer re-checked both P1
+  findings closed with no new blocker.
 
 ## Control Plane Note
 
-Control plane was updated because Phase 3 adds a public output schema and
-explicit activation script. No maturity tier, active lane, current matrix
-authority, selected peak/area, counted detection, ProductWriter default
-extraction, review/replay behavior, or broad Backfill state changed.
+Control plane was updated because Phase 4 adds a public review/report schema and
+explicit report script. No maturity tier, active lane, current matrix authority,
+selected peak/area, counted detection, ProductWriter default extraction,
+review/replay behavior, or broad Backfill state changed.
 
 ## Next Actions
 
-1. Run sub-agent implementation-contract review and docs/control-plane review.
-2. Fix blockers, rerun verification, and commit Phase 3 by purpose.
-3. Prepare Phase 4 Gallery/Report Alignment; do not rebuild gallery unless a
-   missing contract requires it.
+1. Commit Phase 4 by purpose.
+2. Proceed directly to Phase 5 `Validation/Promotion Readiness`.

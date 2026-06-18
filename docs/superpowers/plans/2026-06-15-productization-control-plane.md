@@ -294,7 +294,15 @@ extraction, or broad Backfill authority. Phase 3 `QuantMatrixVersion Activation`
 is now implemented as an explicit manifest-driven activation surface with
 expected-diff, `cell_provenance`, and `row_summary`; it still does not wire
 ProductWriter default extraction, workbooks, GUI, selected peak/area, counted
-detection, reviewer slot2, or broad Backfill authority. Next checkpoint is Phase 4 `Gallery/Report Alignment`.
+detection, reviewer slot2, or broad Backfill authority. Phase 4
+`Gallery/Report Alignment` is now implemented as a review-only report surface
+over `QuantMatrixVersion` outputs and the validated manifest; it exposes
+accepted Backfill versus detected cells, prevalence risk, manual-negative and
+doublet closure, source paths/hashes, manifest sha, and the Gaussian-smoothed
+trace-primary/raw-trace-auxiliary convention without granting ProductWriter,
+matrix, workbook, GUI, selected peak/area, counted detection, reviewer slot2,
+or broad Backfill authority. Next checkpoint is Phase 5
+`Validation/Promotion Readiness`.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2814,6 +2822,34 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrixVersion Review Report v1
+
+- Lane: Backfill gallery/report alignment / Phase 4.
+- Previous tier: Phase 3 `QuantMatrixVersion Activation v1` produced explicit
+  quant/provenance/row/source sidecars but did not provide a user-facing review
+  surface.
+- New tier: unchanged. This is a review-only report adapter and public output
+  schema, not a maturity-tier promotion, ProductWriter default extraction, or
+  new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`,
+  `scripts/build_quant_matrix_version_report.py`, and
+  `xic_extractor/alignment/quant_matrix_report.py`.
+- Product surface changed: additive review outputs only:
+  `quant_matrix_review_rows.tsv`, `quant_matrix_review_summary.json`, and
+  `quant_matrix_review_report.html`.
+- Evidence: focused tests cover schema-column parity, review row rendering for
+  detected plus accepted Backfill cells, summary counts, manifest enrichment,
+  source-summary manifest file-hash drift, hash/authority-bound manifest joins,
+  fail-closed missing manifest join, HTML escaping, and script entrypoint.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: Phase 5 still needs validation/promotion readiness
+  separation so contract correctness is not overclaimed as scientific
+  production readiness.
+- Next checkpoint: Phase 5 Validation/Promotion Readiness.
+
 ### 2026-06-19 - QuantMatrixVersion Activation v1
 
 - Lane: Backfill quant-matrix activation / Phase 3.
@@ -2837,10 +2873,11 @@ at that older checkpoint, not the latest release claim.
 - Product surface not changed: No ProductWriter default extraction, workbook,
   GUI, selected peak, selected area, counted detection, review/replay behavior,
   current 511-cell writer authority, or broad Backfill authority changed.
-- Remaining blocker: gallery/report surfaces still need to align with
-  `cell_provenance`, `row_summary`, source hashes, and prevalence uncertainty
-  before this is a complete user-facing Backfill story.
-- Next checkpoint: Phase 4 Gallery/Report Alignment.
+- Remaining blocker: validation/promotion readiness still needs a separate
+  Phase 5 gate before any production-readiness claim.
+- Next checkpoint: Phase 4 Gallery/Report Alignment was the next phase from
+  this checkpoint and is now represented by
+  `QuantMatrixVersion Review Report v1` above.
 
 ### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker
 

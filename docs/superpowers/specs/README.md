@@ -24,6 +24,12 @@ automatic implementation goals.
   summary invariants for manifest-authorized Backfill values; it does not
   change ProductWriter default extraction, workbook, GUI, selected peak/area,
   or counted-detection behavior.
+- `quant_matrix_review_report_schema.v1.json`: Phase 4 review-only
+  `QuantMatrixVersion` report contract. It defines review rows, summary JSON,
+  and HTML report outputs for accepted Backfill versus detected cells,
+  prevalence uncertainty, manifest/source hashes, manual-negative closure,
+  doublet closure, and Gaussian-smoothed trace-primary/raw-trace-auxiliary
+  display; it does not grant ProductWriter or matrix authority.
 
 ## Rule
 
