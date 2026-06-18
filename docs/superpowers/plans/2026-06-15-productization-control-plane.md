@@ -2564,8 +2564,62 @@ at that older checkpoint, not the latest release claim.
 - Remaining blocker: no second independent human reviewer exists. Subagents may
   flag contradictions and implementation issues, but cannot satisfy
   `reviewer_slot=2`.
-- Next checkpoint: run the owner-boundary artifact test, get subagent
-  re-review of this guard fix, then commit if clean.
+- Next checkpoint: superseded by `lockbox_ai_challenge_packet_v1`, which creates
+  the separate non-authoritative AI/subagent QA surface without filling
+  reviewer slot 2.
+
+### 2026-06-18 - lockbox_ai_challenge_packet_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` reviewer-identity guard. The
+  owner/domain review was recorded, and AI/subagent review was explicitly kept
+  out of human truth slots, but there was no separate artifact for low-manual
+  challenge review.
+- New tier: unchanged `production_candidate`. This is a non-authoritative
+  challenge QA packet; it does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, default extraction, GUI, truth-label,
+  reviewer-slot-2, or broad Backfill authority.
+- Evidence: `scripts/build_lockbox_ai_challenge_pack.py` reads
+  `lockbox_next_action_plan_v1.tsv`, the static Gaussian15 review bundle, the
+  owner label log, and
+  `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`.
+  It writes `docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv`,
+  `docs/superpowers/validation/lockbox_ai_challenge_template_v1.tsv`,
+  `docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json`, and
+  `docs/superpowers/validation/lockbox_ai_challenge_v1/index.html`. Current
+  split: all 72 lockbox cases are present; 53 are visual contradiction checks
+  against owner-confirmed Gaussian15 plots, and 19 are route/evidence integrity
+  checks only. Only the 53 visual rows allow
+  `visual_contradiction_suspected`; the 19 route/evidence rows do not. The
+  template is blank and every no-authority flag is false.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, GUI, broad Backfill, or
+  truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py`
+  built the packet;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py --check-only`
+  returned `Lockbox AI challenge packet is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_ai_challenge_pack.py -v --tb=short`
+  passed `12`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_ai_challenge_pack.py tests/test_lockbox_ai_challenge_pack.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_ai_challenge_pack.py -v --tb=short`
+  passed `20`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_ai_challenge_pack.py tests/test_lockbox_ai_challenge_pack.py tests/test_productization_state_index.py`
+  passed.
+- Subagent review: read-only reviewer found the route/evidence output-scope
+  leak and stale HTML/summary coverage gap. Both were fixed before commit.
+- Remaining blocker: AI challenge results are not yet filled or reviewed, and
+  even filled AI findings can only flag owner re-review. They cannot satisfy
+  human truth completion.
+- Next checkpoint: commit this non-authoritative challenge packet, then run or
+  fill challenge results and route only flagged cases back to the owner.
 
 ### 2026-06-18 - productization_status_index_v1
 

@@ -218,3 +218,22 @@ label fields blank; Codex must not invent the second review. The remaining 19
 cases stay outside this collection pack. The linked static pages and plots use
 the Gaussian15-smoothed boundary as the review basis. This packet still cannot
 feed ProductWriter, touch matrices, alter workbooks, or unpark broad Backfill.
+
+AI challenge packet:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py --check-only
+```
+
+This writes `lockbox_ai_challenge_queue_v1.tsv`,
+`lockbox_ai_challenge_template_v1.tsv`,
+`lockbox_ai_challenge_summary_v1.json`, and
+`lockbox_ai_challenge_v1/index.html`. Current meaning: all 72 lockbox cases are
+available for non-authoritative AI/subagent QA. The 53 plotted Gaussian15 cases
+may receive only visual contradiction checks; the 19 non-ready cases may receive
+only route/evidence integrity checks. The template intentionally leaves all
+challenge result fields blank. AI challenge output cannot satisfy
+`reviewer_slot=2`, cannot become a truth label, cannot feed ProductWriter, and
+cannot touch matrix/workbook/selected peak/selected area/counted detection,
+default extraction, GUI, or broad Backfill authority.
