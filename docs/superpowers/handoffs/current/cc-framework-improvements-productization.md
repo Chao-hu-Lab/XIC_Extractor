@@ -2,8 +2,8 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Latest committed checkpoint: `224a93cb Add lockbox shadow automation design`
-Active working-tree checkpoint: Phase 1 Shadow Scoring Contract Adapter v1
+Recent committed checkpoints: `239d5e52` blueprint; `7c229332` Phase 1 adapter.
+Current checkpoint: Phase 1 closed; Phase 2 not started.
 
 This is the short current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -98,9 +98,7 @@ authority.
 - roles/batch/matrix/exclusion must not alter quant output.
 - ReviewAction selected-candidate switch and manual-boundary area recompute
   remain parked.
-- manual-boundary area recompute remain parked.
 - calibration/normalization activation remains classification and planning only.
-- GUI and broader targets remain blocked.
 
 Status-index anchors retained for `check_productization_state.py`:
 
@@ -161,9 +159,9 @@ Status-index anchors retained for `check_productization_state.py`:
 - `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
   - pruned to this current-state snapshot.
 
-Phase 0 blueprint/routing docs remain dirty in the working tree from the
-previous reset and are still part of the same productization direction update.
-User-provided deepresearch inputs remain unmodified.
+Phase 0 blueprint and Phase 1 adapter changes are committed. User-provided
+deepresearch inputs and separate cleanup inventory notes remain untracked and
+unmodified.
 
 ## Validation Status
 
@@ -173,18 +171,16 @@ Latest completed checks:
   - pass.
 - `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
   - 14 passed.
-- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -k "manual_negative_accept or blocked_doublet or owner_clean_truth_completion or missing_source_hashes" -v --tb=short`
-  - 4 passed, 9 deselected.
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -k "manual_negative_accept or blocked_doublet or owner_clean_truth_completion or missing_source_hashes or actual_case_manifest_path" -v --tb=short`
+  - 5 passed, 9 deselected.
 - `uv run pytest tests/test_productization_state_index.py -v --tb=short`
-  - 10 passed.
+  - 11 passed.
 - `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py -v --tb=short`
   - 25 passed.
 - `uv run python scripts/check_productization_state.py`
   - pass after productization status index hash update.
 - `uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py`
   - pass.
-- `uv run python scripts/check_productization_state.py`;
-  - pass after handoff rewrite.
 - `git diff --check`;
   - pass; only Git CRLF warnings.
 - secret/local-path scan on changed docs/scripts/tests;
@@ -200,6 +196,5 @@ remove stale scorer wording and point the next checkpoint to Phase 2.
 
 ## Next Actions
 
-1. Close Phase 1 as `shadow_ready`.
-2. Next goal should be Phase 2, `ProductionAcceptanceManifest v1`; do not start
-   default quant matrix activation until Phase 3.
+Next goal: Phase 2, `ProductionAcceptanceManifest v1`; do not start default
+quant matrix activation until Phase 3.
