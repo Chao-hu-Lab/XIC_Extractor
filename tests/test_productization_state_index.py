@@ -38,7 +38,7 @@ def test_only_current_backfill_scope_has_writer_authority() -> None:
     assert authority["may_touch_matrix"] == "TRUE"
 
 
-def test_peak_choice_lockbox_status_points_to_second_review_gate() -> None:
+def test_peak_choice_lockbox_status_points_to_single_owner_ai_gate() -> None:
     _, rows = _read_tsv(DEFAULT_STATUS_INDEX)
     row = next(
         item for item in rows if item["lane_id"] == "peak_choice_truth_lockbox_v1"
@@ -46,13 +46,15 @@ def test_peak_choice_lockbox_status_points_to_second_review_gate() -> None:
 
     assert (
         row["current_artifact"]
-        == "docs/superpowers/validation/lockbox_second_review_summary_v1.json"
+        == "docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json"
     )
-    assert row["public_surface"] == "lockbox_second_review_pack_v1"
-    assert row["product_effect"] == "second_review_collection_only"
+    assert row["public_surface"] == "lockbox_single_owner_ai_challenge_gate_v1"
+    assert row["product_effect"] == "shadow_automation_experiment_design_only"
     assert row["row_count"] == "53"
-    assert "second_review_collection_ready_for_53_cases" in row["notes"]
-    assert "ai_challenge_no_owner_recheck_required" in row["notes"]
+    assert "single_owner_ai_challenge_supports_shadow_automation_experiment" in row[
+        "notes"
+    ]
+    assert "not reviewer_slot_2 truth completion" in row["notes"]
     assert row["write_authority"] == "FALSE"
 
 

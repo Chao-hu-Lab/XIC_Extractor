@@ -2751,6 +2751,51 @@ at that older checkpoint, not the latest release claim.
   review, then commit the scoped gate. Do not use this gate to unpark broad
   Backfill or promote labels/challenge output into writer authority.
 
+### 2026-06-18 - lockbox_single_owner_ai_challenge_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` second-review collection
+  gate. The second-review pack was valid only after AI challenge closure, but
+  the lane still required either second-human labels or a separate contract for
+  the single-owner + AI-challenge evidence path.
+- New tier: unchanged `production_candidate`. Current active artifact is
+  `docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json`
+  with
+  `decision=single_owner_ai_challenge_supports_shadow_automation_experiment`.
+  This allows only a later shadow automation experiment design. It is not
+  two-human truth completion and does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, GUI, default extraction, or broad
+  Backfill authority.
+- Evidence: `scripts/build_lockbox_single_owner_ai_challenge_gate.py` checks
+  the current truth summary (`truth_supports_review_only`), AI challenge result
+  summary (`ai_challenge_no_owner_recheck_required`, zero flagged), second
+  review summary (`second_review_collection_ready_for_53_cases`), and
+  non-cyclic owner-boundary confirmation. Output records 53 owner-clean
+  Gaussian15 cases, 19 excluded/not-assessable cases, and 0 product-authority
+  rows.
+- Product surface changed: validation decision JSON, helper script, focused
+  tests, status index, and docs only. No ProductWriter, matrix, workbook,
+  selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py`
+  built the gate;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py --check-only`
+  returned `Lockbox single-owner AI challenge gate is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_single_owner_ai_challenge_gate.py -v --tb=short`
+  passed `8`, including stale truth summary, stale second-review summary,
+  AI-flag, owner-boundary-cycle, owner-boundary-hash, and authority-drift
+  regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_single_owner_ai_challenge_gate.py tests/test_lockbox_single_owner_ai_challenge_gate.py`
+  passed.
+- Remaining blocker: this gate supports only shadow experiment design. Any
+  ProductWriter authority expansion still needs a separate masked/product-writer
+  oracle, expected-diff, and explicit authority-manifest update.
+- Next checkpoint: design the shadow automation experiment around the 53
+  owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
+  scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
+  authority.
+
 ### 2026-06-18 - productization_status_index_v1
 
 - Lane: Productization control-plane cleanup / machine-checkable lane status.

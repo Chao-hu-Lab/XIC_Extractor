@@ -171,6 +171,31 @@ right peak, the case stays flagged. Existing recovered trace evidence records
 right competing peak is around `15.4366`. This resolution is still not a truth
 label, not a reviewer-slot-2 label, and not ProductWriter authority.
 
+## Single-Owner + AI Challenge Gate
+
+The current low-manual decision packet is recorded in:
+
+```text
+docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json
+```
+
+Build/check commands:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py --check-only
+```
+
+Current decision:
+`single_owner_ai_challenge_supports_shadow_automation_experiment`.
+
+Plain-language meaning: the owner has one clean review pass for 53 assessable
+Gaussian15 cases, the AI challenge has zero open owner-recheck flags, and the
+remaining 19 cases stay excluded as insufficient/not assessable. This is enough
+to design a later shadow-only automation experiment, but it is not two-human
+truth completion, not `reviewer_slot=2`, not ProductWriter authority, and not a
+matrix/workbook/selected-peak/area/counting change.
+
 ## Validation
 
 Structural check:

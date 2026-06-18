@@ -1,0 +1,58 @@
+{
+  "allowed_next_step": "shadow_automation_experiment_design_only",
+  "authority_rules": {
+    "broad_backfill_unparked": false,
+    "may_change_counted_detection": false,
+    "may_change_default_extraction": false,
+    "may_change_gui": false,
+    "may_change_selected_area": false,
+    "may_feed_product_writer": false,
+    "may_grant_truth_completion": false,
+    "may_satisfy_reviewer_slot2": false,
+    "may_switch_selected_peak": false,
+    "may_touch_matrix": false,
+    "may_touch_workbook": false,
+    "product_writer_consumption": "forbidden"
+  },
+  "case_counts": {
+    "ai_challenge_flagged_cases": 0,
+    "ai_challenge_total_cases": 72,
+    "owner_assessable_clean_cases": 53,
+    "owner_not_assessable_cases": 19,
+    "product_authority_rows": 0,
+    "second_review_collection_cases": 53,
+    "total_lockbox_cases": 72
+  },
+  "decision": "single_owner_ai_challenge_supports_shadow_automation_experiment",
+  "decision_reasons": [
+    "one owner/domain review pass labels 53 assessable Gaussian15 cases clean",
+    "AI challenge result is current with zero owner re-review flags",
+    "19 lockbox cases remain insufficient/not assessable and excluded",
+    "this is not two-human truth completion and cannot grant writer authority"
+  ],
+  "forbidden_next_steps": [
+    "ProductWriter consumption",
+    "matrix or workbook mutation",
+    "selected peak or selected area rewrite",
+    "counted detection change",
+    "GUI/default extraction behavior change",
+    "broad Backfill unpark",
+    "treating AI challenge as reviewer_slot_2 truth"
+  ],
+  "schema_version": "lockbox_single_owner_ai_challenge_gate_v1",
+  "source_artifacts": {
+    "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
+    "ai_challenge_result_summary_sha256": "AFE3E40BE28AA27525495DA0D69B997D096109D0689280C265F10067C5EDAC56",
+    "owner_boundary_confirmation": "docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json",
+    "owner_boundary_confirmation_sha256": "7208E2B0B83006EF3AD31C22F587F0E5AF97272F3857B4D41EAA61B00B03468C",
+    "second_review_summary": "docs/superpowers/validation/lockbox_second_review_summary_v1.json",
+    "second_review_summary_sha256": "3CBAE083DDA8B96E9A60158EE1FCE18F38EC15CCC60C52A31E23D127FD8CD6B9",
+    "truth_summary": "docs/superpowers/validation/lockbox_truth_summary_v1.json",
+    "truth_summary_sha256": "6DB5CF6FA97A12D002393C9ABE4CF5892A3A2F9F3752C574FD24D233F4320D4D"
+  },
+  "source_decisions": {
+    "ai_challenge_result": "ai_challenge_no_owner_recheck_required",
+    "second_review_summary": "second_review_collection_ready_for_53_cases",
+    "truth_summary": "truth_supports_review_only"
+  }
+}
