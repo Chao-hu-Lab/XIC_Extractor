@@ -1,4 +1,5 @@
 {
+  "ai_challenge_flagged_cases": 0,
   "authority_rules": {
     "broad_backfill_unparked": false,
     "labels_prefilled": false,
@@ -30,6 +31,8 @@
   },
   "schema_version": "lockbox_second_review_summary_v1",
   "source_artifacts": {
+    "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
+    "ai_challenge_result_summary_sha256": "AFE3E40BE28AA27525495DA0D69B997D096109D0689280C265F10067C5EDAC56",
     "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
     "label_log_sha256": "0BBF3531279888EDB4A2A80FA679FD2A82DFDEE3DF42E6841B7B784ABF57E97D",
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
@@ -50,5 +53,6 @@
     "ready_for_second_independent_review": 53,
     "recover_or_mark_gaussian_boundary_unavailable": 1,
     "use_existing_manual_negative_control": 6
-  }
+  },
+  "upstream_ai_challenge_decision": "ai_challenge_no_owner_recheck_required"
 }

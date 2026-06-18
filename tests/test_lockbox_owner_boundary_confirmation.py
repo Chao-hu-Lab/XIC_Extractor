@@ -42,6 +42,8 @@ def test_owner_boundary_confirmation_hashes_match_sources() -> None:
     payload = json.loads(CONFIRMATION.read_text(encoding="utf-8"))
     artifacts = payload["source_artifacts"]
 
+    assert "second_review_summary" not in artifacts
+
     for key, path_value in artifacts.items():
         if not key.endswith("_sha256"):
             expected_hash = artifacts[f"{key}_sha256"]

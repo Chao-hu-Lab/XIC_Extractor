@@ -38,10 +38,10 @@
   "schema_version": "lockbox_ai_challenge_result_summary_v1",
   "source_artifacts": {
     "ai_challenge_packet_summary": "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json",
-    "ai_challenge_packet_summary_sha256": "54E236456884EB093E3CCCAA95D951E0948DB6BD88B2C2405DBFB06223FA1D7F",
+    "ai_challenge_packet_summary_sha256": "077B25EA507B562FCE1C8DD4F567126EF349DE91127732620E43AEE45B3C6B06",
     "ai_challenge_queue": "docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv",
-    "ai_challenge_queue_sha256": "C1764CB4CD80285187C9B1514B090381A5F8D3583F1D4A1EBDE41662BDC6A43F",
+    "ai_challenge_queue_sha256": "89F32FFAD441214C24416CDEDC600593CD79B5452488FDB6EFB096D29009E94F",
     "ai_challenge_result_log": "docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv",
-    "ai_challenge_result_log_sha256": "1176C11557A26DED2F8F336277096B38C7960685A54713334B3305BB0990C6DC"
+    "ai_challenge_result_log_sha256": "0E755E12F4E941838391038CCED487BA55065F1EBD7BEB1BAFBDCD89A55ACF1F"
   }
 }

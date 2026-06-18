@@ -31,6 +31,14 @@ from scripts.build_lockbox_next_action_plan import (
     NEXT_ACTION_SUMMARY,
     check_lockbox_next_action_plan,
 )
+from scripts.check_lockbox_ai_challenge_results import (
+    AI_CHALLENGE_RESULT_SUMMARY,
+    DECISION_NO_OWNER_RECHECK,
+    check_lockbox_ai_challenge_results,
+)
+from scripts.check_lockbox_ai_challenge_results import (
+    SUMMARY_SCHEMA_VERSION as AI_CHALLENGE_RESULT_SUMMARY_SCHEMA_VERSION,
+)
 from scripts.import_lockbox_labels import LABEL_LOG, STATIC_BUNDLE_INDEX
 from xic_extractor.tabular_io import (
     file_sha256,
@@ -104,6 +112,7 @@ def build_lockbox_second_review_pack(
     *,
     next_action_plan_path: Path = NEXT_ACTION_PLAN,
     next_action_summary_path: Path = NEXT_ACTION_SUMMARY,
+    ai_challenge_result_summary_path: Path = AI_CHALLENGE_RESULT_SUMMARY,
     static_bundle_index_path: Path = STATIC_BUNDLE_INDEX,
     label_log_path: Path = LABEL_LOG,
     second_review_queue_path: Path = SECOND_REVIEW_QUEUE,
@@ -115,6 +124,7 @@ def build_lockbox_second_review_pack(
     problems, action_rows, static_by_case, labels_by_case = _load_inputs(
         next_action_plan_path=next_action_plan_path,
         next_action_summary_path=next_action_summary_path,
+        ai_challenge_result_summary_path=ai_challenge_result_summary_path,
         static_bundle_index_path=static_bundle_index_path,
         label_log_path=label_log_path,
     )
@@ -150,6 +160,7 @@ def build_lockbox_second_review_pack(
         index_html,
         next_action_plan_path=next_action_plan_path,
         next_action_summary_path=next_action_summary_path,
+        ai_challenge_result_summary_path=ai_challenge_result_summary_path,
         static_bundle_index_path=static_bundle_index_path,
         label_log_path=label_log_path,
         second_review_queue_path=second_review_queue_path,
@@ -191,6 +202,7 @@ def check_lockbox_second_review_pack(
     *,
     next_action_plan_path: Path = NEXT_ACTION_PLAN,
     next_action_summary_path: Path = NEXT_ACTION_SUMMARY,
+    ai_challenge_result_summary_path: Path = AI_CHALLENGE_RESULT_SUMMARY,
     static_bundle_index_path: Path = STATIC_BUNDLE_INDEX,
     label_log_path: Path = LABEL_LOG,
     second_review_queue_path: Path = SECOND_REVIEW_QUEUE,
@@ -204,9 +216,15 @@ def check_lockbox_second_review_pack(
         next_action_plan_path=next_action_plan_path,
         next_action_summary_path=next_action_summary_path,
     )
+    problems.extend(
+        check_lockbox_ai_challenge_results(
+            ai_challenge_result_summary_path=ai_challenge_result_summary_path,
+        ),
+    )
     result = build_lockbox_second_review_pack(
         next_action_plan_path=next_action_plan_path,
         next_action_summary_path=next_action_summary_path,
+        ai_challenge_result_summary_path=ai_challenge_result_summary_path,
         static_bundle_index_path=static_bundle_index_path,
         label_log_path=label_log_path,
         second_review_queue_path=second_review_queue_path,
@@ -267,6 +285,7 @@ def _load_inputs(
     *,
     next_action_plan_path: Path,
     next_action_summary_path: Path,
+    ai_challenge_result_summary_path: Path,
     static_bundle_index_path: Path,
     label_log_path: Path,
 ) -> tuple[
@@ -337,6 +356,16 @@ def _load_inputs(
     except json.JSONDecodeError as exc:
         problems.append(f"invalid next-action summary JSON: {exc}")
         next_action_summary = {}
+    try:
+        ai_challenge_summary = json.loads(
+            ai_challenge_result_summary_path.read_text(encoding="utf-8"),
+        )
+    except OSError as exc:
+        problems.append(f"could not read AI challenge result summary: {exc}")
+        ai_challenge_summary = {}
+    except json.JSONDecodeError as exc:
+        problems.append(f"invalid AI challenge result summary JSON: {exc}")
+        ai_challenge_summary = {}
 
     static_by_case = _unique_by_case(static_rows, "static bundle", problems)
     labels_by_case = _unique_by_case(label_rows, "label log", problems)
@@ -349,6 +378,7 @@ def _load_inputs(
         problems.append("next-action plan case IDs must match label log")
     if next_action_summary.get("schema_version") != "lockbox_next_action_summary_v1":
         problems.append("next-action summary schema_version mismatch")
+    _check_ai_challenge_summary(ai_challenge_summary, problems)
 
     ready_rows = [
         row
@@ -454,6 +484,35 @@ def _check_ready_label_row(row: Mapping[str, str], problems: list[str]) -> None:
     ):
         if row.get(field) != NO_AUTHORITY:
             problems.append(f"{case_id}: first-review {field} must be FALSE")
+
+
+def _check_ai_challenge_summary(
+    summary: Mapping[str, Any],
+    problems: list[str],
+) -> None:
+    if summary.get("schema_version") != AI_CHALLENGE_RESULT_SUMMARY_SCHEMA_VERSION:
+        problems.append("AI challenge result summary schema_version mismatch")
+    if summary.get("decision") != DECISION_NO_OWNER_RECHECK:
+        problems.append(
+            "second-review pack requires AI challenge no-owner-recheck decision",
+        )
+    case_counts = summary.get("case_counts", {})
+    if not isinstance(case_counts, Mapping):
+        problems.append("AI challenge result summary case_counts must be an object")
+    elif case_counts.get("flagged_cases") != 0:
+        problems.append("second-review pack requires zero AI challenge flags")
+    flagged_cases = summary.get("flagged_cases", [])
+    if flagged_cases:
+        problems.append("second-review pack requires empty AI flagged_cases")
+    authority = summary.get("authority_rules", {})
+    if not isinstance(authority, Mapping):
+        problems.append("AI challenge result summary authority_rules must be an object")
+        return
+    for key, value in authority.items():
+        if value is not False:
+            problems.append(
+                f"AI challenge result summary authority_rules.{key} must be false",
+            )
 
 
 def _queue_row(
@@ -572,6 +631,7 @@ def _summary_json(
     *,
     next_action_plan_path: Path,
     next_action_summary_path: Path,
+    ai_challenge_result_summary_path: Path,
     static_bundle_index_path: Path,
     label_log_path: Path,
     second_review_queue_path: Path,
@@ -610,6 +670,12 @@ def _summary_json(
             "next_action_plan_sha256": file_sha256(next_action_plan_path),
             "next_action_summary": _repo_relative(next_action_summary_path),
             "next_action_summary_sha256": file_sha256(next_action_summary_path),
+            "ai_challenge_result_summary": _repo_relative(
+                ai_challenge_result_summary_path,
+            ),
+            "ai_challenge_result_summary_sha256": file_sha256(
+                ai_challenge_result_summary_path,
+            ),
             "static_review_bundle_index": _repo_relative(static_bundle_index_path),
             "static_review_bundle_index_sha256": file_sha256(
                 static_bundle_index_path,
@@ -626,6 +692,8 @@ def _summary_json(
             "second_review_index": _repo_relative(second_review_index_path),
             "second_review_index_sha256": _text_sha256(index_html),
         },
+        "upstream_ai_challenge_decision": DECISION_NO_OWNER_RECHECK,
+        "ai_challenge_flagged_cases": 0,
         "authority_rules": {
             "labels_prefilled": False,
             "may_feed_product_writer": False,
@@ -888,6 +956,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--next-action-plan", type=Path, default=NEXT_ACTION_PLAN)
     parser.add_argument("--next-action-summary", type=Path, default=NEXT_ACTION_SUMMARY)
+    parser.add_argument(
+        "--ai-challenge-result-summary",
+        type=Path,
+        default=AI_CHALLENGE_RESULT_SUMMARY,
+    )
     parser.add_argument("--static-bundle-index", type=Path, default=STATIC_BUNDLE_INDEX)
     parser.add_argument("--label-log", type=Path, default=LABEL_LOG)
     parser.add_argument("--second-review-queue", type=Path, default=SECOND_REVIEW_QUEUE)
@@ -909,6 +982,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         problems = check_lockbox_second_review_pack(
             next_action_plan_path=args.next_action_plan,
             next_action_summary_path=args.next_action_summary,
+            ai_challenge_result_summary_path=args.ai_challenge_result_summary,
             static_bundle_index_path=args.static_bundle_index,
             label_log_path=args.label_log,
             second_review_queue_path=args.second_review_queue,
@@ -926,6 +1000,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = build_lockbox_second_review_pack(
         next_action_plan_path=args.next_action_plan,
         next_action_summary_path=args.next_action_summary,
+        ai_challenge_result_summary_path=args.ai_challenge_result_summary,
         static_bundle_index_path=args.static_bundle_index,
         label_log_path=args.label_log,
         second_review_queue_path=args.second_review_queue,

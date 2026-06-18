@@ -145,6 +145,11 @@ The owner confirmation for this boundary is recorded in:
 docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json
 ```
 
+That owner-boundary artifact records only upstream human-review evidence and
+no-authority rules. It deliberately does not hash downstream second-review
+summaries, so the AI challenge and second-review packets cannot form a cyclic
+source-artifact dependency.
+
 ## AI Challenge Result
 
 The non-authoritative AI/subagent challenge pass is recorded in:
@@ -234,11 +239,13 @@ This writes `lockbox_second_review_queue_v1.tsv`,
 `lockbox_second_review_template_v1.tsv`,
 `lockbox_second_review_summary_v1.json`, and
 `lockbox_second_review_v1/index.html`. Current meaning: only the 53 plotted
-Gaussian15 cases enter reviewer slot 2. The template intentionally leaves all
-label fields blank; Codex must not invent the second review. The remaining 19
-cases stay outside this collection pack. The linked static pages and plots use
-the Gaussian15-smoothed boundary as the review basis. This packet still cannot
-feed ProductWriter, touch matrices, alter workbooks, or unpark broad Backfill.
+Gaussian15 cases enter reviewer slot 2, and only after the AI challenge result
+summary is current with `ai_challenge_no_owner_recheck_required` and zero
+flagged cases. The template intentionally leaves all label fields blank; Codex
+must not invent the second review. The remaining 19 cases stay outside this
+collection pack. The linked static pages and plots use the Gaussian15-smoothed
+boundary as the review basis. This packet still cannot feed ProductWriter,
+touch matrices, alter workbooks, or unpark broad Backfill.
 
 AI challenge packet:
 

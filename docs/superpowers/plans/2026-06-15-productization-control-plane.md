@@ -2546,8 +2546,8 @@ at that older checkpoint, not the latest release claim.
   schema records that AI challenge review must be stored outside human truth
   slots. The owner boundary confirmation is recorded in
   `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`,
-  with hashes for the static bundle, label log, truth summary, next-action
-  summary, and second-review summary; it explicitly forbids ProductWriter,
+  with hashes for the static bundle, label log, truth summary, and next-action
+  summary; it explicitly forbids ProductWriter,
   matrix, workbook, selected peak/area, counted-detection, default extraction,
   GUI, and broad Backfill authority.
 - Validation:
@@ -2705,6 +2705,51 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: continue from the truth/review substrate. Do not convert this
   closure into writer authority; use it only to unblock later truth-summary or
   review-workflow experiments.
+
+### 2026-06-18 - lockbox_second_review_ai_challenge_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` AI challenge result with
+  `decision=ai_challenge_no_owner_recheck_required`, 72 `no_issue`, and
+  0 flagged cases. The second-review collection pack existed, but it was not
+  mechanically gated on the closed AI challenge result.
+- New tier: unchanged `production_candidate`. The current active artifact is
+  now `docs/superpowers/validation/lockbox_second_review_summary_v1.json`
+  (`decision=second_review_collection_ready_for_53_cases`). It remains a
+  truth/review collection surface only; it grants no ProductWriter, matrix,
+  workbook, selected peak/area, counted-detection, GUI, default extraction, or
+  broad Backfill authority.
+- Evidence: `scripts/build_lockbox_second_review_pack.py` now requires the AI
+  challenge result summary to be current and to report
+  `ai_challenge_no_owner_recheck_required` with zero flagged cases before the
+  second-review pack can validate. The summary records the upstream AI
+  challenge decision and hash. `lockbox_owner_boundary_confirmation_v1.json`
+  was corrected to avoid a cyclic source-artifact chain: owner boundary now
+  records only upstream human-review evidence and no longer hashes downstream
+  second-review summaries. AI challenge queue/template/result metadata were
+  regenerated only to point at that non-cyclic owner-boundary artifact; the
+  challenge results stayed 72 `no_issue`.
+- Product surface changed: validation artifact schemas/content, helper script,
+  focused tests, status index, and docs only. No ProductWriter, matrix,
+  workbook, selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py --check-only`
+  returned `Lockbox AI challenge packet is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`
+  returned `Lockbox second-review pack is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_second_review_pack.py tests/test_lockbox_ai_challenge_results.py tests/test_lockbox_ai_challenge_pack.py tests/test_lockbox_owner_boundary_confirmation.py -v --tb=short`
+  passed `32`.
+- Remaining blocker: this still does not create second human labels. The next
+  product step is to collect/import the second independent review labels, or
+  explicitly define a future single-owner plus AI-challenge evidence contract.
+  Either path still needs a separate expected-diff and authority goal before
+  writer authority can expand.
+- Next checkpoint: run productization state/lane/diagnostics checks, subagent
+  review, then commit the scoped gate. Do not use this gate to unpark broad
+  Backfill or promote labels/challenge output into writer authority.
 
 ### 2026-06-18 - productization_status_index_v1
 

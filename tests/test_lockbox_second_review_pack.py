@@ -12,6 +12,7 @@ from scripts.build_lockbox_second_review_pack import (
     build_lockbox_second_review_pack,
     check_lockbox_second_review_pack,
 )
+from scripts.check_lockbox_ai_challenge_results import AI_CHALLENGE_RESULT_SUMMARY
 from scripts.import_lockbox_labels import STATIC_BUNDLE_INDEX
 
 
@@ -27,6 +28,11 @@ def test_current_second_review_pack_counts_and_authority() -> None:
     assert len(queue_rows) == 53
     assert len(template_rows) == 53
     assert summary["decision"] == "second_review_collection_ready_for_53_cases"
+    assert (
+        summary["upstream_ai_challenge_decision"]
+        == "ai_challenge_no_owner_recheck_required"
+    )
+    assert summary["ai_challenge_flagged_cases"] == 0
     assert summary["case_counts"] == {
         "total_next_action_cases": 72,
         "second_review_queue_cases": 53,
@@ -48,6 +54,10 @@ def test_current_second_review_pack_counts_and_authority() -> None:
     assert {row["may_touch_matrix"] for row in queue_rows} == {"FALSE"}
     assert {row["may_grant_product_authority"] for row in queue_rows} == {"FALSE"}
     assert {row["broad_backfill_unparked"] for row in queue_rows} == {"FALSE"}
+    assert (
+        summary["source_artifacts"]["ai_challenge_result_summary"]
+        == "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json"
+    )
 
 
 def test_current_second_review_queue_is_exactly_next_action_ready_cases() -> None:
@@ -166,6 +176,36 @@ def test_second_review_checker_rejects_queue_authority_flag(tmp_path: Path) -> N
     assert any(
         "may_feed_product_writer must be FALSE" in problem for problem in problems
     )
+
+
+def test_second_review_checker_rejects_open_ai_challenge_flag(
+    tmp_path: Path,
+) -> None:
+    queue, template, summary, index = _build_custom_pack(tmp_path)
+    ai_summary = tmp_path / "ai_challenge_summary.json"
+    payload = json.loads(AI_CHALLENGE_RESULT_SUMMARY.read_text(encoding="utf-8"))
+    payload["decision"] = "ai_challenge_owner_recheck_required"
+    payload["case_counts"]["flagged_cases"] = 1
+    payload["flagged_cases"] = [
+        {
+            "lockbox_case_id": "LOCKBOXV1_60CEB35837FAF38CC4DE9021",
+            "challenge_result": "visual_contradiction_suspected",
+        },
+    ]
+    ai_summary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    problems = check_lockbox_second_review_pack(
+        ai_challenge_result_summary_path=ai_summary,
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+    )
+
+    assert any("AI challenge result summary JSON is stale" in p for p in problems)
+    assert any("requires AI challenge no-owner-recheck decision" in p for p in problems)
+    assert any("requires zero AI challenge flags" in p for p in problems)
+    assert any("requires empty AI flagged_cases" in p for p in problems)
 
 
 def test_second_review_checker_rejects_non_gaussian_queue_row(

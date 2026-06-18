@@ -37,16 +37,16 @@
     "not_assessable_or_excluded_cases": 19,
     "owner_assessed_plotted_gaussian15_cases": 53,
     "path": "docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json",
-    "sha256": "2FB88D848F5D90FACA13ED201033921BFD5755F2AF1CAA00C15097A1A6BB2F42"
+    "sha256": "7208E2B0B83006EF3AD31C22F587F0E5AF97272F3857B4D41EAA61B00B03468C"
   },
   "schema_version": "lockbox_ai_challenge_summary_v1",
   "source_artifacts": {
     "ai_challenge_index": "docs/superpowers/validation/lockbox_ai_challenge_v1/index.html",
     "ai_challenge_index_sha256": "7653EDE03CF93305417DA3C98606EEF219F3813BCA0E9A3B2F5A3F76F74C6EA9",
     "ai_challenge_queue": "docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv",
-    "ai_challenge_queue_sha256": "C1764CB4CD80285187C9B1514B090381A5F8D3583F1D4A1EBDE41662BDC6A43F",
+    "ai_challenge_queue_sha256": "89F32FFAD441214C24416CDEDC600593CD79B5452488FDB6EFB096D29009E94F",
     "ai_challenge_template": "docs/superpowers/validation/lockbox_ai_challenge_template_v1.tsv",
-    "ai_challenge_template_sha256": "640F691BF449DCFD2E0F5BB6B0C5641012CD3172C54D087F9EDBA0C0D9A6D1A5",
+    "ai_challenge_template_sha256": "7952FAB3FE55A6D9194B5AFA9AD9146105ED785A61B945722B6ABC1C9EDE8230",
     "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
     "label_log_sha256": "0BBF3531279888EDB4A2A80FA679FD2A82DFDEE3DF42E6841B7B784ABF57E97D",
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
