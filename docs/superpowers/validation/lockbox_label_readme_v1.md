@@ -161,3 +161,18 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --
 
 The import gate checks static-bundle hash binding, row identity, legal labels,
 and no-authority flags. Its output is a decision packet, not a writer input.
+
+Next-action split after the first review batch:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py --check-only
+```
+
+This writes `lockbox_next_action_plan_v1.tsv` and
+`lockbox_next_action_summary_v1.json`. Current meaning: 53 plotted Gaussian15
+cases are ready for a second independent reviewer; 6 manual wrong-peak/no-peak
+cases are existing negative controls; 12 round-trip-oracle negative cases remain
+parked because that oracle is not independent peak-choice or area truth; 1
+Gaussian boundary-unavailable case needs signal/evidence recovery or remains
+not assessable. None of these routes grants write authority.

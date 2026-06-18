@@ -38,7 +38,7 @@ def test_only_current_backfill_scope_has_writer_authority() -> None:
     assert authority["may_touch_matrix"] == "TRUE"
 
 
-def test_peak_choice_lockbox_status_points_to_truth_summary_gate() -> None:
+def test_peak_choice_lockbox_status_points_to_next_action_gate() -> None:
     _, rows = _read_tsv(DEFAULT_STATUS_INDEX)
     row = next(
         item for item in rows if item["lane_id"] == "peak_choice_truth_lockbox_v1"
@@ -46,10 +46,10 @@ def test_peak_choice_lockbox_status_points_to_truth_summary_gate() -> None:
 
     assert (
         row["current_artifact"]
-        == "docs/superpowers/validation/lockbox_truth_summary_v1.json"
+        == "docs/superpowers/validation/lockbox_next_action_summary_v1.json"
     )
-    assert row["public_surface"] == "lockbox_truth_summary_gate_v1"
-    assert "truth_supports_review_only" in row["notes"]
+    assert row["public_surface"] == "lockbox_next_action_plan_v1"
+    assert "second_review_ready_for_53_cases" in row["notes"]
     assert row["write_authority"] == "FALSE"
 
 

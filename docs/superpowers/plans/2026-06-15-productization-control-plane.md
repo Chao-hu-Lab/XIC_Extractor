@@ -268,6 +268,15 @@ only; it is not a ProductWriter input, matrix area, selected peak switch,
 counted-detection decision, or automatic truth label. The teal shaded review
 window is Gaussian-derived; older candidate/raw boundaries are reference lines
 only.
+Lockbox Next-Action Plan v1 now splits the first one-reviewer import into
+actionable, non-authoritative buckets: 53 plotted Gaussian15 cases are ready for
+second independent review; 6 manual wrong-peak/no-peak cases are existing
+negative controls, not missing-evidence unknowns; 12 failed round-trip oracle
+negative cases stay parked because the oracle is not independent peak-choice or
+area truth; and 1 Gaussian boundary-unavailable case needs signal/evidence
+recovery or remains not assessable. This split narrows the next human step
+without granting ProductWriter, matrix, workbook, selected-peak, selected-area,
+counted-detection, GUI, or broad Backfill authority.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2396,10 +2405,63 @@ at that older checkpoint, not the latest release claim.
   explicit park/insufficient-evidence handling. This gate cannot support an
   automation or writer experiment until independent truth coverage and
   expected-diff authority exist.
-- Next checkpoint: collect a second independent reviewer pass and handle the 19
-  evidence gaps, not broad Backfill heuristic mining. Any later automation or
-  writer experiment still needs independent truth coverage plus expected-diff
-  authority.
+- Next checkpoint: superseded by `lockbox_next_action_plan_v1`, which splits the
+  coarse 19 not-assessable cases into manual-negative controls,
+  round-trip-oracle parked negatives, and one boundary-unavailable evidence gap.
+
+### 2026-06-18 - lockbox_next_action_plan_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` review-only truth-summary
+  gate. The imported batch had 53 assessable labels and 19 coarse
+  not-assessable labels.
+- New tier: unchanged for product authority. The next-action packet is a
+  `production_candidate` review-routing packet only; it does not grant
+  ProductWriter authority and does not reopen broad Backfill.
+- Evidence: `scripts/build_lockbox_next_action_plan.py` reads the static review
+  bundle, imported reviewer label log, and truth-summary gate, then writes
+  `docs/superpowers/validation/lockbox_next_action_plan_v1.tsv` and
+  `docs/superpowers/validation/lockbox_next_action_summary_v1.json`. Current
+  split: 53 `ready_for_second_independent_review`, 6
+  `use_existing_manual_negative_control`, 12
+  `park_roundtrip_oracle_negative_as_nontruth`, and 1
+  `recover_or_mark_gaussian_boundary_unavailable`. Every row has
+  `may_feed_product_writer=FALSE`, `may_touch_matrix=FALSE`, and
+  `may_grant_product_authority=FALSE`.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py`
+  built the next-action artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py --check-only`
+  returned `Lockbox next-action plan is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_next_action_plan.py -v --tb=short`
+  passed `13`, including manual-negative separation, round-trip-oracle parking,
+  second-review routing, boundary-unavailable routing, stale-plan, stale-summary,
+  summary-authority, extra-summary-authority-key, parked-flag, and
+  row-authority regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_next_action_plan.py tests/test_lockbox_next_action_plan.py`
+  passed. Subagent review found two P2 fail-closed gaps and three P3
+  data-flow/test gaps; all were fixed. Final post-fix subagent review found no
+  P0/P1/P2/P3 findings. Full local gate after fixes passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_next_action_plan.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3873 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py --check-only`.
+- Remaining blocker: the 53 plotted clean cases still need a second independent
+  reviewer before any automation experiment. The 12 round-trip oracle negatives
+  remain parked as non-truth; the 6 manual negatives are controls only; the 1
+  boundary-unavailable case needs signal/evidence recovery or remains
+  not-assessable.
+- Next checkpoint: commit this packet, then collect second-review labels for
+  the 53 plotted clean cases. Do not mine another broad Backfill heuristic.
 
 ### 2026-06-18 - productization_status_index_v1
 
