@@ -2655,6 +2655,57 @@ at that older checkpoint, not the latest release claim.
   `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, or wait for owner review if the current
   HTML/plot is enough.
 
+### 2026-06-18 - lockbox_ai_challenge_owner_rule_resolution_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` with one
+  `ai_challenge_owner_recheck_required` flag for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`.
+- New tier: unchanged `production_candidate`; the AI challenge result now has
+  no open owner re-review flag. This closure does not satisfy reviewer slot 2
+  and does not grant ProductWriter, matrix, workbook, selected peak/area,
+  counted-detection, default extraction, GUI, truth-label, or broad Backfill
+  authority.
+- Evidence: the owner clarified the double-peak rule for raw traces: if the
+  Backfill/detect reference apex is on the left peak, keep the current clean
+  decision; if it is indistinguishable or on the right peak, keep the case
+  flagged. Existing recovered trace evidence for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021` records
+  `cell_apex_rt=15.1553` and `trace_apex_rt=15.1553` on the left peak, while
+  the competing right peak is around `15.4366`. The result row now records
+  `challenge_result=no_issue` and
+  `challenge_reason_code=owner_rule_detected_left_peak_resolved`.
+  `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`
+  reports `decision=ai_challenge_no_owner_recheck_required`: 72 `no_issue`,
+  0 flagged.
+- Product surface changed: validation artifact/schema enum, focused tests, and
+  docs/status indexes only. No ProductWriter, matrix, workbook, selected
+  peak/area, counted detection, workbook schema, CLI/config, extraction
+  default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py`
+  rebuilt the result summary with 72 cases and 0 flagged cases;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  returned `Productization state index is consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  returned `Bounded non-broad product lanes are consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_ai_challenge_results.py tests/test_productization_state_index.py -v --tb=short`
+  passed `16`; focused ruff passed for the changed checker/tests.
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  returned `INDEX.md in sync: 90 entry points, 169 total files.`;
+  `git diff --check` returned only LF/CRLF warnings.
+  Read-only subagent review passed with no blocking findings and confirmed the
+  trace artifact, hashes, status index, and no-authority boundary.
+- Remaining blocker: none for the AI challenge flag. Future automation still
+  needs an explicit authority manifest update and expected-diff product goal
+  before any label, challenge output, or review evidence can write product
+  values.
+- Next checkpoint: continue from the truth/review substrate. Do not convert this
+  closure into writer authority; use it only to unblock later truth-summary or
+  review-workflow experiments.
+
 ### 2026-06-18 - productization_status_index_v1
 
 - Lane: Productization control-plane cleanup / machine-checkable lane status.

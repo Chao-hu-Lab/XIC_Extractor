@@ -14,7 +14,7 @@
     "may_touch_workbook": false
   },
   "case_counts": {
-    "flagged_cases": 1,
+    "flagged_cases": 0,
     "product_authority_rows": 0,
     "route_or_evidence_integrity_cases": 19,
     "total_cases": 72,
@@ -22,28 +22,19 @@
   },
   "challenge_reason_counts": {
     "no_obvious_visual_contradiction": 52,
-    "route_integrity_confirmed": 19,
-    "visual_contradiction_suspected": 1
+    "owner_rule_detected_left_peak_resolved": 1,
+    "route_integrity_confirmed": 19
   },
   "challenge_result_counts": {
-    "no_issue": 71,
-    "visual_contradiction_suspected": 1
+    "no_issue": 72
   },
-  "decision": "ai_challenge_owner_recheck_required",
+  "decision": "ai_challenge_no_owner_recheck_required",
   "decision_reasons": [
     "AI/subagent challenge output is non-authoritative QA only",
     "challenge findings can only route cases back to owner re-review",
     "challenge output cannot satisfy reviewer slot 2 or grant writer authority"
   ],
-  "flagged_cases": [
-    {
-      "challenge_notes": "Boundary cuts off right lobe/competing raw peak.",
-      "challenge_reason_code": "visual_contradiction_suspected",
-      "challenge_result": "visual_contradiction_suspected",
-      "challenge_scope": "visual_contradiction_challenge",
-      "lockbox_case_id": "LOCKBOXV1_60CEB35837FAF38CC4DE9021"
-    }
-  ],
+  "flagged_cases": [],
   "schema_version": "lockbox_ai_challenge_result_summary_v1",
   "source_artifacts": {
     "ai_challenge_packet_summary": "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json",
@@ -51,6 +42,6 @@
     "ai_challenge_queue": "docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv",
     "ai_challenge_queue_sha256": "C1764CB4CD80285187C9B1514B090381A5F8D3583F1D4A1EBDE41662BDC6A43F",
     "ai_challenge_result_log": "docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv",
-    "ai_challenge_result_log_sha256": "A2BFED83D4A15ABA34DA58D619C9EDA3933A2F259C8C1F128069238DE3294BD5"
+    "ai_challenge_result_log_sha256": "1176C11557A26DED2F8F336277096B38C7960685A54713334B3305BB0990C6DC"
   }
 }

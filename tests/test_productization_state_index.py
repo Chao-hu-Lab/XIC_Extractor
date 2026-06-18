@@ -49,8 +49,8 @@ def test_peak_choice_lockbox_status_points_to_ai_challenge_results() -> None:
         == "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json"
     )
     assert row["public_surface"] == "lockbox_ai_challenge_result_v1"
-    assert "ai_challenge_owner_recheck_required" in row["notes"]
-    assert "LOCKBOXV1_60CEB35837FAF38CC4DE9021" in row["next_checkpoint"]
+    assert "ai_challenge_no_owner_recheck_required" in row["notes"]
+    assert "owner_rule_detected_left_peak_resolved" in row["notes"]
     assert row["write_authority"] == "FALSE"
 
 

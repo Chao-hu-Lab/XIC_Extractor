@@ -41,9 +41,17 @@ AI_CHALLENGE_RESULT_SUMMARY = (
 SUMMARY_SCHEMA_VERSION = "lockbox_ai_challenge_result_summary_v1"
 DECISION_NO_OWNER_RECHECK = "ai_challenge_no_owner_recheck_required"
 DECISION_OWNER_RECHECK = "ai_challenge_owner_recheck_required"
+OWNER_RULE_RESOLVED_CASE_ID = "LOCKBOXV1_60CEB35837FAF38CC4DE9021"
+OWNER_RULE_RESOLVED_REASON = "owner_rule_detected_left_peak_resolved"
+OWNER_RULE_REQUIRED_NOTE_TOKENS = (
+    "cell_apex_rt=15.1553",
+    "trace_apex_rt=15.1553",
+    "right_peak_rt=15.4366",
+)
 
 ALLOWED_REASON_CODES = {
     "no_obvious_visual_contradiction",
+    OWNER_RULE_RESOLVED_REASON,
     "route_integrity_confirmed",
     "artifact_integrity_problem",
     "route_mismatch",
@@ -212,6 +220,24 @@ def _check_result_rows(
             problems.append(
                 f"AI challenge result row {index}: invalid challenge_reason_code",
             )
+        if row.get("challenge_reason_code") == OWNER_RULE_RESOLVED_REASON:
+            if case_id != OWNER_RULE_RESOLVED_CASE_ID:
+                problems.append(
+                    f"AI challenge result row {index}: "
+                    f"{OWNER_RULE_RESOLVED_REASON} is case-specific",
+                )
+            if result != "no_issue":
+                problems.append(
+                    f"AI challenge result row {index}: "
+                    f"{OWNER_RULE_RESOLVED_REASON} must resolve to no_issue",
+                )
+            notes = row.get("challenge_notes", "")
+            for token in OWNER_RULE_REQUIRED_NOTE_TOKENS:
+                if token not in notes:
+                    problems.append(
+                        f"AI challenge result row {index}: "
+                        f"{OWNER_RULE_RESOLVED_REASON} missing note token {token}",
+                    )
         if row.get("evidence_viewed") not in ALLOWED_EVIDENCE_VIEWED:
             problems.append(f"AI challenge result row {index}: invalid evidence_viewed")
         if row.get("source_hashes") != queue_row.get("source_hashes"):

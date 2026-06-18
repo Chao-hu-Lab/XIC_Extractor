@@ -29,24 +29,30 @@ def test_current_ai_challenge_result_summary_is_non_authoritative() -> None:
         "total_cases": 72,
         "visual_challenge_cases": 53,
         "route_or_evidence_integrity_cases": 19,
-        "flagged_cases": 1,
+        "flagged_cases": 0,
         "product_authority_rows": 0,
     }
-    assert summary["decision"] == "ai_challenge_owner_recheck_required"
+    assert summary["decision"] == "ai_challenge_no_owner_recheck_required"
     assert summary["challenge_result_counts"] == {
-        "no_issue": 71,
-        "visual_contradiction_suspected": 1,
+        "no_issue": 72,
     }
-    assert summary["flagged_cases"] == [
-        {
-            "lockbox_case_id": "LOCKBOXV1_60CEB35837FAF38CC4DE9021",
-            "challenge_result": "visual_contradiction_suspected",
-            "challenge_reason_code": "visual_contradiction_suspected",
-            "challenge_notes": "Boundary cuts off right lobe/competing raw peak.",
-            "challenge_scope": "visual_contradiction_challenge",
-        },
-    ]
+    assert summary["challenge_reason_counts"][
+        "owner_rule_detected_left_peak_resolved"
+    ] == 1
+    assert summary["flagged_cases"] == []
     assert all(value is False for value in summary["authority_rules"].values())
+    owner_rule_row = next(
+        row
+        for row in rows
+        if row["lockbox_case_id"] == "LOCKBOXV1_60CEB35837FAF38CC4DE9021"
+    )
+    assert owner_rule_row["challenge_result"] == "no_issue"
+    assert (
+        owner_rule_row["challenge_reason_code"]
+        == "owner_rule_detected_left_peak_resolved"
+    )
+    assert "cell_apex_rt=15.1553" in owner_rule_row["challenge_notes"]
+    assert "right_peak_rt=15.4366" in owner_rule_row["challenge_notes"]
     for row in rows:
         for field in AUTHORITY_FIELDS:
             assert row[field] == NO_AUTHORITY
@@ -101,6 +107,32 @@ def test_ai_challenge_results_reject_authority_flag(tmp_path: Path) -> None:
     assert any(
         "may_feed_product_writer must be FALSE" in problem for problem in problems
     )
+
+
+def test_ai_challenge_results_reject_generic_owner_rule_reason(
+    tmp_path: Path,
+) -> None:
+    result_log, result_summary = _copy_current_results(tmp_path)
+    rows = list(read_tsv_required(result_log, TEMPLATE_HEADER))
+    generic_row = next(
+        row
+        for row in rows
+        if row["lockbox_case_id"] != "LOCKBOXV1_60CEB35837FAF38CC4DE9021"
+    )
+    generic_row["challenge_reason_code"] = "owner_rule_detected_left_peak_resolved"
+    generic_row["challenge_notes"] = "left peak accepted"
+    write_tsv(result_log, rows, TEMPLATE_HEADER)
+
+    problems = check_lockbox_ai_challenge_results(
+        ai_challenge_result_log_path=result_log,
+        ai_challenge_result_summary_path=result_summary,
+    )
+
+    assert any(
+        "owner_rule_detected_left_peak_resolved is case-specific" in p
+        for p in problems
+    )
+    assert any("missing note token cell_apex_rt=15.1553" in p for p in problems)
 
 
 def test_ai_challenge_results_reject_stale_summary_authority(

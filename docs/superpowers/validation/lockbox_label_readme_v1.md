@@ -154,14 +154,17 @@ docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv
 docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json
 ```
 
-Current decision: `ai_challenge_owner_recheck_required`.
+Current decision: `ai_challenge_no_owner_recheck_required`.
 
-Plain-language meaning: the AI/subagent challenge found no obvious issue in 71
-of 72 lockbox cases. It flagged only
-`LOCKBOXV1_60CEB35837FAF38CC4DE9021` for owner re-review because the challenge
-reviewer suspected the Gaussian15 boundary may cut off the right lobe or a
-competing raw peak. This flag is not a truth label, not a reviewer-slot-2 label,
-and not ProductWriter authority.
+Plain-language meaning: the AI/subagent challenge now has 72 of 72
+`no_issue` rows. The previous flag for
+`LOCKBOXV1_60CEB35837FAF38CC4DE9021` was resolved by the owner rule for
+double-peak raw traces: when the Backfill/detect reference apex is on the left
+peak, the current boundary is acceptable; if it is indistinguishable or on the
+right peak, the case stays flagged. Existing recovered trace evidence records
+`cell_apex_rt=15.1553` and `trace_apex_rt=15.1553` on the left peak, while the
+right competing peak is around `15.4366`. This resolution is still not a truth
+label, not a reviewer-slot-2 label, and not ProductWriter authority.
 
 ## Validation
 
