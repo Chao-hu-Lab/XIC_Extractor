@@ -93,7 +93,7 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
 
     assert candidate.review_priority == "HIGH"
     assert candidate.evidence_score == 82
-    assert candidate.candidate_id == "Sample_1#6095"
+    assert candidate.candidate_id == "Sample_1#6095@mz500.123456_p384.076056"
     assert candidate.feature_family_id == "Sample_1@F0001"
     assert candidate.feature_superfamily_id == "Sample_1@SF0001"
     assert candidate.precursor_mz == pytest.approx(500.123456)
@@ -111,6 +111,11 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
     assert candidate.seed_scan_ids == (6095, 6098, 6102)
     assert candidate.ms1_seed_delta_min is None
     assert candidate.ms1_scan_support_score == pytest.approx(0.8)
+    assert candidate.neutral_loss_error_basis == "measured_scan_precursor_product"
+    assert candidate.precursor_mz_basis == "scan_precursor"
+    assert candidate.scan_precursor_mz == pytest.approx(500.123456)
+    assert candidate.scan_precursor_delta_da == pytest.approx(0.0)
+    assert candidate.max_scan_precursor_abs_delta_da == pytest.approx(0.0)
     assert candidate.matched_tag_names == ("DNA_dR",)
     assert candidate.matched_tag_count == 1
     assert candidate.tag_combine_mode == "single"
@@ -147,8 +152,8 @@ def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
     from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
 
     row = _candidate_row(
-        candidate_id="'=candidate",
-        sample_stem="'+sample",
+        candidate_id="'=Sample#6095@mz500.123456_p384.076056",
+        sample_stem="'=Sample",
         raw_file="'-raw.raw",
         feature_family_id="'@family",
         feature_superfamily_id="'plain_superfamily",
@@ -158,8 +163,8 @@ def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
 
     (candidate,) = read_discovery_candidates_csv(csv_path)
 
-    assert candidate.candidate_id == "=candidate"
-    assert candidate.sample_stem == "+sample"
+    assert candidate.candidate_id == "=Sample#6095@mz500.123456_p384.076056"
+    assert candidate.sample_stem == "=Sample"
     assert candidate.raw_file == Path("-raw.raw")
     assert candidate.feature_family_id == "@family"
     assert candidate.feature_superfamily_id == "'plain_superfamily"
@@ -180,6 +185,89 @@ def test_readers_reject_missing_required_columns(tmp_path: Path) -> None:
         read_discovery_batch_index(batch_path)
     with pytest.raises(ValueError, match="missing required columns"):
         read_discovery_candidates_csv(candidates_path)
+
+
+def test_read_discovery_candidates_csv_rejects_stale_scan_only_candidate_id(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [_candidate_row(candidate_id="Sample_1#6095")],
+    )
+
+    with pytest.raises(ValueError, match="candidate_id must include row identity"):
+        read_discovery_candidates_csv(csv_path)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"sample_stem": "OtherSample"}, "sample stem does not match"),
+        ({"best_ms2_scan_id": "6096"}, "scan id does not match"),
+        ({"precursor_mz": "501.123456"}, "precursor_mz does not match"),
+        ({"product_mz": "385.076056"}, "product_mz does not match"),
+    ],
+)
+def test_read_discovery_candidates_csv_rejects_candidate_id_row_mismatch(
+    tmp_path: Path,
+    overrides: dict[str, str],
+    message: str,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [_candidate_row(**overrides)])
+
+    with pytest.raises(ValueError, match=message):
+        read_discovery_candidates_csv(csv_path)
+
+
+def test_read_discovery_candidates_csv_rejects_duplicate_candidate_id(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(),
+            _candidate_row(feature_family_id="Sample_1@F0002"),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="duplicate candidate_id"):
+        read_discovery_candidates_csv(csv_path)
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("precursor_mz_basis", "target_lookup"),
+        ("neutral_loss_error_basis", "measured_truth"),
+    ],
+)
+def test_read_discovery_candidates_csv_rejects_invalid_basis_enum(
+    tmp_path: Path,
+    column: str,
+    value: str,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [_candidate_row(**{column: value})],
+    )
+
+    with pytest.raises(ValueError, match=rf"row 2.*{column}"):
+        read_discovery_candidates_csv(csv_path)
 
 
 @pytest.mark.parametrize(
@@ -227,7 +315,7 @@ def _candidate_row(**overrides: str) -> dict[str, str]:
         "ms1_support": "clean",
         "rt_alignment": "aligned",
         "family_context": "family",
-        "candidate_id": "Sample_1#6095",
+        "candidate_id": "Sample_1#6095@mz500.123456_p384.076056",
         "feature_family_id": "Sample_1@F0001",
         "feature_family_size": "2",
         "feature_superfamily_id": "Sample_1@SF0001",
@@ -252,6 +340,11 @@ def _candidate_row(**overrides: str) -> dict[str, str]:
         "neutral_loss_tag": "DNA_dR",
         "configured_neutral_loss_da": "116.0474",
         "neutral_loss_mass_error_ppm": "2.5",
+        "neutral_loss_error_basis": "measured_scan_precursor_product",
+        "precursor_mz_basis": "scan_precursor",
+        "scan_precursor_mz": "500.123456",
+        "scan_precursor_delta_da": "0.0",
+        "max_scan_precursor_abs_delta_da": "0.0",
         "rt_seed_min": "8.45",
         "rt_seed_max": "8.55",
         "ms1_search_rt_min": "8.25",

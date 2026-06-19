@@ -12,6 +12,8 @@ from xic_extractor.discovery.models import (
     DiscoverySeed,
     DiscoverySeedGroup,
     DiscoverySettings,
+    GroupPrecursorMzBasis,
+    NeutralLossErrorBasis,
 )
 from xic_extractor.discovery.priority import (
     assign_review_priority,
@@ -93,6 +95,11 @@ def backfill_ms1_candidates(
             ms1_height=ms1_fields.height,
             ms1_trace_quality=ms1_fields.trace_quality,
             ms1_scan_support_score=ms1_fields.scan_support_score,
+            neutral_loss_error_basis=group.neutral_loss_error_basis,
+            precursor_mz_basis=group.precursor_mz_basis,
+            scan_precursor_mz=group.scan_precursor_mz,
+            scan_precursor_delta_da=group.scan_precursor_delta_da,
+            max_scan_precursor_abs_delta_da=group.max_scan_precursor_abs_delta_da,
             seed_event_count=len(group.seeds),
             ms1_peak_found=ms1_fields.peak_found,
             ms1_apex_rt=ms1_fields.apex_rt,
@@ -232,6 +239,12 @@ def _merge_candidate_pair(
             first.ms2_product_max_intensity,
             second.ms2_product_max_intensity,
         ),
+        neutral_loss_error_basis=_combined_neutral_loss_error_basis(first, second),
+        precursor_mz_basis=_combined_precursor_mz_basis(first, second),
+        max_scan_precursor_abs_delta_da=_combined_max_scan_precursor_abs_delta_da(
+            first,
+            second,
+        ),
         review_priority=priority,
         reason=reason,
         selected_tag_count=len(settings.selected_tag_names),
@@ -271,6 +284,41 @@ def _candidate_peak_bounds_present(candidate: DiscoveryCandidate) -> bool:
         and candidate.ms1_peak_rt_end is not None
         and candidate.ms1_peak_rt_start <= candidate.ms1_peak_rt_end
     )
+
+
+def _combined_precursor_mz_basis(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> GroupPrecursorMzBasis:
+    if first.precursor_mz_basis == second.precursor_mz_basis:
+        return first.precursor_mz_basis
+    return "mixed"
+
+
+def _combined_neutral_loss_error_basis(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> NeutralLossErrorBasis:
+    if first.neutral_loss_error_basis == second.neutral_loss_error_basis:
+        return first.neutral_loss_error_basis
+    return "mixed"
+
+
+def _combined_max_scan_precursor_abs_delta_da(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> float | None:
+    values = [
+        value
+        for value in (
+            first.max_scan_precursor_abs_delta_da,
+            second.max_scan_precursor_abs_delta_da,
+        )
+        if value is not None
+    ]
+    if not values:
+        return None
+    return max(values)
 
 
 def _peak_intervals_overlap(

@@ -55,6 +55,11 @@ EXPECTED_PROVENANCE_COLUMNS = (
     "neutral_loss_tag",
     "configured_neutral_loss_da",
     "neutral_loss_mass_error_ppm",
+    "neutral_loss_error_basis",
+    "precursor_mz_basis",
+    "scan_precursor_mz",
+    "scan_precursor_delta_da",
+    "max_scan_precursor_abs_delta_da",
     "rt_seed_min",
     "rt_seed_max",
     "ms1_search_rt_min",
@@ -136,6 +141,11 @@ def _candidate(
         neutral_loss_tag="DNA_dR",
         configured_neutral_loss_da=116.0474,
         neutral_loss_mass_error_ppm=2.584321,
+        neutral_loss_error_basis="measured_scan_precursor_product",
+        precursor_mz_basis="scan_precursor",
+        scan_precursor_mz=258.108512345,
+        scan_precursor_delta_da=0.0,
+        max_scan_precursor_abs_delta_da=0.0,
         rt_seed_min=7.80,
         rt_seed_max=7.86,
         ms1_search_rt_min=7.60,
@@ -182,7 +192,16 @@ def test_discovery_candidate_has_optional_scan_support_score() -> None:
 def test_tag_evidence_json_is_last_provenance_column() -> None:
     assert DISCOVERY_CANDIDATE_COLUMNS[:25] == DISCOVERY_REVIEW_COLUMNS
     assert DISCOVERY_PROVENANCE_COLUMNS[-1] == "tag_evidence_json"
-    assert DISCOVERY_PROVENANCE_COLUMNS[-8] == "ms1_scan_support_score"
+    assert DISCOVERY_PROVENANCE_COLUMNS[
+        DISCOVERY_PROVENANCE_COLUMNS.index("neutral_loss_mass_error_ppm") + 1:
+        DISCOVERY_PROVENANCE_COLUMNS.index("rt_seed_min")
+    ] == (
+        "neutral_loss_error_basis",
+        "precursor_mz_basis",
+        "scan_precursor_mz",
+        "scan_precursor_delta_da",
+        "max_scan_precursor_abs_delta_da",
+    )
 
 
 def test_write_discovery_candidates_csv_creates_parent_and_writes_header(
@@ -424,6 +443,11 @@ def test_write_discovery_candidates_csv_formats_review_values_stably(
     assert row["observed_neutral_loss_da"] == "116.047"
     assert row["best_seed_rt"] == "7.83"
     assert row["neutral_loss_mass_error_ppm"] == "2.58432"
+    assert row["neutral_loss_error_basis"] == "measured_scan_precursor_product"
+    assert row["precursor_mz_basis"] == "scan_precursor"
+    assert row["scan_precursor_mz"] == "258.109"
+    assert row["scan_precursor_delta_da"] == "0"
+    assert row["max_scan_precursor_abs_delta_da"] == "0"
     assert row["ms1_area"] == ""
     assert row["ms2_product_max_intensity"] == "12000"
     assert row["ms1_peak_found"] == "FALSE"
@@ -586,6 +610,11 @@ def test_discovery_seed_group_preserves_group_contract_without_best_seed() -> No
         "rt_seed_max",
         "matched_tag_names",
         "tag_evidence_json",
+        "precursor_mz_basis",
+        "neutral_loss_error_basis",
+        "scan_precursor_mz",
+        "scan_precursor_delta_da",
+        "max_scan_precursor_abs_delta_da",
     )
     assert group.raw_file == raw_file
     assert group.sample_stem == "TumorBC2312_DNA"
@@ -600,6 +629,11 @@ def test_discovery_seed_group_preserves_group_contract_without_best_seed() -> No
     assert group.rt_seed_max == 7.86
     assert group.matched_tag_names == ()
     assert group.tag_evidence_json == "{}"
+    assert group.precursor_mz_basis == "scan_precursor"
+    assert group.neutral_loss_error_basis == "measured_scan_precursor_product"
+    assert group.scan_precursor_mz is None
+    assert group.scan_precursor_delta_da is None
+    assert group.max_scan_precursor_abs_delta_da is None
 
 
 def test_discovery_candidate_from_values_builds_row_identity_candidate_id() -> None:
@@ -629,6 +663,11 @@ def test_discovery_candidate_from_values_builds_row_identity_candidate_id() -> N
         neutral_loss_tag="DNA_dR",
         configured_neutral_loss_da=116.0474,
         neutral_loss_mass_error_ppm=2.58,
+        neutral_loss_error_basis="configured_loss_inferred_precursor",
+        precursor_mz_basis="product_plus_neutral_loss",
+        scan_precursor_mz=300.2028,
+        scan_precursor_delta_da=0.0423,
+        max_scan_precursor_abs_delta_da=0.0423,
         rt_seed_min=7.80,
         rt_seed_max=7.86,
         ms1_search_rt_min=7.60,
@@ -663,6 +702,11 @@ def test_discovery_candidate_from_values_builds_row_identity_candidate_id() -> N
     assert candidate.neutral_loss_tag == "DNA_dR"
     assert candidate.configured_neutral_loss_da == 116.0474
     assert candidate.neutral_loss_mass_error_ppm == 2.58
+    assert candidate.neutral_loss_error_basis == "configured_loss_inferred_precursor"
+    assert candidate.precursor_mz_basis == "product_plus_neutral_loss"
+    assert candidate.scan_precursor_mz == 300.2028
+    assert candidate.scan_precursor_delta_da == 0.0423
+    assert candidate.max_scan_precursor_abs_delta_da == 0.0423
     assert candidate.rt_seed_min == 7.80
     assert candidate.rt_seed_max == 7.86
     assert candidate.ms1_search_rt_min == 7.60

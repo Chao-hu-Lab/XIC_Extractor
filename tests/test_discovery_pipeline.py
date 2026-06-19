@@ -84,6 +84,67 @@ def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_dual_csvs(
     assert "review_note" in review_rows[0]
 
 
+def test_single_raw_pipeline_writes_inferred_and_direct_same_scan_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_path = tmp_path / "TumorBC2312_DNA.raw"
+    output_dir = tmp_path / "out"
+    raw = _FakeRawHandle(
+        [
+            _scan_event(
+                scan_number=19561,
+                rt=23.4669,
+                precursor_mz=301.164978,
+                masses=[184.113235, 185.115845],
+                intensities=[278825.7, 367660.1],
+            ),
+        ],
+        rt=np.array([23.10, 23.34, 23.50]),
+        intensity=np.array([10.0, 1000.0, 20.0]),
+    )
+    monkeypatch.setattr(
+        "xic_extractor.discovery.ms1_backfill.find_peak_and_area",
+        lambda *args, **kwargs: _ok_peak(
+            rt=23.34,
+            intensity=1000.0,
+            area=123456.0,
+            start=23.10,
+            end=23.50,
+        ),
+    )
+
+    outputs = run_discovery(
+        raw_path,
+        output_dir=output_dir,
+        settings=_settings(seed_rt_gap_min=0.20, ms2_precursor_tol_da=1.6),
+        peak_config=_peak_config(tmp_path),
+        raw_opener=lambda path, dll_dir: raw,
+    )
+
+    rows = _read_csv(outputs.candidates_csv)
+    candidate_ids = {row["candidate_id"] for row in rows}
+    assert len(rows) == 2
+    assert len(candidate_ids) == 2
+    assert (
+        "TumorBC2312_DNA#19561@mz300.160635_p184.113235"
+        in candidate_ids
+    )
+    assert (
+        "TumorBC2312_DNA#19561@mz301.164978_p185.115845"
+        in candidate_ids
+    )
+    rows_by_product = {row["product_mz"]: row for row in rows}
+    inferred = rows_by_product["184.113"]
+    direct = rows_by_product["185.116"]
+    assert inferred["precursor_mz_basis"] == "product_plus_neutral_loss"
+    assert inferred["neutral_loss_error_basis"] == (
+        "configured_loss_inferred_precursor"
+    )
+    assert direct["precursor_mz_basis"] == "scan_precursor"
+    assert direct["neutral_loss_error_basis"] == "measured_scan_precursor_product"
+
+
 def test_pipeline_writes_header_only_csv_when_no_strict_seeds(tmp_path: Path) -> None:
     raw = _FakeRawHandle(events=[])
 
@@ -542,18 +603,23 @@ def _scan_event(
     *,
     scan_number: int,
     rt: float,
-    product_intensity: float,
+    product_intensity: float = 10000.0,
+    precursor_mz: float = 258.1085,
+    masses: list[float] | None = None,
+    intensities: list[float] | None = None,
 ) -> Ms2ScanEvent:
-    precursor_mz = 258.1085
-    product_mz = precursor_mz - NEUTRAL_LOSS_DA
+    if masses is None:
+        masses = [precursor_mz - NEUTRAL_LOSS_DA]
+    if intensities is None:
+        intensities = [product_intensity]
     return Ms2ScanEvent(
         scan=Ms2Scan(
             scan_number=scan_number,
             rt=rt,
             precursor_mz=precursor_mz,
-            masses=np.asarray([product_mz], dtype=float),
-            intensities=np.asarray([product_intensity], dtype=float),
-            base_peak=product_intensity,
+            masses=np.asarray(masses, dtype=float),
+            intensities=np.asarray(intensities, dtype=float),
+            base_peak=max(intensities),
         ),
         parse_error=None,
         scan_number=scan_number,

@@ -103,16 +103,40 @@ The first implementation may keep several values as conservative internal defaul
 
 ### 4.2 Seed detection
 
-A discovery seed is created only when an MS2 scan has strict observed neutral-loss evidence.
+A discovery seed is created only when an MS2 scan has CID-NL evidence anchored
+to the scan event. V1 supports two evidence bases.
 
-Strict means:
+Direct scan-precursor evidence means:
 
 - the scan has a precursor m/z,
 - the scan has a product ion consistent with the configured neutral loss,
 - observed neutral loss is calculated from scan precursor and product m/z,
-- mass error is inside tolerance.
+- mass error is inside tolerance,
+- `precursor_mz_basis=scan_precursor`,
+- `neutral_loss_error_basis=measured_scan_precursor_product`.
 
-Target-window borrowing is not allowed because discovery mode has no configured target window.
+Product-plus-neutral-loss inferred evidence means:
+
+- the scan has a precursor m/z,
+- the scan has a product ion that can define `product_mz + configured_neutral_loss_da`,
+- the inferred precursor is inside `ms2_precursor_tol_da` of the scan precursor,
+- the row hypothesis uses the inferred precursor m/z, not the scan filter m/z,
+- `precursor_mz_basis=product_plus_neutral_loss`,
+- `neutral_loss_error_basis=configured_loss_inferred_precursor`.
+
+For inferred seeds, `neutral_loss_mass_error_ppm=0` only means the row was
+constructed from the configured neutral loss. It is not a measured
+scan-precursor/product neutral-loss error. Reviewers and downstream replay
+must inspect `neutral_loss_error_basis`, `precursor_mz_basis`,
+`scan_precursor_mz`, `scan_precursor_delta_da`, and
+`max_scan_precursor_abs_delta_da` before interpreting this field.
+
+This is not target-window borrowing. Discovery mode still has no configured
+target m/z window. The inferred precursor must come from an observed product
+ion plus the configured neutral-loss profile inside the scan precursor
+isolation/trigger window. The same scan/profile may therefore emit both a
+direct isotope-shift row and a monoisotopic inferred row when both products are
+observed.
 
 ### 4.3 Conservative grouping
 
@@ -223,7 +247,9 @@ suffix is part of the public id. One MS2 scan can support multiple neutral-loss
 hypotheses, so `<sample_stem>#<best_ms2_scan_id>` alone is not unique enough
 for review sidecars or alignment provenance. Persisted review/action sidecars
 created against older ids must be rebound from the current candidate CSV before
-being applied to regenerated discovery outputs.
+being applied to regenerated discovery outputs. Alignment replay must reject
+stale `<sample_stem>#<best_ms2_scan_id>` artifacts that lack the row identity
+suffix; silently accepting them can collapse distinct 300/301 same-scan rows.
 
 If a grouped candidate contains multiple seed scans, the best scan should be selected by a deterministic rule, for example:
 
@@ -308,6 +334,11 @@ After those candidate review columns, include provenance and boundary columns:
 | `neutral_loss_tag` | Discovery NL profile name or tag. |
 | `configured_neutral_loss_da` | Expected neutral-loss mass. |
 | `neutral_loss_mass_error_ppm` | Representative or best mass error. |
+| `neutral_loss_error_basis` | `measured_scan_precursor_product`, `configured_loss_inferred_precursor`, or `mixed`. Defines how `neutral_loss_mass_error_ppm` may be interpreted. |
+| `precursor_mz_basis` | `scan_precursor`, `product_plus_neutral_loss`, or `mixed`. Defines whether the row precursor came directly from the scan filter or from product + configured neutral loss. |
+| `scan_precursor_mz` | Representative scan precursor m/z when available. |
+| `scan_precursor_delta_da` | Signed representative delta, defined as `scan_precursor_mz - precursor_mz`. Non-zero deltas are expected for inferred rows. |
+| `max_scan_precursor_abs_delta_da` | Maximum absolute row-vs-scan precursor delta among grouped seeds. Use this field for absolute-magnitude audits and mixed direct/inferred groups. |
 | `rt_seed_min` | Minimum seed RT in group. |
 | `rt_seed_max` | Maximum seed RT in group. |
 | `ms1_search_rt_min` | Padded MS1 search window start. |

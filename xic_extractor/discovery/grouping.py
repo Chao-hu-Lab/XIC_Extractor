@@ -8,6 +8,8 @@ from xic_extractor.discovery.models import (
     DiscoverySeed,
     DiscoverySeedGroup,
     DiscoverySettings,
+    GroupPrecursorMzBasis,
+    NeutralLossErrorBasis,
 )
 
 
@@ -85,6 +87,7 @@ def _can_join_group(
 
 def _build_group(seeds: list[DiscoverySeed]) -> DiscoverySeedGroup:
     best_seed = _best_seed(seeds)
+    scan_precursor_delta_da = _scan_precursor_delta_da(best_seed)
     return DiscoverySeedGroup(
         raw_file=best_seed.raw_file,
         sample_stem=best_seed.sample_stem,
@@ -99,6 +102,11 @@ def _build_group(seeds: list[DiscoverySeed]) -> DiscoverySeedGroup:
         rt_seed_max=max(seed.rt for seed in seeds),
         matched_tag_names=(best_seed.neutral_loss_tag,),
         tag_evidence_json=_merge_seed_evidence(seeds),
+        precursor_mz_basis=_group_precursor_mz_basis(seeds),
+        neutral_loss_error_basis=_group_neutral_loss_error_basis(seeds),
+        scan_precursor_mz=best_seed.scan_precursor_mz,
+        scan_precursor_delta_da=scan_precursor_delta_da,
+        max_scan_precursor_abs_delta_da=_max_scan_precursor_abs_delta_da(seeds),
     )
 
 
@@ -175,6 +183,45 @@ def _scan_precursor_delta_da(seed: DiscoverySeed) -> float | None:
     if seed.scan_precursor_mz is None:
         return None
     return seed.scan_precursor_mz - seed.precursor_mz
+
+
+def _group_precursor_mz_basis(
+    seeds: list[DiscoverySeed],
+) -> GroupPrecursorMzBasis:
+    values = {seed.precursor_mz_basis for seed in seeds}
+    if values == {"scan_precursor"}:
+        return "scan_precursor"
+    if values == {"product_plus_neutral_loss"}:
+        return "product_plus_neutral_loss"
+    return "mixed"
+
+
+def _group_neutral_loss_error_basis(
+    seeds: list[DiscoverySeed],
+) -> NeutralLossErrorBasis:
+    values = {_neutral_loss_error_basis(seed) for seed in seeds}
+    if values == {"measured_scan_precursor_product"}:
+        return "measured_scan_precursor_product"
+    if values == {"configured_loss_inferred_precursor"}:
+        return "configured_loss_inferred_precursor"
+    return "mixed"
+
+
+def _neutral_loss_error_basis(seed: DiscoverySeed) -> NeutralLossErrorBasis:
+    if seed.precursor_mz_basis == "product_plus_neutral_loss":
+        return "configured_loss_inferred_precursor"
+    return "measured_scan_precursor_product"
+
+
+def _max_scan_precursor_abs_delta_da(seeds: list[DiscoverySeed]) -> float | None:
+    values = [
+        abs(delta)
+        for seed in seeds
+        if (delta := _scan_precursor_delta_da(seed)) is not None
+    ]
+    if not values:
+        return None
+    return max(values)
 
 
 def _seed_sort_key(

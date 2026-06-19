@@ -9,6 +9,12 @@ from xic_extractor.discovery.evidence_config import (
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
 PrecursorMzBasis = Literal["scan_precursor", "product_plus_neutral_loss"]
+GroupPrecursorMzBasis = Literal["scan_precursor", "product_plus_neutral_loss", "mixed"]
+NeutralLossErrorBasis = Literal[
+    "measured_scan_precursor_product",
+    "configured_loss_inferred_precursor",
+    "mixed",
+]
 
 DISCOVERY_CANDIDATE_REVIEW_COLUMNS = (
     "review_priority",
@@ -50,6 +56,11 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "neutral_loss_tag",
     "configured_neutral_loss_da",
     "neutral_loss_mass_error_ppm",
+    "neutral_loss_error_basis",
+    "precursor_mz_basis",
+    "scan_precursor_mz",
+    "scan_precursor_delta_da",
+    "max_scan_precursor_abs_delta_da",
     "rt_seed_min",
     "rt_seed_max",
     "ms1_search_rt_min",
@@ -169,6 +180,13 @@ class DiscoverySeedGroup:
     rt_seed_max: float
     matched_tag_names: tuple[str, ...] = ()
     tag_evidence_json: str = "{}"
+    precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor"
+    neutral_loss_error_basis: NeutralLossErrorBasis = (
+        "measured_scan_precursor_product"
+    )
+    scan_precursor_mz: float | None = None
+    scan_precursor_delta_da: float | None = None
+    max_scan_precursor_abs_delta_da: float | None = None
 
 
 @dataclass(frozen=True)
@@ -208,6 +226,13 @@ class DiscoveryCandidate:
     ms1_height: float | None
     ms1_trace_quality: str
     ms1_scan_support_score: float | None = None
+    neutral_loss_error_basis: NeutralLossErrorBasis = (
+        "measured_scan_precursor_product"
+    )
+    precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor"
+    scan_precursor_mz: float | None = None
+    scan_precursor_delta_da: float | None = None
+    max_scan_precursor_abs_delta_da: float | None = None
     feature_family_id: str = ""
     feature_family_size: int = 1
     feature_superfamily_id: str = ""
@@ -251,6 +276,13 @@ class DiscoveryCandidate:
         ms1_height: float | None,
         ms1_trace_quality: str,
         ms1_scan_support_score: float | None = None,
+        neutral_loss_error_basis: NeutralLossErrorBasis = (
+            "measured_scan_precursor_product"
+        ),
+        precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor",
+        scan_precursor_mz: float | None = None,
+        scan_precursor_delta_da: float | None = None,
+        max_scan_precursor_abs_delta_da: float | None = None,
         seed_event_count: int,
         ms1_peak_found: bool,
         ms1_apex_rt: float | None,
@@ -300,6 +332,11 @@ class DiscoveryCandidate:
             ms1_height=ms1_height,
             ms1_trace_quality=ms1_trace_quality,
             ms1_scan_support_score=ms1_scan_support_score,
+            neutral_loss_error_basis=neutral_loss_error_basis,
+            precursor_mz_basis=precursor_mz_basis,
+            scan_precursor_mz=scan_precursor_mz,
+            scan_precursor_delta_da=scan_precursor_delta_da,
+            max_scan_precursor_abs_delta_da=max_scan_precursor_abs_delta_da,
             selected_tag_count=1,
             matched_tag_count=1,
             matched_tag_names=(neutral_loss_tag,),

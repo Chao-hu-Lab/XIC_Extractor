@@ -229,6 +229,29 @@ def test_same_ms2_scan_can_emit_direct_and_inferred_precursor_seeds() -> None:
     assert direct.precursor_mz == pytest.approx(scan_precursor_mz)
 
 
+def test_inferred_precursor_seed_respects_ms2_precursor_window() -> None:
+    product_mz = 184.11322021484375
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=305.0,
+                masses=[product_mz],
+                intensities=[39671.9],
+                scan_number=19867,
+                rt=23.8043,
+            )
+        ]
+    )
+
+    seeds = collect_strict_nl_seeds(
+        raw,
+        raw_file=RAW_FILE,
+        settings=_settings(ms2_precursor_tol_da=1.6),
+    )
+
+    assert seeds == ()
+
+
 def test_observed_loss_error_equal_to_tolerance_is_accepted() -> None:
     precursor_mz = 258.1085
     product_mz = _product_for_loss_ppm(precursor_mz=precursor_mz, ppm=10.0)

@@ -286,6 +286,38 @@ def test_best_seed_tie_breaks_by_error_then_rt_then_scan_number() -> None:
     )
 
 
+def test_group_exposes_mixed_precursor_and_error_basis() -> None:
+    direct = _seed(
+        scan_number=19561,
+        rt=23.4669,
+        precursor_mz=300.160635,
+        product_mz=184.113235,
+        scan_precursor_mz=300.160635,
+        precursor_mz_basis="scan_precursor",
+    )
+    inferred = _seed(
+        scan_number=19488,
+        rt=23.3893,
+        precursor_mz=300.160635,
+        product_mz=184.113235,
+        scan_precursor_mz=301.164978,
+        precursor_mz_basis="product_plus_neutral_loss",
+    )
+
+    groups = group_discovery_seeds(
+        (direct, inferred),
+        settings=_settings(seed_rt_gap_min=0.20),
+    )
+
+    assert len(groups) == 1
+    group = groups[0]
+    assert group.precursor_mz_basis == "mixed"
+    assert group.neutral_loss_error_basis == "mixed"
+    assert group.scan_precursor_mz == inferred.scan_precursor_mz
+    assert group.scan_precursor_delta_da == pytest.approx(1.004343)
+    assert group.max_scan_precursor_abs_delta_da == pytest.approx(1.004343)
+
+
 def _settings(**overrides: float) -> DiscoverySettings:
     values = {
         "neutral_loss_profile": NeutralLossProfile("DNA_dR", NEUTRAL_LOSS_DA),
@@ -307,6 +339,8 @@ def _seed(
     configured_neutral_loss_da: float = NEUTRAL_LOSS_DA,
     observed_neutral_loss_da: float = NEUTRAL_LOSS_DA,
     observed_loss_error_ppm: float = 0.0,
+    scan_precursor_mz: float | None = None,
+    precursor_mz_basis: str = "scan_precursor",
 ) -> DiscoverySeed:
     return DiscoverySeed(
         raw_file=raw_file,
@@ -320,6 +354,8 @@ def _seed(
         configured_neutral_loss_da=configured_neutral_loss_da,
         observed_neutral_loss_da=observed_neutral_loss_da,
         observed_loss_error_ppm=observed_loss_error_ppm,
+        scan_precursor_mz=scan_precursor_mz,
+        precursor_mz_basis=precursor_mz_basis,  # type: ignore[arg-type]
     )
 
 
@@ -338,6 +374,8 @@ def _replace_seed_value(
         "configured_neutral_loss_da": seed.configured_neutral_loss_da,
         "observed_neutral_loss_da": seed.observed_neutral_loss_da,
         "observed_loss_error_ppm": seed.observed_loss_error_ppm,
+        "scan_precursor_mz": seed.scan_precursor_mz,
+        "precursor_mz_basis": seed.precursor_mz_basis,
     }
     values[field] = value
     return DiscoverySeed(**values)

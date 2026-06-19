@@ -3316,6 +3316,43 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: current evidence packet is represented by
   `QuantMatrix Promotion Validation Packet v1` above.
 
+### 2026-06-19 - Discovery row-identity/evidence contract gate v1
+
+- Lane: Discovery row identity and evidence contract / default-output unblocker.
+- Previous tier: default QuantMatrix activation existed for the current
+  511-cell Backfill authority, but user review found that the activated bundle
+  predates a missing `300.1605 -> 184.113` Discovery row. The nearby
+  `301.165 -> 185.116` isotope feature row is valid and must not be deleted or
+  bridged into target authority.
+- New tier: unchanged. This is a Discovery contract/gate hardening and
+  one-RAW validation artifact; it does not regenerate the default matrix,
+  change active lane, or grant new matrix/Backfill/ProductWriter authority.
+- Evidence: `docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`
+  now defines direct scan-precursor and product-plus-neutral-loss inferred
+  seed bases; `discovery_candidates.csv` carries
+  `neutral_loss_error_basis`, `precursor_mz_basis`, `scan_precursor_mz`,
+  `scan_precursor_delta_da`, and `max_scan_precursor_abs_delta_da`; alignment
+  CSV replay rejects stale `sample#scan` candidate ids, mismatched
+  candidate-id suffixes, duplicate candidate ids, and invalid basis enums.
+  The one-RAW validation artifact under
+  `docs/superpowers/validation/discovery_precursor_inference_v1/` emits both
+  inferred `300.1605 / 184.113` and valid `301.165 / 185.116` rows with
+  duplicate candidate ids equal to 0.
+- Product surface changed: Discovery full-candidate TSV schema and alignment
+  replay behavior changed fail-closed for stale candidate ids. ProductWriter,
+  matrix contents, workbook, GUI, selected peak/area, counted detection,
+  scorer, 85RAW validation, current 511-cell writer authority, and broad
+  Backfill authority did not change.
+- Validation: focused Discovery/CSV/alignment tests, one-RAW
+  `scripts/run_discovery.py` over `TumorBC2312_DNA.raw` in the 22-25 min
+  window, and
+  `scripts/check_discovery_precursor_inference_artifact.py --check-only`
+  passed. The candidate artifact SHA-256 is
+  `B1B4956C3F0296D51E144659DB127CFB453140A66030C97C22FEED8C11326E2B`.
+- Remaining blocker: the activated default `quant_matrix.tsv` still predates
+  this Discovery fix. Claiming `300.1605` target-row presence requires a later
+  explicit discovery/alignment/default-activation expected-diff rerun.
+
 ### 2026-06-19 - QuantMatrixVersion Review Report v1
 
 - Lane: Backfill gallery/report alignment / Phase 4.
