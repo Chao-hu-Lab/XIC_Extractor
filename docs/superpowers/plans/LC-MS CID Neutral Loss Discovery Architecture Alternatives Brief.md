@@ -344,3 +344,74 @@ Validation label:
 - No ProductWriter/default matrix/workbook/GUI/Backfill authority changed.
 - No control-plane maturity tier or active lane update is required for this
   checker/decision spike.
+
+## A Owner-Deepening Result - 2026-06-20
+
+Decision:
+
+- Keep the A owner-deepening path.
+- Do not build or merge the B feature-primary temporary adapter.
+- Do not run 8RAW for this decision: focused tests plus the one-RAW oracle now
+  answer the architecture question.
+
+Implementation:
+
+- Added additive `discovery_candidates.csv` fields:
+  `discovery_candidate_state` and `ms1_feature_row_id`.
+- `discovery.models` owns state vocabulary and row-id construction.
+- `DiscoveryCandidate.from_values` assigns state/id before the writer.
+- `discovery.csv_writer` remains render-only.
+- `alignment.csv_io` parses successor fields, rejects invalid state/identity
+  combinations, validates `ms1_feature_row_id` sample/tag/precursor/RT identity,
+  and still reads legacy candidate CSVs that predate the additive successor
+  columns.
+- No `scripts/run_discovery.py` CLI/config flag or B adapter was added.
+
+Focused verification:
+
+- `python -m pytest tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/test_discovery_ms1_backfill.py tests/test_discovery_precursor_inference_artifact.py -q`
+  passed: `92 passed`.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor/discovery/models.py xic_extractor/discovery/ms1_backfill.py xic_extractor/alignment/csv_io.py tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/alignment_pipeline_helpers.py tests/test_shared_peak_identity_candidate_ms2_pattern.py`
+  passed.
+- `python scripts/check_productization_state.py` passed.
+
+One-RAW oracle:
+
+- Reran `TumorBC2312_DNA.raw` RT `22-25` into
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`.
+- Legacy precursor-inference checker passed with 157 rows and SHA256
+  `5267A602D520FAE4F3B11E2CDB99525849D7FD2C01F33ACC37F6D4548194114D`.
+- Successor architecture checker passed with readiness label `diagnostic_only`;
+  alignment parser status was `pass`.
+- Basis counts: 146 `product_plus_neutral_loss`, 6 `mixed`, 5
+  `scan_precursor`.
+- State counts: 46 `ms1_feature_nl_rescued`, 5
+  `ms1_feature_nl_supported`, 106 `review_only_orphan_nl`.
+
+Named facts:
+
+- `300.1605 -> 184.113` recovered as
+  `TumorBC2312_DNA#19561@mz300.160635_p184.113235`, state
+  `ms1_feature_nl_rescued`, row identity
+  `TumorBC2312_DNA|DNA_dR|300.160635|23.341692`, basis
+  `product_plus_neutral_loss`, tag `DNA_dR`.
+- `301.165 -> 185.116` preserved as its own `DNA_dR` tag-evidence row:
+  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`, state
+  `ms1_feature_nl_rescued`, row identity
+  `TumorBC2312_DNA|DNA_dR|301.164978|23.341692`, basis `mixed`.
+- The two named rows have distinct `ms1_feature_row_id` values, so preserving
+  `301.165 -> 185.116` does not depend on demoting/deleting it or treating
+  candidates as matrix rows.
+
+Interpretation:
+
+- A now satisfies the successor state/row-identity contract for the bounded
+  one-RAW oracle.
+- B remains closed because it has no demonstrated material one-RAW advantage
+  over A, and maintaining two Discovery systems would add product risk without
+  decision value.
+- Evidence remains `diagnostic_only`; no ProductWriter/default
+  matrix/workbook/GUI/Backfill authority changed.
+- No productization control-plane update is required because no maturity tier,
+  active lane, ProductWriter/default matrix activation, selected area/counting,
+  or Backfill writer authority changed.

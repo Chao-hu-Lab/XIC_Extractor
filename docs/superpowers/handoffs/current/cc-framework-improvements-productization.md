@@ -13,14 +13,21 @@ The default numeric matrix remains usable as the current detected + 511
 accepted-Backfill product output. ProductWriter default output is activated for
 detected values plus the current accepted Backfill cells.
 
-Discovery/alignment evidence recovered the missing `300.1605 -> 184.113`
-feature in diagnostic validation, but the already activated default matrix
-bundle still predates that rerun. Do not claim the tracked default activation
-bundle contains that row until a separate default activation expected-diff rerun
-regenerates and locks the public surface.
+The CID-NL Discovery A owner-deepening focused slice is now implemented for the
+successor CSV/parser contract: `discovery_candidates.csv` has additive
+`discovery_candidate_state` and `ms1_feature_row_id` fields, and the alignment
+reader fails closed on invalid state/identity combinations, including
+`ms1_feature_row_id` sample/tag/precursor/RT mismatches.
 
-Current follow-up is CID-NL Discovery architecture owner-deepening, not another
-default matrix activation.
+The one-RAW successor oracle for `TumorBC2312_DNA` RT `22-25` now passes. A
+recovers `300.1605 -> 184.113` and preserves `301.165 -> 185.116` as a distinct
+`DNA_dR` tag-evidence row with its own `ms1_feature_row_id`.
+
+This remains `diagnostic_only`. No ProductWriter/default matrix/workbook/GUI,
+selected peak/area, counted detection, or Backfill writer authority changed.
+The productization control plane was not updated because no maturity tier,
+active lane, matrix schema, default activation bundle, or Backfill writer
+authority changed.
 
 ## Product State
 
@@ -28,13 +35,10 @@ default matrix activation.
 - Product authority scope: `backfill_policy_write_ready_rows`.
 - Current Backfill writer authority: exactly 511 accepted Backfill cells.
 - Broad 4613-row Backfill remains parked.
-- No scorer was run for the CID-NL decision spike.
-- No ProductWriter/default activation rerun was launched.
-- No workbook, GUI, selected peak/area, counted detection, or Backfill authority
-  changed.
-- New Discovery/alignment and A/B checker evidence remains `diagnostic_only`.
-- No control-plane maturity tier, active lane, matrix schema, or Backfill writer
-  authority changed in the docs/addendum work.
+- No default activation, 85RAW, workbook, GUI, ProductWriter, or Backfill
+  authority run was launched in this slice.
+- New Discovery successor fields are additive Discovery/alignment parser
+  contract fields, not matrix-row authority.
 
 ## Status Index Anchors
 
@@ -57,53 +61,58 @@ without making this handoff the tier authority:
 - manual-boundary area recompute remain parked
 - classification and planning only
 
-## Canonical References
-
-- Tier / active lane / promotion gate:
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-- Next execution contract:
-  `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md`
-- A/B decision record:
-  `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
-- Deep research input:
-  `docs/deepresearch/LC-MS CID Neutral Loss Discovery.md`
-- Discovery parser contract:
-  `xic_extractor/alignment/csv_io.py`
-- Discovery CSV writer contract:
-  `xic_extractor/discovery/csv_writer.py`
-- Successor A/B checker:
-  `scripts/check_discovery_architecture_ab_artifact.py`
-- Current one-RAW A baseline:
-  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`
-- Archived completed evidence summary:
-  `docs/superpowers/handoffs/archive/2026-06-20_cc-framework-improvements_cid-nl-decision-spike-v1_21dcca68.md`
-
 ## Current CID-NL Decision
 
-Decision Spike v1 result:
+Decision Spike v1 still stands:
 
 - Do not build the B feature-primary temporary adapter yet.
-- Proceed with one bounded A owner-deepening pass in existing Discovery owners.
-- Add explicit `discovery_candidate_state` and `ms1_feature_row_id`.
-- Require writer/reader/parser tests, including fail-closed parser coverage for
-  invalid state + row-identity combinations.
-- Rerun the one-RAW successor checker on `TumorBC2312_DNA` RT `22-25`.
+- Keep the completed A owner-deepening pass in existing Discovery owners.
+- B remains closed because the one-RAW oracle shows no material advantage for a
+  second Discovery system.
 
-A is the next implementation path because current one-RAW evidence already
-recovers `300.1605 -> 184.113` and preserves `301.165 -> 185.116`; this is not
-a claim that the old A design was clean. The next pass absorbs B's useful
-feature-first/evidence-late concepts into A.
+8RAW was not run because focused tests plus the one-RAW oracle answered the
+architecture decision. 85RAW and default activation remain out of scope.
 
-B can reopen only through the gates in the plan addendum: material one-RAW gain
-after A passes, or a documented A structural blocker. A does not get an
-unbounded cleanup loop.
+## Files Changed In Current Slice
+
+- `xic_extractor/discovery/models.py`
+- `xic_extractor/discovery/ms1_backfill.py`
+- `xic_extractor/alignment/csv_io.py`
+- `tests/test_discovery_csv.py`
+- `tests/test_alignment_csv_io.py`
+- `tests/test_discovery_architecture_ab_artifact.py`
+- `tests/alignment_pipeline_helpers.py`
+- `tests/test_shared_peak_identity_candidate_ms2_pattern.py`
+
+## Active Decisions
+
+- `discovery.models` owns `discovery_candidate_state` vocabulary and
+  `ms1_feature_row_id` construction.
+- `DiscoveryCandidate.from_values` assigns:
+  - `scan_precursor` + MS1 peak: `ms1_feature_nl_supported`;
+  - `product_plus_neutral_loss` or `mixed` + MS1 peak:
+    `ms1_feature_nl_rescued`;
+  - no MS1 peak: `review_only_orphan_nl` with blank `ms1_feature_row_id`.
+- `ms1_feature_row_id` is sample/tag/precursor/RT-feature based and does not use
+  representative MS2 scan id.
+- `alignment.csv_io` rejects invalid state enums, blank normal/rescued
+  `ms1_feature_row_id`, normal/rescued rows without MS1 peak,
+  orphan rows with MS1 peak or nonblank id, and duplicate normal/rescued
+  `ms1_feature_row_id` in the same sample/tag scope.
+- `alignment.csv_io` also validates that nonblank `ms1_feature_row_id` matches
+  the candidate row's sample, neutral-loss tag, precursor identity, and MS1
+  feature RT within parser tolerance.
+- `alignment.csv_io` still reads legacy candidate CSVs that predate the two
+  additive successor columns; the successor checker remains the authority for
+  requiring those fields in new A/B evidence.
+- CSV writer remains render-only.
 
 ## Boundaries
 
 - Do not maintain two Discovery systems.
 - Do not make CID-NL/MS2 evidence direct ProductWriter authority.
 - Do not change default matrix/ProductWriter/workbook/GUI/Backfill authority.
-- Do not run default activation in the CID-NL owner-deepening slice.
+- Do not run default activation in this CID-NL owner-deepening slice.
 - Do not run 85RAW unless a later product decision explicitly requires it.
 - Do not treat candidates as matrix rows.
 - Do not demote or delete `301.165 -> 185.116` when it carries its own tag
@@ -111,33 +120,26 @@ unbounded cleanup loop.
 - Do not hide any B temporary adapter behind `scripts/run_discovery.py`
   CLI/config flags.
 
-## Evidence Snapshot
+## Latest Local Checks
 
-- One-RAW A baseline output:
-  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`
-- Legacy precursor-inference checker passed that output with 157 rows and
-  SHA256 `E69C53CE5F054C3D6385A2A66BD1B85B9D0F567F91BBC7F5A78BAC7D73953C44`.
-- Successor checker intentionally failed the current A CSV because it lacks
-  `discovery_candidate_state` and `ms1_feature_row_id`; parser compatibility
-  for current CSV was `pass`.
-- Completed parser/8RAW/alignment evidence is archived, not repeated here.
+- `python -m pytest tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/test_discovery_ms1_backfill.py tests/test_discovery_precursor_inference_artifact.py -q`
+  passed: `92 passed`.
+- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor/discovery/models.py xic_extractor/discovery/ms1_backfill.py xic_extractor/alignment/csv_io.py tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/alignment_pipeline_helpers.py tests/test_shared_peak_identity_candidate_ms2_pattern.py`
+  passed.
+- `python scripts/check_productization_state.py` passed.
+- One-RAW discovery rerun succeeded for `TumorBC2312_DNA` RT `22-25`.
+- Legacy precursor checker passed with 157 rows and SHA256
+  `5267A602D520FAE4F3B11E2CDB99525849D7FD2C01F33ACC37F6D4548194114D`.
+- Successor architecture checker passed with `diagnostic_only` readiness label.
+- One-RAW state counts: 46 `ms1_feature_nl_rescued`, 5
+  `ms1_feature_nl_supported`, 106 `review_only_orphan_nl`.
 
 ## Next Actions
 
-1. Start from the plan addendum's `/goal` and execute A owner-deepening in the
-   existing Discovery owners.
-2. Run focused checker/parser/writer tests before RAW validation.
-3. Rerun the one-RAW successor checker and document whether A closes, A has a
-   structural blocker, or B reopens under temporary-adapter constraints.
-4. Keep default matrix activation separate; only open that expected-diff task
+1. Finish subagent review and commit the task-scoped code/tests/docs.
+2. Keep default matrix activation separate; only open that expected-diff task
    when the public default `quant_matrix.tsv` should materialize the
    `300.1605 -> 184.113` row.
-
-## Latest Local Checks
-
-- Decision Spike v1 focused tests passed before this handoff prune:
-  `python -m pytest tests\test_discovery_architecture_ab_artifact.py tests\test_discovery_precursor_inference_artifact.py -q`
-  (`13 passed`).
-- Decision Spike v1 ruff passed:
-  `uv run ruff check scripts/check_discovery_architecture_ab_artifact.py tests/test_discovery_architecture_ab_artifact.py`.
-- This docs/prune closeout still needs current diff checks before commit.
+3. Reopen B only with new evidence that materially beats A on the one-RAW
+   oracle and names a deletion/facade endpoint; do not hide B behind
+   `scripts/run_discovery.py` flags.

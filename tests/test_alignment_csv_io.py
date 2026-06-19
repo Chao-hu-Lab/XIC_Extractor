@@ -102,6 +102,8 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
     assert candidate.best_seed_rt == pytest.approx(8.49)
     assert candidate.seed_event_count == 3
     assert candidate.ms1_peak_found is True
+    assert candidate.discovery_candidate_state == "ms1_feature_nl_supported"
+    assert candidate.ms1_feature_row_id == "Sample_1|DNA_dR|500.123456|8.48"
     assert candidate.ms1_apex_rt == pytest.approx(8.48)
     assert candidate.ms1_area == pytest.approx(123456.7)
     assert candidate.ms2_product_max_intensity == pytest.approx(9876.5)
@@ -119,6 +121,56 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
     assert candidate.matched_tag_names == ("DNA_dR",)
     assert candidate.matched_tag_count == 1
     assert candidate.tag_combine_mode == "single"
+
+
+def test_read_discovery_candidates_csv_accepts_legacy_rows_without_successor_columns(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    successor_columns = {"discovery_candidate_state", "ms1_feature_row_id"}
+    legacy_columns = tuple(
+        column
+        for column in DISCOVERY_CANDIDATE_COLUMNS
+        if column not in successor_columns
+    )
+    legacy_row = {
+        column: value
+        for column, value in _candidate_row().items()
+        if column in legacy_columns
+    }
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, legacy_columns, [legacy_row])
+
+    (candidate,) = read_discovery_candidates_csv(csv_path)
+
+    assert candidate.discovery_candidate_state == "ms1_feature_nl_supported"
+    assert candidate.ms1_feature_row_id == "Sample_1|DNA_dR|500.123456|8.48"
+
+
+def test_read_discovery_candidates_csv_rejects_partial_successor_schema(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    fieldnames = tuple(
+        column
+        for column in DISCOVERY_CANDIDATE_COLUMNS
+        if column != "ms1_feature_row_id"
+    )
+    row = {
+        column: value
+        for column, value in _candidate_row().items()
+        if column in fieldnames
+    }
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, fieldnames, [row])
+
+    with pytest.raises(
+        ValueError,
+        match="missing required columns: ms1_feature_row_id",
+    ):
+        read_discovery_candidates_csv(csv_path)
 
 
 def test_read_discovery_candidates_preserves_multi_tag_evidence(
@@ -157,6 +209,7 @@ def test_read_discovery_candidates_accepts_writer_rounded_row_identity_mz(
         product_mz="884.33",
         observed_neutral_loss_da="116.047",
         scan_precursor_mz="1000.38",
+        ms1_feature_row_id="Sample_1|DNA_dR|1000.377783|8.48",
     )
     csv_path = tmp_path / "discovery_candidates.csv"
     _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [row])
@@ -229,9 +282,13 @@ def test_discovery_writer_to_alignment_reader_roundtrips_rounded_row_identity(
     (parsed,) = read_discovery_candidates_csv(csv_path)
 
     assert written_row["candidate_id"] == "Sample_1#6095@mz1000.377783_p884.330383"
+    assert written_row["discovery_candidate_state"] == "ms1_feature_nl_rescued"
+    assert written_row["ms1_feature_row_id"] == "Sample_1|DNA_dR|1000.377783|23.41"
     assert written_row["precursor_mz"] == "1000.38"
     assert written_row["product_mz"] == "884.33"
     assert parsed.candidate_id == "Sample_1#6095@mz1000.377783_p884.330383"
+    assert parsed.discovery_candidate_state == "ms1_feature_nl_rescued"
+    assert parsed.ms1_feature_row_id == "Sample_1|DNA_dR|1000.377783|23.41"
 
 
 def test_read_discovery_candidates_rejects_mz_just_outside_display_tolerance(
@@ -267,6 +324,7 @@ def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
         raw_file="'-raw.raw",
         feature_family_id="'@family",
         feature_superfamily_id="'plain_superfamily",
+        ms1_feature_row_id="'=Sample|DNA_dR|500.123456|8.48",
     )
     csv_path = tmp_path / "discovery_candidates.csv"
     _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [row])
@@ -355,6 +413,177 @@ def test_read_discovery_candidates_csv_rejects_duplicate_candidate_id(
         read_discovery_candidates_csv(csv_path)
 
 
+def test_read_discovery_candidates_csv_rejects_invalid_candidate_state(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [_candidate_row(discovery_candidate_state="accepted")],
+    )
+
+    with pytest.raises(ValueError, match="row 2.*discovery_candidate_state"):
+        read_discovery_candidates_csv(csv_path)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "ms1_feature_nl_supported",
+        "ms1_feature_nl_rescued",
+    ],
+)
+def test_read_discovery_candidates_csv_rejects_blank_feature_row_id_for_ms1_rows(
+    tmp_path: Path,
+    state: str,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(
+                discovery_candidate_state=state,
+                ms1_feature_row_id="",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="row 2.*ms1_feature_row_id"):
+        read_discovery_candidates_csv(csv_path)
+
+
+def test_read_discovery_candidates_csv_rejects_ms1_state_without_ms1_peak(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(
+                discovery_candidate_state="ms1_feature_nl_supported",
+                ms1_peak_found="FALSE",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="row 2.*ms1_peak_found"):
+        read_discovery_candidates_csv(csv_path)
+
+
+@pytest.mark.parametrize(
+    "ms1_feature_row_id",
+    [
+        "Sample_1|DNA_dR|500.123456",
+        "OtherSample|DNA_dR|500.123456|8.48",
+        "Sample_1|OtherTag|500.123456|8.48",
+        "Sample_1|DNA_dR|999|8.48",
+        "Sample_1|DNA_dR|500.123456|9.99",
+    ],
+)
+def test_read_discovery_candidates_csv_rejects_mismatched_ms1_feature_row_id(
+    tmp_path: Path,
+    ms1_feature_row_id: str,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [_candidate_row(ms1_feature_row_id=ms1_feature_row_id)],
+    )
+
+    with pytest.raises(ValueError, match="row 2.*ms1_feature_row_id"):
+        read_discovery_candidates_csv(csv_path)
+
+
+def test_read_discovery_candidates_csv_rejects_orphan_state_with_ms1_peak(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(
+                discovery_candidate_state="review_only_orphan_nl",
+                ms1_feature_row_id="",
+            )
+        ],
+    )
+
+    with pytest.raises(ValueError, match="row 2.*review_only_orphan_nl"):
+        read_discovery_candidates_csv(csv_path)
+
+
+def test_read_discovery_candidates_csv_accepts_orphan_without_feature_row_id(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(
+                discovery_candidate_state="review_only_orphan_nl",
+                ms1_feature_row_id="",
+                ms1_peak_found="FALSE",
+                ms1_apex_rt="",
+                ms1_area="",
+                ms1_peak_rt_start="",
+                ms1_peak_rt_end="",
+                ms1_height="",
+                ms1_trace_quality="missing",
+                ms1_scan_support_score="",
+            )
+        ],
+    )
+
+    (candidate,) = read_discovery_candidates_csv(csv_path)
+
+    assert candidate.discovery_candidate_state == "review_only_orphan_nl"
+    assert candidate.ms1_feature_row_id == ""
+    assert candidate.ms1_peak_found is False
+
+
+def test_read_discovery_candidates_rejects_duplicate_ms1_feature_row_id(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(
+        csv_path,
+        DISCOVERY_CANDIDATE_COLUMNS,
+        [
+            _candidate_row(),
+            _candidate_row(
+                candidate_id="Sample_1#6096@mz500.123456_p384.076056",
+                best_ms2_scan_id="6096",
+                seed_scan_ids="6096",
+                feature_family_id="Sample_1@F0002",
+                discovery_candidate_state="ms1_feature_nl_rescued",
+            ),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="duplicate ms1_feature_row_id"):
+        read_discovery_candidates_csv(csv_path)
+
+
 @pytest.mark.parametrize(
     ("column", "value"),
     [
@@ -431,6 +660,8 @@ def _candidate_row(**overrides: str) -> dict[str, str]:
         "rt_alignment": "aligned",
         "family_context": "family",
         "candidate_id": "Sample_1#6095@mz500.123456_p384.076056",
+        "discovery_candidate_state": "ms1_feature_nl_supported",
+        "ms1_feature_row_id": "Sample_1|DNA_dR|500.123456|8.48",
         "feature_family_id": "Sample_1@F0001",
         "feature_family_size": "2",
         "feature_superfamily_id": "Sample_1@SF0001",

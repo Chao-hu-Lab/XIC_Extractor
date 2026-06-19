@@ -21,12 +21,12 @@ def test_ab_checker_accepts_successor_identity_with_parser_compatible_candidate_
             _row(
                 "focus",
                 discovery_candidate_state="ms1_feature_nl_rescued",
-                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|300.1605|23.3417",
+                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|300.160635|23.3417",
             ),
             _row(
                 "preserve",
                 discovery_candidate_state="ms1_feature_nl_supported",
-                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|301.165|23.3421",
+                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|301.164978|23.3417",
             ),
         ],
     )
@@ -172,7 +172,7 @@ def test_ab_checker_rejects_duplicate_normal_focus_rows(tmp_path: Path) -> None:
                 best_ms2_scan_id="19562",
                 seed_scan_ids="19562",
                 feature_family_id="TumorBC2312_DNA@F9999",
-                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|300.1606|23.3444",
+                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|300.160612|23.3417",
                 discovery_candidate_state="ms1_feature_nl_rescued",
             ),
             _row("preserve", discovery_candidate_state="ms1_feature_nl_supported"),
@@ -213,6 +213,7 @@ def test_ab_checker_ignores_nearby_non_rescue_focus_candidates(
                 scan_precursor_mz="300.20281982421875",
                 scan_precursor_delta_da="0.0421996",
                 max_scan_precursor_abs_delta_da="0.0421996",
+                ms1_feature_row_id="TumorBC2312_DNA|DNA_dR|300.16062|23.6329",
                 discovery_candidate_state="ms1_feature_nl_rescued",
                 tag_evidence_json=json.dumps(
                     {
@@ -240,6 +241,7 @@ def test_ab_checker_ignores_nearby_non_rescue_focus_candidates(
                 scan_precursor_delta_da="0.0419707",
                 max_scan_precursor_abs_delta_da="0.0419707",
                 discovery_candidate_state="review_only_orphan_nl",
+                ms1_feature_row_id="",
             ),
             _row("preserve", discovery_candidate_state="ms1_feature_nl_supported"),
         ],
@@ -285,17 +287,11 @@ def _write_candidates(
     *,
     include_successor_columns: bool = True,
 ) -> None:
+    successor_columns = {"discovery_candidate_state", "ms1_feature_row_id"}
     fieldnames = tuple(
-        dict.fromkeys(
-            (
-                *DISCOVERY_CANDIDATE_COLUMNS,
-                *(
-                    ("discovery_candidate_state", "ms1_feature_row_id")
-                    if include_successor_columns
-                    else ()
-                ),
-            )
-        )
+        column
+        for column in DISCOVERY_CANDIDATE_COLUMNS
+        if include_successor_columns or column not in successor_columns
     )
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -387,7 +383,28 @@ def _row(kind: str, **overrides: str) -> dict[str, str]:
             sort_keys=True,
         ),
         "discovery_candidate_state": state,
-        "ms1_feature_row_id": feature_id,
     }
     row.update(overrides)
+    if "ms1_feature_row_id" not in overrides:
+        row["ms1_feature_row_id"] = _default_ms1_feature_row_id(row)
     return row
+
+
+def _default_ms1_feature_row_id(row: dict[str, str]) -> str:
+    if row["ms1_peak_found"] != "TRUE":
+        return ""
+    precursor_mz = row["precursor_mz"]
+    if "@mz" in row["candidate_id"] and "_p" in row["candidate_id"]:
+        precursor_mz = row["candidate_id"].split("@mz", maxsplit=1)[1].split(
+            "_p",
+            maxsplit=1,
+        )[0]
+    rt = row["ms1_apex_rt"] or row["best_seed_rt"]
+    return "|".join(
+        (
+            row["sample_stem"],
+            row["neutral_loss_tag"],
+            precursor_mz,
+            rt,
+        )
+    )

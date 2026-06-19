@@ -14,6 +14,8 @@ from xic_extractor.discovery.models import (
     DiscoverySettings,
     GroupPrecursorMzBasis,
     NeutralLossErrorBasis,
+    assign_discovery_candidate_state,
+    build_ms1_feature_row_id,
 )
 from xic_extractor.discovery.priority import (
     assign_review_priority,
@@ -226,6 +228,7 @@ def _merge_candidate_pair(
         first.matched_tag_names + second.matched_tag_names,
         settings=settings,
     )
+    precursor_mz_basis = _combined_precursor_mz_basis(first, second)
     return replace(
         representative,
         seed_event_count=seed_event_count,
@@ -240,10 +243,24 @@ def _merge_candidate_pair(
             second.ms2_product_max_intensity,
         ),
         neutral_loss_error_basis=_combined_neutral_loss_error_basis(first, second),
-        precursor_mz_basis=_combined_precursor_mz_basis(first, second),
+        precursor_mz_basis=precursor_mz_basis,
         max_scan_precursor_abs_delta_da=_combined_max_scan_precursor_abs_delta_da(
             first,
             second,
+        ),
+        discovery_candidate_state=assign_discovery_candidate_state(
+            ms1_peak_found=True,
+            precursor_mz_basis=precursor_mz_basis,
+        ),
+        ms1_feature_row_id=build_ms1_feature_row_id(
+            sample_stem=representative.sample_stem,
+            neutral_loss_tag=representative.neutral_loss_tag,
+            precursor_mz=representative.precursor_mz,
+            best_seed_rt=representative.best_seed_rt,
+            ms1_peak_found=True,
+            ms1_apex_rt=representative.ms1_apex_rt,
+            ms1_peak_rt_start=representative.ms1_peak_rt_start,
+            ms1_peak_rt_end=representative.ms1_peak_rt_end,
         ),
         review_priority=priority,
         reason=reason,

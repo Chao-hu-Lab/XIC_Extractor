@@ -10,7 +10,10 @@ import numpy as np
 from xic_extractor.alignment.shared_peak_identity_explanation import (
     candidate_ms2_pattern,
 )
+from xic_extractor.discovery.models import DISCOVERY_CANDIDATE_COLUMNS
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
+
+SOURCE_CANDIDATE_ID = "S1#100@mz257.125_p141.078"
 
 
 def test_candidate_ms2_pattern_producer_joins_source_candidate_id_fail_closed(
@@ -41,7 +44,7 @@ def test_candidate_ms2_pattern_producer_joins_source_candidate_id_fail_closed(
                 "apex_rt": "10.02",
                 "peak_start_rt": "9.9",
                 "peak_end_rt": "10.1",
-                "source_candidate_id": "S1#100",
+                "source_candidate_id": SOURCE_CANDIDATE_ID,
             },
             {
                 "feature_family_id": "FAM002",
@@ -101,7 +104,7 @@ def test_candidate_ms2_pattern_producer_joins_source_candidate_id_fail_closed(
     supportive = by_key[("FAM001", "S1")]
     assert supportive["candidate_ms2_pattern_status"] == "supportive"
     assert supportive["candidate_ms2_evidence_level"] == "sample_candidate_aligned"
-    assert supportive["source_candidate_id"] == "S1#100"
+    assert supportive["source_candidate_id"] == SOURCE_CANDIDATE_ID
     assert supportive["matched_neutral_loss_count"] == "1"
     assert supportive["apex_ms2_delta_sec"] == "1.2"
 
@@ -139,7 +142,7 @@ def test_candidate_ms2_pattern_producer_reports_family_context_conflict(
                 "apex_rt": "10.02",
                 "peak_start_rt": "9.9",
                 "peak_end_rt": "10.1",
-                "source_candidate_id": "S1#100",
+                "source_candidate_id": SOURCE_CANDIDATE_ID,
             }
         ],
     )
@@ -214,7 +217,7 @@ def test_candidate_ms2_pattern_direct_candidate_uses_targeted_warn_band(
                 "apex_rt": "10.02",
                 "peak_start_rt": "9.9",
                 "peak_end_rt": "10.1",
-                "source_candidate_id": "S1#100",
+                "source_candidate_id": SOURCE_CANDIDATE_ID,
             }
         ],
     )
@@ -294,7 +297,7 @@ def test_candidate_ms2_pattern_direct_candidate_rejects_outside_targeted_max(
                 "apex_rt": "10.02",
                 "peak_start_rt": "9.9",
                 "peak_end_rt": "10.1",
-                "source_candidate_id": "S1#100",
+                "source_candidate_id": SOURCE_CANDIDATE_ID,
             }
         ],
     )
@@ -556,57 +559,7 @@ def _write_candidate_csv(
 ) -> None:
     _write_csv(
         path,
-        (
-            "review_priority",
-            "evidence_tier",
-            "evidence_score",
-            "ms2_support",
-            "ms1_support",
-            "rt_alignment",
-            "family_context",
-            "candidate_id",
-            "feature_family_id",
-            "feature_family_size",
-            "feature_superfamily_id",
-            "feature_superfamily_size",
-            "feature_superfamily_role",
-            "feature_superfamily_confidence",
-            "feature_superfamily_evidence",
-            "precursor_mz",
-            "product_mz",
-            "observed_neutral_loss_da",
-            "best_seed_rt",
-            "seed_event_count",
-            "ms1_peak_found",
-            "ms1_apex_rt",
-            "ms1_area",
-            "ms2_product_max_intensity",
-            "reason",
-            "raw_file",
-            "sample_stem",
-            "best_ms2_scan_id",
-            "seed_scan_ids",
-            "neutral_loss_tag",
-            "configured_neutral_loss_da",
-            "neutral_loss_mass_error_ppm",
-            "rt_seed_min",
-            "rt_seed_max",
-            "ms1_search_rt_min",
-            "ms1_search_rt_max",
-            "ms1_seed_delta_min",
-            "ms1_peak_rt_start",
-            "ms1_peak_rt_end",
-            "ms1_height",
-            "ms1_trace_quality",
-            "ms1_scan_support_score",
-            "selected_tag_count",
-            "matched_tag_count",
-            "matched_tag_names",
-            "primary_tag_name",
-            "tag_combine_mode",
-            "tag_intersection_status",
-            "tag_evidence_json",
-        ),
+        DISCOVERY_CANDIDATE_COLUMNS,
         [
             {
                 "review_priority": "MEDIUM",
@@ -616,7 +569,9 @@ def _write_candidate_csv(
                 "ms1_support": "weak",
                 "rt_alignment": "aligned",
                 "family_context": "singleton",
-                "candidate_id": "S1#100",
+                "discovery_candidate_state": "ms1_feature_nl_supported",
+                "ms1_feature_row_id": "S1|DNA_dR|257.125|10.02",
+                "candidate_id": SOURCE_CANDIDATE_ID,
                 "feature_family_id": "S1@F001",
                 "feature_family_size": "1",
                 "feature_superfamily_id": "S1@SF001",
@@ -641,6 +596,11 @@ def _write_candidate_csv(
                 "neutral_loss_tag": "DNA_dR",
                 "configured_neutral_loss_da": "116.047",
                 "neutral_loss_mass_error_ppm": neutral_loss_mass_error_ppm,
+                "neutral_loss_error_basis": "measured_scan_precursor_product",
+                "precursor_mz_basis": "scan_precursor",
+                "scan_precursor_mz": "257.125",
+                "scan_precursor_delta_da": "0",
+                "max_scan_precursor_abs_delta_da": "0",
                 "rt_seed_min": "10.0",
                 "rt_seed_max": "10.0",
                 "ms1_search_rt_min": "9.5",
