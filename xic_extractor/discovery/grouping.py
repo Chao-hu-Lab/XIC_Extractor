@@ -137,11 +137,25 @@ def _merge_seed_evidence(seeds: list[DiscoverySeed]) -> str:
                 "scan_ids": [],
                 "rt_min": seed.rt,
                 "rt_max": seed.rt,
+                "precursor_mz_basis": seed.precursor_mz_basis,
+                "scan_precursor_mz": seed.scan_precursor_mz,
+                "scan_precursor_delta_da": _scan_precursor_delta_da(seed),
+                "max_scan_precursor_abs_delta_da": abs(
+                    _scan_precursor_delta_da(seed) or 0.0
+                ),
                 "product_mz": seed.product_mz,
                 "max_intensity": seed.product_intensity,
                 "neutral_loss_error_ppm": seed.observed_loss_error_ppm,
             },
         )
+        if entry["precursor_mz_basis"] != seed.precursor_mz_basis:
+            entry["precursor_mz_basis"] = "mixed"
+        delta_da = _scan_precursor_delta_da(seed)
+        if delta_da is not None:
+            entry["max_scan_precursor_abs_delta_da"] = max(
+                cast(float, entry["max_scan_precursor_abs_delta_da"]),
+                abs(delta_da),
+            )
         entry["scan_count"] = cast(int, entry["scan_count"]) + 1
         scan_ids = list(cast(list[int], entry["scan_ids"]))
         scan_ids.append(seed.scan_number)
@@ -152,7 +166,15 @@ def _merge_seed_evidence(seeds: list[DiscoverySeed]) -> str:
             entry["product_mz"] = seed.product_mz
             entry["max_intensity"] = seed.product_intensity
             entry["neutral_loss_error_ppm"] = seed.observed_loss_error_ppm
+            entry["scan_precursor_mz"] = seed.scan_precursor_mz
+            entry["scan_precursor_delta_da"] = delta_da
     return json.dumps(by_tag, sort_keys=True, separators=(",", ":"))
+
+
+def _scan_precursor_delta_da(seed: DiscoverySeed) -> float | None:
+    if seed.scan_precursor_mz is None:
+        return None
+    return seed.scan_precursor_mz - seed.precursor_mz
 
 
 def _seed_sort_key(

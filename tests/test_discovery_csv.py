@@ -602,7 +602,7 @@ def test_discovery_seed_group_preserves_group_contract_without_best_seed() -> No
     assert group.tag_evidence_json == "{}"
 
 
-def test_discovery_candidate_from_values_uses_sample_and_best_seed_scan_id() -> None:
+def test_discovery_candidate_from_values_builds_row_identity_candidate_id() -> None:
     raw_file = Path("C:/data/TumorBC2312_DNA.raw")
     best_seed = DiscoverySeed(
         raw_file=raw_file,
@@ -647,7 +647,7 @@ def test_discovery_candidate_from_values_uses_sample_and_best_seed_scan_id() -> 
         reason="neutral loss seed",
     )
 
-    assert candidate.candidate_id == "TumorBC2312_DNA#6095"
+    assert candidate.candidate_id == "TumorBC2312_DNA#6095@mz258.1085_p142.0611"
     assert candidate.review_priority == "HIGH"
     assert candidate.reason == "neutral loss seed"
     assert candidate.seed_scan_ids == (6095,)
@@ -675,3 +675,62 @@ def test_discovery_candidate_from_values_uses_sample_and_best_seed_scan_id() -> 
     assert candidate.ms1_height == 4500.0
     assert candidate.ms1_trace_quality == "GOOD"
     assert candidate.ms2_product_max_intensity == 12000.0
+
+
+def test_candidate_id_distinguishes_same_scan_precursor_product_hypotheses() -> None:
+    raw_file = Path("C:/data/TumorBC2312_DNA.raw")
+    best_seed = DiscoverySeed(
+        raw_file=raw_file,
+        sample_stem="TumorBC2312_DNA",
+        scan_number=19561,
+        rt=23.4669,
+        precursor_mz=301.164978,
+        product_mz=185.115845,
+        product_intensity=367660.1,
+        neutral_loss_tag="DNA_dR",
+        configured_neutral_loss_da=116.0474,
+        observed_neutral_loss_da=116.0474,
+        observed_loss_error_ppm=0.0,
+    )
+
+    def _build_candidate(precursor_mz: float, product_mz: float) -> DiscoveryCandidate:
+        return DiscoveryCandidate.from_values(
+            raw_file=raw_file,
+            sample_stem="TumorBC2312_DNA",
+            precursor_mz=precursor_mz,
+            product_mz=product_mz,
+            observed_neutral_loss_da=116.0474,
+            best_seed=best_seed,
+            seed_scan_ids=(19561,),
+            neutral_loss_tag="DNA_dR",
+            configured_neutral_loss_da=116.0474,
+            neutral_loss_mass_error_ppm=0.0,
+            rt_seed_min=23.4669,
+            rt_seed_max=23.4669,
+            ms1_search_rt_min=23.2669,
+            ms1_search_rt_max=23.6669,
+            ms1_seed_delta_min=0.0,
+            ms1_peak_rt_start=None,
+            ms1_peak_rt_end=None,
+            ms1_height=None,
+            ms1_trace_quality="MISSING",
+            seed_event_count=1,
+            ms1_peak_found=False,
+            ms1_apex_rt=None,
+            ms1_area=None,
+            ms2_product_max_intensity=367660.1,
+            review_priority="LOW",
+            reason="strict MS2 NL seed",
+        )
+
+    monoisotopic = _build_candidate(300.160620, 184.113220)
+    isotope = _build_candidate(301.164978, 185.115845)
+
+    assert monoisotopic.best_ms2_scan_id == isotope.best_ms2_scan_id == 19561
+    assert monoisotopic.candidate_id != isotope.candidate_id
+    assert monoisotopic.candidate_id == (
+        "TumorBC2312_DNA#19561@mz300.16062_p184.11322"
+    )
+    assert isotope.candidate_id == (
+        "TumorBC2312_DNA#19561@mz301.164978_p185.115845"
+    )

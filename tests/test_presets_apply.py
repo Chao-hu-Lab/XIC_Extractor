@@ -36,11 +36,12 @@ def test_apply_to_discovery_merges_preset_then_explicit_tuning() -> None:
 
     settings = apply_to_discovery(
         preset,
-        explicit_tuning_overrides={"rt_max": 20.0},
+        explicit_tuning_overrides={"rt_max": 20.0, "ms2_precursor_tol_da": 0.75},
     )
 
     assert settings.rt_max == pytest.approx(20.0)
     assert settings.nl_tolerance_ppm == pytest.approx(15.0)
+    assert settings.ms2_precursor_tol_da == pytest.approx(0.75)
 
 
 def test_apply_to_alignment_returns_runtime_standard_peak_options() -> None:

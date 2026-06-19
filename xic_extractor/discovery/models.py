@@ -8,6 +8,7 @@ from xic_extractor.discovery.evidence_config import (
 )
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
+PrecursorMzBasis = Literal["scan_precursor", "product_plus_neutral_loss"]
 
 DISCOVERY_CANDIDATE_REVIEW_COLUMNS = (
     "review_priority",
@@ -109,6 +110,7 @@ class DiscoverySettings:
     precursor_mz_tolerance_ppm: float = 20.0
     product_mz_tolerance_ppm: float = 20.0
     product_search_ppm: float = 50.0
+    ms2_precursor_tol_da: float = 1.6
     nl_min_intensity_ratio: float = 0.01
     seed_rt_gap_min: float = 0.20
     ms1_search_padding_min: float = 0.20
@@ -148,6 +150,8 @@ class DiscoverySeed:
     observed_loss_error_ppm: float
     matched_tag_names: tuple[str, ...] = ()
     tag_evidence_json: str = "{}"
+    scan_precursor_mz: float | None = None
+    precursor_mz_basis: PrecursorMzBasis = "scan_precursor"
 
 
 @dataclass(frozen=True)
@@ -263,7 +267,12 @@ class DiscoveryCandidate:
             ms1_support="missing",
             rt_alignment="missing",
             family_context="singleton",
-            candidate_id=f"{sample_stem}#{best_seed.scan_number}",
+            candidate_id=_candidate_id(
+                sample_stem=sample_stem,
+                best_seed=best_seed,
+                precursor_mz=precursor_mz,
+                product_mz=product_mz,
+            ),
             precursor_mz=precursor_mz,
             product_mz=product_mz,
             observed_neutral_loss_da=observed_neutral_loss_da,
@@ -311,3 +320,20 @@ class DiscoveryRunOutputs:
 class DiscoveryBatchOutputs:
     batch_index_csv: Path
     per_sample: tuple[DiscoveryRunOutputs, ...]
+
+
+def _candidate_id(
+    *,
+    sample_stem: str,
+    best_seed: DiscoverySeed,
+    precursor_mz: float,
+    product_mz: float,
+) -> str:
+    return (
+        f"{sample_stem}#{best_seed.scan_number}"
+        f"@mz{_format_id_mz(precursor_mz)}_p{_format_id_mz(product_mz)}"
+    )
+
+
+def _format_id_mz(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")

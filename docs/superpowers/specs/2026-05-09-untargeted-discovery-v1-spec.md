@@ -206,17 +206,24 @@ It is not:
 
 ### 5.3 Candidate id
 
-The candidate id should stay simple and traceable:
+The candidate id should stay traceable and row-unique:
 
 ```text
-<sample_stem>#<best_ms2_scan_id>
+<sample_stem>#<best_ms2_scan_id>@mz<precursor_mz>_p<product_mz>
 ```
 
 Example:
 
 ```text
-TumorBC2312_DNA#6095
+TumorBC2312_DNA#6095@mz258.1085_p142.0611
 ```
+
+The `sample#scan` prefix remains human-readable, but the precursor/product
+suffix is part of the public id. One MS2 scan can support multiple neutral-loss
+hypotheses, so `<sample_stem>#<best_ms2_scan_id>` alone is not unique enough
+for review sidecars or alignment provenance. Persisted review/action sidecars
+created against older ids must be rebound from the current candidate CSV before
+being applied to regenerated discovery outputs.
 
 If a grouped candidate contains multiple seed scans, the best scan should be selected by a deterministic rule, for example:
 
@@ -243,7 +250,7 @@ The fixed v1 brief columns are:
 | 5 | `ms1_support` | `strong`, `moderate`, `weak`, or `missing` summary of MS1 peak support. |
 | 6 | `rt_alignment` | `aligned`, `near`, `shifted`, or `missing` summary of MS1 apex vs seed RT. |
 | 7 | `family_context` | `singleton`, `representative`, or `member` summary of duplicate-signal context. |
-| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
+| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>@mz<precursor_mz>_p<product_mz>`. |
 | 9 | `precursor_mz` | Representative precursor m/z. |
 | 10 | `best_seed_rt` | RT of representative seed scan. |
 | 11 | `ms1_area` | MS1 integrated area. |
@@ -271,7 +278,7 @@ because this file is allowed to carry full candidate context.
 | 5 | `ms1_support` | `strong`, `moderate`, `weak`, or `missing` summary of MS1 peak support. |
 | 6 | `rt_alignment` | `aligned`, `near`, `shifted`, or `missing` summary of MS1 apex vs seed RT. |
 | 7 | `family_context` | `singleton`, `representative`, or `member` summary of duplicate-signal context. |
-| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>`. |
+| 8 | `candidate_id` | `<sample_stem>#<best_ms2_scan_id>@mz<precursor_mz>_p<product_mz>`. |
 | 9 | `feature_family_id` | Strict same-MS1-peak family id. |
 | 10 | `feature_family_size` | Count of candidates sharing the strict same-MS1-peak family. |
 | 11 | `feature_superfamily_id` | Broader close-overlap MS1 peak family id. |

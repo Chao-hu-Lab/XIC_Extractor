@@ -11,6 +11,7 @@ from xic_extractor.discovery.models import (
     DiscoverySeed,
     DiscoverySettings,
     NeutralLossProfile,
+    PrecursorMzBasis,
 )
 from xic_extractor.raw_reader import Ms2Scan, Ms2ScanEvent
 
@@ -46,28 +47,28 @@ def _seeds_from_scan(
 ) -> tuple[DiscoverySeed, ...]:
     seeds: list[DiscoverySeed] = []
     for profile in settings.neutral_loss_profiles:
-        seed = _seed_from_scan(
-            scan,
-            raw_file=raw_file,
-            settings=settings,
-            profile=profile,
+        seeds.extend(
+            _seeds_from_scan_profile(
+                scan,
+                raw_file=raw_file,
+                settings=settings,
+                profile=profile,
+            )
         )
-        if seed is not None:
-            seeds.append(seed)
     return tuple(seeds)
 
 
-def _seed_from_scan(
+def _seeds_from_scan_profile(
     scan: Ms2Scan,
     *,
     raw_file: Path,
     settings: DiscoverySettings,
     profile: NeutralLossProfile,
-) -> DiscoverySeed | None:
+) -> tuple[DiscoverySeed, ...]:
     neutral_loss_da = profile.neutral_loss_da
     expected_product = scan.precursor_mz - neutral_loss_da
     if expected_product <= 0.0 or scan.base_peak <= 0.0 or neutral_loss_da <= 0.0:
-        return None
+        return ()
 
     masses = np.asarray(scan.masses, dtype=float)
     intensities = np.asarray(scan.intensities, dtype=float)
@@ -77,29 +78,41 @@ def _seed_from_scan(
         or masses.size == 0
         or masses.size != intensities.size
     ):
-        return None
+        return ()
 
     intensity_floor = scan.base_peak * settings.nl_min_intensity_ratio
-    effective_product_search_ppm = max(
-        settings.product_search_ppm,
-        settings.nl_tolerance_ppm * neutral_loss_da / expected_product,
-    )
-    product_window_ppm = (
-        np.abs(masses - expected_product) / expected_product * 1_000_000.0
-    )
-    search_mask = (
-        (product_window_ppm <= effective_product_search_ppm)
-        & (intensities >= intensity_floor)
+    finite_signal_mask = (
+        (intensities >= intensity_floor)
         & np.isfinite(masses)
         & np.isfinite(intensities)
     )
-    if not search_mask.any():
-        return None
+    direct_mask = _direct_product_mask(
+        masses,
+        intensities,
+        scan=scan,
+        settings=settings,
+        neutral_loss_da=neutral_loss_da,
+        intensity_floor=intensity_floor,
+    )
+    inferred_precursors = masses + neutral_loss_da
+    inferred_mask = (
+        (
+            np.abs(scan.precursor_mz - inferred_precursors)
+            <= settings.ms2_precursor_tol_da
+        )
+        & (intensities >= intensity_floor)
+        & np.isfinite(masses)
+        & np.isfinite(intensities)
+        & np.isfinite(inferred_precursors)
+        & (inferred_precursors > 0.0)
+    )
 
     candidates: list[DiscoverySeed] = []
-    for index in np.flatnonzero(search_mask):
+    direct_candidates: list[DiscoverySeed] = []
+    direct_indices: set[int] = set()
+    for index in np.flatnonzero(direct_mask & finite_signal_mask):
+        direct_indices.add(int(index))
         product_mz = float(masses[int(index)])
-        product_intensity = float(intensities[int(index)])
         observed_loss_da = scan.precursor_mz - product_mz
         observed_loss_error_ppm = (
             abs(observed_loss_da - neutral_loss_da) / neutral_loss_da * 1_000_000.0
@@ -107,52 +120,165 @@ def _seed_from_scan(
         if observed_loss_error_ppm > settings.nl_tolerance_ppm + 1e-9:
             continue
 
-        candidates.append(
-            DiscoverySeed(
+        direct_candidates.append(
+            _build_seed(
                 raw_file=raw_file,
-                sample_stem=raw_file.stem,
-                scan_number=scan.scan_number,
-                rt=scan.rt,
+                scan=scan,
+                profile=profile,
                 precursor_mz=scan.precursor_mz,
                 product_mz=product_mz,
-                product_intensity=product_intensity,
-                neutral_loss_tag=profile.tag,
-                configured_neutral_loss_da=neutral_loss_da,
-                observed_neutral_loss_da=observed_loss_da,
+                product_intensity=float(intensities[int(index)]),
+                neutral_loss_da=neutral_loss_da,
+                observed_loss_da=observed_loss_da,
                 observed_loss_error_ppm=observed_loss_error_ppm,
-                matched_tag_names=(profile.tag,),
-                tag_evidence_json=_tag_evidence_json(
-                    profile.tag,
-                    scan=scan,
-                    product_mz=product_mz,
-                    product_intensity=product_intensity,
-                    observed_loss_error_ppm=observed_loss_error_ppm,
-                ),
+                precursor_mz_basis="scan_precursor",
+            )
+        )
+    if direct_candidates:
+        candidates.append(min(direct_candidates, key=_seed_candidate_rank))
+
+    for index in np.flatnonzero(inferred_mask & finite_signal_mask):
+        if int(index) in direct_indices:
+            continue
+        product_mz = float(masses[int(index)])
+        precursor_mz = product_mz + neutral_loss_da
+        candidates.append(
+            _build_seed(
+                raw_file=raw_file,
+                scan=scan,
+                profile=profile,
+                precursor_mz=precursor_mz,
+                product_mz=product_mz,
+                product_intensity=float(intensities[int(index)]),
+                neutral_loss_da=neutral_loss_da,
+                observed_loss_da=neutral_loss_da,
+                observed_loss_error_ppm=0.0,
+                precursor_mz_basis="product_plus_neutral_loss",
             )
         )
 
-    if not candidates:
-        return None
-    return min(
-        candidates,
-        key=lambda seed: (seed.observed_loss_error_ppm, -seed.product_intensity),
+    return tuple(
+        sorted(
+            _dedupe_seed_candidates(candidates),
+            key=lambda seed: (
+                seed.precursor_mz,
+                seed.product_mz,
+                seed.scan_number,
+                seed.neutral_loss_tag,
+            ),
+        )
     )
+
+
+def _direct_product_mask(
+    masses: np.ndarray,
+    intensities: np.ndarray,
+    *,
+    scan: Ms2Scan,
+    settings: DiscoverySettings,
+    neutral_loss_da: float,
+    intensity_floor: float,
+) -> np.ndarray:
+    expected_product = scan.precursor_mz - neutral_loss_da
+    if expected_product <= 0.0:
+        return np.zeros_like(masses, dtype=bool)
+    effective_product_search_ppm = max(
+        settings.product_search_ppm,
+        settings.nl_tolerance_ppm * neutral_loss_da / expected_product,
+    )
+    product_window_ppm = (
+        np.abs(masses - expected_product) / expected_product * 1_000_000.0
+    )
+    return (
+        (product_window_ppm <= effective_product_search_ppm)
+        & (intensities >= intensity_floor)
+        & np.isfinite(masses)
+        & np.isfinite(intensities)
+    )
+
+
+def _build_seed(
+    *,
+    raw_file: Path,
+    scan: Ms2Scan,
+    profile: NeutralLossProfile,
+    precursor_mz: float,
+    product_mz: float,
+    product_intensity: float,
+    neutral_loss_da: float,
+    observed_loss_da: float,
+    observed_loss_error_ppm: float,
+    precursor_mz_basis: PrecursorMzBasis,
+) -> DiscoverySeed:
+    return DiscoverySeed(
+        raw_file=raw_file,
+        sample_stem=raw_file.stem,
+        scan_number=scan.scan_number,
+        rt=scan.rt,
+        precursor_mz=precursor_mz,
+        product_mz=product_mz,
+        product_intensity=product_intensity,
+        neutral_loss_tag=profile.tag,
+        configured_neutral_loss_da=neutral_loss_da,
+        observed_neutral_loss_da=observed_loss_da,
+        observed_loss_error_ppm=observed_loss_error_ppm,
+        matched_tag_names=(profile.tag,),
+        tag_evidence_json=_tag_evidence_json(
+            profile.tag,
+            scan=scan,
+            precursor_mz=precursor_mz,
+            product_mz=product_mz,
+            product_intensity=product_intensity,
+            observed_loss_error_ppm=observed_loss_error_ppm,
+            precursor_mz_basis=precursor_mz_basis,
+        ),
+        scan_precursor_mz=scan.precursor_mz,
+        precursor_mz_basis=precursor_mz_basis,
+    )
+
+
+def _dedupe_seed_candidates(
+    candidates: list[DiscoverySeed],
+) -> tuple[DiscoverySeed, ...]:
+    best_by_key: dict[tuple[int, int, str], DiscoverySeed] = {}
+    for candidate in candidates:
+        key = (
+            round(candidate.precursor_mz * 1_000_000),
+            round(candidate.product_mz * 1_000_000),
+            candidate.neutral_loss_tag,
+        )
+        existing = best_by_key.get(key)
+        if existing is None or _seed_candidate_rank(candidate) < _seed_candidate_rank(
+            existing
+        ):
+            best_by_key[key] = candidate
+    return tuple(best_by_key.values())
+
+
+def _seed_candidate_rank(seed: DiscoverySeed) -> tuple[float, float, int]:
+    return (seed.observed_loss_error_ppm, -seed.product_intensity, seed.scan_number)
 
 
 def _tag_evidence_json(
     tag: str,
     *,
     scan: Ms2Scan,
+    precursor_mz: float,
     product_mz: float,
     product_intensity: float,
     observed_loss_error_ppm: float,
+    precursor_mz_basis: PrecursorMzBasis,
 ) -> str:
+    scan_precursor_delta_da = scan.precursor_mz - precursor_mz
     payload = {
         tag: {
             "scan_count": 1,
             "scan_ids": [scan.scan_number],
             "rt_min": scan.rt,
             "rt_max": scan.rt,
+            "precursor_mz_basis": precursor_mz_basis,
+            "scan_precursor_mz": scan.precursor_mz,
+            "scan_precursor_delta_da": scan_precursor_delta_da,
             "product_mz": product_mz,
             "max_intensity": product_intensity,
             "neutral_loss_error_ppm": observed_loss_error_ppm,

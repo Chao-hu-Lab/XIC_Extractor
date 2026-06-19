@@ -37,6 +37,7 @@ DISCOVERY_TUNING_OVERRIDE_KEYS = frozenset(
         "precursor_mz_tolerance_ppm",
         "product_mz_tolerance_ppm",
         "product_search_ppm",
+        "ms2_precursor_tol_da",
         "nl_min_intensity_ratio",
         "seed_rt_gap_min",
         "ms1_search_padding_min",

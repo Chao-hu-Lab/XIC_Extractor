@@ -71,14 +71,16 @@ def test_single_raw_pipeline_groups_strict_ms2_seeds_and_writes_dual_csvs(
     )
     rows = _read_csv(outputs.candidates_csv)
     assert len(rows) == 1
-    assert rows[0]["candidate_id"] == "TumorBC2312_DNA#202"
+    assert rows[0]["candidate_id"] == "TumorBC2312_DNA#202@mz258.1085_p142.0611"
     assert rows[0]["best_ms2_scan_id"] == "202"
     assert rows[0]["seed_scan_ids"] == "101;202"
     assert rows[0]["seed_event_count"] == "2"
     assert rows[0]["ms1_peak_found"] == "TRUE"
     review_rows = _read_csv(outputs.review_csv)
     assert len(review_rows) == 1
-    assert review_rows[0]["candidate_id"] == "TumorBC2312_DNA#202"
+    assert review_rows[0]["candidate_id"] == (
+        "TumorBC2312_DNA#202@mz258.1085_p142.0611"
+    )
     assert "review_note" in review_rows[0]
 
 
@@ -169,11 +171,15 @@ def test_batch_pipeline_writes_per_sample_csvs_and_index(
     second_rows = _read_csv(
         tmp_path / "out" / "NormalBC2257_DNA" / "discovery_candidates.csv"
     )
-    assert [row["candidate_id"] for row in first_rows] == ["TumorBC2312_DNA#101"]
-    assert [row["candidate_id"] for row in first_review_rows] == [
-        "TumorBC2312_DNA#101"
+    assert [row["candidate_id"] for row in first_rows] == [
+        "TumorBC2312_DNA#101@mz258.1085_p142.0611"
     ]
-    assert [row["candidate_id"] for row in second_rows] == ["NormalBC2257_DNA#202"]
+    assert [row["candidate_id"] for row in first_review_rows] == [
+        "TumorBC2312_DNA#101@mz258.1085_p142.0611"
+    ]
+    assert [row["candidate_id"] for row in second_rows] == [
+        "NormalBC2257_DNA#202@mz258.1085_p142.0611"
+    ]
     assert not (tmp_path / "out" / "discovery_candidates.csv").exists()
     assert all(raw.entered and raw.closed for raw in raw_by_path.values())
 
