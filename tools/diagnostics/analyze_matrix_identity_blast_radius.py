@@ -525,6 +525,16 @@ def _normalized_benchmark_row(
     target_name = _target_name(match_row) or _target_name(summary_row)
     family_id = match_row.get("feature_family_id", "")
     selected_family_id = summary_row.get("selected_feature_id", "")
+    active_dna_istd_candidate = ""
+    if _is_exact_target_match(match_row):
+        active_dna_istd_candidate = (
+            match_row.get("active_dna_istd_candidate")
+            or _selected_family_active_tag(
+                family_id=family_id,
+                selected_family_id=selected_family_id,
+                summary_row=summary_row,
+            )
+        )
     return {
         **dict(match_row),
         "target_name": target_name,
@@ -534,15 +544,12 @@ def _normalized_benchmark_row(
             or summary_row.get("benchmark_class")
             or summary_row.get("status", "")
         ),
-        "active_dna_istd_candidate": (
-            match_row.get("active_dna_istd_candidate")
-            or _selected_family_active_tag(
-                family_id=family_id,
-                selected_family_id=selected_family_id,
-                summary_row=summary_row,
-            )
-        ),
+        "active_dna_istd_candidate": active_dna_istd_candidate,
     }
+
+
+def _is_exact_target_match(match_row: Mapping[str, str]) -> bool:
+    return (match_row.get("match_type") or "exact") == "exact"
 
 
 def _selected_family_active_tag(

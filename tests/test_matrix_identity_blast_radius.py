@@ -334,6 +334,67 @@ def test_blast_radius_joins_current_targeted_istd_benchmark_aliases(
     assert by_family["FAM002"]["active_dna_istd_candidate"] == ""
 
 
+def test_blast_radius_does_not_promote_isotope_shift_target_alias(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_run(
+        tmp_path / "alignment",
+        review_rows=[
+            _review_row("FAM001", "TRUE", "owner_complete_link;owner_count=2"),
+        ],
+        cell_rows=[
+            _cell_row("FAM001", "sample-a", "detected", 100.0),
+            _cell_row("FAM001", "sample-b", "detected", 90.0),
+        ],
+    )
+    benchmark_dir = tmp_path / "benchmark"
+    benchmark_dir.mkdir()
+    _write_tsv(
+        benchmark_dir / "targeted_istd_benchmark_matches.tsv",
+        [
+            {
+                "target_label": "d4-N6-2HE-dA",
+                "feature_family_id": "FAM001",
+                "match_type": "isotope_shift",
+            },
+        ],
+    )
+    _write_tsv(
+        benchmark_dir / "targeted_istd_benchmark_summary.tsv",
+        [
+            {
+                "target_label": "d4-N6-2HE-dA",
+                "role": "ISTD",
+                "status": "PASS",
+                "active_tag": "TRUE",
+                "selected_feature_id": "FAM001",
+            },
+        ],
+    )
+    (benchmark_dir / "targeted_istd_benchmark.json").write_text(
+        json.dumps({"overall_status": "PASS"}),
+        encoding="utf-8",
+    )
+
+    code = blast.main(
+        [
+            "--alignment-run",
+            str(alignment_dir),
+            "--benchmark-dir",
+            str(benchmark_dir),
+            "--output-dir",
+            str(tmp_path / "blast"),
+            "--require-targeted-benchmark",
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(tmp_path / "blast" / "matrix_identity_blast_radius.tsv")
+    assert rows[0]["targeted_target_name"] == "d4-N6-2HE-dA"
+    assert rows[0]["targeted_benchmark_class"] == "PASS"
+    assert rows[0]["active_dna_istd_candidate"] == ""
+
+
 def test_blast_radius_input_bundle_preserves_existing_order_contracts() -> None:
     review_rows = [
         _review_row("FAM_B", "TRUE", "owner_complete_link;owner_count=2"),

@@ -418,7 +418,9 @@ def test_alignment_matrix_normalizes_sample_columns_once(
     assert matrix.areas_by_family["FAM002"] == {"QC1": 20.0, "S2": 200.0}
 
 
-def test_active_istd_can_pass_with_primary_isotope_shift_fallback(tmp_path: Path):
+def test_active_istd_isotope_shift_only_is_diagnostic_not_primary_pass(
+    tmp_path: Path,
+) -> None:
     targeted = tmp_path / "targeted.xlsx"
     alignment = tmp_path / "alignment"
     isotope_shift = benchmark.ISOTOPE_SHIFT_DA
@@ -469,8 +471,11 @@ def test_active_istd_can_pass_with_primary_isotope_shift_fallback(tmp_path: Path
         output_dir=tmp_path / "benchmark",
     )
 
-    assert summaries[0].status == "PASS"
-    assert summaries[0].selected_feature_id == "FAM_M1"
+    assert summaries[0].status == "FAIL"
+    assert summaries[0].failure_modes == ("MISS",)
+    assert summaries[0].primary_match_count == 0
+    assert summaries[0].primary_feature_ids == ()
+    assert summaries[0].selected_feature_id == ""
     matches = _read_tsv(outputs.matches_tsv)
     assert matches[0]["match_type"] == "isotope_shift"
     assert abs(float(matches[0]["mass_shift_da"]) - isotope_shift) < 1e-4

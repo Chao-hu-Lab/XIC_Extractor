@@ -49,7 +49,9 @@ def _summarize_target(
     )
     targeted_mean_rt = _mean(point.rt for point in benchmark_points)
     primary_matches = tuple(
-        match for match in matches if match.include_in_primary_matrix
+        match
+        for match in matches
+        if match.include_in_primary_matrix and match.match_type == "exact"
     )
     selected = primary_matches[0] if len(primary_matches) == 1 else None
     selected_family = selected.feature_family_id if selected else ""
