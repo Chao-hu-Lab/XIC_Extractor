@@ -162,6 +162,8 @@ def validate_quant_matrix_validation_evidence_packet(
     validation_evidence_json: Path,
     *,
     source_root: Path | None = None,
+    cell_provenance_contract_summary: Path | None = None,
+    cell_provenance_minimal_fixture: Path | None = None,
 ) -> list[str]:
     problems: list[str] = []
     try:
@@ -208,6 +210,8 @@ def validate_quant_matrix_validation_evidence_packet(
             problems=problems,
             label=tier or f"row {index}",
             source_root=source_root,
+            cell_provenance_contract_summary=cell_provenance_contract_summary,
+            cell_provenance_minimal_fixture=cell_provenance_minimal_fixture,
         )
         _append_source_binding_problems(
             row,
@@ -636,6 +640,8 @@ def _append_artifact_binding_problems(
     problems: list[str],
     label: str,
     source_root: Path | None,
+    cell_provenance_contract_summary: Path | None,
+    cell_provenance_minimal_fixture: Path | None,
 ) -> None:
     relpath = _text(row.get("artifact_path"))
     expected_sha256 = _text(row.get("artifact_sha256"))
@@ -663,6 +669,12 @@ def _append_artifact_binding_problems(
             validate_quant_matrix_downstream_impact_smoke(
                 artifact,
                 artifact_root=source_root,
+                cell_provenance_contract_summary=(
+                    cell_provenance_contract_summary
+                ),
+                cell_provenance_minimal_fixture=(
+                    cell_provenance_minimal_fixture
+                ),
             ),
         )
 

@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import scripts.build_quant_matrix_promotion_packet_v2 as packet_v2_module
 from scripts.build_quant_matrix_promotion_packet_v2 import (
     PROMOTION_PACKET_V2_SUMMARY_SCHEMA,
     build_quant_matrix_promotion_packet_v2,
@@ -137,6 +138,97 @@ def test_promotion_packet_v2_rejects_stale_real_bundle_readiness(
 
     assert any("readiness production_ready must be true" in p for p in problems)
     assert any("readiness summary is stale" in p for p in problems)
+
+
+def test_promotion_packet_v2_check_accepts_externalized_real_bundle_cell_provenance(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    real_bundle = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    sources = _write_science_sources(tmp_path)
+    outputs = build_quant_matrix_promotion_packet_v2(
+        output_dir=tmp_path / "packet_v2",
+        source_root=tmp_path,
+        real_bundle_summary_json=real_bundle["summary_json"],
+        large_cohort_artifact=sources["large"],
+        heldout_oracle_artifact=sources["oracle"],
+        cohort_id="synthetic_85raw",
+        oracle_packet_id="synthetic_oracle",
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+    real_bundle["cell_provenance"].unlink()
+
+    assert (
+        validate_quant_matrix_promotion_packet_v2(
+            summary_json=outputs["summary_json"],
+            source_root=tmp_path,
+            expected_source_run_id="synthetic-current-511-authority-replay",
+            expected_downstream_scope="synthetic_current_authority_replay",
+            expected_accepted_backfill_count=1,
+        )
+        == []
+    )
+
+
+def test_promotion_packet_v2_rejects_externalized_provenance_readiness_drift(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    real_bundle = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    sources = _write_science_sources(tmp_path)
+    outputs = build_quant_matrix_promotion_packet_v2(
+        output_dir=tmp_path / "packet_v2",
+        source_root=tmp_path,
+        real_bundle_summary_json=real_bundle["summary_json"],
+        large_cohort_artifact=sources["large"],
+        heldout_oracle_artifact=sources["oracle"],
+        cohort_id="synthetic_85raw",
+        oracle_packet_id="synthetic_oracle",
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+    real_bundle["cell_provenance"].unlink()
+    original_evaluate = packet_v2_module.evaluate_quant_matrix_promotion_readiness
+
+    def drifted_evaluate(*args, **kwargs):
+        result = dict(original_evaluate(*args, **kwargs))
+        summary = json.loads(result["summary_json"].read_text(encoding="utf-8"))
+        summary["production_ready"] = False
+        result["summary_json"].write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        packet_v2_module,
+        "evaluate_quant_matrix_promotion_readiness",
+        drifted_evaluate,
+    )
+
+    problems = validate_quant_matrix_promotion_packet_v2(
+        summary_json=outputs["summary_json"],
+        source_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("readiness summary is stale" in problem for problem in problems)
 
 
 def test_promotion_packet_v2_default_check_rejects_non_current_511_bundle(

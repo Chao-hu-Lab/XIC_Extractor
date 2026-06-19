@@ -6,12 +6,26 @@
   "all_reference_outputs_match": true,
   "artifacts": {
     "cell_provenance": {
+      "externalized": true,
+      "externalized_path": "local_validation_artifacts/externalized_superpowers_validation/quant_matrix_default_product_activation_v1/default_output/cell_provenance.tsv",
       "path": "default_output/cell_provenance.tsv",
+      "replacement_or_summary": "default_output/cell_provenance_summary.json",
+      "retention_decision": "externalize",
       "sha256": "D017326F8A7FA46F7C9C969065C8B2FF1B614953A65E8C19EC8F27615B7C327C"
+    },
+    "cell_provenance_minimal_fixture": {
+      "path": "default_output/cell_provenance_minimal_fixture.tsv",
+      "retention_decision": "keep_minimal_fixture",
+      "sha256": "B1EC4C8824A1DF9750FA247583FFEF1DF6AE3E6748F84661222554EAE3797F97"
+    },
+    "cell_provenance_summary": {
+      "path": "default_output/cell_provenance_summary.json",
+      "retention_decision": "keep_summary",
+      "sha256": "5E139FE1ECC4664F3ACF98D6D1C5A55EDC58E2FE3612A9BAB128BBB9B28B52C8"
     },
     "checks_tsv": {
       "path": "default_product_activation_checks.tsv",
-      "sha256": "BDA6D8B1557AC14897DD49CA4AB45A544AE0138BCEA387A68B60B82340C28942"
+      "sha256": "323FCDC3E1778819F0E1A279C0303BF882B8E59A7C5BB8F37627DF6347DCE805"
     },
     "expected_diff_summary": {
       "path": "default_output/expected_diff_summary.tsv",
@@ -32,7 +46,7 @@
   },
   "authority_statement": "The default quant matrix is explicitly activated from the current 511-cell ProductionAcceptanceManifest and expected-diff contract. Accepted Backfill values are quantification values in the default matrix, not detections or truth claims; detected-only claims remain reconstructable from cell_provenance.",
   "broad_backfill_unparked": false,
-  "check_count": 9,
+  "check_count": 8,
   "default_matrix_files_written": true,
   "default_quant_matrix_changed": true,
   "detected_cell_count": "17489",
@@ -46,11 +60,11 @@
     "input_matrix_identity": "docs/superpowers/validation/quant_matrix_real_bundle_v1/inputs/alignment_matrix_identity.tsv",
     "input_matrix_identity_sha256": "599E4D33C2582D7F35733BBAC18102B0E3D55E54939CE434049F4E4716971A48",
     "product_ready_closeout_summary_json": "docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/quant_matrix_product_ready_closeout_summary.json",
-    "product_ready_closeout_summary_json_sha256": "9D0AB0673DA3086AEF62423C934BB09A2AA7408B0DBA286626E40073EE695987",
+    "product_ready_closeout_summary_json_sha256": "12B1C5027E23003C7D10DCDED98607F97C47FDAAF343B3873B9F12C1ABF74BBD",
     "production_acceptance_manifest": "docs/superpowers/validation/quant_matrix_real_bundle_v1/inputs/production_acceptance_manifest.tsv",
     "production_acceptance_manifest_sha256": "BFF67E9441646B22EFCBD0AF9468876560B08FBF4A90F7B340B0DF614325FD8E",
     "real_bundle_summary_json": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_real_bundle_summary.json",
-    "real_bundle_summary_json_sha256": "0479331B3E9A17492ECDB4420E897432B7FEF8973047889C9B45151DC2DEB9C9"
+    "real_bundle_summary_json_sha256": "820907AD1890B6EF7B5039AA3A59B8B2D9D65E44C7EE7D1B46797D2FC40EDB38"
   },
   "phase": "phase11_default_product_activation",
   "product_authority_scope": "backfill_policy_write_ready_rows",

@@ -37,6 +37,11 @@ from xic_extractor.alignment.quant_matrix_downstream_impact import (
     build_quant_matrix_downstream_impact_smoke,
     validate_quant_matrix_downstream_impact_smoke,
 )
+from xic_extractor.alignment.quant_matrix_fixture_contract import (
+    validate_fixture_contract,
+    write_cell_provenance_contract,
+    write_review_rows_contract,
+)
 from xic_extractor.alignment.quant_matrix_promotion import (
     evaluate_quant_matrix_promotion_readiness,
 )
@@ -278,6 +283,12 @@ def build_quant_matrix_real_bundle(
         output_dir=review_dir,
         html_path=rendered_review_dir / "quant_matrix_review_report.html",
     )
+    fixture_contract_outputs = _write_fixture_contract_outputs(
+        activation_outputs=activation_outputs,
+        review_outputs=review_outputs,
+        quant_dir=quant_dir,
+        review_dir=review_dir,
+    )
     _rewrite_review_artifact_paths(
         summary_json=review_outputs["summary_json"],
         html_path=review_outputs["html"],
@@ -342,6 +353,7 @@ def build_quant_matrix_real_bundle(
         review_html_summary=review_html_summary,
         downstream_outputs=downstream_outputs,
         readiness_outputs=readiness_outputs,
+        fixture_contract_outputs=fixture_contract_outputs,
         accepted_backfill_count=len(manifest_rows),
         source_run_id=_source_run_id(source_paths.activation_inputs_summary),
         downstream_scope=downstream_scope,
@@ -359,9 +371,21 @@ def build_quant_matrix_real_bundle(
         "expected_diff": expected_diff,
         "quant_matrix": activation_outputs["quant_matrix"],
         "cell_provenance": activation_outputs["cell_provenance"],
+        "cell_provenance_summary_json": fixture_contract_outputs[
+            "cell_provenance_summary"
+        ],
+        "cell_provenance_minimal_fixture": fixture_contract_outputs[
+            "cell_provenance_minimal_fixture"
+        ],
         "row_summary": activation_outputs["row_summary"],
         "expected_diff_summary": activation_outputs["expected_diff_summary"],
         "source_summary": activation_outputs["source_summary"],
+        "review_rows_summary_json": fixture_contract_outputs[
+            "review_rows_summary"
+        ],
+        "review_rows_minimal_fixture": fixture_contract_outputs[
+            "review_rows_minimal_fixture"
+        ],
         "review_summary_json": review_outputs["summary_json"],
         "downstream_impact_summary_json": downstream_outputs["summary_json"],
         "readiness_summary_json": readiness_outputs["summary_json"],
@@ -446,13 +470,40 @@ def validate_quant_matrix_real_bundle(
         )
     downstream = artifact_paths.get("downstream_impact_summary_json")
     if downstream is not None:
-        problems.extend(validate_quant_matrix_downstream_impact_smoke(downstream))
+        problems.extend(
+            validate_quant_matrix_downstream_impact_smoke(
+                downstream,
+                cell_provenance_contract_summary=artifact_paths.get(
+                    "cell_provenance_summary",
+                ),
+                cell_provenance_minimal_fixture=artifact_paths.get(
+                    "cell_provenance_minimal_fixture",
+                ),
+            )
+        )
     expected_summary = artifact_paths.get("expected_diff_summary")
     if expected_summary is not None:
         _append_expected_diff_problems(expected_summary, payload, problems)
-    cell_provenance = artifact_paths.get("cell_provenance")
-    if cell_provenance is not None:
-        _append_cell_provenance_problems(cell_provenance, payload, problems)
+    _append_fixture_contract_artifact_problems(
+        artifact_paths,
+        payload,
+        problems,
+        summary_label="cell_provenance_summary",
+        fixture_label="cell_provenance_minimal_fixture",
+        count_column="cell_status",
+        count_value="accepted_backfill",
+        expected_count=expected_accepted_backfill_count,
+    )
+    _append_fixture_contract_artifact_problems(
+        artifact_paths,
+        payload,
+        problems,
+        summary_label="review_rows_summary",
+        fixture_label="review_rows_minimal_fixture",
+        count_column="report_authority",
+        count_value="review_only",
+        expected_count=None,
+    )
     readiness = artifact_paths.get("readiness_summary_json")
     if readiness is not None:
         _append_readiness_problems(readiness, problems)
@@ -772,6 +823,7 @@ def _summary_payload(
     review_html_summary: Path | None,
     downstream_outputs: Mapping[str, Path],
     readiness_outputs: Mapping[str, Path],
+    fixture_contract_outputs: Mapping[str, Path],
     accepted_backfill_count: int,
     source_run_id: str,
     downstream_scope: str,
@@ -783,21 +835,51 @@ def _summary_payload(
         "production_acceptance_manifest": production_acceptance_manifest,
         "expected_diff": expected_diff,
         "quant_matrix": activation_outputs["quant_matrix"],
-        "cell_provenance": activation_outputs["cell_provenance"],
         "row_summary": activation_outputs["row_summary"],
         "expected_diff_summary": activation_outputs["expected_diff_summary"],
         "source_summary": activation_outputs["source_summary"],
-        "review_rows": review_outputs["review_rows"],
         "review_summary_json": review_outputs["summary_json"],
         "downstream_impact_summary_json": downstream_outputs["summary_json"],
         "downstream_impact_rows_tsv": downstream_outputs["rows_tsv"],
         "readiness_summary_json": readiness_outputs["summary_json"],
         "readiness_checks_tsv": readiness_outputs["checks_tsv"],
+        "cell_provenance_summary": fixture_contract_outputs[
+            "cell_provenance_summary"
+        ],
+        "cell_provenance_minimal_fixture": fixture_contract_outputs[
+            "cell_provenance_minimal_fixture"
+        ],
+        "review_rows_summary": fixture_contract_outputs["review_rows_summary"],
+        "review_rows_minimal_fixture": fixture_contract_outputs[
+            "review_rows_minimal_fixture"
+        ],
     }
     artifact_entries: dict[str, dict[str, Any]] = {
         label: _artifact_entry(path, output_dir=output_dir)
         for label, path in artifacts.items()
     }
+    artifact_entries["cell_provenance"] = _externalized_fixture_source_entry(
+        activation_outputs["cell_provenance"],
+        summary_path=fixture_contract_outputs["cell_provenance_summary"],
+        output_dir=output_dir,
+        repo_root=repo_root,
+    )
+    artifact_entries["review_rows"] = _externalized_fixture_source_entry(
+        review_outputs["review_rows"],
+        summary_path=fixture_contract_outputs["review_rows_summary"],
+        output_dir=output_dir,
+        repo_root=repo_root,
+    )
+    artifact_entries["cell_provenance_summary"]["retention_decision"] = (
+        "keep_summary"
+    )
+    artifact_entries["cell_provenance_minimal_fixture"]["retention_decision"] = (
+        "keep_minimal_fixture"
+    )
+    artifact_entries["review_rows_summary"]["retention_decision"] = "keep_summary"
+    artifact_entries["review_rows_minimal_fixture"]["retention_decision"] = (
+        "keep_minimal_fixture"
+    )
     if review_html_summary is None:
         artifact_entries["review_html"] = _artifact_entry(
             review_outputs["html"],
@@ -875,6 +957,67 @@ def _artifact_entry(path: Path, *, output_dir: Path) -> dict[str, str]:
         "path": path.relative_to(output_dir).as_posix(),
         "sha256": file_sha256(path),
     }
+
+
+def _write_fixture_contract_outputs(
+    *,
+    activation_outputs: Mapping[str, Path],
+    review_outputs: Mapping[str, Path],
+    quant_dir: Path,
+    review_dir: Path,
+) -> dict[str, Path]:
+    cell_summary = quant_dir / "cell_provenance_summary.json"
+    cell_fixture = quant_dir / "cell_provenance_minimal_fixture.tsv"
+    review_summary = review_dir / "quant_matrix_review_rows_summary.json"
+    review_fixture = review_dir / "quant_matrix_review_rows_minimal_fixture.tsv"
+    write_cell_provenance_contract(
+        activation_outputs["cell_provenance"],
+        cell_summary,
+        cell_fixture,
+        source_relpath="quant_matrix_version/cell_provenance.tsv",
+    )
+    write_review_rows_contract(
+        review_outputs["review_rows"],
+        review_summary,
+        review_fixture,
+        source_relpath="review/quant_matrix_review_rows.tsv",
+    )
+    return {
+        "cell_provenance_summary": cell_summary,
+        "cell_provenance_minimal_fixture": cell_fixture,
+        "review_rows_summary": review_summary,
+        "review_rows_minimal_fixture": review_fixture,
+    }
+
+
+def _externalized_fixture_source_entry(
+    path: Path,
+    *,
+    summary_path: Path,
+    output_dir: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    return {
+        "path": path.relative_to(output_dir).as_posix(),
+        "sha256": file_sha256(path),
+        "externalized": True,
+        "externalized_path": _display_path(
+            _externalized_validation_artifact_path(path, output_dir=output_dir),
+            base_dir=repo_root,
+        ),
+        "replacement_or_summary": summary_path.relative_to(output_dir).as_posix(),
+        "retention_decision": "externalize",
+    }
+
+
+def _externalized_validation_artifact_path(path: Path, *, output_dir: Path) -> Path:
+    relpath = path.relative_to(output_dir)
+    return (
+        ROOT
+        / "local_validation_artifacts/externalized_superpowers_validation/"
+        "quant_matrix_real_bundle_v1"
+        / relpath
+    )
 
 
 def _original_entry(path: Path, *, repo_root: Path) -> dict[str, str]:
@@ -1146,6 +1289,15 @@ def _append_externalized_artifact_problems(
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         problems.append(f"{label}: replacement summary invalid: {exc}")
         return
+    if summary.get("schema_version") == "quant_matrix_fixture_contract_v1":
+        _append_externalized_fixture_contract_problems(
+            label,
+            raw_entry,
+            summary,
+            summary_path=summary_path,
+            problems=problems,
+        )
+        return
     expected_original = _display_path(output_dir / relpath, base_dir=repo_root)
     if summary.get("original_path") != expected_original:
         problems.append(f"{label}: replacement summary original_path mismatch")
@@ -1155,6 +1307,31 @@ def _append_externalized_artifact_problems(
         problems.append(f"{label}: replacement summary retention_decision mismatch")
     if summary.get("may_grant_product_authority") is not False:
         problems.append(f"{label}: replacement summary must not grant authority")
+
+
+def _append_externalized_fixture_contract_problems(
+    label: str,
+    raw_entry: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    *,
+    summary_path: Path,
+    problems: list[str],
+) -> None:
+    if summary.get("source_relpath") != raw_entry.get("path"):
+        problems.append(f"{label}: fixture contract source_relpath mismatch")
+    if summary.get("source_sha256") != str(raw_entry.get("sha256", "")).upper():
+        problems.append(f"{label}: fixture contract source_sha256 mismatch")
+    if summary.get("may_grant_product_authority") is not False:
+        problems.append(f"{label}: fixture contract must not grant authority")
+    fixture = summary.get("minimal_fixture")
+    if not isinstance(fixture, dict):
+        problems.append(f"{label}: fixture contract missing minimal_fixture")
+        return
+    fixture_path = summary_path.parent / str(fixture.get("path", ""))
+    problems.extend(
+        f"{label}: {problem}"
+        for problem in validate_fixture_contract(summary_path, fixture_path)
+    )
 
 
 def _append_source_artifact_copy_problems(
@@ -1269,6 +1446,68 @@ def _append_cell_provenance_problems(
     )
     if accepted_count != optional_int(payload.get("accepted_backfill_count", "")):
         problems.append("cell_provenance accepted_backfill_count mismatch")
+
+
+def _append_fixture_contract_artifact_problems(
+    artifact_paths: Mapping[str, Path],
+    payload: Mapping[str, Any],
+    problems: list[str],
+    *,
+    summary_label: str,
+    fixture_label: str,
+    count_column: str,
+    count_value: str,
+    expected_count: int | None,
+) -> None:
+    summary_path = artifact_paths.get(summary_label)
+    fixture_path = artifact_paths.get(fixture_label)
+    if summary_path is None:
+        problems.append(f"{_contract_label(summary_label)}: artifact missing")
+        return
+    if fixture_path is None:
+        problems.append(f"{_contract_label(fixture_label)}: artifact missing")
+        return
+    contract_problems = validate_fixture_contract(summary_path, fixture_path)
+    for problem in contract_problems:
+        label = (
+            _contract_label(fixture_label)
+            if "minimal fixture" in problem
+            else _contract_label(summary_label)
+        )
+        problems.append(f"{label}: {problem}")
+    if contract_problems:
+        return
+    try:
+        contract = _read_json_object(summary_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        problems.append(f"{summary_label}: {exc}")
+        return
+    counts = contract.get("counts")
+    if not isinstance(counts, dict):
+        problems.append(f"{summary_label}: counts missing")
+        return
+    raw_column_counts = counts.get(count_column)
+    if not isinstance(raw_column_counts, dict):
+        problems.append(f"{summary_label}: {count_column} counts missing")
+        return
+    observed = optional_int(raw_column_counts.get(count_value, ""))
+    if expected_count is not None and observed != expected_count:
+        problems.append(f"{summary_label}: {count_value} count mismatch")
+    if count_column == "report_authority":
+        source_row_count = optional_int(contract.get("source_row_count", ""))
+        if observed != source_row_count:
+            problems.append(f"{summary_label}: review_only row count mismatch")
+    if payload.get("may_promote_default_quant_matrix") is not False:
+        problems.append(f"{summary_label}: payload promotion flag must stay false")
+
+
+def _contract_label(label: str) -> str:
+    return {
+        "cell_provenance_summary": "cell_provenance summary",
+        "cell_provenance_minimal_fixture": "cell_provenance minimal fixture",
+        "review_rows_summary": "review rows summary",
+        "review_rows_minimal_fixture": "review rows minimal fixture",
+    }.get(label, label)
 
 
 def _append_readiness_problems(readiness: Path, problems: list[str]) -> None:

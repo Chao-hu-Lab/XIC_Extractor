@@ -44,6 +44,7 @@
 | `tools/diagnostics/` | 一次性診斷工具，**不打包** | 否 |
 | `tests/` | pytest 測試（扁平結構 + `fixtures/`） | 否，exclude |
 | `docs/` | 文件、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
+| `docs/superpowers/fixtures/` | Durable manual oracles、expected-diff contracts、schema fixtures、dated diagnostic-ledger snapshots；不是 generated output dump，新檔需 `ARTIFACT_INVENTORY.tsv` 分類 | 否 |
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
 | `config/` | runtime 設定；**只 `*.example.csv` 與固定列表（如 `RNA.csv`）被追蹤** | 範本 CSV |
 | `.github/` | GitHub Actions workflows + dependabot | 否 |

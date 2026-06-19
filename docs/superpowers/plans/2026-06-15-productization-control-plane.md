@@ -3023,6 +3023,41 @@ at that older checkpoint, not the latest release claim.
   before claiming the released default matrix contains the `300.1605` target
   row.
 
+### 2026-06-19 - superpowers_fixture_retention_cleanup_v1
+
+- Lane: repo hygiene / `docs/superpowers/fixtures` retention policy.
+- Previous tier: unchanged. Fixture files mixed active contracts, manual
+  oracles, ledger snapshots, dated diagnostic packets, and historical scratch
+  without a single inventory/hash policy.
+- New tier: unchanged. No product maturity tier, active lane, ProductWriter
+  authority, matrix authority, workbook behavior, GUI behavior, selected
+  peak/area, counted detection, default extraction, or broad Backfill status
+  changed.
+- Evidence: `docs/superpowers/fixtures/RETENTION.md` now defines the fixture
+  retention decisions; `docs/superpowers/fixtures/ARTIFACT_INVENTORY.tsv`
+  inventories 28 retained fixture files, excluding the inventory itself to
+  avoid self-hash churn. The inventory currently records 4 `keep_contract`,
+  3 `keep_manual_oracle`, 1 `keep_manifest`, 12 `keep_ledger_snapshot`,
+  3 `keep_summary`, 1 `needs_human_review`, and 4 `archive_later` rows.
+  `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/README.md` captures
+  duplicate snapshot groups and historical hash-drift observations without
+  rewriting ledger conclusions.
+- Product surface changed: docs/fixture-retention metadata only. Active fixture
+  paths remain stable, and no writer/output/schema/matrix authority changed.
+- Validation: closeout checks passed:
+  `uv run python scripts/check_superpowers_fixture_retention.py`
+  (`28` files, `1` `needs_human_review`, `4` `archive_later`);
+  `uv run pytest tests/test_superpowers_fixture_retention.py -v --tb=short`;
+  fixture consumer shard
+  `uv run pytest tests/test_shared_peak_identity_oracle.py tests/test_shared_peak_identity_classifier.py tests/test_shared_peak_identity_assembler.py tests/test_shared_peak_identity_schema.py tests/test_alignment_tsv_writer.py -v --tb=short`
+  (`59 passed`); and scoped `ruff check` for the fixture retention checker and
+  tests. Focused checker tests now include `keep_summary` missing-file rejection
+  and strict/non-strict `needs_human_review` behavior.
+- Remaining blocker: resolve
+  `docs/superpowers/fixtures/chrom_peak_segment_presence_review_manual_oracle_v1.tsv`
+  as either an active manual oracle with consumer coverage or an archived
+  note-only oracle.
+
 ### 2026-06-19 - validation_artifact_retention_cleanup_v1
 
 - Lane: repo hygiene / `docs/superpowers/validation` retention policy.
@@ -3035,37 +3070,52 @@ at that older checkpoint, not the latest release claim.
   changed.
 - Evidence: `docs/superpowers/validation/RETENTION.md` now defines retention
   decisions; `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv` inventories
-  298 effective validation rows; `docs/superpowers/validation/lockbox_static_review_v1/README.md`
-  preserves the static-review regeneration/use path.
+  304 validation rows: 126 `keep_contract`, 39 `keep_summary`,
+  4 `keep_minimal_fixture`, and 135 `externalize`.
+  `docs/superpowers/validation/lockbox_static_review_v1/README.md` preserves
+  the static-review regeneration/use path.
   `scripts/check_validation_artifact_retention.py` and
   `tests/test_validation_artifact_retention.py` now enforce inventory coverage,
   rendered-artifact externalization, stale rendered-path replacement mapping,
-  externalized-local verification, and explicit `shrink_later` reporting.
-  The completed cleanup wave externalized 132 generated validation artifacts
-  / 12.19 MB from git to ignored local storage under
+  externalized-local verification, explicit `shrink_later` reporting, and
+  `keep_minimal_fixture` retention for small synthetic readiness fixtures.
+  The completed cleanup wave externalized 135 generated validation artifacts
+  from git to ignored local storage under
   `local_validation_artifacts/externalized_superpowers_validation/`, while
-  keeping contract indexes, source hashes, status indexes, summaries, and
-  checker inputs in git.
+  keeping contract indexes, source hashes, status indexes, summaries, minimal
+  fixtures, and checker inputs in git.
 - Product surface changed: docs/artifact retention only. Rendered Lockbox
   review HTML/PNG outputs are no longer version-controlled by default; clean
   checkout contract artifacts, status indexes, source summaries, and checker
   inputs remain tracked. QuantMatrix review HTML and duplicated promotion-packet
   downstream input copies are likewise externalized with tracked summary/hash
-  bindings. Matrix values and product outputs are unchanged.
+  bindings. Full QuantMatrix `cell_provenance.tsv` and
+  `quant_matrix_review_rows.tsv` dumps now have tracked summary JSON plus
+  minimal-fixture replacements for clean-checkout validation. Matrix values,
+  ProductWriter defaults, selected peak/area, counted detection, workbook/GUI
+  behavior, Backfill authority, and product outputs are unchanged.
+  Review/replay validation is stricter: check-only paths now rerun temporary
+  QuantMatrix activation and compare fresh `cell_provenance.tsv` hashes against
+  tracked summary `source_sha256` values before accepting externalized full
+  TSVs.
 - Validation: closeout checks passed:
-  `uv run python scripts/check_validation_artifact_retention.py --require-externalized-local`
-  (`166` retained validation files, `132` externalized, `4` `shrink_later`);
+  `uv run python scripts/check_validation_artifact_retention.py --strict --require-externalized-local`
+  (`169` retained validation files, `135` externalized, `0` `shrink_later`);
   `uv run python scripts/check_productization_state.py`;
   `uv run python scripts/build_quant_matrix_real_bundle.py --check-only`;
   `uv run python scripts/build_quant_matrix_promotion_packet_v2.py --check-only`;
   `uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only`;
   `uv run python scripts/build_quant_matrix_product_ready_closeout.py --check-only`;
   `uv run python scripts/build_quant_matrix_default_product_activation.py --check-only`;
-  focused pytest shard covering lockbox, QuantMatrix, productization status,
-  and retention (`119 passed`);
+  focused QuantMatrix replay/retention pytest shard (`49 passed`);
+  focused validation + fixture retention checker pytest shard (`21 passed`);
   scoped `ruff check` for changed scripts/modules/tests; and
   `uv run mypy xic_extractor`.
-  Earlier closeout checks also passed:
+  Focused follow-up checks also passed:
+  `uv run python scripts/check_validation_artifact_retention.py --strict --require-externalized-local`;
+  `uv run pytest tests/test_validation_artifact_retention.py -v --tb=short`
+  (`10 passed`); and scoped `ruff check` for the validation retention checker
+  and tests. Earlier closeout checks also passed:
   `uv run python scripts/check_productization_state.py`;
   `uv run python scripts/check_lockbox_label_schema.py`;
   `uv run pytest tests/test_validation_artifact_retention.py tests/test_lockbox_label_collection_pack.py tests/test_productization_state_index.py -v --tb=short`
@@ -3073,13 +3123,9 @@ at that older checkpoint, not the latest release claim.
   `py_compile`; local externalized-artifact existence check (`128/128`, no
   missing replacements); credential/local-path scan with only wording false
   positives; and `git diff --check` with LF/CRLF warnings only.
-- Remaining blocker: four large QuantMatrix TSV surfaces remain marked
-  `shrink_later` because current check-only/use-path contracts still read them:
-  default activation `cell_provenance.tsv`, v1 readiness fixture
-  `cell_provenance.tsv`, real bundle `quant_matrix_version/cell_provenance.tsv`,
-  and real bundle `review/quant_matrix_review_rows.tsv`. Shrink those only
-  after a focused checker/status contract update replaces full dumps with
-  summaries, hashes, and minimal fixtures.
+- Remaining blocker: none for `shrink_later`; validation now has zero
+  `shrink_later` rows. Future generated validation outputs should stay outside
+  git unless they are contract/index/hash/summary or minimal-fixture files.
 
 ### 2026-06-19 - QuantMatrix Product Ready Closeout v1
 

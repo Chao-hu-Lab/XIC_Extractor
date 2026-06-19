@@ -1,16 +1,19 @@
-# Validation Fixture Surface Cleanup Implementation Plan
+# Validation Artifact Fixture Surface Cleanup Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan one task at a time. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the remaining validation `shrink_later` fixture debt with explicit summary/hash contracts plus minimal golden fixtures, without changing extraction, ProductWriter, workbook, GUI, selected peak/area/counting, Backfill authority, or matrix semantics.
+**Goal:** Replace the remaining `docs/superpowers/validation/` `shrink_later` fixture-like artifact debt with explicit summary/hash contracts plus minimal golden fixtures, without changing extraction, ProductWriter, workbook, GUI, selected peak/area/counting, Backfill authority, or matrix semantics.
 
 **Architecture:** Keep `docs/superpowers/validation/` as a tracked contract/index/hash/minimal-fixture surface. Full QuantMatrix result tables may still be generated for local review, but default builders and checkers must not require full generated TSVs to be tracked in git when a summary plus golden slice is sufficient. Product behavior stays unchanged; this is no-RAW artifact-retention and fixture-contract work.
+
+**Scope Note:** This plan is only for fixture-like artifacts under `docs/superpowers/validation/`. The canonical fixture directory `docs/superpowers/fixtures/` has a separate cleanup plan and must not be edited by agents executing this plan.
 
 **Tech Stack:** Python 3.13, `uv`, `pytest`, `ruff`, `mypy`, `xic_extractor.tabular_io`, existing QuantMatrix builder/checker modules.
 
 ## Global Constraints
 
 - Worktree/branch: repo root worktree, branch `cc/framework-improvements`.
+- Scope is `docs/superpowers/validation/` only; do not edit `docs/superpowers/fixtures/` under this plan.
 - Do not run RAW or 85RAW.
 - Do not alter ProductWriter/default extraction/workbook/GUI/selected peak/area/counting/Backfill authority/matrix semantics.
 - Do not silently promote or demote a productization maturity tier.
@@ -181,6 +184,17 @@ assert payload["minimal_fixture"]["row_count"] == 2
 assert payload["minimal_fixture"]["sha256"] == file_sha256(fixture_tsv)
 ```
 
+Also assert:
+
+```python
+assert validate_fixture_contract(summary_json, fixture_tsv) == []
+fixture_tsv.unlink()
+assert any(
+    "minimal fixture missing" in problem
+    for problem in validate_fixture_contract(summary_json, fixture_tsv)
+)
+```
+
 - [ ] **Step 2: Write tests for review-row summary counts**
 
 Use a two-row review fixture and assert:
@@ -189,6 +203,16 @@ Use a two-row review fixture and assert:
 assert payload["source_relpath"] == "review/quant_matrix_review_rows.tsv"
 assert payload["counts"]["cell_status"] == {"accepted_backfill": 1, "detected": 1}
 assert payload["counts"]["report_authority"] == {"review_only": 2}
+assert payload["counts"]["truth_status"] == {"": 1, "not_truth_claimed": 1}
+assert payload["counts"]["next_evidence_needed"] == {"": 2}
+assert payload["row_universe"]["key_columns"] == [
+    "peak_hypothesis_id",
+    "sample_stem",
+    "source_feature_family_ids",
+    "cell_status",
+]
+assert payload["row_universe"]["row_count"] == 2
+assert payload["row_universe"]["sha256"]
 assert payload["minimal_fixture"]["row_count"] == 2
 ```
 
@@ -216,7 +240,8 @@ Required behavior:
   - first `accepted_backfill` row;
   - if a class is absent, record it in `selection_warnings` and keep available rows only.
 - Write the fixture TSV with original columns and original values.
-- Write the summary JSON with source SHA, source row count, columns, counts, fixture row count, fixture SHA, selection rule, and `may_grant_product_authority=false`.
+- Write the summary JSON with source SHA, source row count, columns, counts, stable row-universe key columns, row-universe SHA, fixture row count, fixture SHA, selection rule, and `may_grant_product_authority=false`.
+- `validate_fixture_contract()` must validate both sides of the replacement contract: summary JSON shape/counts and the minimal fixture file's existence, schema, row count, and SHA.
 
 - [ ] **Step 5: Verify Task 2**
 
@@ -288,6 +313,40 @@ problems = validate_quant_matrix_real_bundle(
 assert any("cell_provenance summary" in problem for problem in problems)
 ```
 
+Add missing/tampered minimal-fixture tests:
+
+```python
+outputs["cell_provenance_minimal_fixture"].unlink()
+problems = validate_quant_matrix_real_bundle(
+    summary_json=outputs["summary_json"],
+    repo_root=tmp_path,
+    expected_source_run_id="synthetic-current-511-authority-replay",
+    expected_downstream_scope="synthetic_current_authority_replay",
+    expected_accepted_backfill_count=1,
+)
+assert any("cell_provenance minimal fixture" in problem for problem in problems)
+
+outputs = build_quant_matrix_real_bundle(
+    source_run_dir=fixture["source_run"],
+    output_dir=fixture["output_dir"],
+    repo_root=tmp_path,
+    downstream_scope="synthetic_current_authority_replay",
+)
+fixture_text = outputs["review_rows_minimal_fixture"].read_text(encoding="utf-8")
+outputs["review_rows_minimal_fixture"].write_text(
+    fixture_text.replace("review_only", "authority_changed", 1),
+    encoding="utf-8",
+)
+problems = validate_quant_matrix_real_bundle(
+    summary_json=outputs["summary_json"],
+    repo_root=tmp_path,
+    expected_source_run_id="synthetic-current-511-authority-replay",
+    expected_downstream_scope="synthetic_current_authority_replay",
+    expected_accepted_backfill_count=1,
+)
+assert any("review rows minimal fixture" in problem for problem in problems)
+```
+
 - [ ] **Step 2: Run tests and confirm they fail**
 
 Run:
@@ -314,7 +373,8 @@ In `scripts/build_quant_matrix_real_bundle.py`:
 ```
 
 - In summary JSON, keep full source SHA and row count but mark full TSV retention as `externalize`; mark summaries and fixtures as `keep_summary` / `keep_minimal_fixture`.
-- In validation, prefer `cell_provenance_summary_json` for count/hash checks and `cell_provenance_minimal_fixture` for schema/authority-flag checks.
+- In validation, call `validate_fixture_contract()` for every summary/minimal-fixture pair. `validate_quant_matrix_real_bundle()` must fail when the tracked summary is stale, when a minimal fixture is missing, or when a minimal fixture no longer matches the summary SHA.
+- For `review_rows_summary_json`, include `truth_status`, `next_evidence_needed`, source row count, source SHA, row-universe key columns, and row-universe SHA. The review-row replacement must preserve review/replay row identity at the summary level even though the full TSV is externalized.
 - Preserve the existing local full TSV generation during build, but execution cleanup must move or copy any retained local full TSV under `local_validation_artifacts/externalized_superpowers_validation/<validation-relative-path>`.
 
 - [ ] **Step 4: Regenerate real bundle without RAW**
@@ -383,6 +443,8 @@ assert summary["artifacts"]["cell_provenance_minimal_fixture"]["retention_decisi
 
 Add a tamper test for summary count mismatch and expect validation failure.
 
+Also add missing/tampered minimal-fixture tests and require `validate_quant_matrix_default_product_activation()` to fail when `cell_provenance_minimal_fixture.tsv` is missing or no longer matches the summary SHA.
+
 - [ ] **Step 2: Run tests and confirm they fail**
 
 Run:
@@ -399,7 +461,7 @@ In `scripts/build_quant_matrix_default_product_activation.py`:
 
 - Use Task 2 helper to write the summary and fixture beside default outputs.
 - Keep full `cell_provenance.tsv` as a local generated output during the build.
-- Update `_cell_counts` and completeness validation to trust the generated full table during the build, but make check-only validate the tracked summary and minimal fixture.
+- Update `_cell_counts` and completeness validation to trust the generated full table during the build, but make check-only validate the tracked summary and minimal fixture through `validate_fixture_contract()`.
 - Preserve `authority_statement` wording that accepted Backfill values are quantification values, not detections or truth claims.
 
 - [ ] **Step 4: Regenerate and externalize**
@@ -472,13 +534,30 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_validation_artifact_rete
 
 Expected before completion: FAIL if any `shrink_later` row remains.
 
-- [ ] **Step 3: Update inventory decisions**
+- [ ] **Step 3: Split tracked replacement and local externalized path fields**
+
+Before changing retention decisions, migrate `ARTIFACT_INVENTORY.tsv` and `scripts/check_validation_artifact_retention.py` from the overloaded `replacement_or_summary` field to two explicit fields:
+
+```text
+tracked_replacement_or_summary
+externalized_local_path
+```
+
+Rules:
+
+- removed full TSV rows use `tracked_replacement_or_summary` for the tracked summary JSON or minimal fixture path;
+- removed full TSV rows use `externalized_local_path` for the ignored local full TSV path;
+- `--require-externalized-local` checks `externalized_local_path`;
+- clean-checkout default checks use `tracked_replacement_or_summary`.
+
+- [ ] **Step 4: Update inventory decisions**
 
 For removed full TSV paths, set:
 
 ```text
 retention_decision=externalize
-replacement_or_summary=local_validation_artifacts/externalized_superpowers_validation/<relative path>
+tracked_replacement_or_summary=docs/superpowers/validation/<tracked summary json or minimal fixture path>
+externalized_local_path=local_validation_artifacts/externalized_superpowers_validation/<validation-relative-path>
 ```
 
 For new summary JSON files, set:
@@ -497,7 +576,7 @@ retention_decision=keep_minimal_fixture
 
 Ensure no inventory row uses `shrink_later`.
 
-- [ ] **Step 4: Update status hashes**
+- [ ] **Step 5: Update status hashes**
 
 Run the relevant builder check-only commands first, then:
 
@@ -507,7 +586,7 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.
 
 If it fails on stale hashes, update `docs/superpowers/validation/productization_status_index_v1.tsv` to the new summary/check artifact hashes. Do not change maturity tier text unless the evidence level actually changed.
 
-- [ ] **Step 5: Update handoff**
+- [ ] **Step 6: Update handoff**
 
 Rewrite `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` as a current-state snapshot:
 
@@ -518,7 +597,7 @@ Rewrite `docs/superpowers/handoffs/current/cc-framework-improvements-productizat
 - no RAW was run;
 - no product matrix authority changed.
 
-- [ ] **Step 6: Verify Task 5**
+- [ ] **Step 7: Verify Task 5**
 
 Run:
 
@@ -530,14 +609,14 @@ $env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_validation_artifact_rete
 
 Expected: all pass, with `0 shrink_later`.
 
-## Task 6: Final Focused Verification And Commit
+## Task 6: Final Focused Verification And Main-Agent Commit Readiness
 
 **Files:**
 - All files changed by Tasks 1-5.
 
 **Interfaces:**
 - Consumes: completed fixture cleanup.
-- Produces: one focused fixture-retention cleanup commit.
+- Produces: a verified diff that the main agent can stage and commit after explicit user approval.
 
 - [ ] **Step 1: Run no-RAW fixture cleanup gates**
 
@@ -557,31 +636,16 @@ git diff --check
 
 Expected: all commands pass.
 
-- [ ] **Step 2: Scan staged diff**
+- [ ] **Step 2: Prepare main-agent diff summary**
 
-Run after staging:
-
-```powershell
-$pattern = '^\+.*(?i)(' + 'sk' + '-[A-Za-z0-9]|api' + '[_-]?key|pass' + 'word|to' + 'ken|sec' + 'ret|[A-Za-z]:[\\/])'
-git diff --cached --unified=0 -- . | Select-String -Pattern $pattern
-```
-
-Expected: no matches. If wording triggers a false positive, reword the tracked docs before committing.
-
-- [ ] **Step 3: Commit**
-
-Use a separate commit from the retention cleanup commit:
+Run without staging:
 
 ```powershell
-git commit -m "Shrink validation fixture surface"
+git status --short --branch
+git diff --stat
 ```
 
-Commit body should mention:
-
-- remaining `shrink_later` rows reduced to `0`;
-- full TSVs externalized locally;
-- tracked replacements are summaries and minimal fixtures;
-- no RAW run and no product matrix authority change.
+Expected: diff contains only the validation artifact fixture-retention scope. Staging, staged scans, and commit are main-agent/user-owned, not subagent-owned.
 
 ## Self-Review
 

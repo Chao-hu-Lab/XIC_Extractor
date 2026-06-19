@@ -6,8 +6,22 @@
       "sha256": "A78B5F7697D300A66472C12C5E18651E3DCED114169460BDBD23E58927A4B56A"
     },
     "cell_provenance": {
+      "externalized": true,
+      "externalized_path": "local_validation_artifacts/externalized_superpowers_validation/quant_matrix_real_bundle_v1/quant_matrix_version/cell_provenance.tsv",
       "path": "quant_matrix_version/cell_provenance.tsv",
+      "replacement_or_summary": "quant_matrix_version/cell_provenance_summary.json",
+      "retention_decision": "externalize",
       "sha256": "D017326F8A7FA46F7C9C969065C8B2FF1B614953A65E8C19EC8F27615B7C327C"
+    },
+    "cell_provenance_minimal_fixture": {
+      "path": "quant_matrix_version/cell_provenance_minimal_fixture.tsv",
+      "retention_decision": "keep_minimal_fixture",
+      "sha256": "B1EC4C8824A1DF9750FA247583FFEF1DF6AE3E6748F84661222554EAE3797F97"
+    },
+    "cell_provenance_summary": {
+      "path": "quant_matrix_version/cell_provenance_summary.json",
+      "retention_decision": "keep_summary",
+      "sha256": "2BF8DDBF8A1F0B081F552638BD3CCED7AB71EA8369B95DB78A81795DDB0B34B5"
     },
     "downstream_impact_rows_tsv": {
       "path": "downstream_impact/quant_matrix_downstream_impact_rows.tsv",
@@ -58,8 +72,22 @@
       "sha256": "13062FBA0148E955C67F3F6DCF664D5AE6C0CE220C8AFF5F4D10A85FA4A7D379"
     },
     "review_rows": {
+      "externalized": true,
+      "externalized_path": "local_validation_artifacts/externalized_superpowers_validation/quant_matrix_real_bundle_v1/review/quant_matrix_review_rows.tsv",
       "path": "review/quant_matrix_review_rows.tsv",
+      "replacement_or_summary": "review/quant_matrix_review_rows_summary.json",
+      "retention_decision": "externalize",
       "sha256": "900870EE426B1A8CDC88F92085A2F2EEDF39785F33DA108888D67200421AAB5B"
+    },
+    "review_rows_minimal_fixture": {
+      "path": "review/quant_matrix_review_rows_minimal_fixture.tsv",
+      "retention_decision": "keep_minimal_fixture",
+      "sha256": "FDFE7B326883150FE0E3021648614D46305B84A35030FD760EA5E69981ECBE2E"
+    },
+    "review_rows_summary": {
+      "path": "review/quant_matrix_review_rows_summary.json",
+      "retention_decision": "keep_summary",
+      "sha256": "1E548C1992FACEF2F966B6D3561D22910FF583C8A9A0F58EF30F6CF3EAB6DAE0"
     },
     "review_summary_json": {
       "path": "review/quant_matrix_review_summary.json",

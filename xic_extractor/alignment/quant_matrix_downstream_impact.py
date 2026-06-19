@@ -6,6 +6,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.quant_matrix_fixture_contract import (
+    validate_fixture_contract,
+)
 from xic_extractor.alignment.quant_matrix_version import (
     CELL_PROVENANCE_COLUMNS,
     CELL_PROVENANCE_SCHEMA,
@@ -144,6 +147,8 @@ def validate_quant_matrix_downstream_impact_smoke(
     summary_json: Path,
     *,
     artifact_root: Path | None = None,
+    cell_provenance_contract_summary: Path | None = None,
+    cell_provenance_minimal_fixture: Path | None = None,
 ) -> list[str]:
     problems: list[str] = []
     try:
@@ -199,6 +204,8 @@ def validate_quant_matrix_downstream_impact_smoke(
         rows,
         problems,
         artifact_root=artifact_root,
+        cell_provenance_contract_summary=cell_provenance_contract_summary,
+        cell_provenance_minimal_fixture=cell_provenance_minimal_fixture,
     )
     return problems
 
@@ -478,6 +485,8 @@ def _append_input_artifact_problems(
     problems: list[str],
     *,
     artifact_root: Path | None,
+    cell_provenance_contract_summary: Path | None,
+    cell_provenance_minimal_fixture: Path | None,
 ) -> None:
     input_artifacts = payload.get("input_artifacts")
     if not isinstance(input_artifacts, dict):
@@ -500,6 +509,17 @@ def _append_input_artifact_problems(
             artifact_root=artifact_root,
         )
         if path is None or not path.is_file():
+            if (
+                path_field == "cell_provenance_tsv"
+                and cell_provenance_contract_summary is not None
+            ):
+                _append_externalized_cell_provenance_contract_problems(
+                    summary_path=cell_provenance_contract_summary,
+                    fixture_path=cell_provenance_minimal_fixture,
+                    expected_source_sha256=hash_value,
+                    problems=problems,
+                )
+                continue
             problems.append(
                 f"downstream impact input_artifacts.{path_field} does not exist",
             )
@@ -551,6 +571,54 @@ def _append_input_artifact_problems(
         problems.append("downstream impact row_metrics_tsv does not match inputs")
     if payload.get("metrics") != recomputed_metrics:
         problems.append("downstream impact metrics do not match inputs")
+
+
+def _append_externalized_cell_provenance_contract_problems(
+    *,
+    summary_path: Path,
+    fixture_path: Path | None,
+    expected_source_sha256: str,
+    problems: list[str],
+) -> None:
+    if not summary_path.is_file():
+        problems.append("downstream impact cell_provenance summary does not exist")
+        return
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        problems.append(f"downstream impact cell_provenance summary invalid: {exc}")
+        return
+    if not isinstance(summary, dict):
+        problems.append("downstream impact cell_provenance summary must be an object")
+        return
+    if summary.get("schema_version") != "quant_matrix_fixture_contract_v1":
+        problems.append("downstream impact cell_provenance summary schema mismatch")
+    if summary.get("source_sha256") != expected_source_sha256.upper():
+        problems.append("downstream impact cell_provenance source_sha256 mismatch")
+    resolved_fixture = fixture_path or _contract_fixture_path(summary_path, summary)
+    if resolved_fixture is None:
+        problems.append("downstream impact cell_provenance minimal fixture missing")
+        return
+    problems.extend(
+        f"downstream impact cell_provenance contract: {problem}"
+        for problem in validate_fixture_contract(summary_path, resolved_fixture)
+    )
+
+
+def _contract_fixture_path(
+    summary_path: Path,
+    summary: Mapping[str, Any],
+) -> Path | None:
+    fixture = summary.get("minimal_fixture")
+    if not isinstance(fixture, dict):
+        return None
+    relpath = str(fixture.get("path", "")).strip()
+    if not relpath:
+        return None
+    path = Path(relpath)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return summary_path.parent / path
 
 
 def _resolve_input_artifact(

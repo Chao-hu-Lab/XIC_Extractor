@@ -10,8 +10,8 @@ def test_current_validation_retention_inventory_accepts_worktree() -> None:
     result = check_validation_artifact_retention()
 
     assert result.problems == ()
-    assert result.summary["externalized_count"] == 132
-    assert result.summary["shrink_later_count"] == 4
+    assert result.summary["externalized_count"] == 135
+    assert result.summary["shrink_later_count"] == 0
 
 
 def test_checker_rejects_missing_inventory_row(tmp_path: Path) -> None:
@@ -40,7 +40,8 @@ def test_checker_rejects_externalized_png_still_present(tmp_path: Path) -> None:
                 path,
                 category="rendered_plot",
                 decision="externalize",
-                replacement="local_validation_artifacts/rendered/plot.png",
+                tracked_replacement="docs/superpowers/validation/rendered/README.md",
+                externalized_local_path="local_validation_artifacts/rendered/plot.png",
             ),
         ],
     )
@@ -64,7 +65,8 @@ def test_checker_rejects_externalized_html_still_present(tmp_path: Path) -> None
                 path,
                 category="rendered_html",
                 decision="externalize",
-                replacement="local_validation_artifacts/rendered/index.html",
+                tracked_replacement="docs/superpowers/validation/rendered/README.md",
+                externalized_local_path="local_validation_artifacts/rendered/index.html",
             ),
         ],
     )
@@ -96,6 +98,29 @@ def test_checker_accepts_contract_tsv_and_summary_markdown(tmp_path: Path) -> No
     assert result.problems == ()
 
 
+def test_checker_accepts_minimal_fixture_tsv(tmp_path: Path) -> None:
+    root, inventory, policy = _fixture_root(tmp_path)
+    fixture = "docs/superpowers/validation/readiness/inputs/cell_provenance.tsv"
+    _write_text(root / fixture, "id\tcell_status\nA\tdetected\nB\taccepted_backfill\n")
+    _write_inventory(
+        inventory,
+        [
+            _row(
+                fixture,
+                category="tabular_contract",
+                decision="keep_minimal_fixture",
+                generated_by="scripts/build_packet.py --write-readiness-fixture",
+                required_by="scripts/check_readiness.py synthetic readiness contract",
+            ),
+        ],
+    )
+
+    result = _check(root, inventory, policy, candidate_paths=[fixture], strict=True)
+
+    assert result.problems == ()
+    assert result.summary["shrink_later_count"] == 0
+
+
 def test_checker_warns_for_large_shrink_later_and_strict_fails(tmp_path: Path) -> None:
     root, inventory, policy = _fixture_root(tmp_path)
     path = "docs/superpowers/validation/big.tsv"
@@ -109,7 +134,7 @@ def test_checker_warns_for_large_shrink_later_and_strict_fails(tmp_path: Path) -
                 decision="shrink_later",
                 generated_by="scripts/build_big.py",
                 required_by="current checker",
-                replacement="replace later with summary",
+                tracked_replacement="docs/superpowers/validation/big_summary.json",
             ),
         ],
     )
@@ -170,7 +195,8 @@ def test_checker_accepts_stale_rendered_reference_with_externalized_mapping(
                 rendered,
                 category="rendered_html",
                 decision="externalize",
-                replacement="local_validation_artifacts/rendered/index.html",
+                tracked_replacement="docs/superpowers/validation/rendered/index_summary.json",
+                externalized_local_path="local_validation_artifacts/rendered/index.html",
             ),
         ],
     )
@@ -184,7 +210,8 @@ def test_checker_can_require_externalized_local_copy(tmp_path: Path) -> None:
     root, inventory, policy = _fixture_root(tmp_path)
     summary = "docs/superpowers/validation/summary.md"
     rendered = "docs/superpowers/validation/rendered/index.html"
-    replacement = "local_validation_artifacts/rendered/index.html"
+    tracked_replacement = "docs/superpowers/validation/rendered/index_summary.json"
+    externalized_local_path = "local_validation_artifacts/rendered/index.html"
     _write_text(root / summary, f"Open {rendered}\n")
     _write_inventory(
         inventory,
@@ -194,7 +221,8 @@ def test_checker_can_require_externalized_local_copy(tmp_path: Path) -> None:
                 rendered,
                 category="rendered_html",
                 decision="externalize",
-                replacement=replacement,
+                tracked_replacement=tracked_replacement,
+                externalized_local_path=externalized_local_path,
             ),
         ],
     )
@@ -206,7 +234,7 @@ def test_checker_can_require_externalized_local_copy(tmp_path: Path) -> None:
         candidate_paths=[summary],
         require_externalized_local=True,
     )
-    _write_text(root / replacement, "<html></html>")
+    _write_text(root / externalized_local_path, "<html></html>")
     present = _check(
         root,
         inventory,
@@ -278,7 +306,8 @@ def _row(
     decision: str,
     generated_by: str = "",
     required_by: str = "",
-    replacement: str = "",
+    tracked_replacement: str = "",
+    externalized_local_path: str = "",
 ) -> dict[str, str]:
     return {
         "path": path,
@@ -289,7 +318,8 @@ def _row(
         "keep_reason": "test reason",
         "generated_by": generated_by,
         "required_by": required_by,
-        "replacement_or_summary": replacement,
+        "tracked_replacement_or_summary": tracked_replacement,
+        "externalized_local_path": externalized_local_path,
     }
 
 

@@ -33,7 +33,7 @@
     "large_cohort_artifact": "output/productization_realdata_seed_guard_85raw_20260617/consolidated_no_raw_productization/standard_peak_activation_inputs/standard_peak_activation_inputs_summary.json",
     "large_cohort_artifact_sha256": "F92C35FD65D5C210CC82AF49B5E4A7EFE38A2F19D067C74E083782F12AF0DD57",
     "real_bundle_summary_json": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_real_bundle_summary.json",
-    "real_bundle_summary_json_sha256": "0479331B3E9A17492ECDB4420E897432B7FEF8973047889C9B45151DC2DEB9C9"
+    "real_bundle_summary_json_sha256": "820907AD1890B6EF7B5039AA3A59B8B2D9D65E44C7EE7D1B46797D2FC40EDB38"
   },
   "may_promote_default_quant_matrix": true,
   "missing_science_evidence": [],

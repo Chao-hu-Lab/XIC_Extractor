@@ -29,9 +29,9 @@
     "production_acceptance_manifest": "docs/superpowers/validation/quant_matrix_real_bundle_v1/inputs/production_acceptance_manifest.tsv",
     "production_acceptance_manifest_sha256": "BFF67E9441646B22EFCBD0AF9468876560B08FBF4A90F7B340B0DF614325FD8E",
     "promotion_packet_v2_summary_json": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/quant_matrix_promotion_packet_v2_summary.json",
-    "promotion_packet_v2_summary_json_sha256": "CC41A88BEED066414AAF8994B2FFFB87F83DA3EA4CD764D0C610E3B5D7B74FF1",
+    "promotion_packet_v2_summary_json_sha256": "B50B476F383E6D55E6FA487B8A6B80996751D7CD1B27B09A049FA57C921EDF8B",
     "real_bundle_summary_json": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_real_bundle_summary.json",
-    "real_bundle_summary_json_sha256": "0479331B3E9A17492ECDB4420E897432B7FEF8973047889C9B45151DC2DEB9C9"
+    "real_bundle_summary_json_sha256": "820907AD1890B6EF7B5039AA3A59B8B2D9D65E44C7EE7D1B46797D2FC40EDB38"
   },
   "may_enter_product_ready_closeout": true,
   "phase": "phase9_default_activation_dry_run",

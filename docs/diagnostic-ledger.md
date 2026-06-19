@@ -309,6 +309,9 @@ Authoritative notes and artifacts:
 | Current 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_current_8raw_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_current_8raw_failure_mode_report.md`, SHA256 `425B5ABD766A86BAF7970ADC6FC2C06F405454CAB3AAAFB066BE52FAA8679C88` |
 | Post-fix 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_failure_mode_report.md`, SHA256 `FFB5EA89BD1DAECA685BBBA2F9BA96D069C934996DD7C5B3A332992B15D76D98` |
 
+The fixture packet is indexed at
+`docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/README.md`.
+
 Source worktree output for the snapshots above was
 `output/product_priority_reset_phase1/`. The committed fixture copies are the
 durable reference; do not require the original worktree output to exist before

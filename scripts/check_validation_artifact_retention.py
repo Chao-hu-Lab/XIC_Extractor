@@ -35,7 +35,8 @@ REQUIRED_INVENTORY_COLUMNS = (
     "keep_reason",
     "generated_by",
     "required_by",
-    "replacement_or_summary",
+    "tracked_replacement_or_summary",
+    "externalized_local_path",
 )
 KEEP_DECISIONS = {
     "keep_contract",
@@ -206,11 +207,16 @@ def _check_inventory_rows(
             problems.append(f"{path}: inventory says {decision} but file is absent")
         if decision in DROP_DECISIONS and is_present:
             problems.append(f"{path}: {decision} artifact is still present")
-        if decision == "externalize" and not row.get("replacement_or_summary", ""):
+        if decision == "externalize" and not row.get(
+            "tracked_replacement_or_summary",
+            "",
+        ):
             problems.append(f"{path}: externalized artifact needs replacement mapping")
         if require_externalized_local and decision == "externalize":
-            replacement = row.get("replacement_or_summary", "")
-            if replacement and not (repo_root / replacement).exists():
+            local_path = row.get("externalized_local_path", "")
+            if not local_path:
+                problems.append(f"{path}: externalized local path is required")
+            elif not (repo_root / local_path).exists():
                 problems.append(f"{path}: externalized local replacement missing")
         if decision == "shrink_later":
             message = f"{path}: shrink_later remains tracked"
@@ -261,11 +267,12 @@ def _check_large_file_row(
     if not row.get("keep_reason", ""):
         problems.append(f"{path}: large retained file needs keep_reason")
     if not (
-        row.get("generated_by", "")
-        or row.get("required_by", "")
-        or row.get("replacement_or_summary", "")
-    ):
-        problems.append(f"{path}: large retained file needs source or consumer")
+            row.get("generated_by", "")
+            or row.get("required_by", "")
+            or row.get("tracked_replacement_or_summary", "")
+            or row.get("externalized_local_path", "")
+        ):
+            problems.append(f"{path}: large retained file needs source or consumer")
 
 
 def _check_missing_inventory_rows(
@@ -312,7 +319,7 @@ def _check_rendered_references(
                 )
                 continue
             decision = row.get("retention_decision", "")
-            replacement = row.get("replacement_or_summary", "")
+            replacement = row.get("tracked_replacement_or_summary", "")
             if decision == "externalize" and not replacement:
                 problems.append(
                     f"{path}: externalized reference lacks replacement: {reference}",

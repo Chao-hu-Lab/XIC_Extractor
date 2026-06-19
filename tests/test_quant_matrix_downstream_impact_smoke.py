@@ -174,6 +174,30 @@ def test_downstream_impact_rejects_semantic_rows_drift_with_matching_hash(
     assert "downstream impact row_metrics_tsv does not match inputs" in problems
 
 
+def test_downstream_impact_rejects_metrics_drift_with_matching_rows(
+    tmp_path: Path,
+) -> None:
+    inputs = _write_quant_matrix_version_outputs(tmp_path / "inputs")
+    outputs = build_quant_matrix_downstream_impact_smoke(
+        quant_matrix_tsv=inputs["quant_matrix"],
+        cell_provenance_tsv=inputs["cell_provenance"],
+        row_summary_tsv=inputs["row_summary"],
+        output_dir=tmp_path / "smoke",
+        downstream_scope="synthetic_loess_input_contract",
+        bundle_kind="real_quant_matrix_version",
+    )
+    summary = json.loads(outputs["summary_json"].read_text(encoding="utf-8"))
+    summary["metrics"]["detected_cell_count"] = 999
+    outputs["summary_json"].write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    problems = validate_quant_matrix_downstream_impact_smoke(outputs["summary_json"])
+
+    assert "downstream impact metrics do not match inputs" in problems
+
+
 def test_downstream_impact_script_check_only_round_trip(tmp_path: Path) -> None:
     inputs = _write_quant_matrix_version_outputs(tmp_path / "inputs")
     output_dir = tmp_path / "smoke"

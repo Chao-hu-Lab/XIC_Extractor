@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import scripts.build_quant_matrix_default_activation_dry_run as dry_run_module
 from scripts.build_quant_matrix_default_activation_dry_run import (
     ACTIVATION_DRY_RUN_COMPARISON_SCHEMA,
     COMPARISON_COLUMNS,
@@ -113,6 +114,59 @@ def test_default_activation_dry_run_rejects_stale_comparison_tsv(
     assert any("comparison TSV is stale" in problem for problem in problems)
 
 
+def test_default_activation_dry_run_accepts_externalized_cell_provenance(
+    tmp_path: Path,
+) -> None:
+    outputs = _build_synthetic_dry_run(tmp_path)
+    outputs["real_bundle_cell_provenance"].unlink()
+
+    assert (
+        validate_quant_matrix_default_activation_dry_run(
+            summary_json=outputs["summary_json"],
+            source_root=tmp_path,
+            expected_source_run_id="synthetic-current-511-authority-replay",
+            expected_downstream_scope="synthetic_current_authority_replay",
+            expected_accepted_backfill_count=1,
+        )
+        == []
+    )
+
+
+def test_default_activation_dry_run_rejects_externalized_provenance_rerun_drift(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    outputs = _build_synthetic_dry_run(tmp_path)
+    outputs["real_bundle_cell_provenance"].unlink()
+    original_run_activation = dry_run_module.run_activation
+
+    def drifted_run_activation(*args, **kwargs):
+        result = dict(original_run_activation(*args, **kwargs))
+        provenance = result["cell_provenance"]
+        provenance.write_text(
+            provenance.read_text(encoding="utf-8").replace(
+                "accepted_backfill",
+                "detected",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(dry_run_module, "run_activation", drifted_run_activation)
+
+    problems = validate_quant_matrix_default_activation_dry_run(
+        summary_json=outputs["summary_json"],
+        source_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("cell_provenance" in problem for problem in problems)
+    assert any("dry-run sha256 does not match reference" in p for p in problems)
+
+
 def test_default_activation_dry_run_default_check_rejects_non_current_bundle(
     tmp_path: Path,
 ) -> None:
@@ -185,7 +239,7 @@ def test_default_activation_dry_run_script_check_only_round_trip(
 
 def _build_synthetic_dry_run(tmp_path: Path) -> dict[str, Path]:
     inputs = _build_synthetic_packet_v2(tmp_path)
-    return dict(
+    outputs = dict(
         build_quant_matrix_default_activation_dry_run(
             output_dir=tmp_path / "dry_run_gate",
             source_root=tmp_path,
@@ -196,6 +250,8 @@ def _build_synthetic_dry_run(tmp_path: Path) -> dict[str, Path]:
             expected_accepted_backfill_count=1,
         )
     )
+    outputs["real_bundle_cell_provenance"] = inputs["real_bundle_cell_provenance"]
+    return outputs
 
 
 def _build_synthetic_packet_v2(tmp_path: Path) -> dict[str, Path]:
@@ -221,5 +277,6 @@ def _build_synthetic_packet_v2(tmp_path: Path) -> dict[str, Path]:
     )
     return {
         "real_bundle_summary": real_bundle["summary_json"],
+        "real_bundle_cell_provenance": real_bundle["cell_provenance"],
         "packet_summary": packet["summary_json"],
     }

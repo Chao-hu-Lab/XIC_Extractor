@@ -36,6 +36,9 @@ from scripts.build_quant_matrix_real_bundle import (
     DEFAULT_OUTPUT_DIR as DEFAULT_REAL_BUNDLE_DIR,
 )
 from scripts.build_quant_matrix_version import run_activation
+from xic_extractor.alignment.quant_matrix_fixture_contract import (
+    validate_fixture_contract,
+)
 from xic_extractor.alignment.quant_matrix_version import (
     EXPECTED_DIFF_SUMMARY_COLUMNS,
 )
@@ -256,6 +259,15 @@ def validate_quant_matrix_default_activation_dry_run(
     if real_bundle_summary is not None and comparison_tsv is not None:
         bundle_payload = _read_json_object(real_bundle_summary)
         bundle_paths = _real_bundle_paths(bundle_payload, real_bundle_summary)
+        try:
+            actual_rows = read_tsv_required(comparison_tsv, COMPARISON_COLUMNS)
+        except (OSError, ValueError) as exc:
+            problems.append(f"default activation comparison TSV: {exc}")
+            actual_rows = ()
+        normalized_actual = [
+            {column: row.get(column, "") for column in COMPARISON_COLUMNS}
+            for row in actual_rows
+        ]
         dry_run = _run_activation_dry_run(
             bundle_paths=bundle_paths,
             source_root=source_root,
@@ -264,19 +276,11 @@ def validate_quant_matrix_default_activation_dry_run(
             bundle_paths=bundle_paths,
             activation_outputs=dry_run.outputs,
             source_root=source_root,
+            problems=problems,
         )
-        try:
-            actual_rows = read_tsv_required(comparison_tsv, COMPARISON_COLUMNS)
-        except (OSError, ValueError) as exc:
-            problems.append(f"default activation comparison TSV: {exc}")
-            actual_rows = ()
         normalized_expected = [
             {column: row.get(column, "") for column in COMPARISON_COLUMNS}
             for row in expected_rows
-        ]
-        normalized_actual = [
-            {column: row.get(column, "") for column in COMPARISON_COLUMNS}
-            for row in actual_rows
         ]
         if normalized_actual != normalized_expected:
             problems.append("default activation dry-run comparison TSV is stale")
@@ -333,8 +337,10 @@ def _comparison_rows(
     bundle_paths: Mapping[str, Path],
     activation_outputs: Mapping[str, Path],
     source_root: Path,
+    problems: list[str] | None = None,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    binding_problems = problems if problems is not None else []
     meanings = {
         "quant_matrix": "default numeric matrix candidate is deterministic",
         "cell_provenance": "detected/backfilled provenance sidecar is deterministic",
@@ -342,17 +348,18 @@ def _comparison_rows(
         "expected_diff_summary": "expected-diff closure is deterministic",
     }
     for label in REFERENCE_OUTPUT_LABELS:
-        reference = bundle_paths[label]
-        reference_sha = file_sha256(reference)
+        reference_path, reference_sha = _comparison_reference_binding(
+            label,
+            bundle_paths=bundle_paths,
+            source_root=source_root,
+            problems=binding_problems,
+        )
         dry_run_sha = file_sha256(activation_outputs[label])
         rows.append(
             {
                 "schema_version": ACTIVATION_DRY_RUN_COMPARISON_SCHEMA,
                 "artifact_label": label,
-                "reference_artifact_path": _source_relpath(
-                    reference,
-                    source_root=source_root,
-                ),
+                "reference_artifact_path": reference_path,
                 "reference_sha256": reference_sha,
                 "dry_run_sha256": dry_run_sha,
                 "sha256_match": "TRUE" if reference_sha == dry_run_sha else "FALSE",
@@ -376,6 +383,77 @@ def _comparison_problems(rows: Sequence[Mapping[str, str]]) -> list[str]:
     if missing:
         problems.append("missing comparison rows: " + ", ".join(missing))
     return problems
+
+
+def _comparison_reference_binding_problems(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    bundle_paths: Mapping[str, Path],
+    source_root: Path,
+) -> list[str]:
+    problems: list[str] = []
+    by_label = {row.get("artifact_label", ""): row for row in rows}
+    for label in REFERENCE_OUTPUT_LABELS:
+        row = by_label.get(label)
+        if row is None:
+            continue
+        expected_path, expected_sha = _comparison_reference_binding(
+            label,
+            bundle_paths=bundle_paths,
+            source_root=source_root,
+            problems=problems,
+        )
+        if expected_path and row.get("reference_artifact_path") != expected_path:
+            problems.append(f"{label}: comparison reference_artifact_path is stale")
+        if expected_sha:
+            for field in ("reference_sha256", "dry_run_sha256"):
+                if row.get(field) != expected_sha:
+                    problems.append(f"{label}: comparison {field} is stale")
+    return problems
+
+
+def _comparison_reference_binding(
+    label: str,
+    *,
+    bundle_paths: Mapping[str, Path],
+    source_root: Path,
+    problems: list[str],
+) -> tuple[str, str]:
+    if label != "cell_provenance" or label in bundle_paths:
+        path = bundle_paths[label]
+        return (
+            _source_relpath_existing(path, source_root=source_root),
+            file_sha256(path),
+        )
+
+    summary = bundle_paths.get("cell_provenance_summary")
+    fixture = bundle_paths.get("cell_provenance_minimal_fixture")
+    reference = bundle_paths.get("cell_provenance_reference")
+    if summary is None:
+        problems.append("cell_provenance: externalized summary is missing")
+        return "", ""
+    if fixture is None:
+        problems.append("cell_provenance: externalized minimal fixture is missing")
+        return "", ""
+    problems.extend(
+        f"cell_provenance: {problem}"
+        for problem in validate_fixture_contract(summary, fixture)
+    )
+    try:
+        payload = _read_json_object(summary)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        problems.append(f"cell_provenance: {exc}")
+        return "", ""
+    source_sha = str(payload.get("source_sha256", "")).upper()
+    if not _is_sha256(source_sha):
+        problems.append("cell_provenance: fixture contract source_sha256 invalid")
+        source_sha = ""
+    reference_path = (
+        _source_relpath_reference(reference, source_root=source_root)
+        if reference is not None
+        else ""
+    )
+    return reference_path, source_sha
 
 
 def _source_summary_input_hash_problems(
@@ -590,7 +668,6 @@ def _real_bundle_paths(
         "production_acceptance_manifest",
         "expected_diff",
         "quant_matrix",
-        "cell_provenance",
         "row_summary",
         "expected_diff_summary",
     )
@@ -611,7 +688,84 @@ def _real_bundle_paths(
         if not resolved.is_file():
             raise FileNotFoundError(str(resolved))
         result[label] = resolved
+    _append_real_bundle_cell_provenance_paths(
+        artifacts,
+        output_dir=output_dir,
+        result=result,
+    )
+    for label in ("cell_provenance_summary", "cell_provenance_minimal_fixture"):
+        raw_entry = artifacts.get(label)
+        if isinstance(raw_entry, dict) and label not in result:
+            result[label] = _resolve_real_bundle_artifact(
+                raw_entry,
+                output_dir=output_dir,
+                label=label,
+            )
     return result
+
+
+def _append_real_bundle_cell_provenance_paths(
+    artifacts: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    result: dict[str, Path],
+) -> None:
+    raw_entry = artifacts.get("cell_provenance")
+    if not isinstance(raw_entry, dict):
+        raise ValueError("real bundle cell_provenance artifact is missing")
+    resolved = _resolve_real_bundle_artifact_path(
+        raw_entry,
+        output_dir=output_dir,
+        label="cell_provenance",
+    )
+    result["cell_provenance_reference"] = resolved
+    if resolved.is_file():
+        result["cell_provenance"] = resolved
+        return
+    if raw_entry.get("externalized") is not True:
+        raise FileNotFoundError(str(resolved))
+    summary_relpath = str(raw_entry.get("replacement_or_summary", "")).strip()
+    if not summary_relpath:
+        raise ValueError("real bundle cell_provenance replacement is missing")
+    result["cell_provenance_summary"] = _resolve_real_bundle_artifact(
+        {"path": summary_relpath},
+        output_dir=output_dir,
+        label="cell_provenance_summary",
+    )
+
+
+def _resolve_real_bundle_artifact(
+    raw_entry: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    label: str,
+) -> Path:
+    resolved = _resolve_real_bundle_artifact_path(
+        raw_entry,
+        output_dir=output_dir,
+        label=label,
+    )
+    if not resolved.is_file():
+        raise FileNotFoundError(str(resolved))
+    return resolved
+
+
+def _resolve_real_bundle_artifact_path(
+    raw_entry: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    label: str,
+) -> Path:
+    relpath = str(raw_entry.get("path", "")).strip()
+    path = Path(relpath)
+    if not relpath or path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"real bundle {label} path must be bundle-relative")
+    resolved = (output_dir / path).resolve(strict=False)
+    try:
+        resolved.relative_to(output_dir.resolve(strict=False))
+    except ValueError as exc:
+        raise ValueError(f"real bundle {label} path escapes bundle") from exc
+    return resolved
 
 
 def _input_artifacts(
@@ -693,12 +847,25 @@ def _artifact_record(path: Path, *, base_dir: Path) -> dict[str, str]:
 
 
 def _source_relpath(path: Path, *, source_root: Path) -> str:
+    return _source_relpath_existing(path, source_root=source_root)
+
+
+def _source_relpath_existing(path: Path, *, source_root: Path) -> str:
     try:
         return path.resolve(strict=True).relative_to(
             source_root.resolve(strict=True),
         ).as_posix()
     except ValueError:
         return str(path.resolve(strict=True))
+
+
+def _source_relpath_reference(path: Path, *, source_root: Path) -> str:
+    try:
+        return path.resolve(strict=False).relative_to(
+            source_root.resolve(strict=True),
+        ).as_posix()
+    except ValueError:
+        return str(path.resolve(strict=False))
 
 
 def _resolve_source(path: Path, *, source_root: Path) -> Path:

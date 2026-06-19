@@ -34,6 +34,10 @@ from scripts.build_quant_matrix_real_bundle import (
     DEFAULT_OUTPUT_DIR as DEFAULT_REAL_BUNDLE_DIR,
 )
 from scripts.build_quant_matrix_version import run_activation
+from xic_extractor.alignment.quant_matrix_fixture_contract import (
+    validate_fixture_contract,
+    write_cell_provenance_contract,
+)
 from xic_extractor.alignment.quant_matrix_version import EXPECTED_DIFF_SUMMARY_COLUMNS
 from xic_extractor.tabular_io import (
     file_sha256,
@@ -70,11 +74,14 @@ CHECK_COLUMNS = (
 
 REFERENCE_OUTPUT_LABELS = (
     "quant_matrix",
-    "cell_provenance",
     "row_summary",
     "expected_diff_summary",
 )
-DEFAULT_OUTPUT_LABELS = REFERENCE_OUTPUT_LABELS + ("source_summary",)
+DEFAULT_OUTPUT_LABELS = REFERENCE_OUTPUT_LABELS + (
+    "source_summary",
+    "cell_provenance_summary",
+    "cell_provenance_minimal_fixture",
+)
 
 
 def build_quant_matrix_default_product_activation(
@@ -178,6 +185,10 @@ def build_quant_matrix_default_product_activation(
     )
 
     cell_counts = _cell_counts(activation_outputs["cell_provenance"])
+    fixture_contract_outputs = _write_fixture_contract_outputs(
+        activation_outputs=activation_outputs,
+        default_output_dir=default_output_dir,
+    )
     check_rows = _check_rows(
         activation_outputs=activation_outputs,
         reference_paths=bundle_paths,
@@ -202,6 +213,7 @@ def build_quant_matrix_default_product_activation(
         closeout_payload=closeout_payload,
         bundle_paths=bundle_paths,
         activation_outputs=activation_outputs,
+        fixture_contract_outputs=fixture_contract_outputs,
         checks_tsv=checks_tsv,
         check_rows=check_rows,
         expected_diff_summary=expected_diff_summary,
@@ -210,6 +222,12 @@ def build_quant_matrix_default_product_activation(
     return {
         "summary_json": summary_json,
         "checks_tsv": checks_tsv,
+        "cell_provenance_summary_json": fixture_contract_outputs[
+            "cell_provenance_summary"
+        ],
+        "cell_provenance_minimal_fixture": fixture_contract_outputs[
+            "cell_provenance_minimal_fixture"
+        ],
         **activation_outputs,
     }
 
@@ -342,9 +360,12 @@ def validate_quant_matrix_default_product_activation(
                 )
             )
             problems.extend(
-                _cell_provenance_completeness_problems(
-                    quant_matrix_tsv=artifacts["quant_matrix"],
-                    cell_provenance_tsv=artifacts["cell_provenance"],
+                _fixture_contract_problems(
+                    summary_json=artifacts["cell_provenance_summary"],
+                    fixture_tsv=artifacts["cell_provenance_minimal_fixture"],
+                    expected_accepted_backfill_count=(
+                        expected_accepted_backfill_count
+                    ),
                 )
             )
             expected_diff_summary = _expected_diff_summary_status(
@@ -361,7 +382,9 @@ def validate_quant_matrix_default_product_activation(
             _append_summary_payload_stale_problems(
                 payload,
                 expected_diff_summary=expected_diff_summary,
-                cell_counts=_cell_counts(artifacts["cell_provenance"]),
+                cell_counts=_cell_counts_from_contract(
+                    artifacts["cell_provenance_summary"],
+                ),
                 problems=problems,
             )
             expected_checks = _check_rows(
@@ -402,7 +425,6 @@ def _real_bundle_paths(
         "production_acceptance_manifest",
         "expected_diff",
         "quant_matrix",
-        "cell_provenance",
         "row_summary",
         "expected_diff_summary",
         "source_summary",
@@ -544,7 +566,31 @@ def _rerun_output_problems(
         for label in REFERENCE_OUTPUT_LABELS:
             if file_sha256(artifacts[label]) != file_sha256(rerun_outputs[label]):
                 problems.append(f"{label} does not match rerun activation")
+        summary_json = artifacts.get("cell_provenance_summary")
+        if summary_json is None:
+            problems.append("cell_provenance summary missing for rerun comparison")
+        else:
+            problems.extend(
+                _cell_provenance_rerun_problems(
+                    rerun_outputs["cell_provenance"],
+                    summary_json,
+                )
+            )
         return problems
+
+
+def _cell_provenance_rerun_problems(
+    rerun_cell_provenance_tsv: Path,
+    summary_json: Path,
+) -> list[str]:
+    try:
+        payload = _read_json_object(summary_json)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [f"cell_provenance summary invalid for rerun comparison: {exc}"]
+    source_sha = str(payload.get("source_sha256", "")).upper()
+    if file_sha256(rerun_cell_provenance_tsv) != source_sha:
+        return ["cell_provenance does not match rerun activation"]
+    return []
 
 
 def _cell_provenance_completeness_problems(
@@ -583,6 +629,22 @@ def _cell_provenance_completeness_problems(
     return []
 
 
+def _cell_provenance_check_problems(
+    activation_outputs: Mapping[str, Path],
+) -> list[str]:
+    cell_provenance = activation_outputs.get("cell_provenance")
+    if cell_provenance is not None:
+        return _cell_provenance_completeness_problems(
+            quant_matrix_tsv=activation_outputs["quant_matrix"],
+            cell_provenance_tsv=cell_provenance,
+        )
+    summary_json = activation_outputs.get("cell_provenance_summary")
+    fixture_tsv = activation_outputs.get("cell_provenance_minimal_fixture")
+    if summary_json is None or fixture_tsv is None:
+        return ["cell_provenance contract artifacts missing"]
+    return validate_fixture_contract(summary_json, fixture_tsv)
+
+
 def _cell_counts(cell_provenance_tsv: Path) -> dict[str, str]:
     rows = read_tsv_required(
         cell_provenance_tsv,
@@ -592,6 +654,23 @@ def _cell_counts(cell_provenance_tsv: Path) -> dict[str, str]:
     accepted_count = sum(
         1 for row in rows if row.get("cell_status") == "accepted_backfill"
     )
+    return {
+        "detected_cell_count": str(detected_count),
+        "accepted_backfill_cell_count": str(accepted_count),
+        "quant_available_cell_count": str(detected_count + accepted_count),
+    }
+
+
+def _cell_counts_from_contract(summary_json: Path) -> dict[str, str]:
+    payload = _read_json_object(summary_json)
+    counts = payload.get("counts")
+    if not isinstance(counts, dict):
+        return {}
+    raw_cell_counts = counts.get("cell_status")
+    if not isinstance(raw_cell_counts, dict):
+        return {}
+    detected_count = optional_int(raw_cell_counts.get("detected", "")) or 0
+    accepted_count = optional_int(raw_cell_counts.get("accepted_backfill", "")) or 0
     return {
         "detected_cell_count": str(detected_count),
         "accepted_backfill_cell_count": str(accepted_count),
@@ -658,13 +737,11 @@ def _check_rows(
         _check_row(
             "cell_provenance_completes_quant_matrix",
             "pass"
-            if not _cell_provenance_completeness_problems(
-                quant_matrix_tsv=activation_outputs["quant_matrix"],
-                cell_provenance_tsv=activation_outputs["cell_provenance"],
-            )
+            if not _cell_provenance_check_problems(activation_outputs)
             else "fail",
-            "cell_provenance.tsv",
-            "Every non-empty default quant matrix cell has provenance.",
+            "cell_provenance_summary.json",
+            "Every non-empty default quant matrix cell has provenance or a "
+            "tracked provenance contract.",
         )
     )
     return rows
@@ -710,6 +787,7 @@ def _write_summary(
     closeout_payload: Mapping[str, Any],
     bundle_paths: Mapping[str, Path],
     activation_outputs: Mapping[str, Path],
+    fixture_contract_outputs: Mapping[str, Path],
     checks_tsv: Path,
     check_rows: Sequence[Mapping[str, str]],
     expected_diff_summary: Mapping[str, str],
@@ -796,7 +874,24 @@ def _write_summary(
             **{
                 label: _artifact_record(path, base_dir=output_dir)
                 for label, path in activation_outputs.items()
+                if label != "cell_provenance"
             },
+            "cell_provenance": _externalized_fixture_source_entry(
+                activation_outputs["cell_provenance"],
+                summary_path=fixture_contract_outputs["cell_provenance_summary"],
+                output_dir=output_dir,
+                source_root=source_root,
+            ),
+            "cell_provenance_summary": _artifact_record(
+                fixture_contract_outputs["cell_provenance_summary"],
+                base_dir=output_dir,
+            )
+            | {"retention_decision": "keep_summary"},
+            "cell_provenance_minimal_fixture": _artifact_record(
+                fixture_contract_outputs["cell_provenance_minimal_fixture"],
+                base_dir=output_dir,
+            )
+            | {"retention_decision": "keep_minimal_fixture"},
         },
         "authority_statement": (
             "The default quant matrix is explicitly activated from the current "
@@ -916,6 +1011,14 @@ def _output_artifacts(
             continue
         relpath = str(raw_entry.get("path", "")).strip()
         sha256 = str(raw_entry.get("sha256", "")).strip()
+        if raw_entry.get("externalized") is True:
+            _append_externalized_fixture_artifact_problems(
+                str(label),
+                raw_entry,
+                output_dir=output_dir,
+                problems=problems,
+            )
+            continue
         path = Path(relpath)
         if not relpath or path.is_absolute() or ".." in path.parts:
             problems.append(f"default product activation {label} path invalid")
@@ -940,6 +1043,113 @@ def _artifact_record(path: Path, *, base_dir: Path) -> dict[str, str]:
         "path": _relpath(path, base_dir),
         "sha256": file_sha256(path),
     }
+
+
+def _write_fixture_contract_outputs(
+    *,
+    activation_outputs: Mapping[str, Path],
+    default_output_dir: Path,
+) -> dict[str, Path]:
+    summary_json = default_output_dir / "cell_provenance_summary.json"
+    fixture_tsv = default_output_dir / "cell_provenance_minimal_fixture.tsv"
+    write_cell_provenance_contract(
+        activation_outputs["cell_provenance"],
+        summary_json,
+        fixture_tsv,
+        source_relpath="default_output/cell_provenance.tsv",
+    )
+    return {
+        "cell_provenance_summary": summary_json,
+        "cell_provenance_minimal_fixture": fixture_tsv,
+    }
+
+
+def _externalized_fixture_source_entry(
+    path: Path,
+    *,
+    summary_path: Path,
+    output_dir: Path,
+    source_root: Path,
+) -> dict[str, object]:
+    return {
+        "path": _relpath(path, output_dir),
+        "sha256": file_sha256(path),
+        "externalized": True,
+        "externalized_path": _source_relpath(
+            _externalized_validation_artifact_path(path, output_dir=output_dir),
+            source_root=source_root,
+        ),
+        "replacement_or_summary": _relpath(summary_path, output_dir),
+        "retention_decision": "externalize",
+    }
+
+
+def _externalized_validation_artifact_path(path: Path, *, output_dir: Path) -> Path:
+    relpath = path.relative_to(output_dir)
+    return (
+        ROOT
+        / "local_validation_artifacts/externalized_superpowers_validation/"
+        "quant_matrix_default_product_activation_v1"
+        / relpath
+    )
+
+
+def _append_externalized_fixture_artifact_problems(
+    label: str,
+    raw_entry: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    problems: list[str],
+) -> None:
+    summary_path = output_dir / str(raw_entry.get("replacement_or_summary", ""))
+    if not summary_path.is_file():
+        problems.append(f"{label}: replacement summary missing")
+        return
+    try:
+        payload = _read_json_object(summary_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        problems.append(f"{label}: replacement summary invalid: {exc}")
+        return
+    if payload.get("schema_version") != "quant_matrix_fixture_contract_v1":
+        problems.append(f"{label}: replacement summary schema mismatch")
+    if payload.get("source_relpath") != raw_entry.get("path"):
+        problems.append(f"{label}: replacement summary source_relpath mismatch")
+    if payload.get("source_sha256") != str(raw_entry.get("sha256", "")).upper():
+        problems.append(f"{label}: replacement summary source_sha256 mismatch")
+    fixture = payload.get("minimal_fixture")
+    if isinstance(fixture, dict):
+        fixture_tsv = summary_path.parent / str(fixture.get("path", ""))
+        problems.extend(
+            f"{label}: {problem}"
+            for problem in validate_fixture_contract(summary_path, fixture_tsv)
+        )
+    else:
+        problems.append(f"{label}: replacement summary missing minimal_fixture")
+
+
+def _fixture_contract_problems(
+    *,
+    summary_json: Path,
+    fixture_tsv: Path,
+    expected_accepted_backfill_count: int,
+) -> list[str]:
+    problems = [
+        f"cell_provenance summary: {problem}"
+        for problem in validate_fixture_contract(summary_json, fixture_tsv)
+    ]
+    if problems:
+        return problems
+    payload = _read_json_object(summary_json)
+    counts = payload.get("counts")
+    if not isinstance(counts, dict):
+        return ["cell_provenance summary: counts missing"]
+    cell_counts = counts.get("cell_status")
+    if not isinstance(cell_counts, dict):
+        return ["cell_provenance summary: cell_status counts missing"]
+    accepted = optional_int(cell_counts.get("accepted_backfill", ""))
+    if accepted != expected_accepted_backfill_count:
+        return ["cell_provenance summary: accepted_backfill count mismatch"]
+    return []
 
 
 def _rewrite_source_summary_paths(source_summary_tsv: Path) -> None:

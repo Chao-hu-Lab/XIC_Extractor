@@ -26,6 +26,8 @@ Use one of these retention decisions in `ARTIFACT_INVENTORY.tsv`.
 - JSON/TSV manifests that are the only source of a contract or case universe.
 - Status and authority indexes checked by productization scripts.
 - Minimal golden fixtures used by tests or checkers.
+- Synthetic fixture TSVs with only the rows needed to exercise
+  readiness/checker branches are `keep_minimal_fixture`, not `shrink_later`.
 - Hash/source summaries and generation commands for externalized artifacts.
 
 ## Do Not Keep Full Dumps By Default
@@ -46,8 +48,9 @@ local_validation_artifacts/externalized_superpowers_validation/<relative path>
 ```
 
 That directory is ignored by git. Keep a tracked README, summary JSON, or
-inventory row with the original path, replacement location, source script,
-hash/row-count evidence, and regeneration command where available.
+inventory row with the original path, tracked replacement/summary, local
+externalized path, source script, hash/row-count evidence, and regeneration
+command where available.
 
 ## Local Gate
 

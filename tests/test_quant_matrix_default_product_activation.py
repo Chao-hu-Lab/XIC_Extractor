@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import scripts.build_quant_matrix_default_product_activation as activation_module
 from scripts.build_quant_matrix_default_activation_dry_run import (
     build_quant_matrix_default_activation_dry_run,
 )
@@ -98,6 +99,17 @@ def test_default_product_activation_writes_default_outputs(
     assert summary["default_matrix_files_written"] is True
     assert summary["workbook_or_gui_changed"] is False
     assert summary["selected_peak_area_or_counting_changed"] is False
+    assert summary["artifacts"]["cell_provenance"]["retention_decision"] == (
+        "externalize"
+    )
+    assert summary["artifacts"]["cell_provenance_summary"]["retention_decision"] == (
+        "keep_summary"
+    )
+    assert summary["artifacts"]["cell_provenance_minimal_fixture"][
+        "retention_decision"
+    ] == "keep_minimal_fixture"
+    assert outputs["cell_provenance_summary_json"].is_file()
+    assert outputs["cell_provenance_minimal_fixture"].is_file()
 
     matrix_rows = _read_tsv(outputs["quant_matrix"])
     assert matrix_rows == [
@@ -172,12 +184,10 @@ def test_default_product_activation_rejects_tampered_sidecars(
         expected_downstream_scope="synthetic_current_authority_replay",
         expected_accepted_backfill_count=1,
     )
-    outputs["cell_provenance"].write_text(
-        outputs["cell_provenance"].read_text(encoding="utf-8").replace(
-            "accepted_backfill",
-            "detected",
-            1,
-        ),
+    outputs["cell_provenance_minimal_fixture"].write_text(
+        outputs["cell_provenance_minimal_fixture"]
+        .read_text(encoding="utf-8")
+        .replace("accepted_backfill", "detected", 1),
         encoding="utf-8",
     )
     outputs["checks_tsv"].write_text(
@@ -203,12 +213,82 @@ def test_default_product_activation_rejects_tampered_sidecars(
         expected_accepted_backfill_count=1,
     )
 
-    assert any("cell_provenance artifact sha256 mismatch" in p for p in problems)
-    assert any("cell_provenance does not match rerun activation" in p for p in problems)
+    assert any("cell_provenance summary" in p for p in problems)
     assert any("default product activation checks TSV is stale" in p for p in problems)
     assert any(
         "default product activation accepted_backfill_cell_count is stale" in p
         for p in problems
+    )
+
+
+def test_default_product_activation_rejects_missing_minimal_fixture(
+    tmp_path: Path,
+) -> None:
+    inputs = _build_synthetic_activation_inputs(tmp_path)
+    outputs = build_quant_matrix_default_product_activation(
+        output_dir=tmp_path / "default_activation",
+        source_root=tmp_path,
+        real_bundle_summary_json=inputs["real_bundle_summary"],
+        product_ready_closeout_summary_json=inputs["closeout_summary"],
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+    outputs["cell_provenance_minimal_fixture"].unlink()
+
+    problems = validate_quant_matrix_default_product_activation(
+        summary_json=outputs["summary_json"],
+        source_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("cell_provenance_minimal_fixture" in p for p in problems)
+
+
+def test_default_product_activation_rejects_provenance_rerun_drift(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    inputs = _build_synthetic_activation_inputs(tmp_path)
+    outputs = build_quant_matrix_default_product_activation(
+        output_dir=tmp_path / "default_activation",
+        source_root=tmp_path,
+        real_bundle_summary_json=inputs["real_bundle_summary"],
+        product_ready_closeout_summary_json=inputs["closeout_summary"],
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+    original_run_activation = activation_module.run_activation
+
+    def drifted_run_activation(*args, **kwargs):
+        result = dict(original_run_activation(*args, **kwargs))
+        provenance = result["cell_provenance"]
+        provenance.write_text(
+            provenance.read_text(encoding="utf-8").replace(
+                "accepted_backfill",
+                "detected",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(activation_module, "run_activation", drifted_run_activation)
+
+    problems = validate_quant_matrix_default_product_activation(
+        summary_json=outputs["summary_json"],
+        source_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any(
+        "cell_provenance does not match rerun activation" in problem
+        for problem in problems
     )
 
 

@@ -52,6 +52,26 @@ def test_real_bundle_builds_self_validating_contract_outputs(tmp_path: Path) -> 
         expected_accepted_backfill_count=1,
     ) == []
     summary = json.loads(outputs["summary_json"].read_text(encoding="utf-8"))
+    cell_contract = outputs["cell_provenance_summary_json"]
+    review_contract = outputs["review_rows_summary_json"]
+    assert cell_contract.is_file()
+    assert outputs["cell_provenance_minimal_fixture"].is_file()
+    assert review_contract.is_file()
+    assert outputs["review_rows_minimal_fixture"].is_file()
+    assert (
+        summary["artifacts"]["cell_provenance_summary"]["sha256"]
+        == _sha256(cell_contract)
+    )
+    assert (
+        summary["artifacts"]["review_rows_summary"]["sha256"]
+        == _sha256(review_contract)
+    )
+    assert summary["artifacts"]["cell_provenance"]["retention_decision"] == (
+        "externalize"
+    )
+    assert summary["artifacts"]["review_rows"]["retention_decision"] == (
+        "externalize"
+    )
     assert summary["accepted_backfill_count"] == 1
     assert summary["validation_status"] == "contract_ready_science_inconclusive"
     assert summary["product_writer_changed"] is False
@@ -153,6 +173,107 @@ def test_real_bundle_check_rejects_missing_downstream_rows(tmp_path: Path) -> No
     )
 
     assert "downstream impact row_metrics_tsv does not exist" in problems
+
+
+def test_real_bundle_check_rejects_stale_fixture_contract(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    outputs = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    payload = json.loads(
+        outputs["cell_provenance_summary_json"].read_text(encoding="utf-8")
+    )
+    payload["source_row_count"] = 999
+    outputs["cell_provenance_summary_json"].write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    problems = validate_quant_matrix_real_bundle(
+        summary_json=outputs["summary_json"],
+        repo_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("cell_provenance summary" in problem for problem in problems)
+
+
+def test_real_bundle_check_rejects_missing_or_tampered_minimal_fixture(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    outputs = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    outputs["cell_provenance_minimal_fixture"].unlink()
+
+    missing = validate_quant_matrix_real_bundle(
+        summary_json=outputs["summary_json"],
+        repo_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("cell_provenance minimal fixture" in problem for problem in missing)
+
+    outputs = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    fixture_text = outputs["review_rows_minimal_fixture"].read_text(
+        encoding="utf-8"
+    )
+    outputs["review_rows_minimal_fixture"].write_text(
+        fixture_text.replace("review_only", "authority_changed", 1),
+        encoding="utf-8",
+    )
+
+    tampered = validate_quant_matrix_real_bundle(
+        summary_json=outputs["summary_json"],
+        repo_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert any("review rows minimal fixture" in problem for problem in tampered)
+
+
+def test_real_bundle_check_accepts_externalized_cell_provenance(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    outputs = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    outputs["cell_provenance"].unlink()
+
+    assert (
+        validate_quant_matrix_real_bundle(
+            summary_json=outputs["summary_json"],
+            repo_root=tmp_path,
+            expected_source_run_id="synthetic-current-511-authority-replay",
+            expected_downstream_scope="synthetic_current_authority_replay",
+            expected_accepted_backfill_count=1,
+        )
+        == []
+    )
 
 
 def test_real_bundle_can_externalize_review_html(tmp_path: Path) -> None:
@@ -456,3 +577,9 @@ def _write_tsv(
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest().upper()
