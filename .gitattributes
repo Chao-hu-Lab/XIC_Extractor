@@ -1,0 +1,2 @@
+# Validation TSVs intentionally preserve empty trailing cells for schema shape.
+docs/superpowers/validation/**/*.tsv whitespace=-blank-at-eol

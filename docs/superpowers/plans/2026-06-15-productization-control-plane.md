@@ -2839,6 +2839,53 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrix Real Bundle v1
+
+- Lane: Backfill real `QuantMatrixVersion` bundle assembly / Phase 7.
+- Previous tier: Phase 6 defined a downstream-impact smoke contract, but the
+  durable productization packet still did not include a real
+  `QuantMatrixVersion` bundle produced from the current 511-cell authority
+  replay.
+- New tier: unchanged. This is a no-RAW, read-only real-bundle builder/checker
+  and validation artifact, not a maturity-tier promotion, ProductWriter default
+  extraction change, selected peak/area/counting change, workbook/GUI change,
+  review/replay behavior change, broad Backfill unpark, or new matrix
+  authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_real_bundle_schema.v1.json`,
+  `scripts/build_quant_matrix_real_bundle.py`,
+  `tests/test_quant_matrix_real_bundle.py`, and
+  `docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
+- Product surface changed: additive Phase 7 bundle outputs only. The bundle
+  contains a `ProductionAcceptanceManifest`, expected diff,
+  `QuantMatrixVersion`, cell provenance, row summary, review summary/report,
+  downstream-impact smoke, and contract-only readiness sidecars generated from
+  the current source run
+  `seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`.
+- Evidence: default `--check-only` now fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`; synthetic/partial bundles require explicit
+  test overrides and cannot satisfy the default Phase 7 check. Focused tests
+  cover schema parity, self-validation, source-copy tamper rejection,
+  non-current 511 bundle rejection, downstream rows deletion rejection, and CLI
+  round trip.
+- Current validation result: the real bundle check passes, contract correctness
+  passes, downstream-impact smoke passes, and readiness remains
+  `contract_ready_science_inconclusive` with `production_ready=false` and
+  `may_promote_default_quant_matrix=false` because large-cohort/oracle/downstream
+  evidence has not yet been rebound into a promotion packet v2.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix authority, workbook, GUI, selected peak, selected area, counted
+  detection, review/replay behavior, current 511-cell writer authority, or
+  broad Backfill authority changed.
+- Remaining blocker: production-ready promotion still needs a validation packet
+  v2 that binds the real downstream-impact artifact together with the
+  large-cohort and heldout-oracle artifacts.
+- Next checkpoint: build QuantMatrix promotion validation packet v2 from the
+  real bundle's downstream-impact smoke and run readiness against the real
+  bundle.
+
 ### 2026-06-19 - QuantMatrix Downstream Impact Smoke v1
 
 - Lane: Backfill downstream-impact evidence contract / Phase 6.

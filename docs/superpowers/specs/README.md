@@ -46,6 +46,12 @@ automatic implementation goals.
   and missing science evidence while staying read-only with
   `write_authority=false`; downstream-impact rows must validate the artifact
   content, not only a tier string.
+- `quant_matrix_real_bundle_schema.v1.json`: Phase 7 real
+  `QuantMatrixVersion` bundle schema. It assembles the current standard-peak
+  Backfill authority replay into manifest, expected-diff, version, review,
+  downstream-impact, and contract-only readiness artifacts while leaving
+  ProductWriter defaults, workbook/GUI, selected peak/area, counted detection,
+  broad Backfill, and production tier unchanged.
 
 ## Rule
 

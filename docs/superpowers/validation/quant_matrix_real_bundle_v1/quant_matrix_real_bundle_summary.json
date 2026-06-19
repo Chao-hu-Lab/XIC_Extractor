@@ -1,0 +1,129 @@
+{
+  "accepted_backfill_count": 511,
+  "artifacts": {
+    "baseline_quant_matrix": {
+      "path": "inputs/baseline_quant_matrix.tsv",
+      "sha256": "A78B5F7697D300A66472C12C5E18651E3DCED114169460BDBD23E58927A4B56A"
+    },
+    "cell_provenance": {
+      "path": "quant_matrix_version/cell_provenance.tsv",
+      "sha256": "D017326F8A7FA46F7C9C969065C8B2FF1B614953A65E8C19EC8F27615B7C327C"
+    },
+    "downstream_impact_rows_tsv": {
+      "path": "downstream_impact/quant_matrix_downstream_impact_rows.tsv",
+      "sha256": "1014B5FC1B74C7F49407DFFF58C8FAB9A5771F0787C942BD796F728711F6CA14"
+    },
+    "downstream_impact_summary_json": {
+      "path": "downstream_impact/quant_matrix_downstream_impact_smoke.json",
+      "sha256": "E2CC7B48F4437D8E2FAC23B4F1AF28BA0D4CE28947DFE5E014F5549A06204132"
+    },
+    "expected_diff": {
+      "path": "inputs/expected_diff.tsv",
+      "sha256": "4E4589A06870C3DA300DB9627FB6E920D26230F7322B1252B83A475DEC6E9A8E"
+    },
+    "expected_diff_summary": {
+      "path": "quant_matrix_version/expected_diff_summary.tsv",
+      "sha256": "1E8EB27926B43B535DB2CCACCC14608719FF4A5ACB6EC1C63EE4C559C3FC0832"
+    },
+    "input_matrix_identity": {
+      "path": "inputs/alignment_matrix_identity.tsv",
+      "sha256": "599E4D33C2582D7F35733BBAC18102B0E3D55E54939CE434049F4E4716971A48"
+    },
+    "production_acceptance_manifest": {
+      "path": "inputs/production_acceptance_manifest.tsv",
+      "sha256": "BFF67E9441646B22EFCBD0AF9468876560B08FBF4A90F7B340B0DF614325FD8E"
+    },
+    "quant_matrix": {
+      "path": "quant_matrix_version/quant_matrix.tsv",
+      "sha256": "43CA851F97732267CF76552112D75894F74EDA4BC90BC9226E1F7D0958A0517C"
+    },
+    "readiness_checks_tsv": {
+      "path": "readiness/quant_matrix_promotion_readiness_checks.tsv",
+      "sha256": "022CAB45127C1BFA2C506A10CD364185B5A3F3321FEC46929A682D4D5CC39821"
+    },
+    "readiness_summary_json": {
+      "path": "readiness/quant_matrix_promotion_readiness_summary.json",
+      "sha256": "FEE5CF5E39E6E352BDD0CCB6541B85E5984405819CCD0B6FB6965DD59003282C"
+    },
+    "review_html": {
+      "path": "review/quant_matrix_review_report.html",
+      "sha256": "DE671BEEC755979E81D98A2E804E51658EFCE09E3A396E19F3996C7EF2E880C6"
+    },
+    "review_rows": {
+      "path": "review/quant_matrix_review_rows.tsv",
+      "sha256": "900870EE426B1A8CDC88F92085A2F2EEDF39785F33DA108888D67200421AAB5B"
+    },
+    "review_summary_json": {
+      "path": "review/quant_matrix_review_summary.json",
+      "sha256": "4BFF6D27F2412BD4BD3FDDD2276D1E4B24868AA3796DABC17CFE0A19AE18B068"
+    },
+    "row_summary": {
+      "path": "quant_matrix_version/row_summary.tsv",
+      "sha256": "38FB8697377673E7637DC59A792F30068623E9FD8FF54CA901250B30538EFFA8"
+    },
+    "source_summary": {
+      "path": "quant_matrix_version/source_summary.tsv",
+      "sha256": "A26D911DE44E95C96DE9896C90B6AA887A27AD8E000F074EE686AB252EB0E0A1"
+    }
+  },
+  "authority_statement": "Phase 7 real QuantMatrixVersion bundle only. It proves the current 511 accepted Backfill cells can pass the manifest/version/review/downstream contracts, but it does not change ProductWriter defaults.",
+  "broad_backfill_unparked": false,
+  "bundle_kind": "real_quant_matrix_version",
+  "default_quant_matrix_changed": false,
+  "downstream_scope": "current_511_authority_replay",
+  "may_promote_default_quant_matrix": false,
+  "original_source_artifacts": {
+    "activated_matrix": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/activated_matrix/alignment_matrix.tsv",
+      "sha256": "43CA851F97732267CF76552112D75894F74EDA4BC90BC9226E1F7D0958A0517C"
+    },
+    "activation_inputs_summary": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/standard_peak_activation_inputs/standard_peak_activation_inputs.tsv",
+      "sha256": "7A117E1A0E21CBF89703CA589B7EF0713745CA68A77076CF8E244AB152D6CA29"
+    },
+    "activation_value_delta": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/activated_matrix/activation_value_delta.tsv",
+      "sha256": "633D60F23B3413C5EA34DD14ACB98DFF315DAA2DBF555CF3E1D41363BFEE203D"
+    },
+    "activation_values": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/standard_peak_activation_inputs/standard_peak_activation_values.tsv",
+      "sha256": "AECDA89C4F52137B48ADCB61434787086C24F1E9B6C43520A3DE3B5F30B6E422"
+    },
+    "matrix_identity": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/activated_matrix/alignment_matrix_identity.tsv",
+      "sha256": "599E4D33C2582D7F35733BBAC18102B0E3D55E54939CE434049F4E4716971A48"
+    },
+    "seed_guard_decisions": {
+      "path": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization/standard_peak_activation_inputs/seed_guard_decisions.tsv",
+      "sha256": "6B8E692311619C32FA6DC9B0860D46D07066AEE39F3A0E821C90278F8268A95F"
+    }
+  },
+  "phase": "phase7_real_quant_matrix_bundle",
+  "product_writer_changed": false,
+  "raw_or_85raw_ran": false,
+  "read_only": true,
+  "schema_version": "quant_matrix_real_bundle_v1",
+  "scorer_ran": false,
+  "source_artifacts": {
+    "activation_inputs_summary": {
+      "path": "source_artifacts/standard_peak_activation_inputs.tsv",
+      "sha256": "7A117E1A0E21CBF89703CA589B7EF0713745CA68A77076CF8E244AB152D6CA29"
+    },
+    "activation_value_delta": {
+      "path": "source_artifacts/activation_value_delta.tsv",
+      "sha256": "633D60F23B3413C5EA34DD14ACB98DFF315DAA2DBF555CF3E1D41363BFEE203D"
+    },
+    "activation_values": {
+      "path": "source_artifacts/standard_peak_activation_values.tsv",
+      "sha256": "AECDA89C4F52137B48ADCB61434787086C24F1E9B6C43520A3DE3B5F30B6E422"
+    },
+    "seed_guard_decisions": {
+      "path": "source_artifacts/seed_guard_decisions.tsv",
+      "sha256": "6B8E692311619C32FA6DC9B0860D46D07066AEE39F3A0E821C90278F8268A95F"
+    }
+  },
+  "source_run_dir": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization",
+  "source_run_id": "seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617",
+  "status": "pass",
+  "validation_status": "contract_ready_science_inconclusive"
+}
