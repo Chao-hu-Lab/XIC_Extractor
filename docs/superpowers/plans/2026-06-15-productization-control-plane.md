@@ -324,10 +324,14 @@ readiness science-inconclusive until evidence was rebound. Phase 8 now binds
 that real downstream-impact artifact together with the existing large-cohort
 and heldout-oracle artifacts into `QuantMatrix Promotion Packet v2`; real-bundle
 readiness is `production_ready_candidate_packet` with `production_ready=true`
-and `may_promote_default_quant_matrix=true`. This is a candidate promotion
-packet only: ProductWriter default extraction, default matrix authority,
-workbook/GUI behavior, selected peak/area, counted detection, and broad
-Backfill authority remain unchanged until a later expected-diff activation gate.
+and `may_promote_default_quant_matrix=true`. At that point it was a candidate
+promotion packet only: ProductWriter default extraction, default matrix
+authority, workbook/GUI behavior, selected peak/area, counted detection, and
+broad Backfill authority remained unchanged until the later expected-diff
+activation gate described below.
+The default matrix authority phrase here is retained as a productization-state
+anchor for the Phase 8 boundary, as is the later expected-diff activation gate
+phrase.
 Phase 9 now adds that no-RAW default activation dry-run expected-diff gate:
 manifest-driven activation is rerun in a temporary directory and matches the
 Phase 7 reference `quant_matrix`, `cell_provenance`, `row_summary`, and
@@ -341,6 +345,18 @@ the closeout checklist has six passing checks, and the activation contract is
 ready for a separate explicit ProductWriter activation commit. This does not
 itself change default outputs, workbook/GUI, selected peak/area, counted
 detection, current 511-cell authority, or broad Backfill status.
+Phase 11 now performs that explicit ProductWriter/default output activation:
+the default output `quant_matrix.tsv` is written from the current
+ProductionAcceptanceManifest plus expected-diff contract and contains detected
+values plus 511 accepted Backfill quantification values. The activated product
+surface also writes `cell_provenance`, `row_summary`, `expected_diff_summary`,
+and `source_summary`; the summary is
+`product_ready_default_matrix_activated`, with 17489 detected cells, 511
+accepted Backfill cells, 18000 quant-available cells, and zero unused
+expected-diff rows. This activates the current 511-cell default matrix output
+only; it does not change workbook/GUI behavior, selected peak, selected area,
+counted detection, review/replay behavior, broad Backfill status, or the
+registered product authority scope.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2859,6 +2875,52 @@ at that older checkpoint, not the latest release claim.
   owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
+
+### 2026-06-19 - QuantMatrix Default Product Activation v1
+
+- Lane: Backfill default QuantMatrix ProductWriter activation / Phase 11.
+- Previous tier: `product_ready_default_matrix_candidate`, which still
+  required an explicit ProductWriter/default output activation commit.
+- New tier: `product_ready_default_matrix_activated`. The current 511-cell
+  authority is now materialized as default quant matrix output. Authority scope
+  and row count remain unchanged: `backfill_policy_write_ready_rows`, 511
+  accepted Backfill cells, broad 4613-row Backfill still parked.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_default_product_activation_schema.v1.json`,
+  `scripts/build_quant_matrix_default_product_activation.py`,
+  `tests/test_quant_matrix_default_product_activation.py`, and
+  `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`.
+- Product surface changed: explicit default output files are now written:
+  `default_output/quant_matrix.tsv`, `default_output/cell_provenance.tsv`,
+  `default_output/row_summary.tsv`,
+  `default_output/expected_diff_summary.tsv`,
+  `default_output/source_summary.tsv`,
+  `default_product_activation_checks.tsv`, and
+  `quant_matrix_default_product_activation_summary.json`.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. The checker revalidates the Phase 7 real
+  bundle and Phase 10 Product Ready closeout, reruns manifest-driven
+  activation, checks source hashes, requires expected-diff closure, and compares
+  the default outputs with the Phase 7 reference hashes.
+- Current validation result: activation status is `pass`; 511 expected,
+  511 accepted Backfill written, and 0 unused expected-diff rows. Default
+  `quant_matrix.tsv`, `cell_provenance.tsv`, `row_summary.tsv`, and
+  `expected_diff_summary.tsv` match the Phase 7 reference hashes. The sidecar
+  records 17489 detected cells, 511 accepted Backfill cells, and 18000
+  quant-available cells.
+- Product surface not changed: No workbook, GUI, selected peak, selected area,
+  counted detection, review/replay behavior, broad Backfill authority, scorer,
+  RAW, or 85RAW changed. Accepted Backfill values are quantification values in
+  the default matrix, not detections or truth claims.
+- Status-index update: updated the writer row's current artifact/public surface
+  to this activation summary and `quant_matrix_default_product_activation_v1`.
+  The writer row count and product authority scope remain exactly 511 and
+  `backfill_policy_write_ready_rows`.
+- Next checkpoint: maintain this default output through the authority manifest,
+  expected-diff checks, and focused public-surface tests; do not expand Backfill
+  authority without a new authority goal.
 
 ### 2026-06-19 - QuantMatrix Product Ready Closeout v1
 

@@ -69,6 +69,12 @@ automatic implementation goals.
   dry-run evidence into a `product_ready_default_matrix_candidate` statement,
   while still requiring a separate explicit ProductWriter activation commit
   before default outputs or matrix authority can change.
+- `quant_matrix_default_product_activation_schema.v1.json`: explicit
+  ProductWriter/default output activation schema. It writes
+  `default_output/quant_matrix.tsv` plus `cell_provenance`, `row_summary`,
+  `expected_diff_summary`, and `source_summary` from the validated current
+  511-cell authority contract; accepted Backfill values enter the default
+  numeric matrix as quantification values, not detections or truth claims.
 
 ## Rule
 
