@@ -46,8 +46,16 @@
       "sha256": "FEE5CF5E39E6E352BDD0CCB6541B85E5984405819CCD0B6FB6965DD59003282C"
     },
     "review_html": {
+      "externalized": true,
+      "externalized_path": "local_validation_artifacts/externalized_superpowers_validation/quant_matrix_real_bundle_v1/review/quant_matrix_review_report.html",
       "path": "review/quant_matrix_review_report.html",
+      "replacement_or_summary": "review/quant_matrix_review_report_summary.json",
+      "retention_decision": "externalize",
       "sha256": "DE671BEEC755979E81D98A2E804E51658EFCE09E3A396E19F3996C7EF2E880C6"
+    },
+    "review_html_summary_json": {
+      "path": "review/quant_matrix_review_report_summary.json",
+      "sha256": "13062FBA0148E955C67F3F6DCF664D5AE6C0CE220C8AFF5F4D10A85FA4A7D379"
     },
     "review_rows": {
       "path": "review/quant_matrix_review_rows.tsv",

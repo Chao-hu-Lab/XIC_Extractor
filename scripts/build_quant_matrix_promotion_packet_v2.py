@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -140,6 +139,7 @@ def build_quant_matrix_promotion_packet_v2(
     _localize_downstream_evidence_inputs(
         packet_outputs=packet_outputs,
         bundle_paths=bundle_paths,
+        source_root=source_root,
     )
 
     readiness_dir = output_dir / "real_bundle_readiness"
@@ -150,6 +150,7 @@ def build_quant_matrix_promotion_packet_v2(
         review_summary_json=bundle_paths["review_summary_json"],
         validation_evidence_json=packet_outputs["validation_evidence_json"],
         output_dir=readiness_dir,
+        validation_artifact_root=source_root,
     )
     _rewrite_readiness_input_paths(
         readiness_outputs["summary_json"],
@@ -292,6 +293,7 @@ def validate_quant_matrix_promotion_packet_v2(
             validation_evidence_json=evidence_json,
             readiness_summary=readiness_summary,
             readiness_checks=readiness_checks,
+            source_root=source_root,
             problems=problems,
         )
 
@@ -433,6 +435,7 @@ def _append_readiness_rerun_problems(
     validation_evidence_json: Path,
     readiness_summary: Path,
     readiness_checks: Path,
+    source_root: Path,
     problems: list[str],
 ) -> None:
     try:
@@ -444,6 +447,7 @@ def _append_readiness_rerun_problems(
                 review_summary_json=bundle_paths["review_summary_json"],
                 validation_evidence_json=validation_evidence_json,
                 output_dir=Path(tmpdir),
+                validation_artifact_root=source_root,
             )
             expected_summary = _json_without_input_artifacts(outputs["summary_json"])
             actual_summary = _json_without_input_artifacts(readiness_summary)
@@ -461,6 +465,7 @@ def _localize_downstream_evidence_inputs(
     *,
     packet_outputs: Mapping[str, Path],
     bundle_paths: Mapping[str, Path],
+    source_root: Path,
 ) -> None:
     evidence_json = packet_outputs["validation_evidence_json"]
     packet_dir = evidence_json.parent
@@ -482,24 +487,18 @@ def _localize_downstream_evidence_inputs(
         strict=False,
     )
     copied_payload = _read_json_object(copied_summary)
-    inputs_dir = copied_summary.parent / "downstream_impact_inputs"
-    inputs_dir.mkdir(parents=True, exist_ok=True)
     localized_inputs = {
         "quant_matrix_tsv": bundle_paths["quant_matrix"],
         "cell_provenance_tsv": bundle_paths["cell_provenance"],
         "row_summary_tsv": bundle_paths["row_summary"],
     }
+    _remove_stale_downstream_input_copies(copied_summary.parent)
     input_artifacts = copied_payload.get("input_artifacts")
     if not isinstance(input_artifacts, dict):
         raise ValueError("downstream summary input_artifacts must be an object")
     for field, source in localized_inputs.items():
-        destination = inputs_dir / source.name
-        if source.resolve(strict=True) != destination.resolve(strict=False):
-            shutil.copy2(source, destination)
-        input_artifacts[field] = destination.relative_to(
-            copied_summary.parent,
-        ).as_posix()
-        input_artifacts[field.replace("_tsv", "_sha256")] = file_sha256(destination)
+        input_artifacts[field] = _source_relpath(source, source_root=source_root)
+        input_artifacts[field.replace("_tsv", "_sha256")] = file_sha256(source)
     copied_summary.write_text(
         json.dumps(copied_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -530,6 +529,18 @@ def _localize_downstream_evidence_inputs(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _remove_stale_downstream_input_copies(artifact_dir: Path) -> None:
+    stale_dir = artifact_dir / "downstream_impact_inputs"
+    for filename in ("cell_provenance.tsv", "quant_matrix.tsv", "row_summary.tsv"):
+        path = stale_dir / filename
+        if path.exists():
+            path.unlink()
+    try:
+        stale_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _real_bundle_paths(

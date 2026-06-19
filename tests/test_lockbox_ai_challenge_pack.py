@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.build_lockbox_ai_challenge_pack import (
     AI_CHALLENGE_INDEX,
     AI_CHALLENGE_QUEUE,
+    AI_CHALLENGE_RENDERED_OUTPUT_DIR,
     AI_CHALLENGE_SUMMARY,
     AI_CHALLENGE_TEMPLATE,
     OWNER_BOUNDARY_CONFIRMATION,
@@ -109,6 +110,10 @@ def test_current_ai_challenge_index_links_existing_files() -> None:
     html = AI_CHALLENGE_INDEX.read_text(encoding="utf-8")
     hrefs = re.findall(r'href="([^"]+)"', html)
 
+    assert AI_CHALLENGE_INDEX == AI_CHALLENGE_RENDERED_OUTPUT_DIR / "index.html"
+    assert not Path(
+        "docs/superpowers/validation/lockbox_ai_challenge_v1/index.html",
+    ).exists()
     assert "Lockbox AI Challenge v1" in html
     assert html.count("<tr><td>") == 72
     assert hrefs
@@ -240,9 +245,34 @@ def test_ai_challenge_checker_rejects_stale_index(
         ai_challenge_template_path=template,
         ai_challenge_summary_path=summary,
         ai_challenge_index_path=index,
+        require_rendered_local=True,
     )
 
     assert any("AI challenge HTML index is stale" in problem for problem in problems)
+
+
+def test_ai_challenge_checker_default_allows_missing_rendered_index(
+    tmp_path: Path,
+) -> None:
+    queue, template, summary, index = _build_custom_pack(tmp_path)
+    index.unlink()
+
+    default_problems = check_lockbox_ai_challenge_pack(
+        ai_challenge_queue_path=queue,
+        ai_challenge_template_path=template,
+        ai_challenge_summary_path=summary,
+        ai_challenge_index_path=index,
+    )
+    rendered_problems = check_lockbox_ai_challenge_pack(
+        ai_challenge_queue_path=queue,
+        ai_challenge_template_path=template,
+        ai_challenge_summary_path=summary,
+        ai_challenge_index_path=index,
+        require_rendered_local=True,
+    )
+
+    assert default_problems == []
+    assert any("AI challenge HTML index missing" in p for p in rendered_problems)
 
 
 def test_ai_challenge_checker_rejects_stale_summary_authority(

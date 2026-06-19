@@ -4,7 +4,9 @@ from pathlib import Path
 
 from scripts.build_lockbox_label_collection_pack import PACKET_INDEX_HEADER
 from scripts.build_lockbox_static_review_bundle import (
+    CONTRACT_DIR,
     OUTPUT_DIR,
+    RENDERED_OUTPUT_DIR,
     build_lockbox_static_review_bundle,
     check_lockbox_static_review_bundle,
 )
@@ -48,7 +50,9 @@ def test_current_static_review_bundle_counts_and_authority() -> None:
     )
     first_plot = Path(plotted[0]["review_plot_png_path"])
     assert first_plot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
-    html = (OUTPUT_DIR / "index.html").read_text(encoding="utf-8")
+    assert OUTPUT_DIR == CONTRACT_DIR
+    assert not (OUTPUT_DIR / "index.html").exists()
+    html = (RENDERED_OUTPUT_DIR / "index.html").read_text(encoding="utf-8")
     assert "Gaussian15" in html
     assert "ProductWriter authority" in html
 
@@ -141,9 +145,46 @@ def test_static_review_checker_rejects_missing_plot(tmp_path: Path) -> None:
         label_template_path=label_template,
         output_dir=tmp_path / "bundle",
         expected_case_count=2,
+        require_rendered_local=True,
     )
 
     assert any("plot PNG missing" in problem for problem in problems)
+
+
+def test_static_review_checker_default_allows_missing_rendered_local(
+    tmp_path: Path,
+) -> None:
+    packet_index, label_template = _write_synthetic_inputs(tmp_path)
+    build_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        contract_dir=tmp_path / "contract",
+        rendered_output_dir=tmp_path / "rendered",
+    )
+    for path in (tmp_path / "rendered").rglob("*"):
+        if path.is_file():
+            path.unlink()
+
+    default_problems = check_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        contract_dir=tmp_path / "contract",
+        rendered_output_dir=tmp_path / "rendered",
+        expected_case_count=2,
+    )
+    rendered_problems = check_lockbox_static_review_bundle(
+        packet_index_path=packet_index,
+        label_template_path=label_template,
+        contract_dir=tmp_path / "contract",
+        rendered_output_dir=tmp_path / "rendered",
+        expected_case_count=2,
+        require_rendered_local=True,
+    )
+
+    assert default_problems == []
+    assert any("index.html missing" in problem for problem in rendered_problems)
+    assert any("case HTML missing" in problem for problem in rendered_problems)
+    assert any("plot PNG missing" in problem for problem in rendered_problems)
 
 
 def test_static_review_checker_rejects_authority_flags(tmp_path: Path) -> None:

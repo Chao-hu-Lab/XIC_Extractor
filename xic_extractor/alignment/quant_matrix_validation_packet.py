@@ -207,6 +207,7 @@ def validate_quant_matrix_validation_evidence_packet(
             base_dir=base_dir,
             problems=problems,
             label=tier or f"row {index}",
+            source_root=source_root,
         )
         _append_source_binding_problems(
             row,
@@ -634,6 +635,7 @@ def _append_artifact_binding_problems(
     base_dir: Path,
     problems: list[str],
     label: str,
+    source_root: Path | None,
 ) -> None:
     relpath = _text(row.get("artifact_path"))
     expected_sha256 = _text(row.get("artifact_sha256"))
@@ -657,7 +659,12 @@ def _append_artifact_binding_problems(
     elif file_sha256(artifact) != expected_sha256.upper():
         problems.append(f"{label}: artifact_sha256 mismatch")
     if label == "downstream_impact_smoke":
-        problems.extend(validate_quant_matrix_downstream_impact_smoke(artifact))
+        problems.extend(
+            validate_quant_matrix_downstream_impact_smoke(
+                artifact,
+                artifact_root=source_root,
+            ),
+        )
 
 
 def _append_source_binding_problems(

@@ -7,6 +7,7 @@ from scripts.build_lockbox_next_action_plan import NEXT_ACTION_PLAN
 from scripts.build_lockbox_second_review_pack import (
     SECOND_REVIEW_INDEX,
     SECOND_REVIEW_QUEUE,
+    SECOND_REVIEW_RENDERED_OUTPUT_DIR,
     SECOND_REVIEW_SUMMARY,
     SECOND_REVIEW_TEMPLATE,
     build_lockbox_second_review_pack,
@@ -107,6 +108,10 @@ def test_current_second_review_index_links_all_cases() -> None:
     html = SECOND_REVIEW_INDEX.read_text(encoding="utf-8")
     hrefs = re.findall(r'href="([^"]+)"', html)
 
+    assert SECOND_REVIEW_INDEX == SECOND_REVIEW_RENDERED_OUTPUT_DIR / "index.html"
+    assert not Path(
+        "docs/superpowers/validation/lockbox_second_review_v1/index.html",
+    ).exists()
     assert "Lockbox Second Review v1" in html
     assert "Gaussian15" in html
     assert html.count("<tr><td>") == 53
@@ -245,9 +250,36 @@ def test_second_review_checker_rejects_stale_static_plot_hash(
         second_review_template_path=tmp_path / "template.tsv",
         second_review_summary_path=tmp_path / "summary.json",
         second_review_index_path=tmp_path / "index.html",
+        require_rendered_local=True,
     )
 
     assert any("plot_sha256 must match linked PNG" in problem for problem in problems)
+
+
+def test_second_review_checker_default_allows_missing_rendered_index(
+    tmp_path: Path,
+) -> None:
+    queue, template, summary, index = _build_custom_pack(tmp_path)
+    index.unlink()
+
+    default_problems = check_lockbox_second_review_pack(
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+    )
+    rendered_problems = check_lockbox_second_review_pack(
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+        require_rendered_local=True,
+    )
+
+    assert default_problems == []
+    assert any(
+        "lockbox second-review HTML index missing" in p for p in rendered_problems
+    )
 
 
 def test_second_review_checker_rejects_stale_summary(tmp_path: Path) -> None:

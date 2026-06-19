@@ -67,11 +67,17 @@ DEFAULT_SOURCE_RUN_DIR = (
 DEFAULT_OUTPUT_DIR = (
     ROOT / "docs/superpowers/validation/quant_matrix_real_bundle_v1"
 )
+DEFAULT_RENDERED_REVIEW_DIR = (
+    ROOT
+    / "local_validation_artifacts/externalized_superpowers_validation/"
+    "quant_matrix_real_bundle_v1/review"
+)
 DEFAULT_DOWNSTREAM_SCOPE = "current_511_authority_replay"
 DEFAULT_SOURCE_RUN_ID = (
     "seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617"
 )
 DEFAULT_ACCEPTED_BACKFILL_COUNT = 511
+EXTERNALIZED_ARTIFACT_SUMMARY_SCHEMA = "externalized_validation_artifact_summary_v1"
 
 _TRUE = "TRUE"
 _FALSE = "FALSE"
@@ -93,9 +99,14 @@ def build_quant_matrix_real_bundle(
     output_dir: Path = DEFAULT_OUTPUT_DIR,
     repo_root: Path = ROOT,
     downstream_scope: str = DEFAULT_DOWNSTREAM_SCOPE,
+    rendered_review_dir: Path | None = None,
 ) -> Mapping[str, Path]:
     source_paths = _source_run_paths(source_run_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    rendered_review_dir = _resolve_rendered_review_dir(
+        output_dir=output_dir,
+        rendered_review_dir=rendered_review_dir,
+    )
     inputs_dir = output_dir / "inputs"
     sources_dir = output_dir / "source_artifacts"
     quant_dir = output_dir / "quant_matrix_version"
@@ -107,6 +118,7 @@ def build_quant_matrix_real_bundle(
         sources_dir,
         quant_dir,
         review_dir,
+        rendered_review_dir,
         downstream_dir,
         readiness_dir,
     ):
@@ -264,6 +276,7 @@ def build_quant_matrix_real_bundle(
         row_summary_tsv=activation_outputs["row_summary"],
         source_summary_tsv=activation_outputs["source_summary"],
         output_dir=review_dir,
+        html_path=rendered_review_dir / "quant_matrix_review_report.html",
     )
     _rewrite_review_artifact_paths(
         summary_json=review_outputs["summary_json"],
@@ -275,6 +288,11 @@ def build_quant_matrix_real_bundle(
             "source_summary_tsv": activation_outputs["source_summary"],
             "production_acceptance_manifest_tsv": manifest,
         },
+    )
+    review_html_summary = _write_externalized_review_html_summary(
+        output_dir=output_dir,
+        rendered_html=review_outputs["html"],
+        repo_root=repo_root,
     )
     downstream_outputs = build_quant_matrix_downstream_impact_smoke(
         quant_matrix_tsv=activation_outputs["quant_matrix"],
@@ -321,6 +339,7 @@ def build_quant_matrix_real_bundle(
         expected_diff=expected_diff,
         activation_outputs=activation_outputs,
         review_outputs=review_outputs,
+        review_html_summary=review_html_summary,
         downstream_outputs=downstream_outputs,
         readiness_outputs=readiness_outputs,
         accepted_backfill_count=len(manifest_rows),
@@ -332,7 +351,7 @@ def build_quant_matrix_real_bundle(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    return {
+    outputs = {
         "summary_json": summary_json,
         "baseline_quant_matrix": baseline_quant_matrix,
         "input_matrix_identity": input_matrix_identity,
@@ -347,6 +366,9 @@ def build_quant_matrix_real_bundle(
         "downstream_impact_summary_json": downstream_outputs["summary_json"],
         "readiness_summary_json": readiness_outputs["summary_json"],
     }
+    if review_html_summary is not None:
+        outputs["review_html_summary_json"] = review_html_summary
+    return outputs
 
 
 def validate_quant_matrix_real_bundle(
@@ -747,6 +769,7 @@ def _summary_payload(
     expected_diff: Path,
     activation_outputs: Mapping[str, Path],
     review_outputs: Mapping[str, Path],
+    review_html_summary: Path | None,
     downstream_outputs: Mapping[str, Path],
     readiness_outputs: Mapping[str, Path],
     accepted_backfill_count: int,
@@ -766,12 +789,31 @@ def _summary_payload(
         "source_summary": activation_outputs["source_summary"],
         "review_rows": review_outputs["review_rows"],
         "review_summary_json": review_outputs["summary_json"],
-        "review_html": review_outputs["html"],
         "downstream_impact_summary_json": downstream_outputs["summary_json"],
         "downstream_impact_rows_tsv": downstream_outputs["rows_tsv"],
         "readiness_summary_json": readiness_outputs["summary_json"],
         "readiness_checks_tsv": readiness_outputs["checks_tsv"],
     }
+    artifact_entries: dict[str, dict[str, Any]] = {
+        label: _artifact_entry(path, output_dir=output_dir)
+        for label, path in artifacts.items()
+    }
+    if review_html_summary is None:
+        artifact_entries["review_html"] = _artifact_entry(
+            review_outputs["html"],
+            output_dir=output_dir,
+        )
+    else:
+        artifact_entries["review_html"] = _externalized_review_html_entry(
+            output_dir=output_dir,
+            rendered_html=review_outputs["html"],
+            review_html_summary=review_html_summary,
+            repo_root=repo_root,
+        )
+        artifact_entries["review_html_summary_json"] = _artifact_entry(
+            review_html_summary,
+            output_dir=output_dir,
+        )
     return {
         "schema_version": REAL_BUNDLE_SCHEMA,
         "phase": "phase7_real_quant_matrix_bundle",
@@ -824,10 +866,7 @@ def _summary_payload(
                 repo_root=repo_root,
             ),
         },
-        "artifacts": {
-            label: _artifact_entry(path, output_dir=output_dir)
-            for label, path in artifacts.items()
-        },
+        "artifacts": artifact_entries,
     }
 
 
@@ -843,6 +882,82 @@ def _original_entry(path: Path, *, repo_root: Path) -> dict[str, str]:
         "path": _display_path(path, base_dir=repo_root),
         "sha256": file_sha256(path),
     }
+
+
+def _resolve_rendered_review_dir(
+    *,
+    output_dir: Path,
+    rendered_review_dir: Path | None,
+) -> Path:
+    if rendered_review_dir is not None:
+        return rendered_review_dir
+    if output_dir.resolve(strict=False) == DEFAULT_OUTPUT_DIR.resolve(strict=False):
+        return DEFAULT_RENDERED_REVIEW_DIR
+    return output_dir / "review"
+
+
+def _write_externalized_review_html_summary(
+    *,
+    output_dir: Path,
+    rendered_html: Path,
+    repo_root: Path,
+) -> Path | None:
+    original_html = output_dir / "review/quant_matrix_review_report.html"
+    if rendered_html.resolve(strict=False) == original_html.resolve(strict=False):
+        return None
+    if original_html.exists():
+        original_html.unlink()
+    summary_path = output_dir / "review/quant_matrix_review_report_summary.json"
+    summary = {
+        "schema_version": EXTERNALIZED_ARTIFACT_SUMMARY_SCHEMA,
+        "artifact_id": "quant_matrix_real_bundle_v1.review_html",
+        "original_path": _display_path(original_html, base_dir=repo_root),
+        "externalized_path": _display_path(rendered_html, base_dir=repo_root),
+        "generated_file_name": rendered_html.name,
+        "size_bytes": rendered_html.stat().st_size,
+        "line_count": _text_line_count(rendered_html),
+        "sha256": file_sha256(rendered_html),
+        "source_builder_command": (
+            "uv run python scripts/build_quant_matrix_real_bundle.py"
+        ),
+        "generated_by": "scripts/build_quant_matrix_real_bundle.py",
+        "purpose": "review-only rendered HTML for human inspection",
+        "retention_decision": "externalize",
+        "may_touch_matrix": False,
+        "may_grant_product_authority": False,
+        "product_writer_changed": False,
+        "matrix_authority_changed": False,
+        "created_or_updated": "2026-06-19",
+    }
+    summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return summary_path
+
+
+def _externalized_review_html_entry(
+    *,
+    output_dir: Path,
+    rendered_html: Path,
+    review_html_summary: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    return {
+        "path": "review/quant_matrix_review_report.html",
+        "sha256": file_sha256(rendered_html),
+        "externalized": True,
+        "externalized_path": _display_path(rendered_html, base_dir=repo_root),
+        "replacement_or_summary": review_html_summary.relative_to(
+            output_dir,
+        ).as_posix(),
+        "retention_decision": "externalize",
+    }
+
+
+def _text_line_count(path: Path) -> int:
+    with path.open("r", encoding="utf-8") as handle:
+        return sum(1 for _ in handle)
 
 
 def _rewrite_source_summary_paths(source_summary_tsv: Path) -> None:
@@ -962,6 +1077,15 @@ def _artifact_paths_from_summary(
         if not isinstance(raw_entry, dict):
             problems.append(f"{label}: artifact entry must be an object")
             continue
+        if raw_entry.get("externalized") is True:
+            _append_externalized_artifact_problems(
+                str(label),
+                raw_entry,
+                output_dir=output_dir,
+                repo_root=repo_root,
+                problems=problems,
+            )
+            continue
         relpath = str(raw_entry.get("path", "")).strip()
         sha256 = str(raw_entry.get("sha256", "")).strip()
         path = _resolve_child(output_dir, relpath, problems, label=label)
@@ -986,6 +1110,51 @@ def _artifact_paths_from_summary(
         problems=problems,
     )
     return resolved
+
+
+def _append_externalized_artifact_problems(
+    label: str,
+    raw_entry: Mapping[str, Any],
+    *,
+    output_dir: Path,
+    repo_root: Path,
+    problems: list[str],
+) -> None:
+    relpath = str(raw_entry.get("path", "")).strip()
+    sha256 = str(raw_entry.get("sha256", "")).strip()
+    if not relpath:
+        problems.append(f"{label}: externalized artifact path is missing")
+        return
+    if Path(relpath).is_absolute() or ".." in Path(relpath).parts:
+        problems.append(f"{label}: externalized artifact path must be output-relative")
+    if not _is_sha256(sha256):
+        problems.append(f"{label}: externalized artifact sha256 must be 64-hex")
+    summary_relpath = str(raw_entry.get("replacement_or_summary", "")).strip()
+    summary_path = _resolve_child(
+        output_dir,
+        summary_relpath,
+        problems,
+        label=f"{label} replacement summary",
+    )
+    if summary_path is None:
+        return
+    if not summary_path.is_file():
+        problems.append(f"{label}: replacement summary missing")
+        return
+    try:
+        summary = _read_json_object(summary_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        problems.append(f"{label}: replacement summary invalid: {exc}")
+        return
+    expected_original = _display_path(output_dir / relpath, base_dir=repo_root)
+    if summary.get("original_path") != expected_original:
+        problems.append(f"{label}: replacement summary original_path mismatch")
+    if summary.get("sha256") != sha256.upper():
+        problems.append(f"{label}: replacement summary sha256 mismatch")
+    if summary.get("retention_decision") != "externalize":
+        problems.append(f"{label}: replacement summary retention_decision mismatch")
+    if summary.get("may_grant_product_authority") is not False:
+        problems.append(f"{label}: replacement summary must not grant authority")
 
 
 def _append_source_artifact_copy_problems(
@@ -1157,6 +1326,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             repo_root=args.repo_root,
             downstream_scope=args.downstream_scope,
+            rendered_review_dir=args.rendered_review_dir,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -1170,6 +1340,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-run-dir", type=Path, default=DEFAULT_SOURCE_RUN_DIR)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--rendered-review-dir", type=Path)
     parser.add_argument("--repo-root", type=Path, default=ROOT)
     parser.add_argument("--downstream-scope", default=DEFAULT_DOWNSTREAM_SCOPE)
     parser.add_argument("--check-only", action="store_true")

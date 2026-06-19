@@ -42,13 +42,13 @@
   "schema_version": "lockbox_single_owner_ai_challenge_gate_v1",
   "source_artifacts": {
     "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
-    "ai_challenge_result_summary_sha256": "AFE3E40BE28AA27525495DA0D69B997D096109D0689280C265F10067C5EDAC56",
+    "ai_challenge_result_summary_sha256": "37705F262B665079BA378B958E5DB4E2895FB3717DE7A146485F24855C64111F",
     "owner_boundary_confirmation": "docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json",
-    "owner_boundary_confirmation_sha256": "7208E2B0B83006EF3AD31C22F587F0E5AF97272F3857B4D41EAA61B00B03468C",
+    "owner_boundary_confirmation_sha256": "D140BEB6EEB5C8D45884489AD54D53FB994FE6A5F5305066C602008A6DD31BD1",
     "second_review_summary": "docs/superpowers/validation/lockbox_second_review_summary_v1.json",
-    "second_review_summary_sha256": "3CBAE083DDA8B96E9A60158EE1FCE18F38EC15CCC60C52A31E23D127FD8CD6B9",
+    "second_review_summary_sha256": "295FC801131966F061DB9472C04F76531FDC5900742E40617BDB0F7E2A83437B",
     "truth_summary": "docs/superpowers/validation/lockbox_truth_summary_v1.json",
-    "truth_summary_sha256": "6DB5CF6FA97A12D002393C9ABE4CF5892A3A2F9F3752C574FD24D233F4320D4D"
+    "truth_summary_sha256": "EB065B2B463E8A7046A36CCFAD62238DA155ABEF988892D7BA7F6724CC031AC7"
   },
   "source_decisions": {
     "ai_challenge_result": "ai_challenge_no_owner_recheck_required",

@@ -140,7 +140,11 @@ def build_quant_matrix_downstream_impact_smoke(
     return {"summary_json": summary_json, "rows_tsv": rows_tsv}
 
 
-def validate_quant_matrix_downstream_impact_smoke(summary_json: Path) -> list[str]:
+def validate_quant_matrix_downstream_impact_smoke(
+    summary_json: Path,
+    *,
+    artifact_root: Path | None = None,
+) -> list[str]:
     problems: list[str] = []
     try:
         payload = json.loads(summary_json.read_text(encoding="utf-8"))
@@ -189,7 +193,13 @@ def validate_quant_matrix_downstream_impact_smoke(summary_json: Path) -> list[st
                 "downstream impact pass_conditions failed: " + ";".join(failed),
             )
     rows = _rows_tsv_binding_problems(summary_json, payload, problems)
-    _append_input_artifact_problems(summary_json, payload, rows, problems)
+    _append_input_artifact_problems(
+        summary_json,
+        payload,
+        rows,
+        problems,
+        artifact_root=artifact_root,
+    )
     return problems
 
 
@@ -466,6 +476,8 @@ def _append_input_artifact_problems(
     payload: Mapping[str, Any],
     rows: Sequence[Mapping[str, str]] | None,
     problems: list[str],
+    *,
+    artifact_root: Path | None,
 ) -> None:
     input_artifacts = payload.get("input_artifacts")
     if not isinstance(input_artifacts, dict):
@@ -482,7 +494,11 @@ def _append_input_artifact_problems(
         if not path_value:
             problems.append(f"downstream impact input_artifacts.{path_field} missing")
             continue
-        path = _resolve_input_artifact(summary_json, Path(path_value))
+        path = _resolve_input_artifact(
+            summary_json,
+            Path(path_value),
+            artifact_root=artifact_root,
+        )
         if path is None or not path.is_file():
             problems.append(
                 f"downstream impact input_artifacts.{path_field} does not exist",
@@ -537,11 +553,18 @@ def _append_input_artifact_problems(
         problems.append("downstream impact metrics do not match inputs")
 
 
-def _resolve_input_artifact(summary_json: Path, path: Path) -> Path | None:
+def _resolve_input_artifact(
+    summary_json: Path,
+    path: Path,
+    *,
+    artifact_root: Path | None,
+) -> Path | None:
     if path.is_absolute():
         return path
     root = _infer_repo_root(summary_json)
     candidates = [summary_json.parent / path]
+    if artifact_root is not None:
+        candidates.append(artifact_root / path)
     if root is not None:
         candidates.append(root / path)
     for candidate in candidates:

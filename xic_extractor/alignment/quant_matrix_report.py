@@ -96,6 +96,7 @@ def build_quant_matrix_review_report(
     row_summary_tsv: Path,
     source_summary_tsv: Path,
     output_dir: Path,
+    html_path: Path | None = None,
 ) -> Mapping[str, Path]:
     cell_rows = read_tsv_required(cell_provenance_tsv, CELL_PROVENANCE_COLUMNS)
     row_summary_rows = read_tsv_required(row_summary_tsv, ROW_SUMMARY_COLUMNS)
@@ -121,7 +122,9 @@ def build_quant_matrix_review_report(
     output_dir.mkdir(parents=True, exist_ok=True)
     review_rows_tsv = output_dir / "quant_matrix_review_rows.tsv"
     summary_json = output_dir / "quant_matrix_review_summary.json"
-    html_path = output_dir / "quant_matrix_review_report.html"
+    if html_path is None:
+        html_path = output_dir / "quant_matrix_review_report.html"
+    html_path.parent.mkdir(parents=True, exist_ok=True)
 
     write_tsv(
         review_rows_tsv,

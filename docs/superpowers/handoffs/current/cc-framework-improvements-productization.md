@@ -1,6 +1,6 @@
 # XIC productization handoff
 
-Updated: 2026-06-19 16:20
+Updated: 2026-06-19 18:14 +08:00
 Branch: `cc/framework-improvements`
 
 This is a compact current-state snapshot. Tier authority remains in
@@ -9,32 +9,40 @@ This is a compact current-state snapshot. Tier authority remains in
 ## Current Verdict
 
 The default numeric matrix is usable for downstream analysis as the current
-detected + 511 accepted-Backfill product output, but it predates the Discovery
-row-identity fix. Do not claim the activated `quant_matrix.tsv` contains the
-`d4-N6-2HE-dA` monoisotopic `300.1605 -> 184.113` target row until a later
+detected + 511 accepted-Backfill product output. The latest side cleanup did
+not change ProductWriter behavior, matrix values, workbook/GUI behavior,
+selected peak/area, counted detection, default extraction, scorer behavior, or
+Backfill authority.
+
+The `d4-N6-2HE-dA` monoisotopic `300.1605 -> 184.113` absence was traced to
+Discovery row creation and the Discovery generation path is fixed. The already
+activated default matrix bundle still predates that fix, so do not claim the
+activated `quant_matrix.tsv` contains that exact target row until a later
 discovery/alignment/default-activation expected-diff rerun regenerates it.
 
-The Discovery contract/gate is now fixed for the stop-ship root cause:
-
-- same scan/profile can preserve the valid `301.165 / 185.116` dR isotope row;
-- same scan/profile can also emit the inferred `300.1605 / 184.113` row;
-- row identity is encoded in `candidate_id`;
-- stale, duplicate, or row-mismatched candidate ids fail closed during
-  alignment CSV replay;
-- full Discovery candidate rows expose basis/delta provenance fields.
+Validation artifact retention cleanup is now executed through the current
+Phase 0-5 plan: rendered review HTML/PNG, QuantMatrix review HTML, and
+duplicated promotion-packet downstream input copies are not durable
+version-controlled product contracts. Contract indexes, status files, summaries,
+source hashes, and checker inputs remain in git and are covered by a
+metadata-only retention checker.
 
 ## Active References
 
 - Control plane:
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+- Validation retention policy:
+  `docs/superpowers/validation/RETENTION.md`
+- Validation artifact inventory:
+  `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv`
 - Default matrix activation bundle:
   `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`
 - Discovery precursor inference validation:
   `docs/superpowers/validation/discovery_precursor_inference_v1/`
-- Untargeted Discovery V1 spec:
-  `docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`
-- Blueprint:
-  `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`
+- Externalized local rendered artifacts:
+  `local_validation_artifacts/externalized_superpowers_validation/`
+- Retention checker:
+  `scripts/check_validation_artifact_retention.py`
 
 ## Product State
 
@@ -42,10 +50,12 @@ The Discovery contract/gate is now fixed for the stop-ship root cause:
 - Product authority scope: `backfill_policy_write_ready_rows`.
 - Current Backfill writer authority: exactly 511 accepted Backfill cells.
 - Broad 4613-row Backfill remains parked.
-- ProductWriter, workbook, GUI, selected peak/area, counted detection, scorer,
-  and Backfill authority are unchanged by the Discovery fix.
-- The Discovery full-candidate CSV schema and alignment replay behavior did
-  change; control plane records this as a no-tier-change public-surface update.
+- ProductWriter default matrix output is activated for detected values plus the
+  current 511 accepted Backfill values.
+- Four large QuantMatrix TSV validation outputs remain in git as `shrink_later`
+  until checker/use-path contracts can be reduced safely.
+- The retention cleanup only changes docs/artifact storage policy and removes
+  generated review/render/duplicate-copy outputs from version control.
 
 Status-index anchors retained:
 
@@ -65,7 +75,7 @@ Status-index anchors retained:
 - manual-boundary area recompute remain parked
 - classification and planning only
 
-## Stop-Ship Root Cause
+## Discovery Stop-Ship Fix
 
 User review found `d4-N6-2HE-dA` target `m/z=300.1605` absent from the
 activated `quant_matrix.tsv`. The nearby `301.165 / 185.116` row is a valid
@@ -79,7 +89,7 @@ only exact precursor. In `TumorBC2312_DNA.raw`, the observed product
 precursor-derived product and rejected the valid monoisotopic product before
 grouping/alignment.
 
-## Implemented Fix
+Implemented fix:
 
 - `DiscoverySettings.ms2_precursor_tol_da` / `scripts/run_discovery.py
   --ms2-precursor-tol-da` define the scan precursor window for inferred CID-NL
@@ -89,53 +99,98 @@ grouping/alignment.
 - Full candidate rows include `neutral_loss_error_basis`,
   `precursor_mz_basis`, `scan_precursor_mz`, `scan_precursor_delta_da`, and
   `max_scan_precursor_abs_delta_da`.
-- `neutral_loss_mass_error_ppm=0` on inferred rows means configured-loss
-  inference, not measured scan-precursor/product mass error.
 - `candidate_id` is `<sample>#<scan>@mz<precursor_mz>_p<product_mz>`.
 - Alignment CSV replay rejects stale `sample#scan` ids, mismatched suffixes,
   duplicate candidate ids, and invalid basis enums so 300/301 same-scan rows
   cannot collapse or be rebound silently.
 
-## Validation
+## Validation Artifact Retention
 
-Focused tests passed:
+`docs/superpowers/validation/RETENTION.md` defines which validation artifacts
+belong in git. `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv` currently
+inventories 298 effective rows:
 
-```powershell
-$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_discovery_ms2_seeds.py tests/test_discovery_grouping.py tests/test_discovery_csv.py tests/test_discovery_pipeline.py tests/test_alignment_csv_io.py tests/test_discovery_precursor_inference_artifact.py -v --tb=short
-```
+- 126 `keep_contract`
+- 36 `keep_summary`
+- 4 `shrink_later`
+- 132 `externalize`
 
-Result: `79 passed`.
+The cleanup externalized 132 generated validation artifacts / 12.19 MB to
+ignored local storage under
+`local_validation_artifacts/externalized_superpowers_validation/`. The tracked
+Lockbox static-review contract is now
+`docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv` plus
+`docs/superpowers/validation/lockbox_static_review_v1/README.md`; rendered
+`index.html`, `cases/*.html`, and `plots/*.png` are generated local/release
+artifacts. QuantMatrix real-bundle review HTML now has tracked
+`review/quant_matrix_review_report_summary.json`, and promotion packet v2
+downstream duplicate input TSVs are externalized while the copied downstream
+summary points back to canonical real-bundle inputs by source-root path and
+hash.
 
-One-RAW Discovery validation passed without 85RAW/scorer:
+`scripts/check_validation_artifact_retention.py` now enforces inventory coverage,
+forbids externalized/generated rendered files from remaining in the effective
+tracked validation surface, verifies stale rendered-path references have an
+inventory replacement mapping, and reports the 4 remaining QuantMatrix
+`shrink_later` files. Its default mode is clean-checkout safe; the
+`--require-externalized-local` mode verifies the ignored local copies on this
+machine.
 
-```powershell
-.venv\Scripts\python.exe scripts\run_discovery.py --raw C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\TumorBC2312_DNA.raw --dll-dir C:\Xcalibur\system\programs --output-dir docs\superpowers\validation\discovery_precursor_inference_v1\TumorBC2312_DNA --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --rt-min 22 --rt-max 25 --ms2-precursor-tol-da 1.6 --resolver-mode local_minimum
-```
-
-Artifact checker passed:
-
-```powershell
-$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_discovery_precursor_inference_artifact.py --check-only --summary-json docs\superpowers\validation\discovery_precursor_inference_v1\discovery_precursor_inference_check_summary.json
-```
-
-Candidate SHA-256:
-`B1B4956C3F0296D51E144659DB127CFB453140A66030C97C22FEED8C11326E2B`.
+This does not alter any product tier or write authority. The control plane has
+a no-tier-change maintenance entry for
+`validation_artifact_retention_cleanup_v1`.
 
 ## Boundaries
 
 - No 85RAW run was launched.
 - No scorer was run.
-- No ProductWriter/default matrix regeneration was run.
+- No ProductWriter/default extraction/workbook/GUI run was launched.
+- Validation default-activation artifacts were only rebuilt to refresh the
+  summary hash chain after retention externalization.
 - No workbook/GUI/default extraction behavior changed.
 - No current 511-cell writer authority or broad Backfill authority changed.
 - Do not demote/delete the `301.165` isotope row.
+- Do not remove `shrink_later` QuantMatrix files until the checker/status
+  contract is changed and verified.
+
+## Validation
+
+Discovery focused validation from the prior fix passed:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_discovery_ms2_seeds.py tests/test_discovery_grouping.py tests/test_discovery_csv.py tests/test_discovery_pipeline.py tests/test_alignment_csv_io.py tests/test_discovery_precursor_inference_artifact.py -v --tb=short
+```
+
+Result: `79 passed` for that earlier focused shard.
+
+Retention cleanup validation passed in this closeout:
+
+```powershell
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_validation_artifact_retention.py --require-externalized-local
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_quant_matrix_real_bundle.py --check-only
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_quant_matrix_promotion_packet_v2.py --check-only
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_quant_matrix_product_ready_closeout.py --check-only
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_quant_matrix_default_product_activation.py --check-only
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_static_review_bundle.py tests/test_lockbox_ai_challenge_pack.py tests/test_lockbox_ai_challenge_results.py tests/test_lockbox_second_review_pack.py tests/test_lockbox_owner_boundary_confirmation.py tests/test_lockbox_single_owner_ai_challenge_gate.py tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_default_activation_dry_run.py tests/test_quant_matrix_product_ready_closeout.py tests/test_quant_matrix_default_product_activation.py tests/test_productization_state_index.py tests/test_validation_artifact_retention.py -v --tb=short
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check <changed retention/lockbox/quant scripts/modules/tests>
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+```
+
+Results: retention checker passed with `166` retained validation files, `132`
+externalized artifacts, and `4` `shrink_later` warnings; productization state
+was consistent; real bundle, promotion packet v2, dry-run, closeout, and
+default activation check-only commands passed; focused pytest `119 passed`;
+scoped ruff passed; and `mypy xic_extractor` passed.
 
 ## Next Actions
 
-1. Finish sub-agent review of the Discovery contract/gate and fix any findings.
-2. Run final focused gates: Discovery tests, checker, default activation
-   `--check-only`, productization state checker, hook smoke, secret/local-path
-   scan, and `git diff --check`.
-3. Only after this gate, open a separate regeneration goal for
-   discovery/alignment/default-activation expected diff if the product matrix
-   should materialize the `300.1605` target row.
+1. Commit this as a repo-hygiene/validation-retention change if the diff is
+   accepted.
+2. Open a later focused cleanup to shrink the four remaining `shrink_later`
+   QuantMatrix TSV outputs only after checker/status contracts no longer
+   require full dumps.
+3. Open a separate regeneration goal for discovery/alignment/default activation
+   expected diff when the product matrix should materialize the `300.1605`
+   target row.

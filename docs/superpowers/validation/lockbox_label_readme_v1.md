@@ -19,21 +19,29 @@ opening the matching packet under
 
 ## Review UX
 
-For visual review, open:
+For visual review, use the externalized static bundle when available:
 
 ```text
-docs/superpowers/validation/lockbox_static_review_v1/index.html
+local_validation_artifacts/externalized_superpowers_validation/lockbox_static_review_v1/index.html
 ```
 
-This static bundle has one page per lockbox case and Gaussian15-smoothed review
-plots where trace evidence supports a Gaussian-derived review boundary. The
-teal shaded window is the Gaussian15 review boundary; orange dotted lines are
-the older candidate/raw boundary reference only. The plot is a
-review/morphology view only: it does not change matrix values, workbook values,
-selected peak, selected area, counted detection, or ProductWriter authority.
-Cases without trace evidence, or with trace files that have no usable Gaussian
-boundary, stay visibly marked as missing/unavailable evidence; do not infer
-labels for them.
+The version-controlled review contract remains
+`docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv`. The
+rendered `index.html`, per-case HTML pages, and PNG plots are generated results
+and are no longer tracked in git by default. Regenerate them with:
+
+```powershell
+uv run python scripts/build_lockbox_static_review_bundle.py
+```
+
+The static bundle has one page per lockbox case and Gaussian15-smoothed review
+plots where trace evidence supports a Gaussian-derived review boundary. The teal
+shaded window is the Gaussian15 review boundary; orange dotted lines are the
+older candidate/raw boundary reference only. The plot is a review/morphology
+view only: it does not change matrix values, workbook values, selected peak,
+selected area, counted detection, or ProductWriter authority. Cases without
+trace evidence, or with trace files that have no usable Gaussian boundary, stay
+visibly marked as missing/unavailable evidence; do not infer labels for them.
 
 ## Allowed Labels
 

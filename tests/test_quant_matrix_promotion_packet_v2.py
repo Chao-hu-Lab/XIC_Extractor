@@ -104,6 +104,11 @@ def test_promotion_packet_v2_builds_real_bundle_ready_candidate(
         copied_downstream.parent / copied_downstream_payload["row_metrics_tsv"]
     )
     assert copied_downstream_rows.is_file()
+    assert not (copied_downstream.parent / "downstream_impact_inputs").exists()
+    input_artifacts = copied_downstream_payload["input_artifacts"]
+    for field in ("cell_provenance_tsv", "quant_matrix_tsv", "row_summary_tsv"):
+        assert input_artifacts[field].startswith("bundle/quant_matrix_version/")
+        assert (tmp_path / input_artifacts[field]).is_file()
     assert (
         summary["artifacts"]["real_bundle_readiness_summary_json"]["sha256"]
         == file_sha256(outputs["real_bundle_readiness_summary_json"])

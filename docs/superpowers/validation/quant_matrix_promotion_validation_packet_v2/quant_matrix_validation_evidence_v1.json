@@ -33,7 +33,7 @@
     },
     {
       "artifact_path": "artifacts/downstream_impact_smoke__quant_matrix_downstream_impact_smoke.json",
-      "artifact_sha256": "FFADCC69EEDA604DA3AC7188B5384ADBBF46640D38AE324A619323412622A9A9",
+      "artifact_sha256": "978CA42F11813AB2947D77A90A1818A3695FE124E5EF81CA6188FA67B5FBD793",
       "cohort_id": "",
       "downstream_scope": "current_511_authority_replay",
       "evidence_note": "Phase 7 real QuantMatrixVersion downstream-impact smoke artifact bound by copied summary and row metrics hashes.",

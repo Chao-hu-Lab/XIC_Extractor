@@ -45,7 +45,13 @@ PACKET_INDEX = (
     ROOT / "docs/superpowers/validation/lockbox_review_packets_v1/packet_index.tsv"
 )
 LABEL_TEMPLATE = ROOT / "docs/superpowers/validation/lockbox_label_template_v1.tsv"
-OUTPUT_DIR = ROOT / "docs/superpowers/validation/lockbox_static_review_v1"
+CONTRACT_DIR = ROOT / "docs/superpowers/validation/lockbox_static_review_v1"
+RENDERED_OUTPUT_DIR = (
+    ROOT
+    / "local_validation_artifacts/externalized_superpowers_validation/"
+    "lockbox_static_review_v1"
+)
+OUTPUT_DIR = CONTRACT_DIR
 
 SCHEMA_VERSION = "lockbox_static_review_bundle_v1"
 PLOT_STATUS_PLOTTED = "plotted_gaussian15"
@@ -56,6 +62,7 @@ BUNDLE_INDEX_HEADER = [
     "schema_version",
     "lockbox_case_id",
     "case_html_path",
+    "case_html_sha256",
     "review_plot_png_path",
     "plot_status",
     "plot_sha256",
@@ -90,14 +97,22 @@ def build_lockbox_static_review_bundle(
     *,
     packet_index_path: Path = PACKET_INDEX,
     label_template_path: Path = LABEL_TEMPLATE,
-    output_dir: Path = OUTPUT_DIR,
+    contract_dir: Path = CONTRACT_DIR,
+    rendered_output_dir: Path = RENDERED_OUTPUT_DIR,
+    output_dir: Path | None = None,
 ) -> dict[str, object]:
     packet_rows = list(
         read_tsv_required(packet_index_path, required_columns=("lockbox_case_id",))
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    case_dir = output_dir / "cases"
-    plot_dir = output_dir / "plots"
+    contract_dir, rendered_output_dir = _resolve_output_dirs(
+        contract_dir=contract_dir,
+        rendered_output_dir=rendered_output_dir,
+        output_dir=output_dir,
+    )
+    contract_dir.mkdir(parents=True, exist_ok=True)
+    rendered_output_dir.mkdir(parents=True, exist_ok=True)
+    case_dir = rendered_output_dir / "cases"
+    plot_dir = rendered_output_dir / "plots"
     case_dir.mkdir(parents=True, exist_ok=True)
     plot_dir.mkdir(parents=True, exist_ok=True)
     _clear_generated_files(case_dir, "*.html")
@@ -109,14 +124,15 @@ def build_lockbox_static_review_bundle(
             packet,
             packet_index_path=packet_index_path,
             label_template_path=label_template_path,
-            output_dir=output_dir,
+            output_dir=rendered_output_dir,
             case_dir=case_dir,
             plot_dir=plot_dir,
         )
         bundle_rows.append(row)
-        _write_case_html(packet, row, case_dir=case_dir, output_dir=output_dir)
+        _write_case_html(packet, row, case_dir=case_dir, output_dir=rendered_output_dir)
+        row["case_html_sha256"] = file_sha256(_resolve_path(row["case_html_path"]))
 
-    index_path = output_dir / "bundle_index.tsv"
+    index_path = contract_dir / "bundle_index.tsv"
     write_tsv(
         index_path,
         bundle_rows,
@@ -124,11 +140,13 @@ def build_lockbox_static_review_bundle(
         extrasaction="raise",
         lineterminator="\n",
     )
-    _write_index_html(bundle_rows, output_dir=output_dir)
+    _write_index_html(bundle_rows, output_dir=rendered_output_dir)
     status_counts = Counter(row["plot_status"] for row in bundle_rows)
     return {
-        "output_dir": output_dir,
-        "index_html": output_dir / "index.html",
+        "contract_dir": contract_dir,
+        "rendered_output_dir": rendered_output_dir,
+        "output_dir": contract_dir,
+        "index_html": rendered_output_dir / "index.html",
         "bundle_index": index_path,
         "case_count": len(bundle_rows),
         "plot_count": status_counts[PLOT_STATUS_PLOTTED],
@@ -140,10 +158,18 @@ def check_lockbox_static_review_bundle(
     *,
     packet_index_path: Path = PACKET_INDEX,
     label_template_path: Path = LABEL_TEMPLATE,
-    output_dir: Path = OUTPUT_DIR,
+    contract_dir: Path = CONTRACT_DIR,
+    rendered_output_dir: Path = RENDERED_OUTPUT_DIR,
+    output_dir: Path | None = None,
     expected_case_count: int = 72,
+    require_rendered_local: bool = False,
 ) -> list[str]:
     problems: list[str] = []
+    contract_dir, rendered_output_dir = _resolve_output_dirs(
+        contract_dir=contract_dir,
+        rendered_output_dir=rendered_output_dir,
+        output_dir=output_dir,
+    )
     source_rows = list(
         read_tsv_required(
             packet_index_path,
@@ -160,7 +186,7 @@ def check_lockbox_static_review_bundle(
         "label template",
         problems,
     )
-    header, rows = _read_bundle_index(output_dir / "bundle_index.tsv", problems)
+    header, rows = _read_bundle_index(contract_dir / "bundle_index.tsv", problems)
     if list(header) != BUNDLE_INDEX_HEADER:
         problems.append("bundle index header must match static review schema")
     if len(rows) != expected_case_count:
@@ -170,11 +196,12 @@ def check_lockbox_static_review_bundle(
         problems.append("bundle case IDs must match packet index")
     if len(set(case_ids)) != len(case_ids):
         problems.append("bundle case IDs must be unique")
-    index_html = output_dir / "index.html"
-    if not index_html.exists():
-        problems.append("index.html missing")
-    elif "Gaussian15" not in index_html.read_text(encoding="utf-8"):
-        problems.append("index.html must mention Gaussian15")
+    index_html = rendered_output_dir / "index.html"
+    if require_rendered_local:
+        if not index_html.exists():
+            problems.append("index.html missing")
+        elif "Gaussian15" not in index_html.read_text(encoding="utf-8"):
+            problems.append("index.html must mention Gaussian15")
     for row_number, row in enumerate(rows, start=2):
         source_row = source_rows_by_id.get(row.get("lockbox_case_id", ""))
         _check_source_binding(
@@ -187,7 +214,12 @@ def check_lockbox_static_review_bundle(
             label_template_sha=label_template_sha,
             problems=problems,
         )
-        _check_bundle_row(row, row_number, output_dir, problems)
+        _check_bundle_row(
+            row,
+            row_number,
+            problems,
+            require_rendered_local=require_rendered_local,
+        )
     return problems
 
 
@@ -207,6 +239,7 @@ def _bundle_index_row(
         "schema_version": SCHEMA_VERSION,
         "lockbox_case_id": case_id,
         "case_html_path": _relative_to(case_html_path, ROOT),
+        "case_html_sha256": "",
         "review_plot_png_path": (
             _relative_to(plot_result.path, ROOT) if plot_result.path else ""
         ),
@@ -811,8 +844,9 @@ def _check_source_binding(
 def _check_bundle_row(
     row: Mapping[str, str],
     row_number: int,
-    output_dir: Path,
     problems: list[str],
+    *,
+    require_rendered_local: bool,
 ) -> None:
     if row.get("schema_version") != SCHEMA_VERSION:
         problems.append(f"bundle row {row_number}: invalid schema_version")
@@ -826,17 +860,25 @@ def _check_bundle_row(
         problems.append(f"bundle row {row_number}: smoothing method must be Gaussian15")
     if row.get("gaussian_window_points") != str(DEFAULT_GAUSSIAN15_WINDOW_POINTS):
         problems.append(f"bundle row {row_number}: smoothing window must be 15")
-    case_path = _resolve_path(row.get("case_html_path", ""))
-    if not case_path.exists():
-        problems.append(f"bundle row {row_number}: case HTML missing")
-    else:
-        text = case_path.read_text(encoding="utf-8")
-        if row.get("lockbox_case_id", "") not in text:
-            problems.append(f"bundle row {row_number}: case HTML missing case id")
-        if "ProductWriter authority" not in text:
-            problems.append(
-                f"bundle row {row_number}: case HTML missing authority text",
-            )
+    case_path_value = row.get("case_html_path", "")
+    if not case_path_value:
+        problems.append(f"bundle row {row_number}: case_html_path missing")
+    if not _looks_like_sha256(row.get("case_html_sha256", "")):
+        problems.append(f"bundle row {row_number}: case_html_sha256 invalid")
+    if require_rendered_local:
+        case_path = _resolve_path(case_path_value)
+        if not case_path.exists():
+            problems.append(f"bundle row {row_number}: case HTML missing")
+        else:
+            text = case_path.read_text(encoding="utf-8")
+            if row.get("lockbox_case_id", "") not in text:
+                problems.append(f"bundle row {row_number}: case HTML missing case id")
+            if "ProductWriter authority" not in text:
+                problems.append(
+                    f"bundle row {row_number}: case HTML missing authority text",
+                )
+            if file_sha256(case_path) != row.get("case_html_sha256", ""):
+                problems.append(f"bundle row {row_number}: case_html_sha256 mismatch")
     plot_status = row.get("plot_status", "")
     plot_path_value = row.get("review_plot_png_path", "")
     if plot_status not in {
@@ -847,14 +889,19 @@ def _check_bundle_row(
         problems.append(f"bundle row {row_number}: unknown plot_status")
     if plot_status == PLOT_STATUS_PLOTTED:
         _check_gaussian_review_boundary(row, row_number, problems)
-        plot_path = _resolve_path(plot_path_value)
-        if not plot_path.exists():
-            problems.append(f"bundle row {row_number}: plot PNG missing")
-        else:
-            if not plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
-                problems.append(f"bundle row {row_number}: plot is not a PNG")
-            if file_sha256(plot_path) != row.get("plot_sha256", ""):
-                problems.append(f"bundle row {row_number}: plot_sha256 mismatch")
+        if not plot_path_value:
+            problems.append(f"bundle row {row_number}: review_plot_png_path missing")
+        if not _looks_like_sha256(row.get("plot_sha256", "")):
+            problems.append(f"bundle row {row_number}: plot_sha256 invalid")
+        if require_rendered_local:
+            plot_path = _resolve_path(plot_path_value)
+            if not plot_path.exists():
+                problems.append(f"bundle row {row_number}: plot PNG missing")
+            else:
+                if not plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+                    problems.append(f"bundle row {row_number}: plot is not a PNG")
+                if file_sha256(plot_path) != row.get("plot_sha256", ""):
+                    problems.append(f"bundle row {row_number}: plot_sha256 mismatch")
     elif plot_path_value:
         problems.append(f"bundle row {row_number}: non-plotted row must not have plot")
     elif _has_gaussian_review_boundary(row):
@@ -916,6 +963,12 @@ def _has_gaussian_review_boundary(row: Mapping[str, str]) -> bool:
     )
 
 
+def _looks_like_sha256(value: str) -> bool:
+    if len(value) != 64:
+        return False
+    return all(character in "0123456789ABCDEFabcdef" for character in value)
+
+
 def _checked_file_sha256(path: Path, label: str, problems: list[str]) -> str:
     try:
         return file_sha256(path)
@@ -956,6 +1009,17 @@ def _format_optional_float(value: float | None) -> str:
     if value is None or not np.isfinite(float(value)):
         return ""
     return f"{float(value):.6g}"
+
+
+def _resolve_output_dirs(
+    *,
+    contract_dir: Path,
+    rendered_output_dir: Path,
+    output_dir: Path | None,
+) -> tuple[Path, Path]:
+    if output_dir is not None:
+        return output_dir, output_dir
+    return contract_dir, rendered_output_dir
 
 
 def _relative_link(path_value: str | Path, base: Path) -> str:
@@ -1098,14 +1162,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet-index", type=Path, default=PACKET_INDEX)
     parser.add_argument("--label-template", type=Path, default=LABEL_TEMPLATE)
-    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
+    parser.add_argument(
+        "--contract-dir",
+        type=Path,
+        default=CONTRACT_DIR,
+        help="Directory for tracked contract files such as bundle_index.tsv.",
+    )
+    parser.add_argument(
+        "--rendered-output-dir",
+        type=Path,
+        default=RENDERED_OUTPUT_DIR,
+        help="Directory for ignored rendered HTML/PNG review outputs.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Legacy alias: write contract and rendered outputs to the same directory.",
+    )
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--require-rendered-local", action="store_true")
     args = parser.parse_args(argv)
     if args.check_only:
         problems = check_lockbox_static_review_bundle(
             packet_index_path=args.packet_index,
             label_template_path=args.label_template,
+            contract_dir=args.contract_dir,
+            rendered_output_dir=args.rendered_output_dir,
             output_dir=args.output_dir,
+            require_rendered_local=args.require_rendered_local,
         )
         if problems:
             for problem in problems:
@@ -1116,6 +1201,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = build_lockbox_static_review_bundle(
         packet_index_path=args.packet_index,
         label_template_path=args.label_template,
+        contract_dir=args.contract_dir,
+        rendered_output_dir=args.rendered_output_dir,
         output_dir=args.output_dir,
     )
     print(

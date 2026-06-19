@@ -3023,6 +3023,64 @@ at that older checkpoint, not the latest release claim.
   before claiming the released default matrix contains the `300.1605` target
   row.
 
+### 2026-06-19 - validation_artifact_retention_cleanup_v1
+
+- Lane: repo hygiene / `docs/superpowers/validation` retention policy.
+- Previous tier: unchanged. Validation artifacts included rendered review HTML
+  pages and PNG plots in git, which made branch diffs look like product/code
+  changes even when they were generated review outputs.
+- New tier: unchanged. No product maturity tier, active lane, ProductWriter
+  authority, matrix authority, workbook behavior, GUI behavior, selected
+  peak/area, counted detection, default extraction, or broad Backfill status
+  changed.
+- Evidence: `docs/superpowers/validation/RETENTION.md` now defines retention
+  decisions; `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv` inventories
+  298 effective validation rows; `docs/superpowers/validation/lockbox_static_review_v1/README.md`
+  preserves the static-review regeneration/use path.
+  `scripts/check_validation_artifact_retention.py` and
+  `tests/test_validation_artifact_retention.py` now enforce inventory coverage,
+  rendered-artifact externalization, stale rendered-path replacement mapping,
+  externalized-local verification, and explicit `shrink_later` reporting.
+  The completed cleanup wave externalized 132 generated validation artifacts
+  / 12.19 MB from git to ignored local storage under
+  `local_validation_artifacts/externalized_superpowers_validation/`, while
+  keeping contract indexes, source hashes, status indexes, summaries, and
+  checker inputs in git.
+- Product surface changed: docs/artifact retention only. Rendered Lockbox
+  review HTML/PNG outputs are no longer version-controlled by default; clean
+  checkout contract artifacts, status indexes, source summaries, and checker
+  inputs remain tracked. QuantMatrix review HTML and duplicated promotion-packet
+  downstream input copies are likewise externalized with tracked summary/hash
+  bindings. Matrix values and product outputs are unchanged.
+- Validation: closeout checks passed:
+  `uv run python scripts/check_validation_artifact_retention.py --require-externalized-local`
+  (`166` retained validation files, `132` externalized, `4` `shrink_later`);
+  `uv run python scripts/check_productization_state.py`;
+  `uv run python scripts/build_quant_matrix_real_bundle.py --check-only`;
+  `uv run python scripts/build_quant_matrix_promotion_packet_v2.py --check-only`;
+  `uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only`;
+  `uv run python scripts/build_quant_matrix_product_ready_closeout.py --check-only`;
+  `uv run python scripts/build_quant_matrix_default_product_activation.py --check-only`;
+  focused pytest shard covering lockbox, QuantMatrix, productization status,
+  and retention (`119 passed`);
+  scoped `ruff check` for changed scripts/modules/tests; and
+  `uv run mypy xic_extractor`.
+  Earlier closeout checks also passed:
+  `uv run python scripts/check_productization_state.py`;
+  `uv run python scripts/check_lockbox_label_schema.py`;
+  `uv run pytest tests/test_validation_artifact_retention.py tests/test_lockbox_label_collection_pack.py tests/test_productization_state_index.py -v --tb=short`
+  (`53 passed`); `.codex/hooks/fixtures/assert_hook_outputs.py`; hook
+  `py_compile`; local externalized-artifact existence check (`128/128`, no
+  missing replacements); credential/local-path scan with only wording false
+  positives; and `git diff --check` with LF/CRLF warnings only.
+- Remaining blocker: four large QuantMatrix TSV surfaces remain marked
+  `shrink_later` because current check-only/use-path contracts still read them:
+  default activation `cell_provenance.tsv`, v1 readiness fixture
+  `cell_provenance.tsv`, real bundle `quant_matrix_version/cell_provenance.tsv`,
+  and real bundle `review/quant_matrix_review_rows.tsv`. Shrink those only
+  after a focused checker/status contract update replaces full dumps with
+  summaries, hashes, and minimal fixtures.
+
 ### 2026-06-19 - QuantMatrix Product Ready Closeout v1
 
 - Lane: Backfill default QuantMatrix Product Ready candidate closeout /

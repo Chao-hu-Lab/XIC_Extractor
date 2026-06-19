@@ -6,11 +6,11 @@
   "downstream_scope": "current_511_authority_replay",
   "input_artifacts": {
     "cell_provenance_sha256": "D017326F8A7FA46F7C9C969065C8B2FF1B614953A65E8C19EC8F27615B7C327C",
-    "cell_provenance_tsv": "downstream_impact_inputs/cell_provenance.tsv",
+    "cell_provenance_tsv": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_version/cell_provenance.tsv",
     "quant_matrix_sha256": "43CA851F97732267CF76552112D75894F74EDA4BC90BC9226E1F7D0958A0517C",
-    "quant_matrix_tsv": "downstream_impact_inputs/quant_matrix.tsv",
+    "quant_matrix_tsv": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_version/quant_matrix.tsv",
     "row_summary_sha256": "38FB8697377673E7637DC59A792F30068623E9FD8FF54CA901250B30538EFFA8",
-    "row_summary_tsv": "downstream_impact_inputs/row_summary.tsv"
+    "row_summary_tsv": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_version/row_summary.tsv"
   },
   "metrics": {
     "accepted_backfill_values_are_positive_numeric": true,

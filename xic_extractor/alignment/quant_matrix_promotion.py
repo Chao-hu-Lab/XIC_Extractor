@@ -101,6 +101,7 @@ def evaluate_quant_matrix_promotion_readiness(
     review_summary_json: Path,
     output_dir: Path,
     validation_evidence_json: Path | None = None,
+    validation_artifact_root: Path | None = None,
 ) -> Mapping[str, Path]:
     expected_diff_rows = read_tsv_required(
         expected_diff_summary_tsv,
@@ -122,6 +123,7 @@ def evaluate_quant_matrix_promotion_readiness(
         validation_evidence,
         checks,
         validation_evidence_json=validation_evidence_json,
+        validation_artifact_root=validation_artifact_root,
     )
     blockers.extend(cast(list[str], science_result["blockers"]))
 
@@ -379,6 +381,7 @@ def _evaluate_science_evidence(
     checks: list[dict[str, str]],
     *,
     validation_evidence_json: Path | None,
+    validation_artifact_root: Path | None,
 ) -> dict[str, object]:
     blockers: list[str] = []
     if evidence.get("schema_version") != VALIDATION_EVIDENCE_SCHEMA:
@@ -399,7 +402,11 @@ def _evaluate_science_evidence(
             "blockers": blockers,
         }
 
-    parsed_evidence = _validation_tiers(evidence, validation_evidence_json)
+    parsed_evidence = _validation_tiers(
+        evidence,
+        validation_evidence_json,
+        validation_artifact_root=validation_artifact_root,
+    )
     validation_tiers = parsed_evidence.validation_tiers
     blockers.extend(parsed_evidence.blockers)
     _append_validation_packet_checks(parsed_evidence, checks)
@@ -449,6 +456,8 @@ def _evaluate_science_evidence(
 def _validation_tiers(
     evidence: Mapping[str, Any],
     validation_evidence_json: Path | None,
+    *,
+    validation_artifact_root: Path | None,
 ) -> ValidationEvidenceParse:
     tiers: dict[str, str] = {}
     blockers: list[str] = []
@@ -484,6 +493,7 @@ def _validation_tiers(
                 for problem in _required_science_binding_problems(
                     row,
                     base_dir=base_dir,
+                    artifact_root=validation_artifact_root,
                 )
             )
     if duplicate_tiers:
@@ -635,6 +645,7 @@ def _required_science_binding_problems(
     row: Mapping[str, Any],
     *,
     base_dir: Path | None,
+    artifact_root: Path | None,
 ) -> list[str]:
     tier = str(row.get("tier", "")).strip()
     required_fields = _REQUIRED_SCIENCE_TIER_PROVENANCE[tier]
@@ -667,7 +678,10 @@ def _required_science_binding_problems(
                 problems.append("artifact_sha256 mismatch")
             if tier == "downstream_impact_smoke" and resolved_artifact.exists():
                 problems.extend(
-                    validate_quant_matrix_downstream_impact_smoke(resolved_artifact),
+                    validate_quant_matrix_downstream_impact_smoke(
+                        resolved_artifact,
+                        artifact_root=artifact_root,
+                    ),
                 )
     elif artifact_relpath:
         problems.append("validation evidence path is required for artifact binding")

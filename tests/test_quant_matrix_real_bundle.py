@@ -155,6 +155,41 @@ def test_real_bundle_check_rejects_missing_downstream_rows(tmp_path: Path) -> No
     assert "downstream impact row_metrics_tsv does not exist" in problems
 
 
+def test_real_bundle_can_externalize_review_html(tmp_path: Path) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    rendered_review_dir = tmp_path / "rendered_review"
+    outputs = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+        rendered_review_dir=rendered_review_dir,
+    )
+
+    assert validate_quant_matrix_real_bundle(
+        summary_json=outputs["summary_json"],
+        repo_root=tmp_path,
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    ) == []
+
+    contract_html = fixture["output_dir"] / "review/quant_matrix_review_report.html"
+    rendered_html = rendered_review_dir / "quant_matrix_review_report.html"
+    summary = json.loads(outputs["summary_json"].read_text(encoding="utf-8"))
+    review_html = summary["artifacts"]["review_html"]
+    replacement = fixture["output_dir"] / review_html["replacement_or_summary"]
+    replacement_payload = json.loads(replacement.read_text(encoding="utf-8"))
+
+    assert not contract_html.exists()
+    assert rendered_html.is_file()
+    assert outputs["review_html_summary_json"] == replacement
+    assert review_html["externalized"] is True
+    assert review_html["retention_decision"] == "externalize"
+    assert replacement_payload["may_grant_product_authority"] is False
+    assert replacement_payload["sha256"] == review_html["sha256"]
+
+
 def test_real_bundle_script_check_only_round_trip(tmp_path: Path) -> None:
     fixture = _write_source_run_fixture(tmp_path)
 

@@ -46,11 +46,11 @@
     "input_matrix_identity": "docs/superpowers/validation/quant_matrix_real_bundle_v1/inputs/alignment_matrix_identity.tsv",
     "input_matrix_identity_sha256": "599E4D33C2582D7F35733BBAC18102B0E3D55E54939CE434049F4E4716971A48",
     "product_ready_closeout_summary_json": "docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/quant_matrix_product_ready_closeout_summary.json",
-    "product_ready_closeout_summary_json_sha256": "1B290A027AC32866A0A9B286CCC2D6FF9EA5F877FDDF959C112E027DBADA7F61",
+    "product_ready_closeout_summary_json_sha256": "9D0AB0673DA3086AEF62423C934BB09A2AA7408B0DBA286626E40073EE695987",
     "production_acceptance_manifest": "docs/superpowers/validation/quant_matrix_real_bundle_v1/inputs/production_acceptance_manifest.tsv",
     "production_acceptance_manifest_sha256": "BFF67E9441646B22EFCBD0AF9468876560B08FBF4A90F7B340B0DF614325FD8E",
     "real_bundle_summary_json": "docs/superpowers/validation/quant_matrix_real_bundle_v1/quant_matrix_real_bundle_summary.json",
-    "real_bundle_summary_json_sha256": "319C8F68E6BE91A5E8E6CA54285F427D1A3A6D6E28FFAF357CDF84660DBEF2AD"
+    "real_bundle_summary_json_sha256": "0479331B3E9A17492ECDB4420E897432B7FEF8973047889C9B45151DC2DEB9C9"
   },
   "phase": "phase11_default_product_activation",
   "product_authority_scope": "backfill_policy_write_ready_rows",
