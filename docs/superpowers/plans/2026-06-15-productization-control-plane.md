@@ -316,10 +316,18 @@ evidence is explicitly missing, so the Phase 5 readiness fixture remains
 `QuantMatrix downstream-impact smoke` contract: a downstream artifact must
 prove that a real `QuantMatrixVersion` bundle improves numeric matrix coverage
 while preserving detected-only claims through sidecars; contract fixtures and
-tier strings cannot satisfy promotion. The Phase 0-6 product spine is complete,
-but promotion remains blocked on a real downstream-impact artifact generated
-from a real `QuantMatrixVersion` bundle, not a scorer revival or broad Backfill
-writer.
+tier strings cannot satisfy promotion. Phase 7 assembled the current real
+511-cell `QuantMatrixVersion` bundle from
+`seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`
+and confirmed contract correctness plus downstream-impact smoke, while keeping
+readiness science-inconclusive until evidence was rebound. Phase 8 now binds
+that real downstream-impact artifact together with the existing large-cohort
+and heldout-oracle artifacts into `QuantMatrix Promotion Packet v2`; real-bundle
+readiness is `production_ready_candidate_packet` with `production_ready=true`
+and `may_promote_default_quant_matrix=true`. This is a candidate promotion
+packet only: ProductWriter default extraction, default matrix authority,
+workbook/GUI behavior, selected peak/area, counted detection, and broad
+Backfill authority remain unchanged until a later expected-diff activation gate.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2839,6 +2847,49 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrix Promotion Packet v2
+
+- Lane: Backfill promotion evidence packet / Phase 8.
+- Previous tier: Phase 7 produced a real 511-cell `QuantMatrixVersion` bundle
+  with downstream-impact smoke, but readiness was still
+  `contract_ready_science_inconclusive` because the real downstream artifact had
+  not been rebound with the existing large-cohort and heldout-oracle evidence.
+- New tier: `production_ready_candidate_packet` for the packet/readiness gate
+  only. This is not ProductWriter default extraction, default matrix authority,
+  selected peak/area/counting behavior, workbook/GUI behavior, review/replay
+  behavior change, broad Backfill unpark, or a new matrix write.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_promotion_packet_v2_schema.v1.json`,
+  `scripts/build_quant_matrix_promotion_packet_v2.py`,
+  `tests/test_quant_matrix_promotion_packet_v2.py`, and
+  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`.
+- Product surface changed: additive Phase 8 promotion packet outputs only:
+  `quant_matrix_promotion_packet_v2_summary.json`,
+  `quant_matrix_validation_evidence_v1.json`,
+  `quant_matrix_validation_evidence_rows.tsv`,
+  `quant_matrix_validation_evidence_summary.json`, copied `artifacts/*`, and
+  `real_bundle_readiness/`. The packet copies the downstream-impact smoke bundle
+  plus packet-local downstream input TSVs so content validation can rerun
+  without trusting tier strings alone.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. Focused tests cover schema parity, real-bundle
+  candidate readiness, stale real-bundle readiness rejection, non-current 511
+  bundle rejection, and CLI round trip.
+- Current validation result: large-cohort, heldout-oracle, and real
+  downstream-impact evidence all pass. Real-bundle readiness is
+  `production_ready_candidate_packet`, `contract_correctness_status=pass`,
+  `scientific_confidence_status=pass`, `production_ready=true`, and
+  `may_promote_default_quant_matrix=true`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix authority, workbook, GUI, selected peak, selected area, counted
+  detection, review/replay behavior, current 511-cell writer authority, or
+  broad Backfill authority changed.
+- Remaining blocker: default matrix activation still needs a Phase 9 dry-run
+  expected-diff gate before any public writer/default behavior changes.
+- Next checkpoint: Phase 9 default-matrix activation dry-run expected-diff gate.
+
 ### 2026-06-19 - QuantMatrix Real Bundle v1
 
 - Lane: Backfill real `QuantMatrixVersion` bundle assembly / Phase 7.
@@ -2873,18 +2924,16 @@ at that older checkpoint, not the latest release claim.
 - Current validation result: the real bundle check passes, contract correctness
   passes, downstream-impact smoke passes, and readiness remains
   `contract_ready_science_inconclusive` with `production_ready=false` and
-  `may_promote_default_quant_matrix=false` because large-cohort/oracle/downstream
-  evidence has not yet been rebound into a promotion packet v2.
+  `may_promote_default_quant_matrix=false` before Phase 8 evidence binding.
 - Product surface not changed: No ProductWriter default extraction, default
   matrix authority, workbook, GUI, selected peak, selected area, counted
   detection, review/replay behavior, current 511-cell writer authority, or
   broad Backfill authority changed.
-- Remaining blocker: production-ready promotion still needs a validation packet
-  v2 that binds the real downstream-impact artifact together with the
-  large-cohort and heldout-oracle artifacts.
-- Next checkpoint: build QuantMatrix promotion validation packet v2 from the
-  real bundle's downstream-impact smoke and run readiness against the real
-  bundle.
+- Remaining blocker: historical for Phase 7. Phase 8 now binds the real
+  downstream-impact artifact into promotion packet v2; default matrix activation
+  still requires a later expected-diff gate.
+- Next checkpoint: historical. Use `QuantMatrix Promotion Packet v2` above for
+  the current promotion candidate packet.
 
 ### 2026-06-19 - QuantMatrix Downstream Impact Smoke v1
 

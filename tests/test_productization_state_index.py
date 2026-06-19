@@ -173,7 +173,7 @@ def test_control_plane_quant_matrix_validation_packet_is_current() -> None:
     assert "Do not treat this packet as `production_ready`" in section
 
 
-def test_control_plane_current_summary_routes_to_validation_packet() -> None:
+def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
         text,
@@ -195,10 +195,19 @@ def test_control_plane_current_summary_routes_to_validation_packet() -> None:
     assert "`QuantMatrix Promotion Validation Packet v1`" in summary
     assert "`contract_ready_science_inconclusive`" in summary
     assert "`may_promote_default_quant_matrix=false`" in summary
-    assert "Phase 0-5 product spine is" in summary
-    assert "complete, but promotion remains blocked" in summary
-    assert "unbound" in summary
+    assert "Phase 6" in summary
     assert "tier/status strings" in summary
+    assert "Phase 7" in summary
+    assert "current real\n511-cell `QuantMatrixVersion` bundle" in summary
+    assert "Phase 8" in summary
+    assert "`QuantMatrix Promotion Packet v2`" in summary
+    assert "`production_ready_candidate_packet`" in summary
+    assert "`production_ready=true`" in summary
+    assert "`may_promote_default_quant_matrix=true`" in summary
+    assert "candidate promotion\npacket only" in summary
+    assert "ProductWriter default extraction" in summary
+    assert "default matrix authority" in summary
+    assert "later expected-diff activation gate" in summary
     assert "large-cohort" in summary
     assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
@@ -254,6 +263,19 @@ def test_specs_readme_lists_quant_matrix_validation_evidence_schema() -> None:
     assert "artifact-bound" in text
     assert "source artifact paths/hashes" in text
     assert "`write_authority=false`" in text
+
+
+def test_specs_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_promotion_packet_v2_schema.v1.json" in text
+    assert "`production_ready_candidate_packet`" in text
+    assert "large-cohort" in text
+    assert "heldout-oracle" in text
+    assert "real downstream-impact smoke" in text
+    assert "default matrix authority unchanged" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

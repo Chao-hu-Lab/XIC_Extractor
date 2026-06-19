@@ -2,33 +2,22 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Checkpoint: Phase 0-7 Backfill quant-matrix product spine is complete.
-The current real `QuantMatrixVersion` bundle validates, but default-matrix
-promotion remains science-inconclusive until Phase 8 binds a packet v2.
+Checkpoint: Phase 8 complete. The real 511-cell bundle is now bound into
+promotion packet v2; next checkpoint is Phase 9 default-matrix activation
+dry-run expected-diff gate.
 
 Tier authority lives in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
-machine-readable validation indexes.
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`. This
+handoff is only the current continuation snapshot.
 
 ## Current Objective
 
-Backfill productization is moving toward a default quant matrix that includes
+Move Backfill productization toward a default quant matrix that includes
 detected values plus accepted Backfill values, while keeping detection claims,
 truth claims, scientific confidence, and write authority separate.
 
-Completed spine:
-
-- Phase 0: cleanup map and blueprint alignment.
-- Phase 1: shadow-only lockbox contract adapter.
-- Phase 2: `ProductionAcceptanceManifest v1` schema/checker.
-- Phase 3: explicit `QuantMatrixVersion v1` activation outputs.
-- Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
-- Phase 5: read-only promotion readiness checker.
-- Phase 5 follow-up: no-RAW artifact-bound validation evidence packet.
-- Phase 6: no-RAW downstream-impact smoke contract and content validator.
-- Phase 7: real 511-cell `QuantMatrixVersion` bundle assembly.
-
-No scorer was run. No RAW/85RAW was run in this sequence.
+Active goal scope: finish Phases 8-10 with per-phase focused verification,
+sub-agent review, fixes, commit, and handoff/control-plane updates.
 
 ## Active References
 
@@ -85,27 +74,25 @@ Status-index anchors retained for `check_productization_state.py`:
 - manual-boundary area recompute remain parked.
 - classification and planning only.
 
+## Completed Spine
+
+- Phase 1: shadow-only lockbox contract adapter.
+- Phase 2: `ProductionAcceptanceManifest v1` schema/checker.
+- Phase 3: explicit `QuantMatrixVersion v1` activation outputs.
+- Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
+- Phase 5: read-only promotion readiness checker plus validation packet v1.
+- Phase 6: no-RAW downstream-impact smoke contract and content validator.
+- Phase 7: real 511-cell `QuantMatrixVersion` bundle assembly.
+- Phase 8: promotion packet v2 / real-bundle readiness candidate.
+
+No scorer was run. No RAW/85RAW was run in this sequence.
+
 ## Current Real Bundle
 
-`QuantMatrix Real Bundle v1` lives at
-`docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
-
-It was generated from source run
+`docs/superpowers/validation/quant_matrix_real_bundle_v1/` was generated from
+source run
 `seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`
 with `downstream_scope=current_511_authority_replay`.
-
-Bundle contents:
-
-- copied source artifacts under `source_artifacts/`;
-- `inputs/production_acceptance_manifest.tsv`;
-- `inputs/expected_diff.tsv`;
-- `quant_matrix_version/quant_matrix.tsv`;
-- `quant_matrix_version/cell_provenance.tsv`;
-- `quant_matrix_version/row_summary.tsv`;
-- `review/quant_matrix_review_summary.json`;
-- `downstream_impact/quant_matrix_downstream_impact_smoke.json`;
-- `readiness/quant_matrix_promotion_readiness_summary.json`;
-- `quant_matrix_real_bundle_summary.json`.
 
 Current result:
 
@@ -117,118 +104,66 @@ Current result:
 - `production_ready=false`;
 - `may_promote_default_quant_matrix=false`.
 
-Default Phase 7 `--check-only` fail-closes to the current source run,
+Default Phase 7 `--check-only` fail-closes to that source run,
 `downstream_scope=current_511_authority_replay`, and exactly `511` accepted
-Backfill cells. Synthetic or partial bundles need explicit test overrides and
-cannot satisfy the default Phase 7 artifact check.
+Backfill cells. Synthetic or partial bundles need explicit test overrides.
 
-## Current Promotion Packet
+## Current Promotion Packet v2
 
-`QuantMatrix Promotion Validation Packet v1` remains at
-`docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
+`docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`
+binds the Phase 7 real downstream-impact smoke artifact with existing
+large-cohort and heldout-oracle evidence, then runs promotion readiness against
+the real bundle inputs.
 
-Current packet status:
+Current result:
 
-- large-cohort evidence: `pass`;
-- heldout-oracle evidence: `pass`;
-- downstream-impact evidence: `missing`;
-- readiness fixture: `contract_ready_science_inconclusive`;
-- `production_ready=false`;
-- `may_promote_default_quant_matrix=false`.
+- `quant_matrix_validation_evidence_v1.json` with three passing science tiers;
+- `real_bundle_readiness/quant_matrix_promotion_readiness_summary.json`;
+- readiness label `production_ready_candidate_packet`;
+- `production_ready=true` and `may_promote_default_quant_matrix=true` only for
+  the candidate packet;
+- accepted Backfill count remains `511`;
+- `write_authority=false`;
+- `default_quant_matrix_changed=false`;
+- `raw_or_85raw_ran=false`;
+- `product_writer_changed=false`.
 
-Phase 8 should build packet v2 by binding the real bundle's downstream-impact
-artifact into the validation packet with the existing large-cohort and
-heldout-oracle evidence.
+Still out of scope:
 
-## Phase Artifacts
-
-- Phase 1:
-  `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`,
-  `scripts/build_lockbox_shadow_automation_experiment_design.py`, and
-  `tests/test_lockbox_shadow_automation_experiment_design.py`.
-- Phase 2:
-  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`,
-  `scripts/check_production_acceptance_manifest.py`, and
-  `tests/test_production_acceptance_manifest_contract.py`.
-- Phase 3:
-  `xic_extractor/alignment/quant_matrix_version.py`,
-  `scripts/build_quant_matrix_version.py`, and
-  `tests/test_quant_matrix_version_activation.py`.
-- Phase 4:
-  `xic_extractor/alignment/quant_matrix_report.py`,
-  `scripts/build_quant_matrix_version_report.py`, and
-  `tests/test_quant_matrix_version_report.py`.
-- Phase 5:
-  `xic_extractor/alignment/quant_matrix_promotion.py`,
-  `scripts/check_quant_matrix_promotion_readiness.py`, and
-  `tests/test_quant_matrix_promotion_readiness.py`.
-- Validation packet:
-  `xic_extractor/alignment/quant_matrix_validation_packet.py`,
-  `scripts/build_quant_matrix_promotion_validation_packet.py`, and
-  `tests/test_quant_matrix_validation_packet.py`.
-- Phase 6:
-  `xic_extractor/alignment/quant_matrix_downstream_impact.py`,
-  `scripts/build_quant_matrix_downstream_impact_smoke.py`, and
-  `tests/test_quant_matrix_downstream_impact_smoke.py`.
-- Phase 7:
-  `scripts/build_quant_matrix_real_bundle.py`,
-  `tests/test_quant_matrix_real_bundle.py`,
-  `docs/superpowers/specs/quant_matrix_real_bundle_schema.v1.json`, and
-  `docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
+- no ProductWriter/default extraction activation;
+- no workbook/GUI/selected peak/selected area/counting changes;
+- no new matrix authority beyond the current 511-cell source run;
+- no broad Backfill revival;
+- no scorer and no RAW/85RAW run.
 
 ## Rejected Paths
 
-- Do not run or revive a scorer as productization authority.
-- Do not create a second independent lockbox case manifest.
-- Do not treat owner-clean challenge rows, AI challenge evidence, manual
-  negative controls, missing-overlay rows, or summary scores as truth
-  completion.
-- Do not let shadow/report/gallery/readiness/validation artifacts feed
-  ProductWriter, matrix/workbook output, selected peak/area, counted detection,
-  GUI, default extraction, reviewer slot 2, or broad Backfill authority.
-- Do not treat low detected support or high Backfill dependency as standalone
-  matrix-value blockers.
+- Do not use scoring weights as write authority.
+- Do not treat Backfill as detection or truth.
+- Do not grant write authority from shadow/report/gallery/review/readiness
+  artifacts alone.
 - Do not overwrite detected values with Backfill values.
+- Do not create another independent lockbox case manifest.
 
-## Validation Status
+## Last Verified State
 
-Current Phase 7 checks:
+Phase 8 validation passed:
 
-- `uv run python scripts/build_quant_matrix_real_bundle.py --check-only`:
-  `real_bundle_status: pass`.
-- `uv run pytest tests/test_quant_matrix_real_bundle.py -v --tb=short`:
-  6 passed.
-- `uv run pytest tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py -v --tb=short`:
-  24 passed.
-- `uv run ruff check scripts/build_quant_matrix_real_bundle.py tests/test_quant_matrix_real_bundle.py`:
-  pass.
-- `uv run mypy scripts/build_quant_matrix_real_bundle.py`:
-  pass.
-- `uv run python scripts/check_productization_state.py`:
-  consistent and fail-closed.
-- `git diff --check`:
-  pass.
-- secret scan:
-  no credential patterns found; ordinary words such as `tokens` in older
-  control-plane prose are false positives.
-- local-path scan:
-  no Windows absolute paths remain in the Phase 7 changed surface.
+- `uv run pytest tests/test_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_validation_packet.py tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_productization_state_index.py -v --tb=short`;
+- `uv run ruff check scripts/build_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_promotion_packet_v2.py tests/test_productization_state_index.py`;
+- `uv run mypy scripts/build_quant_matrix_promotion_packet_v2.py`;
+- `uv run python scripts/build_quant_matrix_promotion_packet_v2.py --check-only`;
+- `uv run python scripts/check_productization_state.py`;
+- `git diff --check`;
+- credential/local-path scans found no Phase 8 issues.
 
-## Control Plane Note
-
-Control plane was updated for Phase 7 because this goal adds a public
-real-bundle schema, builder/checker script, and durable validation artifact.
-No maturity tier, active lane, current 511-cell authority, selected peak/area,
-counted detection, ProductWriter default extraction, review/replay behavior,
-workbook/GUI behavior, or broad Backfill state changed.
-
-Phase 7 reviewer P1 was fixed: default `--check-only` now rejects non-current
-or partial bundles unless explicit test overrides are provided.
+Sub-agent review found no P1/P2 blockers. Residual risk: Phase 8 is no-RAW
+artifact-bound validation; it is not default matrix activation or a new truth
+source.
 
 ## Next Actions
 
-1. Phase 8: build QuantMatrix promotion validation packet v2 using the real
-   downstream-impact smoke artifact.
-2. Run promotion readiness against the real bundle and packet v2.
-3. Keep ProductWriter/default matrix activation out of scope until the
-   promotion packet is production-ready.
+1. Phase 9: build default-matrix activation dry-run expected-diff gate.
+2. Keep ProductWriter/default behavior unchanged until the dry-run gate closes.
+3. After Phase 9, run sub-agent review, fix blockers, commit, then proceed to
+   Phase 10 Product Ready closeout.

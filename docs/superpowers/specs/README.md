@@ -52,6 +52,12 @@ automatic implementation goals.
   downstream-impact, and contract-only readiness artifacts while leaving
   ProductWriter defaults, workbook/GUI, selected peak/area, counted detection,
   broad Backfill, and production tier unchanged.
+- `quant_matrix_promotion_packet_v2_schema.v1.json`: Phase 8 no-RAW promotion
+  packet summary schema. It binds the Phase 7 real bundle, large-cohort
+  evidence, heldout-oracle evidence, and real downstream-impact smoke into a
+  `production_ready_candidate_packet` while still leaving ProductWriter
+  defaults, workbook/GUI, selected peak/area, counted detection, broad Backfill,
+  and default matrix authority unchanged.
 
 ## Rule
 
