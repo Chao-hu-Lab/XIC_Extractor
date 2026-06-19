@@ -311,7 +311,10 @@ class BackfillCellEvidence:
 
     @property
     def hypothesis_or_claim_blocked(self) -> bool:
-        if _normalize(self.group_claim_state) in _HYPOTHESIS_BLOCKING_CLAIM_STATES:
+        if (
+            _normalize(self.group_claim_state) in _HYPOTHESIS_BLOCKING_CLAIM_STATES
+            and not self.claim_resolved_by_current_winner
+        ):
             return True
         if (
             _normalize(self.consolidation_state)
@@ -331,6 +334,14 @@ class BackfillCellEvidence:
             ),
         ).lower()
         return any(marker in text for marker in _HYPOTHESIS_BLOCKING_MARKERS)
+
+    @property
+    def claim_resolved_by_current_winner(self) -> bool:
+        current = _normalize(self.group_hypothesis_id)
+        winner = _normalize(self.claim_winner_group_hypothesis_id)
+        if not current or not winner or current != winner:
+            return False
+        return _normalize(self.consolidation_state) == "moved_to_primary_winner"
 
     @property
     def additional_ms1_support(self) -> bool:

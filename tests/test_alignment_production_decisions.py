@@ -597,6 +597,39 @@ def test_product_authorized_same_peak_wrong_hypothesis_stays_review_rescue():
     assert rescue.blank_reason == BACKFILL_HYPOTHESIS_BLOCKED_REASON
 
 
+def test_product_authorized_claim_resolved_by_current_winner_writes_rescue():
+    matrix = _matrix(
+        clusters=(
+            _feature("FAM001", evidence="owner_complete_link;owner_count=3"),
+        ),
+        cells=(
+            _cell("d1", "FAM001", "detected", 100.0),
+            _cell("d2", "FAM001", "detected", 95.0),
+            _cell(
+                "rescued_moved_to_winner",
+                "FAM001",
+                "rescued",
+                80.0,
+                group_hypothesis_id="FAM001",
+                group_claim_state="duplicate_loser",
+                claim_winner_group_hypothesis_id="FAM001",
+                claim_source_group_hypothesis_id="FAM_LOSER",
+                consolidation_state="moved_to_primary_winner",
+            ),
+        ),
+        sample_order=("d1", "d2", "rescued_moved_to_winner"),
+    )
+
+    rescue = build_production_decisions(matrix, AlignmentConfig()).cell(
+        "FAM001",
+        "rescued_moved_to_winner",
+    )
+
+    assert rescue.write_matrix_value is True
+    assert rescue.production_status == "accepted_rescue"
+    assert rescue.matrix_value == 80.0
+
+
 def test_product_authorized_same_peak_mode_split_blocker_stays_review_rescue():
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=3"),),
@@ -701,6 +734,7 @@ def _cell(
     backfill_ms1_reason: str = ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
     backfill_drift_supported: bool = False,
     candidate_ms2_evidence: bool = True,
+    group_hypothesis_id: str = "",
     group_claim_state: str = "",
     claim_winner_group_hypothesis_id: str = "",
     claim_source_group_hypothesis_id: str = "",
@@ -743,6 +777,7 @@ def _cell(
             if status == "duplicate_assigned"
             else status
         ),
+        group_hypothesis_id=group_hypothesis_id,
         group_claim_state=group_claim_state,
         claim_winner_group_hypothesis_id=claim_winner_group_hypothesis_id,
         claim_source_group_hypothesis_id=claim_source_group_hypothesis_id,

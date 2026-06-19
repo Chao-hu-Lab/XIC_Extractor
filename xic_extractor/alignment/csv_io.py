@@ -172,6 +172,8 @@ def _parse_candidate_row(
 ) -> DiscoveryCandidate:
     candidate_id = _machine_field(row, "candidate_id")
     row_identity = _parse_row_identity_candidate_id(path, row_number, candidate_id)
+    precursor_mz_text = row.get("precursor_mz", "")
+    product_mz_text = row.get("product_mz", "")
     precursor_mz = _parse_float(path, row_number, row, "precursor_mz")
     product_mz = _parse_float(path, row_number, row, "product_mz")
     sample_stem = _machine_field(row, "sample_stem")
@@ -184,7 +186,9 @@ def _parse_candidate_row(
         sample_stem=sample_stem,
         best_ms2_scan_id=best_ms2_scan_id,
         precursor_mz=precursor_mz,
+        precursor_mz_text=precursor_mz_text,
         product_mz=product_mz,
+        product_mz_text=product_mz_text,
     )
     return DiscoveryCandidate(
         review_priority=_required_text(path, row_number, row, "review_priority"),  # type: ignore[arg-type]
@@ -325,7 +329,9 @@ def _require_candidate_id_matches_row(
     sample_stem: str,
     best_ms2_scan_id: int,
     precursor_mz: float,
+    precursor_mz_text: str,
     product_mz: float,
+    product_mz_text: str,
 ) -> None:
     if row_identity.sample_stem != sample_stem:
         raise ValueError(
@@ -344,6 +350,7 @@ def _require_candidate_id_matches_row(
         column="precursor_mz",
         id_value=row_identity.precursor_mz,
         row_value=precursor_mz,
+        row_text=precursor_mz_text,
     )
     _require_candidate_id_mz_matches_row(
         path,
@@ -352,6 +359,7 @@ def _require_candidate_id_matches_row(
         column="product_mz",
         id_value=row_identity.product_mz,
         row_value=product_mz,
+        row_text=product_mz_text,
     )
 
 
@@ -363,13 +371,28 @@ def _require_candidate_id_mz_matches_row(
     column: str,
     id_value: float,
     row_value: float,
+    row_text: str,
 ) -> None:
-    if abs(id_value - row_value) <= _ROW_ID_MZ_TOLERANCE_DA:
+    tolerance_da = _candidate_id_mz_tolerance_da(row_text)
+    if abs(id_value - row_value) <= tolerance_da:
         return
     raise ValueError(
         f"{path}: row {row_number}: candidate_id {column} does not match "
-        f"{column} for {candidate_id!r}: id={id_value:g}, row={row_value:g}"
+        f"{column} for {candidate_id!r}: id={id_value:.8g}, "
+        f"row={row_value:.8g}, tolerance_da={tolerance_da:g}"
     )
+
+
+def _candidate_id_mz_tolerance_da(row_text: str) -> float:
+    text = row_text.strip()
+    mantissa = re.split("[eE]", text, maxsplit=1)[0]
+    if "." not in mantissa:
+        return _ROW_ID_MZ_TOLERANCE_DA
+    fractional = mantissa.rsplit(".", maxsplit=1)[1]
+    if not fractional.isdigit():
+        return _ROW_ID_MZ_TOLERANCE_DA
+    display_half_unit_da = 0.5 * (10 ** -len(fractional))
+    return max(_ROW_ID_MZ_TOLERANCE_DA, display_half_unit_da)
 
 
 def _parse_neutral_loss_error_basis(

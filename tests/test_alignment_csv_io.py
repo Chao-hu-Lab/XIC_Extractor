@@ -146,6 +146,116 @@ def test_read_discovery_candidates_preserves_multi_tag_evidence(
     assert "scan_count" in candidates[0].tag_evidence_json
 
 
+def test_read_discovery_candidates_accepts_writer_rounded_row_identity_mz(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    row = _candidate_row(
+        candidate_id="Sample_1#6095@mz1000.377783_p884.330383",
+        precursor_mz="1000.38",
+        product_mz="884.33",
+        observed_neutral_loss_da="116.047",
+        scan_precursor_mz="1000.38",
+    )
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [row])
+
+    (candidate,) = read_discovery_candidates_csv(csv_path)
+
+    assert candidate.candidate_id == "Sample_1#6095@mz1000.377783_p884.330383"
+    assert candidate.precursor_mz == pytest.approx(1000.38)
+    assert candidate.product_mz == pytest.approx(884.33)
+
+
+def test_discovery_writer_to_alignment_reader_roundtrips_rounded_row_identity(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+    from xic_extractor.discovery.csv_writer import write_discovery_candidates_csv
+    from xic_extractor.discovery.models import DiscoveryCandidate, DiscoverySeed
+
+    raw_file = Path("C:/raw/Sample_1.raw")
+    seed = DiscoverySeed(
+        raw_file=raw_file,
+        sample_stem="Sample_1",
+        scan_number=6095,
+        rt=23.4,
+        precursor_mz=1000.377783,
+        product_mz=884.330383,
+        product_intensity=12000.0,
+        neutral_loss_tag="DNA_dR",
+        configured_neutral_loss_da=116.0474,
+        observed_neutral_loss_da=116.0474,
+        observed_loss_error_ppm=0.0,
+    )
+    candidate = DiscoveryCandidate.from_values(
+        raw_file=raw_file,
+        sample_stem="Sample_1",
+        precursor_mz=1000.377783,
+        product_mz=884.330383,
+        observed_neutral_loss_da=116.0474,
+        best_seed=seed,
+        seed_scan_ids=(6095,),
+        neutral_loss_tag="DNA_dR",
+        configured_neutral_loss_da=116.0474,
+        neutral_loss_mass_error_ppm=0.0,
+        neutral_loss_error_basis="configured_loss_inferred_precursor",
+        precursor_mz_basis="product_plus_neutral_loss",
+        scan_precursor_mz=1000.377783,
+        scan_precursor_delta_da=0.0,
+        max_scan_precursor_abs_delta_da=0.0,
+        rt_seed_min=23.35,
+        rt_seed_max=23.45,
+        ms1_search_rt_min=23.15,
+        ms1_search_rt_max=23.65,
+        ms1_seed_delta_min=0.0,
+        ms1_peak_rt_start=23.25,
+        ms1_peak_rt_end=23.55,
+        ms1_height=4500.0,
+        ms1_trace_quality="GOOD",
+        seed_event_count=1,
+        ms1_peak_found=True,
+        ms1_apex_rt=23.41,
+        ms1_area=88765.4,
+        ms2_product_max_intensity=12000.0,
+        review_priority="HIGH",
+        reason="neutral loss seed",
+    )
+    csv_path = tmp_path / "discovery_candidates.csv"
+
+    write_discovery_candidates_csv(csv_path, [candidate])
+    written_row = _read_csv(csv_path)[0]
+    (parsed,) = read_discovery_candidates_csv(csv_path)
+
+    assert written_row["candidate_id"] == "Sample_1#6095@mz1000.377783_p884.330383"
+    assert written_row["precursor_mz"] == "1000.38"
+    assert written_row["product_mz"] == "884.33"
+    assert parsed.candidate_id == "Sample_1#6095@mz1000.377783_p884.330383"
+
+
+def test_read_discovery_candidates_rejects_mz_just_outside_display_tolerance(
+    tmp_path: Path,
+) -> None:
+    from xic_extractor.alignment.csv_io import read_discovery_candidates_csv
+
+    row = _candidate_row(
+        candidate_id="Sample_1#6095@mz1000.386_p884.330383",
+        precursor_mz="1000.38",
+        product_mz="884.33",
+        observed_neutral_loss_da="116.047",
+        scan_precursor_mz="1000.38",
+    )
+    csv_path = tmp_path / "discovery_candidates.csv"
+    _write_csv(csv_path, DISCOVERY_CANDIDATE_COLUMNS, [row])
+
+    with pytest.raises(
+        ValueError,
+        match=r"precursor_mz does not match.*tolerance_da=0.005",
+    ):
+        read_discovery_candidates_csv(csv_path)
+
+
 def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
     tmp_path: Path,
 ) -> None:
@@ -292,6 +402,11 @@ def test_read_discovery_candidates_csv_rejects_malformed_typed_fields_with_row_n
 
     with pytest.raises(ValueError, match=rf"row 2.*{column}"):
         read_discovery_candidates_csv(csv_path)
+
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
 
 
 def _write_csv(
