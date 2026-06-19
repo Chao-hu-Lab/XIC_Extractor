@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -18,7 +17,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from xic_extractor.tabular_io import read_tsv_with_header
+from xic_extractor.artifact_retention import (
+    git_visible_paths,
+    index_inventory_by_path,
+    missing_inventory_paths,
+    normalize_repo_path,
+    present_existing_paths,
+    read_inventory_rows,
+    read_policy_decisions,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VALIDATION_DIR = ROOT / "docs/superpowers/validation"
@@ -74,29 +81,35 @@ def check_validation_artifact_retention(
 ) -> RetentionCheckResult:
     problems: list[str] = []
     warnings: list[str] = []
-    allowed_decisions = _read_policy_decisions(retention_policy_path, problems)
-    header, rows = _read_inventory(inventory_path, problems)
+    allowed_decisions = read_policy_decisions(
+        retention_policy_path,
+        required_decisions=KEEP_DECISIONS | DROP_DECISIONS,
+        problems=problems,
+        missing_message="retention policy is missing decisions: ",
+    )
+    header, rows = read_inventory_rows(
+        inventory_path,
+        required_columns=REQUIRED_INVENTORY_COLUMNS,
+        problems=problems,
+    )
     if header and tuple(header) != REQUIRED_INVENTORY_COLUMNS:
         problems.append("inventory header must exactly match retention policy columns")
 
-    inventory_by_path = _index_inventory(rows, problems)
+    inventory_by_path = index_inventory_by_path(rows, problems=problems)
     if candidate_paths is None or deleted_paths is None:
-        git_candidate_paths, git_deleted_paths = _git_validation_paths(
-            repo_root,
-            validation_dir,
-            problems,
+        git_candidate_paths, git_deleted_paths = git_visible_paths(
+            repo_root=repo_root,
+            surface_dir=validation_dir,
+            problems=problems,
+            include_deleted=True,
         )
         if candidate_paths is None:
             candidate_paths = git_candidate_paths
         if deleted_paths is None:
             deleted_paths = git_deleted_paths
 
-    present_paths = {
-        _normalize_repo_path(path)
-        for path in candidate_paths
-        if (repo_root / _normalize_repo_path(path)).exists()
-    }
-    deleted_path_set = {_normalize_repo_path(path) for path in deleted_paths}
+    present_paths = present_existing_paths(candidate_paths, repo_root=repo_root)
+    deleted_path_set = {normalize_repo_path(path) for path in deleted_paths}
     _check_inventory_rows(
         inventory_by_path,
         allowed_decisions,
@@ -135,53 +148,6 @@ def check_validation_artifact_retention(
         "warnings": len(warnings),
     }
     return RetentionCheckResult(tuple(problems), tuple(warnings), summary)
-
-
-def _read_policy_decisions(path: Path, problems: list[str]) -> set[str]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        problems.append(f"could not read retention policy {path}: {exc}")
-        return set()
-    decisions = set(re.findall(r"\|\s*`([^`]+)`\s*\|", text))
-    missing = (KEEP_DECISIONS | DROP_DECISIONS) - decisions
-    if missing:
-        problems.append(
-            "retention policy is missing decisions: " + ", ".join(sorted(missing)),
-        )
-    return decisions
-
-
-def _read_inventory(
-    path: Path,
-    problems: list[str],
-) -> tuple[tuple[str, ...], list[dict[str, str]]]:
-    try:
-        return read_tsv_with_header(path, required_columns=REQUIRED_INVENTORY_COLUMNS)
-    except OSError as exc:
-        problems.append(f"could not read inventory {path}: {exc}")
-    except ValueError as exc:
-        problems.append(str(exc))
-    return (), []
-
-
-def _index_inventory(
-    rows: Sequence[Mapping[str, str]],
-    problems: list[str],
-) -> dict[str, Mapping[str, str]]:
-    by_path: dict[str, Mapping[str, str]] = {}
-    seen = Counter(_normalize_repo_path(row.get("path", "")) for row in rows)
-    duplicates = sorted(path for path, count in seen.items() if path and count > 1)
-    if duplicates:
-        problems.append("duplicate inventory rows: " + ", ".join(duplicates))
-    for index, row in enumerate(rows, start=2):
-        path = _normalize_repo_path(row.get("path", ""))
-        if not path:
-            problems.append(f"inventory row {index}: path is required")
-            continue
-        if path not in by_path:
-            by_path[path] = row
-    return by_path
 
 
 def _check_inventory_rows(
@@ -280,7 +246,7 @@ def _check_missing_inventory_rows(
     inventory_by_path: Mapping[str, Mapping[str, str]],
     problems: list[str],
 ) -> None:
-    missing = sorted(path for path in present_paths if path not in inventory_by_path)
+    missing = missing_inventory_paths(set(present_paths), inventory_by_path)
     if missing:
         problems.append(
             "validation files missing inventory rows: " + ", ".join(missing),
@@ -306,7 +272,7 @@ def _check_rendered_references(
             problems.append(f"{path}: could not scan rendered references: {exc}")
             continue
         references = {
-            _normalize_repo_path(match)
+            normalize_repo_path(match)
             for match in RENDERED_REFERENCE_RE.findall(text)
         }
         for reference in sorted(references):
@@ -338,65 +304,6 @@ def _is_rendered_artifact(path: str, category: str) -> bool:
         "rendered_plot",
         "binary_review_media",
     }
-
-
-def _git_validation_paths(
-    repo_root: Path,
-    validation_dir: Path,
-    problems: list[str],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    rel_validation = _repo_relative(validation_dir, repo_root)
-    tracked = _git_lines(repo_root, "ls-files", rel_validation, problems=problems)
-    untracked = _git_lines(
-        repo_root,
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        rel_validation,
-        problems=problems,
-    )
-    deleted = _git_lines(
-        repo_root,
-        "ls-files",
-        "--deleted",
-        rel_validation,
-        problems=problems,
-    )
-    candidates = sorted(({*tracked, *untracked} - set(deleted)))
-    return tuple(candidates), tuple(sorted(deleted))
-
-
-def _git_lines(
-    repo_root: Path,
-    *args: str,
-    problems: list[str],
-) -> tuple[str, ...]:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        problems.append(
-            f"git {' '.join(args)} failed: {completed.stderr.strip()}",
-        )
-        return ()
-    return tuple(
-        _normalize_repo_path(line)
-        for line in completed.stdout.splitlines()
-        if line.strip()
-    )
-
-
-def _repo_relative(path: Path, repo_root: Path) -> str:
-    relative = path.resolve().relative_to(repo_root.resolve()).as_posix()
-    return _normalize_repo_path(relative)
-
-
-def _normalize_repo_path(path: str) -> str:
-    return path.strip().replace("\\", "/")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

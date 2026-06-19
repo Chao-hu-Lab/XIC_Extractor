@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import scripts.build_quant_matrix_promotion_packet_v2 as packet_v2_module
 from scripts.build_quant_matrix_promotion_packet_v2 import (
     PROMOTION_PACKET_V2_SUMMARY_SCHEMA,
@@ -114,6 +116,123 @@ def test_promotion_packet_v2_builds_real_bundle_ready_candidate(
         summary["artifacts"]["real_bundle_readiness_summary_json"]["sha256"]
         == file_sha256(outputs["real_bundle_readiness_summary_json"])
     )
+
+
+def test_promotion_packet_v2_builds_externalized_real_bundle_cell_provenance(
+    tmp_path: Path,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    real_bundle = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    real_bundle["cell_provenance"].unlink()
+    sources = _write_science_sources(tmp_path)
+
+    outputs = build_quant_matrix_promotion_packet_v2(
+        output_dir=tmp_path / "packet_v2",
+        source_root=tmp_path,
+        real_bundle_summary_json=real_bundle["summary_json"],
+        large_cohort_artifact=sources["large"],
+        heldout_oracle_artifact=sources["oracle"],
+        cohort_id="synthetic_85raw",
+        oracle_packet_id="synthetic_oracle",
+        expected_source_run_id="synthetic-current-511-authority-replay",
+        expected_downstream_scope="synthetic_current_authority_replay",
+        expected_accepted_backfill_count=1,
+    )
+
+    assert (
+        validate_quant_matrix_promotion_packet_v2(
+            summary_json=outputs["summary_json"],
+            source_root=tmp_path,
+            expected_source_run_id="synthetic-current-511-authority-replay",
+            expected_downstream_scope="synthetic_current_authority_replay",
+            expected_accepted_backfill_count=1,
+        )
+        == []
+    )
+    evidence = json.loads(
+        outputs["validation_evidence_json"].read_text(encoding="utf-8")
+    )
+    downstream_row = next(
+        row for row in evidence["evidence"] if row["tier"] == "downstream_impact_smoke"
+    )
+    copied_downstream = outputs["validation_evidence_json"].parent / downstream_row[
+        "artifact_path"
+    ]
+    copied_downstream_payload = json.loads(
+        copied_downstream.read_text(encoding="utf-8"),
+    )
+    input_artifacts = copied_downstream_payload["input_artifacts"]
+    contract = json.loads(
+        real_bundle["cell_provenance_summary_json"].read_text(encoding="utf-8"),
+    )
+    assert (
+        input_artifacts["cell_provenance_tsv"]
+        == "bundle/quant_matrix_version/cell_provenance.tsv"
+    )
+    assert not (tmp_path / input_artifacts["cell_provenance_tsv"]).exists()
+    assert input_artifacts["cell_provenance_sha256"] == contract["source_sha256"]
+
+    readiness = json.loads(
+        outputs["real_bundle_readiness_summary_json"].read_text(encoding="utf-8"),
+    )
+    readiness_inputs = readiness["input_artifacts"]
+    readiness_input_text = "\n".join(str(value) for value in readiness_inputs.values())
+    assert "activation_rerun" not in readiness_input_text
+    assert "validation_evidence/" not in readiness_input_text
+    assert not Path(readiness_inputs["cell_provenance_tsv"]).is_absolute()
+    assert not Path(readiness_inputs["validation_evidence_json"]).is_absolute()
+    assert readiness_inputs["cell_provenance_tsv"].endswith(
+        "bundle/quant_matrix_version/cell_provenance.tsv",
+    )
+    assert readiness_inputs["validation_evidence_json"].endswith(
+        "quant_matrix_validation_evidence_v1.json",
+    )
+
+
+def test_promotion_packet_v2_build_rejects_externalized_provenance_replay_drift(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    fixture = _write_source_run_fixture(tmp_path)
+    real_bundle = build_quant_matrix_real_bundle(
+        source_run_dir=fixture["source_run"],
+        output_dir=fixture["output_dir"],
+        repo_root=tmp_path,
+        downstream_scope="synthetic_current_authority_replay",
+    )
+    real_bundle["cell_provenance"].unlink()
+    sources = _write_science_sources(tmp_path)
+    original_run_activation = packet_v2_module.run_activation
+
+    def drifted_run_activation(*args, **kwargs):
+        outputs = dict(original_run_activation(*args, **kwargs))
+        with outputs["cell_provenance"].open("a", encoding="utf-8") as handle:
+            handle.write("# drift\n")
+        return outputs
+
+    monkeypatch.setattr(packet_v2_module, "run_activation", drifted_run_activation)
+
+    with pytest.raises(
+        ValueError,
+        match="promotion packet v2 cell_provenance materialization failed",
+    ):
+        build_quant_matrix_promotion_packet_v2(
+            output_dir=tmp_path / "packet_v2",
+            source_root=tmp_path,
+            real_bundle_summary_json=real_bundle["summary_json"],
+            large_cohort_artifact=sources["large"],
+            heldout_oracle_artifact=sources["oracle"],
+            cohort_id="synthetic_85raw",
+            oracle_packet_id="synthetic_oracle",
+            expected_source_run_id="synthetic-current-511-authority-replay",
+            expected_downstream_scope="synthetic_current_authority_replay",
+            expected_accepted_backfill_count=1,
+        )
 
 
 def test_promotion_packet_v2_rejects_stale_real_bundle_readiness(

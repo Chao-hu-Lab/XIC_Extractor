@@ -1,6 +1,6 @@
 # XIC productization handoff
 
-Updated: 2026-06-19 20:11 +08:00
+Updated: 2026-06-19 21:16 +08:00
 Branch: `cc/framework-improvements`
 
 This is the compact current-state snapshot. Tier authority remains in
@@ -20,7 +20,8 @@ activated default matrix bundle still predates that fix, so do not claim the
 activated `quant_matrix.tsv` contains that exact target row until a later
 discovery/alignment/default-activation expected-diff rerun regenerates it.
 
-Validation status for the current cleanup: `diagnostic_only`.
+Validation status for the current cleanup and retention reuse refactor:
+`diagnostic_only`.
 
 ## Active References
 
@@ -36,6 +37,10 @@ Validation status for the current cleanup: `diagnostic_only`.
   `scripts/check_validation_artifact_retention.py`
 - Fixture retention checker:
   `scripts/check_superpowers_fixture_retention.py`
+- Shared retention mechanics:
+  `xic_extractor/artifact_retention.py`,
+  `xic_extractor/alignment/quant_matrix_artifacts.py`,
+  `docs/superpowers/notes/2026-06-19-retention-reuse-duplication-ledger.md`
 - Default matrix activation bundle:
   `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`
 - Externalized local validation artifacts:
@@ -54,25 +59,14 @@ Validation status for the current cleanup: `diagnostic_only`.
   fixture replacements and ignored local replay copies.
 - The retention cleanup changes docs/artifact storage policy and metadata gates
   only. It does not alter product tier or write authority.
+- The retention/QuantMatrix artifact reuse refactors deepen checker and
+  JSON/path/hash/bundle replay mechanics only. They do not change maturity
+  tier, active lane, matrix output, review authority, selected area/counting,
+  or Backfill writer authority. No control-plane tier update is needed.
 
-Status-index anchors retained:
-
-- `product_ready_default_matrix_activated`
-- Broad Backfill auto-write remains parked
-- Goal 0/1 hardening added
-- machine-adjudicated without granting new writer authority
-- Goal 2 added Review Packet / Approval Workflow v1
-- lockbox_shadow_automation_experiment_v1
-- Goal 4 added Missing-Overlay Evidence Recovery v1
-- keep only as explanation/triage
-- lockbox/review packet surfaces remain diagnostic unless separately activated
-- Targeted MS1 shape identity limited rescue remains production-ready
-- GUI and broader targets remain blocked
-- `sample_metadata_v1` remains production-ready for no-output ordering
-- roles/batch/matrix/exclusion must not alter quant output
-- ReviewAction selected-candidate switch and manual-boundary area recompute remain parked
-- manual-boundary area recompute remain parked
-- classification and planning only
+Status-index handoff anchors retained for the fail-closed checker: `product_ready_default_matrix_activated`; Broad Backfill auto-write remains parked; Goal 0/1 hardening added; machine-adjudicated without granting new writer authority; Goal 2 added Review Packet / Approval Workflow v1; lockbox_shadow_automation_experiment_v1; Goal 4 added Missing-Overlay Evidence Recovery v1; keep only as explanation/triage; Targeted MS1 shape identity limited rescue remains production-ready; GUI and broader targets remain blocked; `sample_metadata_v1` remains production-ready for no-output ordering; roles/batch/matrix/exclusion must not alter quant output; ReviewAction selected-candidate switch and manual-boundary area recompute remain parked; classification and planning only.
+Do not reinterpret diagnostic/lockbox/review-packet surfaces as product
+authority from this handoff alone.
 
 ## Validation Retention
 
@@ -99,6 +93,17 @@ are local replay artifacts, not durable version-controlled product contracts.
 Clean checkout validation still reruns temporary QuantMatrix activation and
 compares fresh `cell_provenance.tsv` hashes against tracked summary
 `source_sha256` values before accepting externalized full TSVs.
+The validation checker now reuses `xic_extractor.artifact_retention` for shared
+policy/inventory/git/path mechanics; validation-specific rendered-reference and
+externalized-local rules remain local.
+QuantMatrix productization scripts now reuse
+`xic_extractor.alignment.quant_matrix_artifacts` for bundle-relative artifact
+resolution, source-summary hash checks, and `cell_provenance` rerun hash
+binding. Promotion packet v2 build/check-only now materializes missing
+externalized `cell_provenance.tsv` from tracked full TSV, a SHA-checked
+externalized local copy, or a no-RAW activation replay. Durable summaries keep
+bundle/reference paths; temp replay paths are not written into retained
+artifacts.
 
 Remaining validation work: keep future generated outputs out of
 `docs/superpowers/validation` unless they are contract/index/hash/summary or
@@ -123,6 +128,9 @@ Active fixture paths remain stable. The dated packet
 `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/README.md` records two
 duplicate snapshot groups and historical hash-drift observations without
 rewriting ledger conclusions.
+The fixture checker now reuses `xic_extractor.artifact_retention` for shared
+policy/inventory/git/path/metadata mechanics; fixture-specific authority,
+ledger, and human-review rules remain local.
 
 Remaining fixture work: resolve
 `chrom_peak_segment_presence_review_manual_oracle_v1.tsv` as either an active
@@ -138,22 +146,14 @@ manual oracle with consumer coverage or an archived note-only oracle.
 - Do not demote/delete the `301.165` isotope row.
 - Externalized full QuantMatrix TSVs are local replay/audit copies only; clean
   checkout validation uses tracked summary/minimal fixture contracts.
+- `docs/superpowers/fixtures/ARTIFACT_INVENTORY.tsv` metadata for three
+  markdown policy/summary files was aligned to current working-tree bytes only.
 
 ## Verification
 
-Fixture retention closeout passed:
-
-- `uv run python scripts/check_superpowers_fixture_retention.py`
-  - `28` files, `1` `needs_human_review` warning, `4` `archive_later` rows
-- focused fixture consumer pytest:
-  - `tests/test_superpowers_fixture_retention.py`
-  - shared peak identity fixture tests
-  - `tests/test_alignment_tsv_writer.py`
-  - result: `67 passed`
-- scoped ruff:
-  - `scripts/check_superpowers_fixture_retention.py`
-  - `tests/test_superpowers_fixture_retention.py`
-  - result: passed
+Fixture retention closeout passed: checker accepted 28 retained files with the
+known `needs_human_review` warning, focused consumer pytest passed, and scoped
+ruff passed.
 
 Current validation retention closeout passed:
 
@@ -167,9 +167,27 @@ Current validation retention closeout passed:
 - scoped ruff for validation retention checker/tests passed
 - fixture consumer shard passed: `59 passed`
 
+Retention reuse refactor smoke passed:
+
+- focused ruff for `artifact_retention`, both retention checkers, and tests
+- `tests/test_artifact_retention.py`,
+  `tests/test_validation_artifact_retention.py`,
+  `tests/test_superpowers_fixture_retention.py`: `27 passed`
+- `uv run mypy xic_extractor`: passed
+- `uv run python .codex/hooks/fixtures/assert_hook_outputs.py`: passed
+- `git diff --check`: no whitespace errors; Windows line-ending warnings only
+- secret/local-path scan over changed files: no matches
+- QuantMatrix artifact reuse focused tests passed:
+  `tests/test_quant_matrix_artifacts.py` plus default dry-run, promotion packet
+  v2, product-ready closeout, and default product activation tests: `35 passed`
+- Full pytest was attempted and stopped at unrelated stale candidate-id fixture:
+  `tests/test_alignment_identity_coherence_pipeline.py::test_run_alignment_emits_identity_coherence_diagnostic_when_opted_in`.
+
 ## Next Actions
 
-1. Commit this as repo-hygiene/retention cleanup if the diff is accepted.
+1. Commit the artifact reuse refactor if the diff is accepted.
 2. Resolve the chrom-peak-segment manual oracle as active fixture or archive.
-3. Open a separate regeneration goal when the product matrix should materialize
+3. Deepen the next duplicated seam only when a third caller needs the same
+   phase-local replay orchestration or schema-check mechanics.
+4. Open a separate regeneration goal when the product matrix should materialize
    the `300.1605` target row.

@@ -88,6 +88,16 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   shards, subagents, plugins, or long runs must name the product evidence or
   decision they add; dataset-specific slices are staging evidence, not durable
   product policy.
+- Before adding a new validation, fixture, retention, diagnostic,
+  productization, or artifact-index workflow, search for an existing owner of
+  the same responsibility. If a wheel exists, deepen and reuse that module
+  before creating a parallel workflow; a new sibling workflow must state why the
+  existing interface is wrong for this case.
+- Treat the third instance of the same mechanical responsibility as a refactor
+  trigger. Shared mechanics such as artifact path resolution, inventory parsing,
+  hashing, externalized-artifact checks, schema checks, replay checks, and stale
+  result detection should move behind a small reusable interface while
+  phase-specific policy and domain authority statements stay local.
 - Treat `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, hook
   scripts, execpolicy, and subagent TOML as execution-affecting config. Changes
   need docs/handoff review, smoke check, and secret/local-path scan.

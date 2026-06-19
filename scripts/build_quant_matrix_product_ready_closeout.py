@@ -33,6 +33,24 @@ from scripts.build_quant_matrix_real_bundle import (
     DEFAULT_DOWNSTREAM_SCOPE,
     DEFAULT_SOURCE_RUN_ID,
 )
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    artifact_record as _artifact_record,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    is_sha256 as _is_sha256,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    raise_if_problems as _raise_if_problems,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    read_json_object as _read_json_object,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    resolve_source as _resolve_source,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_relpath as _source_relpath,
+)
 from xic_extractor.tabular_io import (
     file_sha256,
     optional_int,
@@ -595,46 +613,6 @@ def _output_artifacts(
         if not _is_sha256(sha256) or file_sha256(resolved) != sha256.upper():
             problems.append(f"product ready closeout {label} sha256 mismatch")
     return result
-
-
-def _artifact_record(path: Path, *, base_dir: Path) -> dict[str, str]:
-    return {
-        "path": path.resolve(strict=False).relative_to(
-            base_dir.resolve(strict=False),
-        ).as_posix(),
-        "sha256": file_sha256(path),
-    }
-
-
-def _source_relpath(path: Path, *, source_root: Path) -> str:
-    try:
-        return path.resolve(strict=True).relative_to(
-            source_root.resolve(strict=True),
-        ).as_posix()
-    except ValueError:
-        return str(path.resolve(strict=True))
-
-
-def _resolve_source(path: Path, *, source_root: Path) -> Path:
-    return path if path.is_absolute() else source_root / path
-
-
-def _read_json_object(path: Path) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected JSON object")
-    return data
-
-
-def _is_sha256(value: str) -> bool:
-    return len(value) == 64 and all(
-        character in "0123456789abcdefABCDEF" for character in value
-    )
-
-
-def _raise_if_problems(label: str, problems: Sequence[str]) -> None:
-    if problems:
-        raise ValueError(f"{label}: " + "; ".join(problems))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

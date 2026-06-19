@@ -34,6 +34,33 @@ from scripts.build_quant_matrix_real_bundle import (
     DEFAULT_OUTPUT_DIR as DEFAULT_REAL_BUNDLE_DIR,
 )
 from scripts.build_quant_matrix_version import run_activation
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    artifact_record as _artifact_record,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    cell_provenance_rerun_problems as _shared_cell_provenance_rerun_problems,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    raise_if_problems as _raise_if_problems,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    read_json_object as _read_json_object,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    resolve_real_bundle_paths,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    resolve_source as _resolve_source,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_relpath as _source_relpath,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_relpath_reference as _source_relpath_reference,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_summary_input_hash_problems as _shared_source_summary_input_hash_problems,
+)
 from xic_extractor.alignment.quant_matrix_fixture_contract import (
     validate_fixture_contract,
     write_cell_provenance_contract,
@@ -415,38 +442,20 @@ def _real_bundle_paths(
     payload: Mapping[str, Any],
     summary_json: Path,
 ) -> dict[str, Path]:
-    artifacts = payload.get("artifacts")
-    if not isinstance(artifacts, dict):
-        raise ValueError("real bundle artifacts must be an object")
-    output_dir = summary_json.parent
-    labels = (
-        "baseline_quant_matrix",
-        "input_matrix_identity",
-        "production_acceptance_manifest",
-        "expected_diff",
-        "quant_matrix",
-        "row_summary",
-        "expected_diff_summary",
-        "source_summary",
+    return resolve_real_bundle_paths(
+        payload,
+        summary_json,
+        required_labels=(
+            "baseline_quant_matrix",
+            "input_matrix_identity",
+            "production_acceptance_manifest",
+            "expected_diff",
+            "quant_matrix",
+            "row_summary",
+            "expected_diff_summary",
+            "source_summary",
+        ),
     )
-    result: dict[str, Path] = {}
-    for label in labels:
-        raw_entry = artifacts.get(label)
-        if not isinstance(raw_entry, dict):
-            raise ValueError(f"real bundle {label} artifact is missing")
-        relpath = str(raw_entry.get("path", "")).strip()
-        path = Path(relpath)
-        if not relpath or path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"real bundle {label} path must be bundle-relative")
-        resolved = (output_dir / path).resolve(strict=False)
-        try:
-            resolved.relative_to(output_dir.resolve(strict=False))
-        except ValueError as exc:
-            raise ValueError(f"real bundle {label} path escapes bundle") from exc
-        if not resolved.is_file():
-            raise FileNotFoundError(str(resolved))
-        result[label] = resolved
-    return result
 
 
 def _source_identity_problems(
@@ -506,27 +515,10 @@ def _source_summary_input_hash_problems(
     *,
     expected_inputs: Mapping[str, Path],
 ) -> list[str]:
-    rows = read_tsv_required(source_summary_tsv, ("schema_version",))
-    if len(rows) != 1:
-        return ["source_summary must contain exactly one row"]
-    row = rows[0]
-    expected_hashes = {
-        "input_quant_matrix_sha256": file_sha256(
-            expected_inputs["baseline_quant_matrix"],
-        ),
-        "input_matrix_identity_sha256": file_sha256(
-            expected_inputs["input_matrix_identity"],
-        ),
-        "production_acceptance_manifest_sha256": file_sha256(
-            expected_inputs["production_acceptance_manifest"],
-        ),
-        "expected_diff_sha256": file_sha256(expected_inputs["expected_diff"]),
-    }
-    problems: list[str] = []
-    for field, expected in expected_hashes.items():
-        if row.get(field) != expected:
-            problems.append(f"source_summary {field} mismatch")
-    return problems
+    return _shared_source_summary_input_hash_problems(
+        source_summary_tsv,
+        expected_inputs=expected_inputs,
+    )
 
 
 def _reference_output_problems(
@@ -583,14 +575,14 @@ def _cell_provenance_rerun_problems(
     rerun_cell_provenance_tsv: Path,
     summary_json: Path,
 ) -> list[str]:
-    try:
-        payload = _read_json_object(summary_json)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        return [f"cell_provenance summary invalid for rerun comparison: {exc}"]
-    source_sha = str(payload.get("source_sha256", "")).upper()
-    if file_sha256(rerun_cell_provenance_tsv) != source_sha:
-        return ["cell_provenance does not match rerun activation"]
-    return []
+    return _shared_cell_provenance_rerun_problems(
+        rerun_cell_provenance_tsv,
+        summary_json,
+        invalid_message_prefix=(
+            "cell_provenance summary invalid for rerun comparison"
+        ),
+        mismatch_message="cell_provenance does not match rerun activation",
+    )
 
 
 def _cell_provenance_completeness_problems(
@@ -1038,13 +1030,6 @@ def _output_artifacts(
     return result
 
 
-def _artifact_record(path: Path, *, base_dir: Path) -> dict[str, str]:
-    return {
-        "path": _relpath(path, base_dir),
-        "sha256": file_sha256(path),
-    }
-
-
 def _write_fixture_contract_outputs(
     *,
     activation_outputs: Mapping[str, Path],
@@ -1075,7 +1060,7 @@ def _externalized_fixture_source_entry(
         "path": _relpath(path, output_dir),
         "sha256": file_sha256(path),
         "externalized": True,
-        "externalized_path": _source_relpath(
+        "externalized_path": _source_relpath_reference(
             _externalized_validation_artifact_path(path, output_dir=output_dir),
             source_root=source_root,
         ),
@@ -1175,26 +1160,6 @@ def _rewrite_source_summary_paths(source_summary_tsv: Path) -> None:
     )
 
 
-def _read_json_object(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected JSON object")
-    return payload
-
-
-def _resolve_source(path: Path, *, source_root: Path) -> Path:
-    return path if path.is_absolute() else source_root / path
-
-
-def _source_relpath(path: Path, *, source_root: Path) -> str:
-    try:
-        return path.resolve(strict=False).relative_to(
-            source_root.resolve(strict=False),
-        ).as_posix()
-    except ValueError:
-        return str(path)
-
-
 def _relpath(path: Path, base_dir: Path) -> str:
     try:
         return path.resolve(strict=False).relative_to(
@@ -1214,11 +1179,6 @@ def _portable_relpath(path: Path, base_dir: Path) -> str:
         ).as_posix()
     except ValueError:
         return str(path)
-
-
-def _raise_if_problems(label: str, problems: Sequence[str]) -> None:
-    if problems:
-        raise ValueError(label + ": " + "; ".join(problems))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

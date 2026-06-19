@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
-import subprocess
 import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -18,7 +16,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from xic_extractor.tabular_io import file_sha256, read_tsv_with_header
+from xic_extractor.artifact_retention import (
+    git_visible_paths,
+    index_inventory_by_path,
+    missing_inventory_paths,
+    present_existing_paths,
+    read_inventory_rows,
+    read_policy_decisions,
+    retained_file_metadata,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURES_DIR = ROOT / "docs/superpowers/fixtures"
@@ -69,19 +75,43 @@ def check_superpowers_fixture_retention(
 ) -> FixtureRetentionCheckResult:
     problems: list[str] = []
     warnings: list[str] = []
-    allowed_decisions = _read_policy_decisions(retention_policy_path, problems)
-    header, rows = _read_inventory(inventory_path, problems)
+    allowed_decisions = read_policy_decisions(
+        retention_policy_path,
+        required_decisions=ACTIVE_KEEP_DECISIONS
+        | TEMP_KEEP_DECISIONS
+        | DROP_DECISIONS
+        | {"keep_ledger_snapshot"},
+        problems=problems,
+        missing_message="fixture retention policy is missing decisions: ",
+    )
+    header, rows = read_inventory_rows(
+        inventory_path,
+        required_columns=REQUIRED_INVENTORY_COLUMNS,
+        problems=problems,
+    )
     if header and tuple(header) != REQUIRED_INVENTORY_COLUMNS:
         problems.append("inventory header must exactly match fixture policy columns")
 
-    inventory_by_path = _index_inventory(rows, problems)
+    inventory_by_path = index_inventory_by_path(
+        rows,
+        problems=problems,
+        self_index_path=SELF_INDEX_PATH,
+        self_index_message=(
+            f"{SELF_INDEX_PATH}: inventory must not contain a self-hash row"
+        ),
+    )
     if candidate_paths is None:
-        candidate_paths = _git_fixture_paths(repo_root, fixtures_dir, problems)
-    present_paths = {
-        path
-        for path in (_normalize_repo_path(path) for path in candidate_paths)
-        if path != SELF_INDEX_PATH and (repo_root / path).exists()
-    }
+        candidate_paths, _ = git_visible_paths(
+            repo_root=repo_root,
+            surface_dir=fixtures_dir,
+            problems=problems,
+            exclude_paths={SELF_INDEX_PATH},
+        )
+    present_paths = present_existing_paths(
+        candidate_paths,
+        repo_root=repo_root,
+        exclude_paths={SELF_INDEX_PATH},
+    )
 
     _check_inventory_rows(
         inventory_by_path,
@@ -112,60 +142,6 @@ def check_superpowers_fixture_retention(
         "warnings": len(warnings),
     }
     return FixtureRetentionCheckResult(tuple(problems), tuple(warnings), summary)
-
-
-def _read_policy_decisions(path: Path, problems: list[str]) -> set[str]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        problems.append(f"could not read retention policy {path}: {exc}")
-        return set()
-    decisions = set(re.findall(r"\|\s*`([^`]+)`\s*\|", text))
-    required = ACTIVE_KEEP_DECISIONS | TEMP_KEEP_DECISIONS | DROP_DECISIONS | {
-        "keep_ledger_snapshot",
-    }
-    missing = required - decisions
-    if missing:
-        problems.append(
-            "fixture retention policy is missing decisions: "
-            + ", ".join(sorted(missing)),
-        )
-    return decisions
-
-
-def _read_inventory(
-    path: Path,
-    problems: list[str],
-) -> tuple[tuple[str, ...], list[dict[str, str]]]:
-    try:
-        return read_tsv_with_header(path, required_columns=REQUIRED_INVENTORY_COLUMNS)
-    except OSError as exc:
-        problems.append(f"could not read inventory {path}: {exc}")
-    except ValueError as exc:
-        problems.append(str(exc))
-    return (), []
-
-
-def _index_inventory(
-    rows: Sequence[Mapping[str, str]],
-    problems: list[str],
-) -> dict[str, Mapping[str, str]]:
-    by_path: dict[str, Mapping[str, str]] = {}
-    seen = Counter(_normalize_repo_path(row.get("path", "")) for row in rows)
-    duplicates = sorted(path for path, count in seen.items() if path and count > 1)
-    if duplicates:
-        problems.append("duplicate inventory rows: " + ", ".join(duplicates))
-    for index, row in enumerate(rows, start=2):
-        path = _normalize_repo_path(row.get("path", ""))
-        if not path:
-            problems.append(f"inventory row {index}: path is required")
-            continue
-        if path == SELF_INDEX_PATH:
-            problems.append(f"{path}: inventory must not contain a self-hash row")
-            continue
-        if path not in by_path:
-            by_path[path] = row
-    return by_path
 
 
 def _check_inventory_rows(
@@ -222,23 +198,20 @@ def _check_declared_metadata(
 ) -> None:
     file_path = repo_root / path
     try:
-        data = file_path.read_bytes()
+        metadata = retained_file_metadata(file_path)
     except OSError as exc:
         problems.append(f"{path}: could not read retained file: {exc}")
         return
     declared_size = row.get("size_bytes", "")
-    actual_size = str(file_path.stat().st_size)
+    actual_size = str(metadata.size_bytes)
     if declared_size != actual_size:
         problems.append(f"{path}: size_bytes {declared_size!r} != {actual_size}")
     declared_lines = row.get("line_count", "")
-    actual_line_count = data.count(b"\n") + (
-        0 if data.endswith(b"\n") or not data else 1
-    )
-    actual_lines = str(actual_line_count)
+    actual_lines = str(metadata.line_count)
     if declared_lines != actual_lines:
         problems.append(f"{path}: line_count {declared_lines!r} != {actual_lines}")
     declared_sha = row.get("sha256", "")
-    actual_sha = file_sha256(file_path)
+    actual_sha = metadata.sha256
     if declared_sha != actual_sha:
         problems.append(f"{path}: sha256 {declared_sha!r} != {actual_sha}")
 
@@ -310,58 +283,9 @@ def _check_missing_inventory_rows(
     inventory_by_path: Mapping[str, Mapping[str, str]],
     problems: list[str],
 ) -> None:
-    missing = sorted(path for path in present_paths if path not in inventory_by_path)
+    missing = missing_inventory_paths(set(present_paths), inventory_by_path)
     if missing:
         problems.append("fixture files missing inventory rows: " + ", ".join(missing))
-
-
-def _git_fixture_paths(
-    repo_root: Path,
-    fixtures_dir: Path,
-    problems: list[str],
-) -> tuple[str, ...]:
-    rel_fixtures = _repo_relative(fixtures_dir, repo_root)
-    tracked = _git_lines(repo_root, "ls-files", rel_fixtures, problems=problems)
-    untracked = _git_lines(
-        repo_root,
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        rel_fixtures,
-        problems=problems,
-    )
-    return tuple(sorted({*tracked, *untracked} - {SELF_INDEX_PATH}))
-
-
-def _git_lines(
-    repo_root: Path,
-    *args: str,
-    problems: list[str],
-) -> tuple[str, ...]:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        problems.append(f"git {' '.join(args)} failed: {completed.stderr.strip()}")
-        return ()
-    return tuple(
-        _normalize_repo_path(line)
-        for line in completed.stdout.splitlines()
-        if line.strip()
-    )
-
-
-def _repo_relative(path: Path, repo_root: Path) -> str:
-    relative = path.resolve().relative_to(repo_root.resolve()).as_posix()
-    return _normalize_repo_path(relative)
-
-
-def _normalize_repo_path(path: str) -> str:
-    return path.strip().replace("\\", "/")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

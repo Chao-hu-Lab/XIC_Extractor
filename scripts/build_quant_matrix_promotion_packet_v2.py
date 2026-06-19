@@ -37,8 +37,32 @@ from scripts.build_quant_matrix_real_bundle import (
     DEFAULT_OUTPUT_DIR as DEFAULT_REAL_BUNDLE_DIR,
 )
 from scripts.build_quant_matrix_version import run_activation
-from xic_extractor.alignment.quant_matrix_fixture_contract import (
-    validate_fixture_contract,
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    artifact_record as _artifact_record,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    is_sha256 as _is_sha256,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    materialize_cell_provenance_for_replay as _materialize_cell_provenance_for_replay,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    raise_if_problems as _raise_if_problems,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    read_json_object as _read_json_object,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    resolve_real_bundle_paths,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    resolve_source as _resolve_source,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_relpath as _source_relpath,
+)
+from xic_extractor.alignment.quant_matrix_artifacts import (
+    source_relpath_reference as _source_relpath_reference,
 )
 from xic_extractor.alignment.quant_matrix_promotion import (
     evaluate_quant_matrix_promotion_readiness,
@@ -93,100 +117,133 @@ def build_quant_matrix_promotion_packet_v2(
         raise ValueError("real bundle check failed: " + "; ".join(problems))
 
     bundle_payload = _read_json_object(real_bundle_summary)
-    bundle_paths = _real_bundle_paths(bundle_payload, real_bundle_summary)
+    bundle_paths = _real_bundle_paths(
+        bundle_payload,
+        real_bundle_summary,
+        source_root=source_root,
+    )
     downstream_scope = str(bundle_payload.get("downstream_scope", "")).strip()
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    packet_outputs = build_quant_matrix_validation_evidence_packet(
-        output_dir=output_dir,
-        evidence_artifacts=[
-            ValidationEvidenceArtifact(
-                tier="85raw_large_cohort",
-                status="pass",
-                source_artifact=large_cohort_artifact,
-                cohort_id=cohort_id,
-                raw_run_count=raw_run_count,
-                evidence_note=(
-                    "Existing no-RAW 85RAW consolidated standard-peak activation "
-                    "input summary; large-cohort evidence only, not matrix "
-                    "authority."
-                ),
-            ),
-            ValidationEvidenceArtifact(
-                tier="heldout_oracle",
-                status="pass",
-                source_artifact=heldout_oracle_artifact,
-                oracle_packet_id=oracle_packet_id,
-                evidence_note=(
-                    "Existing 20-case heldout trace reintegration oracle smoke "
-                    "pass; oracle evidence only, not truth authority."
-                ),
-            ),
-            ValidationEvidenceArtifact(
-                tier="downstream_impact_smoke",
-                status="pass",
-                source_artifact=_source_argument(
-                    bundle_paths["downstream_impact_summary_json"],
-                    source_root=source_root,
-                ),
-                downstream_scope=downstream_scope,
-                evidence_note=(
-                    "Phase 7 real QuantMatrixVersion downstream-impact smoke "
-                    "artifact bound by copied summary and row metrics hashes."
-                ),
-            ),
-        ],
-        packet_id=packet_id,
-        requested_readiness_label=requested_readiness_label,
-        source_root=source_root,
-    )
-    _localize_downstream_evidence_inputs(
-        packet_outputs=packet_outputs,
-        bundle_paths=bundle_paths,
-        source_root=source_root,
-    )
-
-    readiness_dir = output_dir / "real_bundle_readiness"
-    readiness_outputs = evaluate_quant_matrix_promotion_readiness(
-        expected_diff_summary_tsv=bundle_paths["expected_diff_summary"],
-        cell_provenance_tsv=bundle_paths["cell_provenance"],
-        row_summary_tsv=bundle_paths["row_summary"],
-        review_summary_json=bundle_paths["review_summary_json"],
-        validation_evidence_json=packet_outputs["validation_evidence_json"],
-        output_dir=readiness_dir,
-        validation_artifact_root=source_root,
-    )
-    _rewrite_readiness_input_paths(
-        readiness_outputs["summary_json"],
-        paths={
-            "expected_diff_summary_tsv": bundle_paths["expected_diff_summary"],
-            "cell_provenance_tsv": bundle_paths["cell_provenance"],
-            "row_summary_tsv": bundle_paths["row_summary"],
-            "review_summary_json": bundle_paths["review_summary_json"],
-            "validation_evidence_json": packet_outputs["validation_evidence_json"],
-        },
-    )
-
-    summary_json = output_dir / "quant_matrix_promotion_packet_v2_summary.json"
-    _write_summary(
-        summary_json,
-        output_dir=output_dir,
-        source_root=source_root,
-        packet_id=packet_id,
-        real_bundle_summary=real_bundle_summary,
-        bundle_payload=bundle_payload,
-        large_cohort_artifact=_resolve_source(
-            large_cohort_artifact,
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        materialization_problems: list[str] = []
+        cell_provenance_tsv = _cell_provenance_for_readiness_rerun(
+            bundle_paths=bundle_paths,
             source_root=source_root,
-        ),
-        heldout_oracle_artifact=_resolve_source(
-            heldout_oracle_artifact,
+            tmpdir=tmpdir_path,
+            problems=materialization_problems,
+        )
+        _raise_if_problems(
+            "promotion packet v2 cell_provenance materialization failed",
+            materialization_problems,
+        )
+        if cell_provenance_tsv is None:
+            raise ValueError(
+                "promotion packet v2 cell_provenance materialization failed",
+            )
+
+        packet_outputs = build_quant_matrix_validation_evidence_packet(
+            output_dir=output_dir,
+            evidence_artifacts=[
+                ValidationEvidenceArtifact(
+                    tier="85raw_large_cohort",
+                    status="pass",
+                    source_artifact=large_cohort_artifact,
+                    cohort_id=cohort_id,
+                    raw_run_count=raw_run_count,
+                    evidence_note=(
+                        "Existing no-RAW 85RAW consolidated standard-peak activation "
+                        "input summary; large-cohort evidence only, not matrix "
+                        "authority."
+                    ),
+                ),
+                ValidationEvidenceArtifact(
+                    tier="heldout_oracle",
+                    status="pass",
+                    source_artifact=heldout_oracle_artifact,
+                    oracle_packet_id=oracle_packet_id,
+                    evidence_note=(
+                        "Existing 20-case heldout trace reintegration oracle smoke "
+                        "pass; oracle evidence only, not truth authority."
+                    ),
+                ),
+                ValidationEvidenceArtifact(
+                    tier="downstream_impact_smoke",
+                    status="pass",
+                    source_artifact=_source_argument(
+                        bundle_paths["downstream_impact_summary_json"],
+                        source_root=source_root,
+                    ),
+                    downstream_scope=downstream_scope,
+                    evidence_note=(
+                        "Phase 7 real QuantMatrixVersion downstream-impact smoke "
+                        "artifact bound by copied summary and row metrics hashes."
+                    ),
+                ),
+            ],
+            packet_id=packet_id,
+            requested_readiness_label=requested_readiness_label,
             source_root=source_root,
-        ),
-        packet_outputs=packet_outputs,
-        readiness_outputs=readiness_outputs,
-        requested_readiness_label=requested_readiness_label,
-    )
+        )
+        _localize_downstream_evidence_inputs(
+            packet_outputs=packet_outputs,
+            bundle_paths=bundle_paths,
+            cell_provenance_tsv=cell_provenance_tsv,
+            source_root=source_root,
+        )
+
+        readiness_validation_evidence_json = _validation_evidence_for_readiness_rerun(
+            validation_evidence_json=packet_outputs["validation_evidence_json"],
+            cell_provenance_tsv=cell_provenance_tsv,
+            tmpdir=tmpdir_path,
+        )
+        readiness_dir = output_dir / "real_bundle_readiness"
+        readiness_outputs = evaluate_quant_matrix_promotion_readiness(
+            expected_diff_summary_tsv=bundle_paths["expected_diff_summary"],
+            cell_provenance_tsv=cell_provenance_tsv,
+            row_summary_tsv=bundle_paths["row_summary"],
+            review_summary_json=bundle_paths["review_summary_json"],
+            validation_evidence_json=readiness_validation_evidence_json,
+            output_dir=readiness_dir,
+            validation_artifact_root=source_root,
+        )
+        _rewrite_readiness_input_paths(
+            readiness_outputs["summary_json"],
+            paths={
+                "expected_diff_summary_tsv": bundle_paths["expected_diff_summary"],
+                "cell_provenance_tsv": bundle_paths.get(
+                    "cell_provenance_reference",
+                    cell_provenance_tsv,
+                ),
+                "row_summary_tsv": bundle_paths["row_summary"],
+                "review_summary_json": bundle_paths["review_summary_json"],
+                "validation_evidence_json": packet_outputs[
+                    "validation_evidence_json"
+                ],
+            },
+        )
+
+        summary_json = output_dir / "quant_matrix_promotion_packet_v2_summary.json"
+        _write_summary(
+            summary_json,
+            output_dir=output_dir,
+            source_root=source_root,
+            packet_id=packet_id,
+            real_bundle_summary=real_bundle_summary,
+            bundle_payload=bundle_payload,
+            large_cohort_artifact=_resolve_source(
+                large_cohort_artifact,
+                source_root=source_root,
+            ),
+            heldout_oracle_artifact=_resolve_source(
+                heldout_oracle_artifact,
+                source_root=source_root,
+            ),
+            packet_outputs=packet_outputs,
+            readiness_outputs=readiness_outputs,
+            requested_readiness_label=requested_readiness_label,
+        )
     return {
         **packet_outputs,
         "real_bundle_readiness_summary_json": readiness_outputs["summary_json"],
@@ -271,7 +328,11 @@ def validate_quant_matrix_promotion_packet_v2(
         )
         try:
             bundle_payload = _read_json_object(real_bundle_summary)
-            bundle_paths = _real_bundle_paths(bundle_payload, real_bundle_summary)
+            bundle_paths = _real_bundle_paths(
+                bundle_payload,
+                real_bundle_summary,
+                source_root=source_root,
+            )
         except (OSError, ValueError, FileNotFoundError) as exc:
             problems.append(f"real bundle paths: {exc}")
 
@@ -502,38 +563,17 @@ def _cell_provenance_for_readiness_rerun(
     tmpdir: Path,
     problems: list[str],
 ) -> Path | None:
-    existing = bundle_paths.get("cell_provenance")
-    if existing is not None:
-        return existing
-    summary = bundle_paths.get("cell_provenance_summary")
-    fixture = bundle_paths.get("cell_provenance_minimal_fixture")
-    if summary is None or fixture is None:
-        problems.append("promotion packet v2 cell_provenance replacement missing")
-        return None
-    problems.extend(
-        f"promotion packet v2 cell_provenance contract: {problem}"
-        for problem in validate_fixture_contract(summary, fixture)
+    return _materialize_cell_provenance_for_replay(
+        bundle_paths=bundle_paths,
+        source_root=source_root,
+        output_dir=tmpdir / "activation_rerun",
+        activation_runner=run_activation,
+        problems=problems,
+        problem_prefix="promotion packet v2",
+        mismatch_message=(
+            "promotion packet v2 cell_provenance does not match rerun activation"
+        ),
     )
-    payload = _read_json_object(summary)
-    source_sha = str(payload.get("source_sha256", "")).upper()
-    activation_outputs = dict(
-        run_activation(
-            input_quant_matrix_tsv=bundle_paths["baseline_quant_matrix"],
-            input_matrix_identity_tsv=bundle_paths["input_matrix_identity"],
-            production_acceptance_manifest_tsv=bundle_paths[
-                "production_acceptance_manifest"
-            ],
-            expected_diff_tsv=bundle_paths["expected_diff"],
-            output_dir=tmpdir / "activation_rerun",
-            manifest_root=source_root,
-        )
-    )
-    cell_provenance = activation_outputs["cell_provenance"]
-    if file_sha256(cell_provenance) != source_sha:
-        problems.append(
-            "promotion packet v2 cell_provenance does not match rerun activation",
-        )
-    return cell_provenance
 
 
 def _validation_evidence_for_readiness_rerun(
@@ -606,6 +646,7 @@ def _localize_downstream_evidence_inputs(
     *,
     packet_outputs: Mapping[str, Path],
     bundle_paths: Mapping[str, Path],
+    cell_provenance_tsv: Path,
     source_root: Path,
 ) -> None:
     evidence_json = packet_outputs["validation_evidence_json"]
@@ -629,17 +670,26 @@ def _localize_downstream_evidence_inputs(
     )
     copied_payload = _read_json_object(copied_summary)
     localized_inputs = {
-        "quant_matrix_tsv": bundle_paths["quant_matrix"],
-        "cell_provenance_tsv": bundle_paths["cell_provenance"],
-        "row_summary_tsv": bundle_paths["row_summary"],
+        "quant_matrix_tsv": (
+            bundle_paths["quant_matrix"],
+            bundle_paths["quant_matrix"],
+        ),
+        "cell_provenance_tsv": (
+            cell_provenance_tsv,
+            bundle_paths.get("cell_provenance_reference", cell_provenance_tsv),
+        ),
+        "row_summary_tsv": (bundle_paths["row_summary"], bundle_paths["row_summary"]),
     }
     _remove_stale_downstream_input_copies(copied_summary.parent)
     input_artifacts = copied_payload.get("input_artifacts")
     if not isinstance(input_artifacts, dict):
         raise ValueError("downstream summary input_artifacts must be an object")
-    for field, source in localized_inputs.items():
-        input_artifacts[field] = _source_relpath(source, source_root=source_root)
-        input_artifacts[field.replace("_tsv", "_sha256")] = file_sha256(source)
+    for field, (hash_source, display_source) in localized_inputs.items():
+        input_artifacts[field] = _source_relpath_reference(
+            display_source,
+            source_root=source_root,
+        )
+        input_artifacts[field.replace("_tsv", "_sha256")] = file_sha256(hash_source)
     copied_summary.write_text(
         json.dumps(copied_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -687,113 +737,31 @@ def _remove_stale_downstream_input_copies(artifact_dir: Path) -> None:
 def _real_bundle_paths(
     payload: Mapping[str, Any],
     summary_json: Path,
+    *,
+    source_root: Path,
 ) -> dict[str, Path]:
-    artifacts = payload.get("artifacts")
-    if not isinstance(artifacts, dict):
-        raise ValueError("real bundle artifacts must be an object")
-    output_dir = summary_json.parent
-    labels = (
-        "baseline_quant_matrix",
-        "input_matrix_identity",
-        "production_acceptance_manifest",
-        "expected_diff",
-        "quant_matrix",
-        "expected_diff_summary",
-        "row_summary",
-        "review_summary_json",
-        "downstream_impact_summary_json",
+    return resolve_real_bundle_paths(
+        payload,
+        summary_json,
+        source_root=source_root,
+        required_labels=(
+            "baseline_quant_matrix",
+            "input_matrix_identity",
+            "production_acceptance_manifest",
+            "expected_diff",
+            "quant_matrix",
+            "expected_diff_summary",
+            "row_summary",
+            "review_summary_json",
+            "downstream_impact_summary_json",
+        ),
+        include_cell_provenance=True,
+        include_cell_provenance_reference=True,
+        optional_labels=(
+            "cell_provenance_summary",
+            "cell_provenance_minimal_fixture",
+        ),
     )
-    result: dict[str, Path] = {}
-    for label in labels:
-        raw_entry = artifacts.get(label)
-        if not isinstance(raw_entry, dict):
-            raise ValueError(f"real bundle {label} artifact is missing")
-        relpath = str(raw_entry.get("path", "")).strip()
-        if not relpath:
-            raise ValueError(f"real bundle {label} path is missing")
-        path = Path(relpath)
-        if path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"real bundle {label} path must be bundle-relative")
-        resolved = (output_dir / path).resolve(strict=False)
-        try:
-            resolved.relative_to(output_dir.resolve(strict=False))
-        except ValueError as exc:
-            raise ValueError(f"real bundle {label} path escapes bundle") from exc
-        if not resolved.is_file():
-            raise FileNotFoundError(str(resolved))
-        result[label] = resolved
-    _append_real_bundle_cell_provenance_paths(
-        artifacts,
-        output_dir=output_dir,
-        result=result,
-    )
-    for label in ("cell_provenance_summary", "cell_provenance_minimal_fixture"):
-        raw_entry = artifacts.get(label)
-        if isinstance(raw_entry, dict):
-            result[label] = _resolve_real_bundle_artifact(
-                raw_entry,
-                output_dir=output_dir,
-                label=label,
-            )
-    return result
-
-
-def _append_real_bundle_cell_provenance_paths(
-    artifacts: Mapping[str, Any],
-    *,
-    output_dir: Path,
-    result: dict[str, Path],
-) -> None:
-    raw_entry = artifacts.get("cell_provenance")
-    if not isinstance(raw_entry, dict):
-        raise ValueError("real bundle cell_provenance artifact is missing")
-    relpath = str(raw_entry.get("path", "")).strip()
-    if not relpath:
-        raise ValueError("real bundle cell_provenance path is missing")
-    path = Path(relpath)
-    if path.is_absolute() or ".." in path.parts:
-        raise ValueError("real bundle cell_provenance path must be bundle-relative")
-    resolved = (output_dir / path).resolve(strict=False)
-    try:
-        resolved.relative_to(output_dir.resolve(strict=False))
-    except ValueError as exc:
-        raise ValueError("real bundle cell_provenance path escapes bundle") from exc
-    if resolved.is_file():
-        result["cell_provenance"] = resolved
-        return
-    if raw_entry.get("externalized") is not True:
-        raise FileNotFoundError(str(resolved))
-    summary_relpath = str(raw_entry.get("replacement_or_summary", "")).strip()
-    if not summary_relpath:
-        raise ValueError("real bundle cell_provenance replacement is missing")
-    summary_path = _resolve_real_bundle_artifact(
-        {"path": summary_relpath},
-        output_dir=output_dir,
-        label="cell_provenance_summary",
-    )
-    result["cell_provenance_summary"] = summary_path
-
-
-def _resolve_real_bundle_artifact(
-    raw_entry: Mapping[str, Any],
-    *,
-    output_dir: Path,
-    label: str,
-) -> Path:
-    relpath = str(raw_entry.get("path", "")).strip()
-    if not relpath:
-        raise ValueError(f"real bundle {label} path is missing")
-    path = Path(relpath)
-    if path.is_absolute() or ".." in path.parts:
-        raise ValueError(f"real bundle {label} path must be bundle-relative")
-    resolved = (output_dir / path).resolve(strict=False)
-    try:
-        resolved.relative_to(output_dir.resolve(strict=False))
-    except ValueError as exc:
-        raise ValueError(f"real bundle {label} path escapes bundle") from exc
-    if not resolved.is_file():
-        raise FileNotFoundError(str(resolved))
-    return resolved
 
 
 def _input_artifacts(
@@ -879,15 +847,6 @@ def _rewrite_readiness_input_paths(
     )
 
 
-def _artifact_record(path: Path, *, base_dir: Path) -> dict[str, str]:
-    return {
-        "path": path.resolve(strict=False).relative_to(
-            base_dir.resolve(strict=False),
-        ).as_posix(),
-        "sha256": file_sha256(path),
-    }
-
-
 def _source_argument(path: Path, *, source_root: Path) -> Path:
     try:
         return path.resolve(strict=True).relative_to(
@@ -895,19 +854,6 @@ def _source_argument(path: Path, *, source_root: Path) -> Path:
         )
     except ValueError:
         return path
-
-
-def _source_relpath(path: Path, *, source_root: Path) -> str:
-    try:
-        return path.resolve(strict=True).relative_to(
-            source_root.resolve(strict=True),
-        ).as_posix()
-    except ValueError:
-        return str(path.resolve(strict=True))
-
-
-def _resolve_source(path: Path, *, source_root: Path) -> Path:
-    return path if path.is_absolute() else source_root / path
 
 
 def _display_path(path: Path, *, base_dir: Path) -> str:
@@ -920,19 +866,6 @@ def _json_without_input_artifacts(path: Path) -> object:
         data = dict(data)
         data.pop("input_artifacts", None)
     return data
-
-
-def _read_json_object(path: Path) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected JSON object")
-    return data
-
-
-def _is_sha256(value: str) -> bool:
-    return len(value) == 64 and all(
-        character in "0123456789abcdefABCDEF" for character in value
-    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
