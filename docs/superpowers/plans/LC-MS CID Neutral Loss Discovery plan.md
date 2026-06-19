@@ -705,3 +705,563 @@ Control plane:
 - Update the control plane only if a later implementation changes tier, active
   lane, ProductWriter/default-output authority, public schema, or validation
   readiness claim.
+
+## Decision Spike v1 Addendum - A Owner-Deepening Execution Contract
+
+Status:
+
+- This addendum is the next executable slice after the A/B architecture decision
+  spike in
+  `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`.
+- It narrows Phase 7 tickets 3, 5, and 6 into one end-to-end continuation.
+- It does not replace the North Star, existing owner map, or A/B brief. It only
+  defines how to deepen the existing A path before reopening any B adapter.
+- It does not authorize ProductWriter/default matrix/workbook/GUI/Backfill
+  authority changes, default activation, 85RAW, or a second maintained Discovery
+  system.
+
+Plain-language decision:
+
+- The decision to continue with A is not a claim that the original A design was
+  clean. It is a claim that the current evidence does not justify maintaining a
+  second Discovery system.
+- A already recovers the named biology oracle in the one-RAW baseline:
+  `300.1605 -> 184.113`.
+- A also preserves the isotope-related `301.165 -> 185.116` row when it carries
+  its own `DNA_dR` tag evidence.
+- The current failure is architectural explicitness: the public Discovery CSV
+  still lacks a first-class row state and a stable MS1 feature row identity.
+- Therefore the next move is to absorb B's useful concepts into A: feature-first
+  row identity, evidence-late support, explicit states, parser fail-closed
+  behavior, and writer-as-renderer discipline.
+
+Required context to read before implementation:
+
+This addendum is the execution contract for the next slice. The A/B brief is the
+decision record, the control plane owns maturity tier and active lane, and the
+current handoff is only a compact state snapshot.
+
+- `AGENTS.md`
+- `docs/agent-parameter-settings.md`
+- `docs/architecture-contract.md`
+- `docs/agent-subagent-routing.md`
+- `docs/deepresearch/LC-MS CID Neutral Loss Discovery.md`
+- `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md`
+- `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
+- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
+  as current state, not contract authority
+- `scripts/check_discovery_architecture_ab_artifact.py`
+- `tests/test_discovery_architecture_ab_artifact.py`
+
+### Architecture Preflight
+
+Objective:
+
+- Deepen the existing Discovery A path so every normal candidate row is an MS1
+  chromatographic feature with explicit state, provenance, tag evidence, and a
+  stable `ms1_feature_row_id`.
+
+Existing owners to reuse:
+
+- `scripts/run_discovery.py` remains the public CLI.
+- `xic_extractor.discovery.pipeline` orchestrates.
+- `xic_extractor.discovery.ms2_seeds` creates MS2/CID-NL evidence.
+- `xic_extractor.discovery.grouping` groups seed evidence.
+- `xic_extractor.discovery.ms1_backfill` reconciles hypotheses to MS1 traces and
+  peaks.
+- `xic_extractor.discovery.feature_family` owns family grouping.
+- `xic_extractor.discovery.models` owns Discovery row data.
+- `xic_extractor.discovery.csv_writer` renders Discovery CSVs.
+- `xic_extractor.alignment.csv_io` owns the alignment reader contract.
+
+No new owners:
+
+- Do not create a parallel `feature_primary` Discovery product path.
+- Do not hide a B adapter behind `scripts/run_discovery.py` CLI/config flags.
+- Do not add a second manifest or source of truth for Discovery rows.
+- Do not let diagnostic TSVs, candidates, or sidecars become matrix authority.
+
+Evidence role:
+
+- CID-NL, MS2 scan precursor, product+neutral-loss inference, isolation metadata,
+  MS1 shape, RT, and future models are evidence providers.
+- They support `EvidenceVector`, `PeakHypothesis`, candidate state, and
+  `AuditTrail`; they do not directly write ProductWriter authority.
+
+Public contract risk:
+
+- `discovery_candidates.csv` changes additively by gaining
+  `discovery_candidate_state` and `ms1_feature_row_id`.
+- The alignment reader must accept valid new rows and fail closed on invalid
+  state/identity rows.
+- `candidate_id` remains provenance and compatibility identity; it must not be
+  promoted back into row authority.
+- `discovery_batch_index.csv` and existing public paths remain compatible.
+
+Call-cost model:
+
+- Phase 0 to Phase 3 use static code review and focused tests only.
+- Phase 4 uses one RAW: `TumorBC2312_DNA.raw`, RT `22-25`.
+- Phase 5 may use 8RAW Discovery/parser evidence only if the one-RAW oracle
+  passes and the implementation is otherwise contract-clean.
+- Do not run 85RAW or default activation in this slice.
+
+Stop rule:
+
+- Stop and document the blocker if the work requires ProductWriter/default
+  matrix/workbook/GUI/Backfill authority changes, a global MS1 feature
+  enumerator, a B runtime flag, 85RAW, or a candidate-as-matrix-row shortcut.
+
+### Concepts To Absorb From B
+
+1. Feature-first row identity:
+   A row is primarily an MS1 chromatographic feature in a sample/tag context,
+   not an MS2 scan event and not a formatted `candidate_id`.
+
+2. Evidence-late support:
+   CID-NL/MS2 evidence explains why a feature is plausible. It does not create
+   an unchecked normal row without MS1 reconciliation.
+
+3. Explicit state:
+   The state must be a data field, not an inference from reason strings,
+   candidate IDs, or missing columns.
+
+4. Candidate ID demotion:
+   `candidate_id` remains useful for traceability and compatibility, but the
+   durable row concept is `ms1_feature_row_id` plus state/provenance.
+
+5. Ambiguity as a first-class outcome:
+   Co-isolation, repeated DDA, isotope/adduct pressure, and missing MS1 support
+   must become explicit states or audit facts, not silent row inflation.
+
+6. Writer render-only:
+   The CSV writer serializes fields already decided by Discovery owners. It must
+   not recompute state, tag evidence, or row identity.
+
+7. Parser fail-closed:
+   Alignment input parsing must reject invalid state/identity combinations
+   before downstream model selection can treat them as usable evidence.
+
+### Successor Contract
+
+Required public CSV fields:
+
+- `discovery_candidate_state`
+- `ms1_feature_row_id`
+
+Required state semantics:
+
+- A normal Discovery row has MS1 feature support and tag/evidence provenance.
+- A rescued Discovery row still has MS1 feature support; the rescue is about the
+  evidence path, not permission to skip feature identity.
+- A review-only row is observable evidence but not a normal matrix candidate.
+- A rejected row is explainable evidence that must not enter normal candidate
+  flow.
+
+Recommended initial state vocabulary:
+
+- `ms1_feature_nl_supported`
+- `ms1_feature_nl_rescued`
+- `review_only_orphan_nl`
+- `review_only_ambiguous_coisolation`
+- `rejected_noise_or_outside_rt`
+
+This vocabulary may be renamed during implementation, but the final names must
+remain short, human-explainable, and test-covered. Avoid nested
+dataset-specific qualifiers.
+
+`ms1_feature_row_id` invariant:
+
+- Stable inside one Discovery output for the same sample, tag, MS1 feature m/z
+  region, and RT peak.
+- Independent of the representative MS2 scan number.
+- Independent of whether the evidence basis is `scan_precursor`,
+  `product_plus_neutral_loss`, or `mixed`.
+- Distinct for `300.1605 -> 184.113` and `301.165 -> 185.116` when both carry
+  their own tag evidence.
+
+Successor checker must assert:
+
+- `300.1605 -> 184.113` is recovered for `TumorBC2312_DNA`.
+- The recovered row has explicit state, `ms1_feature_row_id`, tag evidence,
+  source/provenance, and parser compatibility.
+- `301.165 -> 185.116` is preserved as its own `DNA_dR` tag pair, not merely as
+  any row near that product m/z.
+- Row identity/provenance/tag/source state pass, not only m/z/product
+  existence.
+
+### Phase 0 - Research And Trap Inventory
+
+Tasks:
+
+- Re-read the authoritative inputs above.
+- Inspect the current Discovery owner path from seed collection through CSV
+  writing and alignment parsing.
+- Enumerate design traps found in the current A path: scan-event identity,
+  product+NL row inflation, reason-string authority, writer recomputation,
+  parser permissiveness, isotope demotion, and candidates-as-matrix-rows.
+- Check existing tests before adding new ones, especially
+  `tests/test_discovery_ms2_seeds.py`, `tests/test_discovery_ms1_backfill.py`,
+  `tests/test_discovery_csv.py`, `tests/test_alignment_csv_io.py`, and
+  `tests/test_discovery_architecture_ab_artifact.py`.
+
+Deliverables:
+
+- A short owner/trap note in the implementation summary or handoff.
+- A concrete list of files that will be changed.
+- A statement that no ProductWriter/default matrix/workbook/GUI/Backfill
+  authority is in scope.
+
+Decision point:
+
+- If the existing owners can express the successor contract, continue to Phase
+  1.
+- If they cannot, stop and propose a minimal owner refactor inside
+  `xic_extractor.discovery`, not a B product adapter.
+
+Acceptance criteria:
+
+- The implementer can name the exact owner for state assignment, row identity,
+  CSV rendering, and parser validation.
+- No new parallel Discovery workflow is introduced.
+
+### Phase 1 - Design The A Successor Contract
+
+Tasks:
+
+- Define the final `discovery_candidate_state` enum or literal vocabulary.
+- Define `ms1_feature_row_id` construction and collision rules.
+- Define how state is assigned from grouped MS2 evidence and MS1 backfill
+  results.
+- Define invalid state/identity combinations for parser rejection.
+- Define the expected additive CSV diff and backward-compatibility behavior.
+
+Deliverables:
+
+- Contract notes in the plan, commit message body, or implementation summary.
+- Focused tests written first or updated first for state assignment, writer
+  output, reader parsing, and checker behavior.
+- Expected one-RAW diff: current A's biology recall should remain, while the
+  successor checker changes from intentional fail to pass.
+
+Decision point:
+
+- If state requires ProductWriter or alignment model-selection authority to be
+  meaningful, stop. The state is being placed too late.
+- If `candidate_id` must be parsed as the only durable row identity, stop. The
+  successor contract has not actually been implemented.
+
+Acceptance criteria:
+
+- The design can explain why `300.1605 -> 184.113` and
+  `301.165 -> 185.116` are distinct rows without special-casing either pair.
+- The design can explain where orphan NL evidence goes without becoming a
+  normal matrix candidate.
+
+### Phase 2 - Implement Existing-Owner Deepening
+
+Tasks:
+
+- Add the new state and `ms1_feature_row_id` to existing Discovery models.
+- Assign state and feature row identity in the existing MS1 reconciliation path.
+- Render the new fields additively from `discovery.csv_writer`.
+- Parse and validate the new fields in `alignment.csv_io`.
+- Preserve current public CLI shape in `scripts/run_discovery.py`.
+- Preserve current default matrix, workbook, GUI, and Backfill behavior.
+
+Deliverables:
+
+- Implementation code in existing owners only.
+- Updated focused tests.
+- No B adapter, no new CLI/config flag, no second source of truth.
+
+Decision point:
+
+- If implementation starts duplicating seed grouping/backfill logic under a new
+  adapter, stop and refactor back into existing owners.
+- If the writer needs to infer state from strings, move the state assignment
+  earlier.
+
+Acceptance criteria:
+
+- Existing valid Discovery output remains parseable.
+- New Discovery output contains `discovery_candidate_state` and
+  `ms1_feature_row_id`.
+- Invalid state values fail closed in parser tests.
+- `alignment.csv_io` parser tests reject normal or rescued rows with blank
+  `ms1_feature_row_id`, duplicate `ms1_feature_row_id` in the same sample/tag
+  scope, and any state/identity combination declared invalid in Phase 1.
+- `301.165 -> 185.116` is not demoted or deleted when it has tag evidence.
+
+### Phase 3 - Focused Contract Verification
+
+Tasks:
+
+- Run the focused checker tests.
+- Run Discovery CSV writer/reader tests.
+- Run alignment CSV parser tests, including negative cases for invalid states,
+  blank normal/rescued `ms1_feature_row_id`, duplicate normal/rescued
+  `ms1_feature_row_id` in the same sample/tag scope, and Phase 1 invalid
+  state/identity combinations.
+- Run ruff on changed files.
+- Run `scripts/check_productization_state.py` only to verify no accidental
+  control-plane inconsistency if docs/control-plane-adjacent files changed.
+
+Minimum commands:
+
+```powershell
+python -m pytest tests\test_discovery_architecture_ab_artifact.py tests\test_discovery_precursor_inference_artifact.py -q
+uv run pytest tests/test_discovery_csv.py tests/test_alignment_csv_io.py -v --tb=short
+uv run ruff check xic_extractor/discovery xic_extractor/alignment scripts/check_discovery_architecture_ab_artifact.py tests/test_discovery_architecture_ab_artifact.py
+uv run python scripts/check_productization_state.py
+```
+
+Deliverables:
+
+- Test output summary in final/handoff.
+- Any failing checker output preserved under task-specific `output/` if useful.
+
+Decision point:
+
+- If focused tests fail due to a contract disagreement, fix the contract or
+  implementation before RAW validation.
+- Do not use RAW output to compensate for failing unit/contract tests.
+
+Acceptance criteria:
+
+- Focused tests pass.
+- Parser compatibility is explicit.
+- No ProductWriter/default matrix/Backfill authority change is observed.
+
+### Phase 4 - One-RAW Product Oracle
+
+Tasks:
+
+- Rerun Discovery on `TumorBC2312_DNA.raw` with RT `22-25`.
+- Run the legacy precursor-inference checker to ensure recall did not regress.
+- Run the successor architecture checker against the new A output.
+- Inspect row facts for both named pairs.
+
+One-RAW command shape:
+
+```powershell
+.venv\Scripts\python.exe scripts\run_discovery.py `
+  --raw C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation\TumorBC2312_DNA.raw `
+  --dll-dir C:\Xcalibur\system\programs `
+  --output-dir output\discovery_architecture_ab\a_incremental\one_raw_tumorbc2312 `
+  --rt-min 22 `
+  --rt-max 25 `
+  --timing-output output\discovery_architecture_ab\a_incremental\one_raw_tumorbc2312\timing.json
+```
+
+Checker command shape:
+
+```powershell
+.venv\Scripts\python.exe scripts\check_discovery_architecture_ab_artifact.py `
+  --baseline-candidates output\discovery_architecture_ab\a_incremental\one_raw_tumorbc2312\discovery_candidates.csv `
+  --candidate-candidates output\discovery_architecture_ab\a_incremental\one_raw_tumorbc2312\discovery_candidates.csv `
+  --focus-sample TumorBC2312_DNA `
+  --focus-precursor-mz 300.1605 `
+  --focus-product-mz 184.113 `
+  --preserve-precursor-mz 301.165 `
+  --preserve-product-mz 185.116 `
+  --preserve-tag DNA_dR `
+  --summary-json output\discovery_architecture_ab\a_incremental\one_raw_tumorbc2312\architecture_ab_check.json `
+  --check-only
+```
+
+Deliverables:
+
+- Updated one-RAW output under
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`.
+- `architecture_ab_check.json` with `diagnostic_only` label and pass/fail
+  result.
+- A short evidence summary documenting row count, basis counts, parser status,
+  focus pair, preserved pair, state, `ms1_feature_row_id`, tag evidence, and
+  source/provenance.
+
+Decision point:
+
+- If A passes the successor checker, B remains closed unless a separate
+  structural reason or material one-RAW advantage is demonstrated.
+- If A still fails only because the successor contract is too vague, revise the
+  contract and tests before touching B.
+- If A cannot express the feature-first contract without becoming a pile of
+  patches, stop the A pass and document the exact structural limitation. The
+  next decision must choose exactly one path: a minimal refactor inside existing
+  Discovery owners, a temporary B comparison adapter with deletion/facade
+  endpoint, or killing B with evidence that A is sufficient.
+
+Acceptance criteria:
+
+- `300.1605 -> 184.113` is recovered.
+- `301.165 -> 185.116` is preserved as its own `DNA_dR` tag pair.
+- Both named facts include state, row identity, provenance, tag/source fields,
+  and parser compatibility.
+- No default activation is run.
+
+### Phase 5 - Optional 8RAW Discovery/Parser Evidence
+
+Entry criteria:
+
+- Phase 4 passes.
+- The remaining product decision cannot be answered by focused tests and the
+  one-RAW oracle.
+
+Tasks:
+
+- Run at most 8RAW Discovery/parser validation.
+- Do not run default activation.
+- Do not run 85RAW.
+- Do not claim product readiness from candidate volume alone.
+
+Deliverables:
+
+- 8RAW output under a task-specific `output/` path.
+- Parser smoke summary.
+- A statement whether the new state/identity fields remain coherent across the
+  8RAW batch.
+
+Decision point:
+
+- If 8RAW exposes row inflation, parser, or provenance drift, fix A before B.
+- If 8RAW is clean and one-RAW already passes, close B unless there is a
+  documented material advantage.
+
+Acceptance criteria:
+
+- 8RAW, if run, is still `diagnostic_only`.
+- Candidate rows are not treated as matrix rows.
+- Control plane remains unchanged unless tier, active lane, or writer authority
+  truly changes.
+
+### Phase 6 - Delivery And Review
+
+Tasks:
+
+- Update the A/B Alternatives Brief with the new evidence and decision.
+- Update the current handoff only if the next-action state changes or the
+  current snapshot would otherwise be stale.
+- Request subagent review for implementation and contract blast radius.
+- Fix review findings before commit.
+- Commit only task-scoped files after inspecting `git status --short --branch`
+  and staged diff.
+
+Deliverables:
+
+- Updated code/tests/docs if implementation occurred.
+- Focused verification summary.
+- One-RAW oracle evidence summary.
+- Explicit final decision: A closed successfully, A needs another owner-deepening
+  pass, or B is reopened as a temporary comparison adapter.
+- Explicit control-plane statement: updated because authority changed, or not
+  updated because no tier/active lane/ProductWriter/Backfill authority changed.
+
+Decision point:
+
+- If product public surface changed only additively for Discovery diagnostics,
+  label the evidence `diagnostic_only` or `production_candidate` according to
+  validation. Do not claim default matrix readiness.
+- If any matrix authority changed, open a separate expected-diff/default
+  activation task instead of folding it into this Discovery slice.
+
+Acceptance criteria:
+
+- The branch contains one coherent Discovery path.
+- The successor checker evidence is documented.
+- The handoff gives the next agent a clear continue/stop point.
+- No unrelated dirty files are staged or committed.
+
+### B Reopen Criteria
+
+B has two different reopen gates. Do not collapse them into a vague second pass
+on A.
+
+Gate 1 - A succeeds but B may still have material value:
+
+- A emits `discovery_candidate_state` and `ms1_feature_row_id`.
+- A passes focused tests and the one-RAW successor checker.
+- B can name a material one-RAW advantage that A does not already provide.
+- The proposed B adapter can test that advantage without modifying
+  ProductWriter/default matrix/workbook/GUI/Backfill authority.
+- The adapter is not hidden behind `scripts/run_discovery.py` CLI/config flags.
+- The same plan names the deletion or facade endpoint so there will not be two
+  maintained Discovery systems.
+
+Gate 2 - A structural blocker:
+
+- Phase 1 or Phase 2 documents that existing Discovery owners cannot express the
+  successor contract cleanly without a brittle patch stack.
+- The blocker names the exact owner/invariant that fails.
+- The next decision chooses exactly one: minimal refactor inside existing
+  Discovery owners, temporary B comparison adapter, or kill B with a documented
+  reason.
+- This gate does not require A to emit the successor fields first, because the
+  blocker may be that A cannot emit them cleanly.
+
+A gets one bounded owner-deepening pass. If focused tests plus the one-RAW
+successor checker do not prove explicit state, stable `ms1_feature_row_id`,
+parser fail-closed behavior, and preservation of both named pairs, stop and use
+Gate 2 instead of opening an unbounded A cleanup loop.
+
+B must be deleted or left unmerged when:
+
+- It does not materially beat A on the one-RAW oracle.
+- It only improves naming while duplicating the same owner responsibilities.
+- It makes candidates look more like matrix rows.
+- It requires public product authority changes to prove value.
+
+### End-To-End Goal Prompt
+
+```text
+/goal
+在 C:\Users\user\Desktop\XIC_Extractor 的 cc/framework-improvements branch，end-to-end 執行 LC-MS CID-NL Discovery A owner-deepening successor contract，讓既有 A path 吸收 B 的 feature-first/evidence-late 概念，並用 focused tests + one-RAW oracle 收斂是否仍需 B temporary comparison adapter。
+
+先讀：
+- AGENTS.md
+- docs/agent-parameter-settings.md
+- docs/architecture-contract.md
+- docs/agent-subagent-routing.md
+- docs/deepresearch/LC-MS CID Neutral Loss Discovery.md
+- docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md
+- docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md
+- docs/superpowers/handoffs/current/cc-framework-improvements-productization.md
+
+目前決策：
+- 不先做 B feature-primary adapter。
+- A 不是因為原始設計完美才被選中，而是因為目前 one-RAW evidence 顯示 A 已 recover 300.1605 -> 184.113 並 preserve 301.165 -> 185.116，沒有證據支持維護第二套 Discovery 系統。
+- 下一步是在既有 Discovery owners 中加入 explicit discovery_candidate_state 與 ms1_feature_row_id，並讓 parser/checker fail-closed。
+
+必須守住：
+- 不維護兩套 Discovery 系統。
+- 不把 CID-NL/MS2 evidence 直接變 ProductWriter authority。
+- 不改 default matrix/ProductWriter/workbook/GUI/Backfill authority。
+- 不跑 default activation。
+- 不跑 85RAW；8RAW 只有在 one-RAW/focused tests 無法回答產品決策時才可考慮。
+- 不新增第二份獨立 manifest/source of truth。
+- 不把 candidates 當 matrix rows。
+- 不 demote/delete 301.165 -> 185.116，只要它有自己的 tag evidence 就應保留。
+- B temporary adapter 不可藏在 scripts/run_discovery.py CLI/config flag 後面。
+- B 若 one-RAW oracle 沒明顯勝過 A，就刪掉 adapter 或不 merge product code。
+- A owner-deepening 只有一個 bounded pass；若 focused tests + one-RAW successor checker 仍無法證明 state、ms1_feature_row_id、parser fail-closed 與兩個 named pairs，就停止並記錄 A structural blocker，不開無界 A cleanup。
+
+分階段執行：
+1. Research: 讀 owner path、現有 tests、checker 與 handoff，列出 A 目前地雷與要改的 owner，不動 ProductWriter/default matrix。
+2. Design: 定義 discovery_candidate_state vocabulary、ms1_feature_row_id invariant、parser invalid combinations、expected additive CSV diff。
+3. Implement: 在既有 xic_extractor.discovery owners 補 state/row identity，在 csv_writer render，在 alignment.csv_io parse/validate；不新增 B adapter、不改 CLI public shape。
+4. Verify focused: 跑 focused checker/parser/writer tests 與 ruff；parser negative tests 必須涵蓋 invalid state、blank normal/rescued ms1_feature_row_id、同 sample/tag scope duplicate normal/rescued ms1_feature_row_id、以及 Phase 1 宣告的 invalid state/identity combinations。失敗先修 contract 或實作，不用 RAW 蓋過 unit/contract failure。
+5. Verify one-RAW: rerun TumorBC2312_DNA RT 22-25，跑 legacy precursor checker 與 successor architecture checker，明確 assert 300.1605 -> 184.113 recovered、301.165 -> 185.116 preserved as its own DNA_dR tag pair，並檢查 row identity/provenance/tag/source/state。
+6. Delivery: 更新 Alternatives Brief 與必要 handoff；請 subagent review，修復後 commit。control plane 只有 tier/active lane/authority 真改才更新；否則明說不需要更新。
+
+完成條件：
+- discovery_candidates.csv additive contract 有 discovery_candidate_state 與 ms1_feature_row_id。
+- writer/reader/parser/checker focused tests 通過。
+- one-RAW successor checker 通過或失敗原因被文件化成明確 A structural blocker。
+- parser fail-closed tests 涵蓋 state + ms1_feature_row_id 組合，不只 invalid enum。
+- 300.1605 -> 184.113 recovered。
+- 301.165 -> 185.116 preserved as its own tag-evidence row。
+- row identity/provenance/tag/source/state 被驗證，不只是 m/z/product 存在。
+- A/B 決策被更新：A closed、A needs one more owner-deepening pass、或 B reopened under temporary-adapter constraints。
+- 若實作，subagent review 後修復並 commit。
+- 無 default activation、無 85RAW、無 ProductWriter/default matrix/workbook/GUI/Backfill authority change。
+```
