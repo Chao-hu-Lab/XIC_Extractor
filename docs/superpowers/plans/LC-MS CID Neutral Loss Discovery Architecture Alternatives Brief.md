@@ -291,3 +291,56 @@ successor expected-diff checker first, then build only enough temporary adapter
 code to run the one-RAW comparison. If no, implement A directly. B should not
 touch ProductWriter/default matrix/Backfill/GUI, and no replacement should
 advance to 8RAW until the one-RAW comparison justifies it.
+
+## Decision Spike v1 Result - 2026-06-20
+
+Decision:
+
+- Do not build the B temporary comparison adapter in this branch yet.
+- Proceed with A incremental owner-deepening first: add explicit
+  `discovery_candidate_state` and `ms1_feature_row_id` to the existing
+  Discovery owner path, with writer/reader roundtrip and parser tests, before
+  any B feature-primary adapter is allowed to claim a successor oracle pass.
+
+Evidence:
+
+- Added successor checker:
+  `scripts/check_discovery_architecture_ab_artifact.py`.
+- Focused checker tests passed:
+  `python -m pytest tests\test_discovery_architecture_ab_artifact.py tests\test_discovery_precursor_inference_artifact.py -q`
+  (`13 passed`).
+- Focused ruff passed:
+  `uv run ruff check scripts/check_discovery_architecture_ab_artifact.py tests/test_discovery_architecture_ab_artifact.py`.
+- One-RAW A baseline ran successfully for `TumorBC2312_DNA` RT `22-25`:
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`.
+- Legacy precursor-inference checker passed that output with 157 rows and SHA256
+  `E69C53CE5F054C3D6385A2A66BD1B85B9D0F567F91BBC7F5A78BAC7D73953C44`, confirming
+  the current A path still recovers `300.1605 -> 184.113` and preserves
+  `301.165 -> 185.116`.
+- The successor checker intentionally fails the same A output because the
+  current public Discovery CSV lacks `discovery_candidate_state` and
+  `ms1_feature_row_id`. Its summary is
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/architecture_ab_check.json`;
+  the alignment parser compatibility status is `pass`, row count is 157, and
+  basis counts are 146 `product_plus_neutral_loss`, 6 `mixed`, and 5
+  `scan_precursor`.
+
+Interpretation:
+
+- A already passes the legacy biology recall/provenance check for the named
+  one-RAW case, so there is no current evidence that a B adapter would beat A on
+  recall.
+- A does not yet satisfy the successor row-state / MS1-row-identity contract.
+  That is an A owner-deepening gap, not a reason to create a second Discovery
+  system.
+- B can be reopened only after the A successor contract exists and passes the
+  one-RAW checker; any B adapter must remain temporary, outside
+  `scripts/run_discovery.py` flags/config, and must be deleted or left unmerged
+  if it does not materially beat A on the same oracle.
+
+Validation label:
+
+- Current evidence is `diagnostic_only`.
+- No ProductWriter/default matrix/workbook/GUI/Backfill authority changed.
+- No control-plane maturity tier or active lane update is required for this
+  checker/decision spike.

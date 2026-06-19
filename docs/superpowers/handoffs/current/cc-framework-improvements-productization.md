@@ -1,6 +1,6 @@
 # XIC productization handoff
 
-Updated: 2026-06-20 00:20 +08:00
+Updated: 2026-06-20 00:33 +08:00
 Branch: `cc/framework-improvements`
 
 This is the compact current-state snapshot. Tier authority remains in
@@ -34,6 +34,15 @@ another default matrix activation. Two docs now define the next gate:
 - `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md`
 - `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
 
+Decision Spike v1 result: do not build the B feature-primary temporary adapter
+yet. A one-RAW rerun confirms current A still recovers `300.1605 -> 184.113`
+and preserves `301.165 -> 185.116`, but the new successor checker correctly
+fails the current A CSV because it lacks explicit `discovery_candidate_state`
+and `ms1_feature_row_id`. Next work is A incremental owner-deepening of those
+fields in the existing Discovery path, then rerun the successor checker. B can
+reopen only after A passes that successor contract and a B adapter can show a
+material one-RAW gain without becoming a second maintained Discovery system.
+
 ## Product State
 
 - Current tier: `product_ready_default_matrix_activated`.
@@ -44,6 +53,9 @@ another default matrix activation. Two docs now define the next gate:
 - No ProductWriter/default activation rerun was launched in this validation.
 - No workbook, GUI, default extraction, selected peak/area, counted detection,
   or Backfill authority changed.
+- CID-NL Decision Spike v1 added only a diagnostic checker, one-RAW Discovery
+  output under `output/`, and docs/handoff updates. No control-plane maturity
+  tier, active lane, matrix schema, or Backfill writer authority changed.
 - Control plane maintenance note updated for the matrix-decision behavior fix.
   Maturity tier, active lane, matrix schema, and Backfill writer authority are
   unchanged.
@@ -72,6 +84,12 @@ Status-index anchors remain fail-closed only: `product_ready_default_matrix_acti
   `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
 - Deep research input:
   `docs/deepresearch/LC-MS CID Neutral Loss Discovery.md`
+- Successor A/B checker:
+  `scripts/check_discovery_architecture_ab_artifact.py`
+- Focused successor checker tests:
+  `tests/test_discovery_architecture_ab_artifact.py`
+- Current one-RAW A baseline for the decision spike:
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`
 
 ## Discovery And Alignment Evidence
 
@@ -117,6 +135,20 @@ been moved into the correct winner family but still carried loser claim state;
 resolved winner claims now write as `accepted_rescue`, while true wrong-
 hypothesis claims remain review-only.
 
+Decision Spike v1 one-RAW rerun:
+
+- Output:
+  `output/discovery_architecture_ab/a_incremental/one_raw_tumorbc2312/`
+- Row count: 157.
+- Legacy precursor-inference checker: pass, SHA256
+  `E69C53CE5F054C3D6385A2A66BD1B85B9D0F567F91BBC7F5A78BAC7D73953C44`.
+- Successor checker:
+  `architecture_ab_check.json` is `diagnostic_only` and intentionally `fail`
+  because current A lacks `discovery_candidate_state` and
+  `ms1_feature_row_id`; alignment parser compatibility for the current CSV is
+  `pass`.
+- Decision: A incremental owner-deepening first; no B adapter yet.
+
 ## Tailing And Duplicate Hypotheses
 
 The user-supplied Thermo screenshots are consistent with tailing/baseline
@@ -137,6 +169,11 @@ inference.
   product row when it carries its own tag evidence.
 - Do not treat Discovery candidates as matrix rows. Candidate volume is high by
   design after precursor inference is restored.
+- Do not start the B feature-primary adapter until A emits explicit
+  `discovery_candidate_state` and `ms1_feature_row_id`, and the successor
+  one-RAW checker passes. If B is later attempted, it must stay out of
+  `scripts/run_discovery.py` CLI/config flags and be deleted or left unmerged
+  unless it materially beats A on the same oracle.
 - Do not treat the parser-fixed 8RAW alignment as default matrix activation.
 - Do not launch 85RAW unless the next step names a product decision that 8RAW
   cannot close.
@@ -159,13 +196,23 @@ inference.
   reader roundtrip, and a just-outside-tolerance negative case.
 - Single-RAW Discovery checker, 8RAW Discovery, 8RAW alignment preflight, and
   parser + claim-fix 8RAW alignment completed successfully.
+- Decision Spike v1 focused checker tests:
+  `python -m pytest tests\test_discovery_architecture_ab_artifact.py tests\test_discovery_precursor_inference_artifact.py -q`
+  (`13 passed`).
+- Decision Spike v1 ruff:
+  `uv run ruff check scripts/check_discovery_architecture_ab_artifact.py tests/test_discovery_architecture_ab_artifact.py`
+  passed.
+- Decision Spike v1 one-RAW A baseline command completed and emitted
+  `discovery_candidates.csv`, `discovery_review.csv`, and `timing.json`.
 
 ## Next Actions
 
-1. Commit the parser/claim fixes, productization state update, pulse report, and
-   CID-NL architecture docs in purpose-split commits.
-2. In the next session, choose whether B deserves a short design spike. If yes,
-   write the successor expected-diff checker first; if no, implement A directly.
+1. Implement A incremental owner-deepening in the existing Discovery owners:
+   add explicit `discovery_candidate_state` and `ms1_feature_row_id` with
+   writer/reader roundtrip and parser tests.
+2. Rerun the one-RAW successor checker. Only consider a B temporary adapter if
+   A passes the successor checker and B can test a material gain without a
+   public runtime flag or second maintained Discovery path.
 3. Keep default matrix activation separate. Only open that expected-diff task
    when the public default `quant_matrix.tsv` should materialize the
    `300.1605 -> 184.113` row.
