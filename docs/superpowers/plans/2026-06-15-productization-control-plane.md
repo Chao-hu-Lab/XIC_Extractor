@@ -328,6 +328,13 @@ and `may_promote_default_quant_matrix=true`. This is a candidate promotion
 packet only: ProductWriter default extraction, default matrix authority,
 workbook/GUI behavior, selected peak/area, counted detection, and broad
 Backfill authority remain unchanged until a later expected-diff activation gate.
+Phase 9 now adds that no-RAW default activation dry-run expected-diff gate:
+manifest-driven activation is rerun in a temporary directory and matches the
+Phase 7 reference `quant_matrix`, `cell_provenance`, `row_summary`, and
+`expected_diff_summary` hashes exactly, with 511 expected, 511 written, and 0
+unused expected-diff rows. The gate allows Product Ready closeout review to
+proceed, but it still writes no default matrix files and changes no
+ProductWriter/default behavior.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2846,6 +2853,49 @@ at that older checkpoint, not the latest release claim.
   owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
+
+### 2026-06-19 - QuantMatrix Default Activation Dry-Run v1
+
+- Lane: Backfill default matrix activation dry-run / Phase 9.
+- Previous tier: Phase 8 produced a `production_ready_candidate_packet`, but no
+  gate had replayed the actual manifest-driven default matrix activation path
+  against the Phase 7 real bundle expected diff.
+- New tier: default activation dry-run gate pass. This permits Phase 10 Product
+  Ready closeout review to proceed, but it is still a no-RAW, read-only
+  validation artifact: no ProductWriter default extraction, default matrix
+  output, selected peak/area/counting behavior, workbook/GUI behavior,
+  review/replay behavior, broad Backfill unpark, or new matrix write changed.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_default_activation_dry_run_schema.v1.json`,
+  `scripts/build_quant_matrix_default_activation_dry_run.py`,
+  `tests/test_quant_matrix_default_activation_dry_run.py`, and
+  `docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`.
+- Product surface changed: additive Phase 9 dry-run outputs only:
+  `quant_matrix_default_activation_dry_run_summary.json` and
+  `default_activation_dry_run_comparison.tsv`. The dry-run activation writes
+  temporary outputs only during build/check and commits no duplicate full matrix
+  outputs.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. Focused tests cover schema parity, candidate
+  expected-diff replay, stale comparison rejection, non-current 511 bundle
+  rejection, and CLI round trip.
+- Current validation result: default activation dry-run gate is `pass`; the
+  Phase 9 rerun writes `511` expected Backfill rows, `511` accepted Backfill
+  cells, and `0` unused expected-diff rows in temporary output. The rerun's
+  `quant_matrix`, `cell_provenance`, `row_summary`, and
+  `expected_diff_summary` hashes match the Phase 7 reference bundle exactly.
+  The summary records `dry_run_only=true`, `write_authority=false`,
+  `default_quant_matrix_changed=false`, and
+  `default_matrix_files_written=false`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix files, workbook, GUI, selected peak, selected area, counted detection,
+  review/replay behavior, current 511-cell writer authority, or broad Backfill
+  authority changed.
+- Remaining blocker: Product Ready still needs Phase 10 closeout to collect the
+  Phase 8/9 gates, review residual risk, and state the activation contract.
+- Next checkpoint: Phase 10 Product Ready closeout gate.
 
 ### 2026-06-19 - QuantMatrix Promotion Packet v2
 

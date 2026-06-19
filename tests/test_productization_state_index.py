@@ -208,6 +208,11 @@ def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     assert "ProductWriter default extraction" in summary
     assert "default matrix authority" in summary
     assert "later expected-diff activation gate" in summary
+    assert "Phase 9" in summary
+    assert "default activation dry-run expected-diff gate" in summary
+    assert "511 expected, 511 written, and 0\nunused expected-diff rows" in summary
+    assert "writes no default matrix files" in summary
+    assert "changes no\nProductWriter/default behavior" in summary
     assert "large-cohort" in summary
     assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
@@ -276,6 +281,18 @@ def test_specs_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
     assert "heldout-oracle" in text
     assert "real downstream-impact smoke" in text
     assert "default matrix authority unchanged" in text
+
+
+def test_specs_readme_lists_quant_matrix_default_activation_dry_run_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_default_activation_dry_run_schema.v1.json" in text
+    assert "temporary directory" in text
+    assert "expected-diff summary hashes" in text
+    assert "comparison/summary artifacts" in text
+    assert "ProductWriter defaults and default matrix outputs remain unchanged" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

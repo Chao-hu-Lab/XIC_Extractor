@@ -2,9 +2,9 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Checkpoint: Phase 8 complete. The real 511-cell bundle is now bound into
-promotion packet v2; next checkpoint is Phase 9 default-matrix activation
-dry-run expected-diff gate.
+Checkpoint: Phase 9 complete. The real 511-cell bundle is bound into promotion
+packet v2, and default activation dry-run expected-diff gate now passes. Next
+checkpoint is Phase 10 Product Ready closeout.
 
 Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`. This
@@ -84,6 +84,7 @@ Status-index anchors retained for `check_productization_state.py`:
 - Phase 6: no-RAW downstream-impact smoke contract and content validator.
 - Phase 7: real 511-cell `QuantMatrixVersion` bundle assembly.
 - Phase 8: promotion packet v2 / real-bundle readiness candidate.
+- Phase 9: default activation dry-run expected-diff gate.
 
 No scorer was run. No RAW/85RAW was run in this sequence.
 
@@ -128,6 +129,24 @@ Current result:
 - `raw_or_85raw_ran=false`;
 - `product_writer_changed=false`.
 
+## Current Dry-Run Gate
+
+`docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`
+reruns manifest-driven `QuantMatrixVersion` activation in a temporary directory
+and compares the outputs to the Phase 7 real bundle.
+
+Current result:
+
+- `default_activation_dry_run_gate_status=pass`;
+- expected diff: `511` expected, `511` written, `0` unused;
+- reference hashes match for `quant_matrix`, `cell_provenance`, `row_summary`,
+  and `expected_diff_summary`;
+- `dry_run_only=true`;
+- `write_authority=false`;
+- `default_quant_matrix_changed=false`;
+- `default_matrix_files_written=false`;
+- `may_enter_product_ready_closeout=true`.
+
 Still out of scope:
 
 - no ProductWriter/default extraction activation;
@@ -147,8 +166,12 @@ Still out of scope:
 
 ## Last Verified State
 
-Phase 8 validation passed:
+Phase 9 validation passed:
 
+- `uv run pytest tests/test_quant_matrix_default_activation_dry_run.py -v --tb=short`;
+- `uv run ruff check scripts/build_quant_matrix_default_activation_dry_run.py tests/test_quant_matrix_default_activation_dry_run.py`;
+- `uv run mypy scripts/build_quant_matrix_default_activation_dry_run.py`;
+- `uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only`;
 - `uv run pytest tests/test_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_validation_packet.py tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_productization_state_index.py -v --tb=short`;
 - `uv run ruff check scripts/build_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_promotion_packet_v2.py tests/test_productization_state_index.py`;
 - `uv run mypy scripts/build_quant_matrix_promotion_packet_v2.py`;
@@ -157,13 +180,13 @@ Phase 8 validation passed:
 - `git diff --check`;
 - credential/local-path scans found no Phase 8 issues.
 
-Sub-agent review found no P1/P2 blockers. Residual risk: Phase 8 is no-RAW
-artifact-bound validation; it is not default matrix activation or a new truth
-source.
+Latest sub-agent review found no P1/P2 blockers for Phase 9. Residual risk:
+Phase 8/9 are no-RAW artifact-bound validation gates; they are not a new truth
+source or ProductWriter activation.
 
 ## Next Actions
 
-1. Phase 9: build default-matrix activation dry-run expected-diff gate.
-2. Keep ProductWriter/default behavior unchanged until the dry-run gate closes.
-3. After Phase 9, run sub-agent review, fix blockers, commit, then proceed to
-   Phase 10 Product Ready closeout.
+1. Commit Phase 9 after final local checks.
+2. Phase 10: Product Ready closeout packet.
+3. Keep ProductWriter/default behavior unchanged until Phase 10 explicitly
+   states the activation contract and residual risk.

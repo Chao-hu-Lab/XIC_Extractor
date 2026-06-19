@@ -58,6 +58,12 @@ automatic implementation goals.
   `production_ready_candidate_packet` while still leaving ProductWriter
   defaults, workbook/GUI, selected peak/area, counted detection, broad Backfill,
   and default matrix authority unchanged.
+- `quant_matrix_default_activation_dry_run_schema.v1.json`: Phase 9 no-RAW
+  default activation dry-run gate. It reruns manifest-driven
+  `QuantMatrixVersion` activation in a temporary directory, compares the
+  candidate quant matrix/provenance/row summary/expected-diff summary hashes
+  with the Phase 7 real bundle, and writes only comparison/summary artifacts;
+  ProductWriter defaults and default matrix outputs remain unchanged.
 
 ## Rule
 
