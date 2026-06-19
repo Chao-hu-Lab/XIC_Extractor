@@ -357,6 +357,16 @@ expected-diff rows. This activates the current 511-cell default matrix output
 only; it does not change workbook/GUI behavior, selected peak, selected area,
 counted detection, review/replay behavior, broad Backfill status, or the
 registered product authority scope.
+The `d4-N6-2HE-dA` target-row identity stop-ship is now traced to discovery
+MS2 seed extraction, not ProductWriter or Backfill: Thermo MS2 filter precursor
+can be an isolation/trigger mass, so CID-NL discovery must allow
+product-plus-neutral-loss inferred precursor seeds within
+`ms2_precursor_tol_da`. The discovery path now emits inferred
+`300.160x / 184.113` seeds without deleting valid `301.165 / 185.116` isotope
+seeds, and discovery `candidate_id` includes precursor/product row identity to
+avoid same-scan candidate collisions. This fixes the generation path only; the
+already activated default matrix bundle remains stale for this target until a
+later explicit discovery/alignment/default-activation expected-diff rerun.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2921,6 +2931,97 @@ at that older checkpoint, not the latest release claim.
 - Next checkpoint: maintain this default output through the authority manifest,
   expected-diff checks, and focused public-surface tests; do not expand Backfill
   authority without a new authority goal.
+
+### 2026-06-19 - Target-row identity gap stop-ship addendum
+
+- Lane: Default QuantMatrix target-row identity / targeted ISTD benchmark
+  semantics.
+- Previous tier: `product_ready_default_matrix_activated` for the 511-cell
+  default matrix activation bundle.
+- New tier: unchanged. The 511-cell matrix writer authority, active lane,
+  `backfill_policy_write_ready_rows` scope, and broad Backfill parked state are
+  unchanged. This addendum changes diagnostic/review semantics and records a
+  target-row identity blocker; it does not change ProductWriter output files or
+  matrix authority.
+- Evidence: user review found `d4-N6-2HE-dA` target `m/z=300.1605` absent from
+  `quant_matrix.tsv`. Investigation showed the final matrix has nearby rows
+  `299.155` and valid isotope-shift dR-tag feature row `301.165`, but no exact
+  target row for `300.1605`.
+  Discovery artifacts under `local_validation_artifacts/discovery/accepted_p8b/85raw`
+  contain `0` 22-25 min monoisotopic `300.1605 -> 184.113` candidates and
+  `160` isotope-shift `301.165 -> 185.116` candidates spanning all 85 samples.
+  Existing targeted ISTD benchmark output had incorrectly selected `FAM007866`
+  as a primary `d4-N6-2HE-dA` row despite `match_type=isotope_shift`.
+- Product surface changed: targeted ISTD benchmark summaries now count only
+  `match_type=exact` rows as primary matches, and matrix identity blast-radius
+  joins no longer promote isotope-shift benchmark rows to
+  `active_dna_istd_candidate`. Output schemas are unchanged; review/replay
+  classification semantics are stricter.
+- Validation: focused red/green tests now cover isotope-only active ISTD
+  failing as `MISS` and blast-radius refusing to promote isotope-shift target
+  aliases. `uv run pytest tests/test_targeted_istd_benchmark.py tests/test_matrix_identity_blast_radius.py -v --tb=short`
+  passed 25 tests. A no-RAW recheck over the existing targeted workbook and
+  alignment TSV/XLSX artifacts writes
+  `tmp_runtime/targeted_istd_benchmark_d4_recheck_20260619/` and reports
+  `d4-N6-2HE-dA status=FAIL`, `failure_modes=MISS`,
+  `primary_match_count=0`; `FAM007866` remains visible only as
+  `match_type=isotope_shift`.
+- Remaining blocker: the activated default matrix remains numerically usable for
+  downstream wide-matrix analysis, but release-facing target/ISTD lookup is not
+  product-ready for `d4-N6-2HE-dA` until active targets can materialize exact
+  target-anchored product rows and the default activation expected-diff bundle
+  is regenerated. Keep `301.165` as its own valid feature row; do not bridge it
+  back to `300.1605` as authority or treat it as a reason to suppress the
+  missing monoisotopic row.
+
+### 2026-06-19 - Discovery precursor inference root-cause fix v1
+
+- Lane: Untargeted discovery row identity / target-row stop-ship remediation.
+- Previous tier: unchanged from
+  `product_ready_default_matrix_activated` for the current 511-cell default
+  matrix activation bundle, with `d4-N6-2HE-dA` release-facing target lookup
+  blocked by the missing exact row.
+- New tier: unchanged. This fixes discovery generation behavior and artifact
+  identity only. It does not promote a new maturity tier, change active lane,
+  alter ProductWriter authority, regenerate the default matrix, unpark broad
+  Backfill, or change workbook/GUI, selected peak, selected area, counted
+  detection, review/replay, scorer, RAW/85RAW authority, or current 511-cell
+  Backfill authority.
+- Root cause: `xic_extractor.discovery.ms2_seeds` used the Thermo MS2 filter
+  precursor as the only exact precursor when searching for
+  `precursor - neutral_loss` products. For `TumorBC2312_DNA`, RAW MS2 scans in
+  the 22-25 min window include filter precursor `300.2028` with product
+  `184.1132`; `184.1132 + 116.0474 = 300.1606`, but the old direct-only search
+  looked near `184.1554` and rejected the row before grouping/alignment.
+- Product surface changed: `DiscoverySettings` and `scripts/run_discovery.py`
+  now expose `ms2_precursor_tol_da` / `--ms2-precursor-tol-da` for Da-level
+  MS2 filter precursor/isolation matching. Discovery seed extraction emits
+  product-plus-neutral-loss inferred precursor seeds in addition to direct
+  scan-precursor neutral-loss seeds. Discovery `candidate_id` now keeps the
+  `sample#scan` anchor but appends precursor/product row identity, preventing
+  same-scan candidate collisions. Discovery `tag_evidence_json` records
+  `precursor_mz_basis`, `scan_precursor_mz`, and scan-precursor delta fields.
+  CSV column schemas are unchanged.
+- Evidence: focused tests cover inferred monoisotopic seed recovery, direct and
+  inferred same-scan coexistence, old out-of-tolerance rejection behavior,
+  public CLI/preset plumbing, and same-scan candidate ID uniqueness. Single RAW
+  validation under
+  `docs/superpowers/validation/discovery_precursor_inference_v1/` reran only
+  `TumorBC2312_DNA.raw` over 22-25 min and observed
+  `duplicate_candidate_ids=0`, emitted `300.161 / 184.113` rows with
+  `precursor_mz_basis=product_plus_neutral_loss`, and retained the valid
+  `301.165 / 185.116` dR-tag row.
+- Validation:
+  `uv run pytest tests/test_discovery_ms2_seeds.py tests/test_discovery_grouping.py tests/test_discovery_csv.py tests/test_discovery_pipeline.py tests/test_run_discovery.py tests/test_presets_apply.py -v --tb=short`
+  passed `92`; focused ruff over the touched discovery/CLI/preset/tests passed.
+  The one-RAW command in
+  `docs/superpowers/validation/discovery_precursor_inference_v1/README.md`
+  exited `0`.
+- Remaining blocker: the existing activated default `quant_matrix.tsv` has not
+  been regenerated and still reflects pre-fix discovery artifacts. A later
+  explicit discovery/alignment/default-activation expected-diff rerun is needed
+  before claiming the released default matrix contains the `300.1605` target
+  row.
 
 ### 2026-06-19 - QuantMatrix Product Ready Closeout v1
 
