@@ -312,10 +312,14 @@ the first no-RAW evidence packet from existing artifacts: large-cohort and
 heldout-oracle evidence are artifact-bound and pass, while downstream-impact
 evidence is explicitly missing, so the Phase 5 readiness fixture remains
 `contract_ready_science_inconclusive` with
-`may_promote_default_quant_matrix=false`. The Phase 0-5 product spine is
-complete, but promotion remains blocked on a real downstream-impact evidence
-packet and real `QuantMatrixVersion` bundle, not a scorer revival or broad
-Backfill writer.
+`may_promote_default_quant_matrix=false`. Phase 6 now defines the no-RAW
+`QuantMatrix downstream-impact smoke` contract: a downstream artifact must
+prove that a real `QuantMatrixVersion` bundle improves numeric matrix coverage
+while preserving detected-only claims through sidecars; contract fixtures and
+tier strings cannot satisfy promotion. The Phase 0-6 product spine is complete,
+but promotion remains blocked on a real downstream-impact artifact generated
+from a real `QuantMatrixVersion` bundle, not a scorer revival or broad Backfill
+writer.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2834,6 +2838,47 @@ at that older checkpoint, not the latest release claim.
   owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
+
+### 2026-06-19 - QuantMatrix Downstream Impact Smoke v1
+
+- Lane: Backfill downstream-impact evidence contract / Phase 6.
+- Previous tier: `QuantMatrix Promotion Validation Packet v1` required
+  downstream-impact evidence, but the tier could only bind artifact relpath,
+  hash, and `downstream_scope`; it did not define the artifact content needed to
+  distinguish a real `QuantMatrixVersion` downstream smoke from a contract
+  fixture or arbitrary tier string.
+- New tier: unchanged. This is a no-RAW, read-only downstream-impact contract
+  and checker/builder surface, not a maturity-tier promotion, ProductWriter
+  default extraction, selected peak/area/counting change, workbook/GUI change,
+  or new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_downstream_impact_smoke_schema.v1.json`,
+  `scripts/build_quant_matrix_downstream_impact_smoke.py`, and
+  `xic_extractor/alignment/quant_matrix_downstream_impact.py`.
+- Product surface changed: additive downstream-impact smoke outputs only:
+  `quant_matrix_downstream_impact_smoke.json` and
+  `quant_matrix_downstream_impact_rows.tsv`. The existing validation packet and
+  promotion readiness check now content-validate the
+  `downstream_impact_smoke` artifact instead of trusting a tier string alone.
+  Validation packets copy the downstream smoke bundle as summary plus rows TSV.
+- Evidence: focused tests cover schema parity, real-bundle pass behavior,
+  contract-fixture no-promotion behavior, row-metrics hash drift rejection,
+  input-artifact hash drift rejection, recomputed row/metric mismatch rejection,
+  script `--check-only` round trip, promotion-readiness science-ready fixture
+  content validation, validation-packet rejection of downstream contract
+  fixtures, and validation-packet acceptance of real downstream bundles.
+- Current validation result: Phase 6 contract tests pass, but the current
+  durable promotion packet still remains `contract_ready_science_inconclusive`
+  until a real downstream-impact artifact is generated from a real
+  `QuantMatrixVersion` bundle and rebound into the packet.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: production-ready promotion still needs a real
+  `QuantMatrixVersion` bundle plus downstream-impact smoke generated from that
+  bundle. Contract fixtures cannot satisfy promotion.
+- Next checkpoint: assemble the real `QuantMatrixVersion` bundle and run the
+  downstream-impact smoke against it before building a promotion packet v2.
 
 ### 2026-06-19 - QuantMatrix Promotion Validation Packet v1
 

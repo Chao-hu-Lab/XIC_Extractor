@@ -2,8 +2,9 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Checkpoint: Phase 0-5 Backfill quant-matrix product spine is complete;
-`QuantMatrix Promotion Validation Packet v1` exists but remains science-inconclusive.
+Checkpoint: Phase 0-6 Backfill quant-matrix product spine is complete;
+downstream-impact smoke contract exists, but the durable promotion packet
+remains science-inconclusive until a real `QuantMatrixVersion` bundle is bound.
 
 Tier authority lives in `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
 plus the machine-readable validation indexes.
@@ -23,6 +24,7 @@ Completed spine:
 - Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
 - Phase 5: read-only promotion readiness checker.
 - Phase 5 follow-up: no-RAW artifact-bound validation evidence packet.
+- Phase 6: no-RAW downstream-impact smoke contract and content validator.
 
 No scorer was run. No RAW/85RAW was run in this sequence.
 
@@ -36,7 +38,8 @@ No scorer was run. No RAW/85RAW was run in this sequence.
   `production_acceptance_manifest_schema.v1.json`,
   `quant_matrix_version_schema.v1.json`,
   `quant_matrix_review_report_schema.v1.json`,
-  `quant_matrix_promotion_readiness_schema.v1.json`, and
+  `quant_matrix_promotion_readiness_schema.v1.json`,
+  `quant_matrix_downstream_impact_smoke_schema.v1.json`, and
   `quant_matrix_validation_evidence_schema.v1.json`.
 
 ## Product Contract
@@ -104,6 +107,12 @@ Current packet status:
 The readiness fixture is synthetic contract input used to prove checker
 integration only. It is not a real `QuantMatrixVersion` production bundle.
 
+Phase 6 now defines the downstream-impact artifact contract:
+`quant_matrix_downstream_impact_smoke.json` plus
+`quant_matrix_downstream_impact_rows.tsv`. The promotion checker and validation
+packet checker content-validate this artifact; a contract fixture or arbitrary
+tier string cannot satisfy `downstream_impact_smoke`.
+
 ## Phase Artifacts
 
 - Phase 1:
@@ -130,6 +139,10 @@ integration only. It is not a real `QuantMatrixVersion` production bundle.
   `xic_extractor/alignment/quant_matrix_validation_packet.py`,
   `scripts/build_quant_matrix_promotion_validation_packet.py`, and
   `tests/test_quant_matrix_validation_packet.py`.
+- Phase 6 downstream impact:
+  `xic_extractor/alignment/quant_matrix_downstream_impact.py`,
+  `scripts/build_quant_matrix_downstream_impact_smoke.py`, and
+  `tests/test_quant_matrix_downstream_impact_smoke.py`.
 
 ## Rejected Paths
 
@@ -147,23 +160,11 @@ integration only. It is not a real `QuantMatrixVersion` production bundle.
 
 ## Validation Status
 
-Current checks in this goal:
+Current Phase 6 checks:
 
-- `uv run pytest tests/test_quant_matrix_validation_packet.py -v --tb=short`:
-  11 passed.
-- `uv run pytest tests/test_quant_matrix_promotion_readiness.py -v --tb=short`:
-  10 passed.
-- `uv run pytest tests/test_productization_state_index.py -v --tb=short`:
-  21 passed.
-- `uv run ruff check xic_extractor/alignment/quant_matrix_validation_packet.py scripts/build_quant_matrix_promotion_validation_packet.py tests/test_quant_matrix_validation_packet.py`:
-  pass.
-- `uv run mypy xic_extractor/alignment/quant_matrix_validation_packet.py xic_extractor/alignment/quant_matrix_promotion.py`:
-  pass.
-- `uv run python scripts/build_quant_matrix_promotion_validation_packet.py --write-readiness-fixture`:
-  pass.
-- `uv run python scripts/build_quant_matrix_promotion_validation_packet.py --check-only`:
-  pass.
-- Repo-external `uv run --project ... build_quant_matrix_promotion_validation_packet.py --check-only`:
+- `uv run pytest tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_quant_matrix_validation_packet.py -v --tb=short`:
+  31 passed.
+- `uv run ruff check xic_extractor/alignment/quant_matrix_downstream_impact.py xic_extractor/alignment/quant_matrix_promotion.py xic_extractor/alignment/quant_matrix_validation_packet.py scripts/build_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_quant_matrix_validation_packet.py`:
   pass.
 
 Remaining closeout checks before commit:
@@ -171,29 +172,23 @@ Remaining closeout checks before commit:
 - productization state check after final edits.
 - `git diff --check`.
 
-Sub-agent review:
-
-- Product/control-plane reviewer found no blockers and confirmed this does not
-  change maturity tier, active lane, ProductWriter/default matrix authority,
-  review/replay behavior, selected peak/area/counting, or production readiness.
-- Implementation reviewer found three blockers, fixed with tests: check-only
-  now rejects top-level authority drift, resolves source artifacts relative to
-  a source root instead of cwd, and validates rows TSV, summary hashes, and any
-  readiness fixture inputs/outputs against a fresh checker rerun.
-- Final focused re-review found no code-level blocker; the only remaining note
-  was that untracked fixture outputs must be staged/committed with this goal.
-
 ## Control Plane Note
 
-Control plane was updated because this goal adds a public validation evidence
-packet schema, builder/checker script, and durable validation packet. No
-maturity tier, active lane, current matrix authority, selected peak/area,
-counted detection, ProductWriter default extraction, review/replay behavior, or
-broad Backfill state changed.
+Control plane was updated for Phase 6 because this goal adds a public
+downstream-impact smoke schema, builder/checker script, and validation-packet
+content gate. No maturity tier, active lane, current matrix authority, selected
+peak/area, counted detection, ProductWriter default extraction,
+review/replay behavior, or broad Backfill state changed.
+
+Phase 6 reviewer blockers were fixed: downstream smoke bundles now copy the
+rows TSV into validation packets, and the validator checks input artifact
+paths/hashes plus recomputed metrics/rows instead of trusting a self-consistent
+summary.
 
 ## Next Actions
 
-1. Define the downstream-impact evidence source for accepted Backfill values.
-2. Bind that downstream artifact into the validation packet.
-3. Re-run Phase 5 readiness on a real `QuantMatrixVersion` bundle before any
-   default-matrix promotion claim.
+1. Phase 7: assemble a real `QuantMatrixVersion` bundle from the current
+   authority manifest/expected-diff path.
+2. Generate downstream-impact smoke from that real bundle.
+3. Build a promotion packet v2 only after the real bundle and downstream smoke
+   pass; do not promote a contract fixture.

@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from xic_extractor.alignment.quant_matrix_downstream_impact import (
+    validate_quant_matrix_downstream_impact_smoke,
+)
 from xic_extractor.tabular_io import file_sha256, read_tsv_required, write_tsv
 
 VALIDATION_EVIDENCE_SCHEMA = "quant_matrix_validation_evidence_v1"
@@ -309,7 +312,42 @@ def _copy_artifact(source: Path, artifacts_dir: Path, tier: str) -> Path:
     destination = artifacts_dir / f"{_safe_filename(tier)}__{source.name}"
     if source.resolve(strict=True) != destination.resolve(strict=False):
         shutil.copy2(source, destination)
+    if tier == "downstream_impact_smoke":
+        _copy_downstream_impact_bundle(source, destination)
     return destination
+
+
+def _copy_downstream_impact_bundle(source_summary: Path, copied_summary: Path) -> None:
+    try:
+        payload = json.loads(source_summary.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        message = f"{source_summary}: invalid downstream summary: {exc}"
+        raise ValueError(message) from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{source_summary}: downstream summary must be an object")
+    row_metrics = _text(payload.get("row_metrics_tsv"))
+    if not row_metrics:
+        raise ValueError(f"{source_summary}: row_metrics_tsv is missing")
+    row_path = Path(row_metrics)
+    if row_path.is_absolute() or ".." in row_path.parts:
+        raise ValueError(
+            f"{source_summary}: row_metrics_tsv must be a relative child path",
+        )
+    source_row_metrics = (source_summary.parent / row_path).resolve(strict=False)
+    copied_row_metrics = (copied_summary.parent / row_path).resolve(strict=False)
+    try:
+        copied_row_metrics.relative_to(copied_summary.parent.resolve(strict=False))
+    except ValueError as exc:
+        raise ValueError(
+            f"{source_summary}: row_metrics_tsv escapes copied packet",
+        ) from exc
+    if not source_row_metrics.is_file():
+        raise FileNotFoundError(str(source_row_metrics))
+    copied_row_metrics.parent.mkdir(parents=True, exist_ok=True)
+    if source_row_metrics.resolve(strict=True) != copied_row_metrics.resolve(
+        strict=False,
+    ):
+        shutil.copy2(source_row_metrics, copied_row_metrics)
 
 
 def _required_science_status(
@@ -618,6 +656,8 @@ def _append_artifact_binding_problems(
         problems.append(f"{label}: artifact_sha256 must be 64-hex")
     elif file_sha256(artifact) != expected_sha256.upper():
         problems.append(f"{label}: artifact_sha256 mismatch")
+    if label == "downstream_impact_smoke":
+        problems.extend(validate_quant_matrix_downstream_impact_smoke(artifact))
 
 
 def _append_source_binding_problems(

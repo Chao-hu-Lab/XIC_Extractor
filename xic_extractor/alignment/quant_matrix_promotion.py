@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from xic_extractor.alignment.quant_matrix_downstream_impact import (
+    validate_quant_matrix_downstream_impact_smoke,
+)
 from xic_extractor.alignment.quant_matrix_report import QUANT_MATRIX_REVIEW_SCHEMA
 from xic_extractor.alignment.quant_matrix_validation_packet import (
     VALIDATION_EVIDENCE_SCHEMA,
@@ -662,6 +665,10 @@ def _required_science_binding_problems(
                 and file_sha256(resolved_artifact) != artifact_sha256.upper()
             ):
                 problems.append("artifact_sha256 mismatch")
+            if tier == "downstream_impact_smoke" and resolved_artifact.exists():
+                problems.extend(
+                    validate_quant_matrix_downstream_impact_smoke(resolved_artifact),
+                )
     elif artifact_relpath:
         problems.append("validation evidence path is required for artifact binding")
     return problems

@@ -6,6 +6,7 @@
   "validation_evidence_json": "quant_matrix_validation_evidence_v1.json",
   "validation_evidence_rows_tsv": "quant_matrix_validation_evidence_rows.tsv",
   "summary_json": "quant_matrix_validation_evidence_summary.json",
+  "downstream_impact_artifact_schema": "quant_matrix_downstream_impact_smoke_v1",
   "evidence_row_columns": [
     "schema_version",
     "tier",
@@ -70,7 +71,9 @@
     "artifact_sha256_must_match_copied_artifact": true,
     "source_artifact_path_and_sha256_are_required": true,
     "duplicate_tiers_fail_closed": true,
-    "missing_required_science_evidence_stays_inconclusive": true
+    "missing_required_science_evidence_stays_inconclusive": true,
+    "downstream_impact_smoke_must_validate_artifact_content": true,
+    "downstream_impact_contract_fixture_cannot_satisfy_promotion": true
   },
   "authority_rules": {
     "read_only": true,

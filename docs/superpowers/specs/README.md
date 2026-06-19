@@ -36,11 +36,16 @@ automatic implementation goals.
   focused tests and 8RAW smoke evidence cannot claim `production_ready` without
   artifact-bound large-cohort, heldout-oracle/manual-review, and
   downstream-impact evidence.
+- `quant_matrix_downstream_impact_smoke_schema.v1.json`: Phase 6 no-RAW
+  downstream-impact smoke contract. It proves a real `QuantMatrixVersion`
+  bundle improves numeric matrix coverage while preserving detected-only claims
+  through sidecars; contract fixtures cannot satisfy promotion.
 - `quant_matrix_validation_evidence_schema.v1.json`: no-RAW artifact-bound
   evidence packet consumed by Phase 5 promotion readiness. It records copied
   packet artifact paths/hashes, source artifact paths/hashes, tier metadata,
   and missing science evidence while staying read-only with
-  `write_authority=false`.
+  `write_authority=false`; downstream-impact rows must validate the artifact
+  content, not only a tier string.
 
 ## Rule
 

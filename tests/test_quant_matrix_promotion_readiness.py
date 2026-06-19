@@ -3,6 +3,9 @@ import json
 import subprocess
 from pathlib import Path
 
+from xic_extractor.alignment.quant_matrix_downstream_impact import (
+    build_quant_matrix_downstream_impact_smoke,
+)
 from xic_extractor.alignment.quant_matrix_promotion import (
     PROMOTION_CHECK_COLUMNS,
     PROMOTION_READINESS_SCHEMA,
@@ -451,7 +454,7 @@ def _read_tsv(path: Path) -> list[dict[str, str]]:
 def _science_ready_evidence_rows(root: Path) -> list[dict[str, str]]:
     cohort = _write_evidence_artifact(root, "85raw_large_cohort.json")
     oracle = _write_evidence_artifact(root, "heldout_oracle.json")
-    downstream = _write_evidence_artifact(root, "downstream_impact_smoke.json")
+    downstream = _write_downstream_impact_artifact(root)
     return [
         {
             "tier": "85raw_large_cohort",
@@ -483,3 +486,94 @@ def _write_evidence_artifact(root: Path, filename: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"artifact": filename}) + "\n", encoding="utf-8")
     return path
+
+
+def _write_downstream_impact_artifact(root: Path) -> Path:
+    input_dir = root / "downstream_inputs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    quant_matrix = input_dir / "quant_matrix.tsv"
+    _write_tsv(
+        quant_matrix,
+        ("Mz", "RT", "SampleA", "SampleB", "SampleC"),
+        [
+            {
+                "Mz": "101.1",
+                "RT": "5.5",
+                "SampleA": "100",
+                "SampleB": "222.2",
+                "SampleC": "",
+            }
+        ],
+    )
+    cell_provenance = input_dir / "cell_provenance.tsv"
+    _write_tsv(
+        cell_provenance,
+        CELL_PROVENANCE_COLUMNS,
+        [
+            {
+                "schema_version": "quant_matrix_cell_provenance_v1",
+                "peak_hypothesis_id": "PH001",
+                "sample_stem": "SampleA",
+                "source_feature_family_ids": "FAM001",
+                "matrix_value": "100",
+                "cell_status": "detected",
+                "value_source": "input_quant_matrix",
+                "write_authority": "FALSE",
+                "acceptance_decision": "",
+                "acceptance_basis": "",
+                "truth_status": "",
+                "quant_value_source": "",
+                "matrix_area_source": "",
+                "source_artifact_relpath": "",
+                "source_artifact_sha256": "",
+                "source_row_sha256": "",
+                "manifest_sha256": "",
+            },
+            {
+                "schema_version": "quant_matrix_cell_provenance_v1",
+                "peak_hypothesis_id": "PH001",
+                "sample_stem": "SampleB",
+                "source_feature_family_ids": "FAM001",
+                "matrix_value": "222.2",
+                "cell_status": "accepted_backfill",
+                "value_source": "ProductionAcceptanceManifest",
+                "write_authority": "TRUE",
+                "acceptance_decision": "accept_basic_backfill",
+                "acceptance_basis": "machine_basic",
+                "truth_status": "not_truth_claimed",
+                "quant_value_source": "gaussian_smoothed_integration",
+                "matrix_area_source": "gaussian_smoothed_boundary_integration",
+                "source_artifact_relpath": "sources/cell_evidence.tsv",
+                "source_artifact_sha256": "A" * 64,
+                "source_row_sha256": "B" * 64,
+                "manifest_sha256": "C" * 64,
+            },
+        ],
+    )
+    row_summary = input_dir / "row_summary.tsv"
+    _write_tsv(
+        row_summary,
+        ROW_SUMMARY_COLUMNS,
+        [
+            {
+                "schema_version": "quant_matrix_row_summary_v1",
+                "peak_hypothesis_id": "PH001",
+                "source_feature_family_ids": "FAM001",
+                "detected_count": "1",
+                "accepted_backfilled_count": "1",
+                "quant_available_count": "2",
+                "missing_count": "1",
+                "backfill_fraction": "0.500000",
+                "prevalence_flags": "low_seed_support",
+            }
+        ],
+    )
+    outputs = build_quant_matrix_downstream_impact_smoke(
+        quant_matrix_tsv=quant_matrix,
+        cell_provenance_tsv=cell_provenance,
+        row_summary_tsv=row_summary,
+        output_dir=root / "validation_artifacts" / "downstream_impact_smoke",
+        downstream_scope="synthetic_loess_gate_fixture",
+        bundle_kind="real_quant_matrix_version",
+    )
+    return outputs["summary_json"]
