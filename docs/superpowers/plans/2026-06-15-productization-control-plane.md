@@ -4035,3 +4035,61 @@ the later low-height writer entry above as the current tier source.
 - Remaining blocker: this does not regenerate the tracked default activation
   bundle. A separate default activation expected-diff task is still required
   before claiming the tracked default `quant_matrix.tsv` contains this row.
+
+### 2026-06-20 - CID-NL product-ready alignment evidence v1
+
+- Lane: CID-NL Discovery-to-alignment row identity / default-output unblocker.
+- Previous tier: `product_ready_default_matrix_activated` for the tracked
+  511-cell Backfill default matrix bundle; CID-NL rerun evidence was not yet a
+  default activation source.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state
+  changed. Current default matrix authority remains exactly the existing
+  511-cell `backfill_policy_write_ready_rows` activation.
+- Product surface changed: alignment primary-family consolidation is stricter.
+  The shared-MS1 duplicate-claim fallback now only merges different
+  neutral-loss tags; same-tag rows with distinct product identity must pass the
+  normal product/loss identity tolerance or stay separate. The Discovery MS1
+  candidate merge also reuses `ms1_feature_row_id` to merge same-feature seed
+  evidence without requiring tail seed ranges to touch the peak center. These
+  changes affect future Discovery/alignment row identity, not the tracked
+  default ProductWriter bundle.
+- Evidence: `docs/superpowers/validation/cid_nl_product_ready_alignment_v1/`
+  records the 8RAW and 85RAW reruns. 8RAW alignment over
+  `output/discovery/cid_nl_product_ready_8raw_20260620_fix2` produced
+  `300.1605 -> 184.113` as `FAM001386`, 8/8,
+  `product_matrix_identity_complete`, `identity_confidence=high`; it also
+  preserved `301.165 -> 185.116` as its own `FAM001414`, 8/8,
+  `product_matrix_identity_complete`, `identity_confidence=high`, with
+  `consolidation_state=not_consolidated`.
+- 85RAW alignment over
+  `output/discovery/cid_nl_product_ready_85raw_20260620_fix2` produced
+  `300.1605 -> 184.113` as `FAM011499`, 85/85,
+  `product_matrix_identity_complete`, `identity_confidence=high`. The valid
+  `301.165 -> 185.116` dR-tag row is preserved as `FAM011783`, 83/85,
+  `product_matrix_identity_complete`, centered at
+  `family_center_mz=301.165` and `family_product_mz=185.116`; it is no longer
+  collapsed into the earlier erroneous `301.171 / 185.123` winner identity.
+  This preserved 301 row still has `identity_confidence=review` and review
+  flags for backfill evidence / missing independent backfill identity evidence;
+  that residual risk is why this entry is evidence for a later expected-diff
+  gate, not default activation readiness.
+  TumorBC2312 provenance for the preserved row points to
+  `TumorBC2312_DNA#19561@mz301.164978_p185.115845` with
+  `write_matrix_value=TRUE`, while the Discovery source row remains
+  `discovery_candidate_state=ms1_feature_nl_rescued` with
+  `ms1_feature_row_id=TumorBC2312_DNA|DNA_dR|301.164978|23.341692`.
+- Validation: red/green focused consolidation regression passed after the fix;
+  `python -m pytest tests/test_alignment_primary_consolidation.py -q` passed
+  `9`, and `python -m pytest tests/test_discovery_ms1_backfill.py -q` passed
+  `20`. 8RAW and 85RAW alignment preflights and reruns completed with documented
+  `validation-minimal`, `production-equivalent`, `audit-evidence-mode none`;
+  85RAW used the canonical `validation-fast`, `raw-workers 11`, and
+  `super-window` settings.
+- Remaining blocker: this is `production_candidate` evidence for CID-NL
+  Discovery-to-alignment row identity, not a default matrix promotion. A
+  separate expected-diff/default-activation goal must decide whether these
+  artifacts change the released default `quant_matrix.tsv`. That future goal
+  must not treat Discovery candidates as matrix rows and must not let CID-NL/MS2
+  evidence directly become ProductWriter authority.

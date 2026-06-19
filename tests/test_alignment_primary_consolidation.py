@@ -123,6 +123,86 @@ def test_consolidation_merges_shared_ms1_peak_across_nl_evidence_tags():
     assert "shared_ms1_peak_nl_tags=DNA_R,DNA_dR" in evidence
 
 
+def test_same_tag_product_distinct_rows_do_not_merge_by_shared_ms1_peak():
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature(
+                "FAM_EXACT",
+                mz=301.165,
+                rt=23.35,
+                product_mz=185.116,
+                observed_loss=116.049,
+                neutral_loss_tag="DNA_dR",
+                evidence="owner_complete_link;owner_count=2",
+            ),
+            _feature(
+                "FAM_SHIFTED",
+                mz=301.171,
+                rt=23.36,
+                product_mz=185.123,
+                observed_loss=116.048,
+                neutral_loss_tag="DNA_dR",
+                evidence="owner_complete_link;owner_count=2",
+            ),
+        ),
+        sample_order=("s1", "s2", "s3", "s4"),
+        cells=(
+            _cell("s1", "FAM_EXACT", "detected", 100.0, apex=23.35),
+            _cell("s2", "FAM_EXACT", "detected", 110.0, apex=23.35),
+            _duplicate_cell(
+                "s3",
+                "FAM_EXACT",
+                winner="FAM_SHIFTED",
+                original="rescued",
+                apex=23.36,
+            ),
+            _duplicate_cell(
+                "s4",
+                "FAM_EXACT",
+                winner="FAM_SHIFTED",
+                original="rescued",
+                apex=23.36,
+            ),
+            _duplicate_cell(
+                "s1",
+                "FAM_SHIFTED",
+                winner="FAM_EXACT",
+                original="rescued",
+                apex=23.35,
+            ),
+            _duplicate_cell(
+                "s2",
+                "FAM_SHIFTED",
+                winner="FAM_EXACT",
+                original="rescued",
+                apex=23.35,
+            ),
+            _cell("s3", "FAM_SHIFTED", "detected", 200.0, apex=23.36),
+            _cell("s4", "FAM_SHIFTED", "detected", 210.0, apex=23.36),
+        ),
+    )
+
+    consolidated = consolidate_primary_family_rows(matrix, AlignmentConfig())
+    rows = {
+        _feature_by_id(consolidated, "FAM_EXACT").feature_family_id: _feature_by_id(
+            consolidated,
+            "FAM_EXACT",
+        ),
+        _feature_by_id(consolidated, "FAM_SHIFTED").feature_family_id: _feature_by_id(
+            consolidated,
+            "FAM_SHIFTED",
+        ),
+    }
+    decisions = build_production_decisions(consolidated, AlignmentConfig())
+
+    assert rows["FAM_EXACT"].consolidation_state == "not_consolidated"
+    assert rows["FAM_SHIFTED"].consolidation_state == "not_consolidated"
+    assert rows["FAM_EXACT"].family_product_mz == 185.116
+    assert rows["FAM_SHIFTED"].family_product_mz == 185.123
+    assert decisions.row("FAM_EXACT").include_in_primary_matrix is True
+    assert decisions.row("FAM_SHIFTED").include_in_primary_matrix is True
+
+
 def test_consolidation_prefers_stronger_sample_peak_over_weak_detected_peak():
     matrix = AlignmentMatrix(
         clusters=(

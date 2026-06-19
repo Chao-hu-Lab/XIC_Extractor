@@ -781,6 +781,10 @@ def _shared_ms1_peak_family(
         getattr(right, "review_only", False),
     ):
         return False
+    left_tag = str(getattr(left, "neutral_loss_tag", ""))
+    right_tag = str(getattr(right, "neutral_loss_tag", ""))
+    if not left_tag or not right_tag or left_tag == right_tag:
+        return False
     if ppm(_family_center_mz(left), _family_center_mz(right)) > config.max_ppm:
         return False
     return (

@@ -4,48 +4,40 @@ Updated: 2026-06-20
 Branch: `cc/framework-improvements`
 
 This is a compact current-state snapshot. It is not product authority. Tier,
-active lane, and promotion gate authority remain in
+active lane, and promotion-gate authority remain in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
 
 ## Current Verdict
 
-The default numeric matrix remains usable as the current detected + 511
-accepted-Backfill product output. ProductWriter default output is activated for
-detected values plus the current accepted Backfill cells.
+The tracked default QuantMatrix remains the current detected + 511 accepted
+Backfill product output. ProductWriter default output and Backfill authority did
+not change in this slice.
 
-The CID-NL Discovery A owner-deepening focused slice is now implemented for the
-successor CSV/parser contract: `discovery_candidates.csv` has additive
-`discovery_candidate_state` and `ms1_feature_row_id` fields, and the alignment
-reader fails closed on invalid state/identity combinations, including
-`ms1_feature_row_id` sample/tag/precursor/RT mismatches.
+CID-NL Discovery/alignment row identity has moved beyond one-RAW diagnostic
+evidence. The A owner-deepened path now has focused tests plus 8RAW and 85RAW
+alignment evidence showing that `300.1605 -> 184.113` can become a primary
+matrix identity while `301.165 -> 185.116` remains a valid dR-tag row identity.
 
-The one-RAW successor oracle for `TumorBC2312_DNA` RT `22-25` now passes. A
-recovers `300.1605 -> 184.113` and preserves `301.165 -> 185.116` as a distinct
-`DNA_dR` tag-evidence row with its own `ms1_feature_row_id`.
-
-This remains `diagnostic_only`. No ProductWriter/default matrix/workbook/GUI,
-selected peak/area, counted detection, or Backfill writer authority changed.
-The productization control plane was not updated because no maturity tier,
-active lane, matrix schema, default activation bundle, or Backfill writer
-authority changed.
+Readiness for this CID-NL packet is `production_candidate` for
+Discovery-to-alignment row identity. It is not
+`product_ready_default_matrix_activated` because the tracked default activation
+bundle was not regenerated from the new 85RAW artifacts.
 
 ## Product State
 
-- Current tier: `product_ready_default_matrix_activated`.
+- Current default tier: `product_ready_default_matrix_activated`.
 - Product authority scope: `backfill_policy_write_ready_rows`.
 - Current Backfill writer authority: exactly 511 accepted Backfill cells.
 - Broad 4613-row Backfill remains parked.
-- No default activation, 85RAW, workbook, GUI, ProductWriter, or Backfill
-  authority run was launched in this slice.
-- New Discovery successor fields are additive Discovery/alignment parser
-  contract fields, not matrix-row authority.
+- Default matrix/ProductWriter/workbook/GUI/Backfill authority were not changed.
+- CID-NL/MS2 evidence remains evidence-provider input; it is not direct
+  ProductWriter authority.
 
 ## Status Index Anchors
 
-These short anchors keep `scripts/check_productization_state.py` fail-closed
-without making this handoff the tier authority:
+These anchors keep `scripts/check_productization_state.py` fail-closed. They do
+not make this handoff the tier authority.
 
-- `product_ready_default_matrix_activated`
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
 - machine-adjudicated without granting new writer authority
@@ -61,85 +53,79 @@ without making this handoff the tier authority:
 - manual-boundary area recompute remain parked
 - classification and planning only
 
-## Current CID-NL Decision
+## CID-NL Evidence
 
-Decision Spike v1 still stands:
+Validation note:
+`docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`.
 
-- Do not build the B feature-primary temporary adapter yet.
-- Keep the completed A owner-deepening pass in existing Discovery owners.
-- B remains closed because the one-RAW oracle shows no material advantage for a
-  second Discovery system.
+8RAW alignment:
 
-8RAW was not run because focused tests plus the one-RAW oracle answered the
-architecture decision. 85RAW and default activation remain out of scope.
+- Input Discovery: `output/discovery/cid_nl_product_ready_8raw_20260620_fix2`.
+- Output alignment: `output/discovery/cid_nl_product_ready_alignment_8raw_20260620_fix3`.
+- `300.1605 -> 184.113`: `FAM001386`, 8/8,
+  `product_matrix_identity_complete`, high confidence.
+- `301.165 -> 185.116`: `FAM001414`, 8/8,
+  `product_matrix_identity_complete`, high confidence,
+  `consolidation_state=not_consolidated`.
 
-## Files Changed In Current Slice
+85RAW alignment:
 
-- `xic_extractor/discovery/models.py`
-- `xic_extractor/discovery/ms1_backfill.py`
-- `xic_extractor/alignment/csv_io.py`
-- `tests/test_discovery_csv.py`
-- `tests/test_alignment_csv_io.py`
-- `tests/test_discovery_architecture_ab_artifact.py`
-- `tests/alignment_pipeline_helpers.py`
-- `tests/test_shared_peak_identity_candidate_ms2_pattern.py`
+- Input Discovery: `output/discovery/cid_nl_product_ready_85raw_20260620_fix2`.
+- Output alignment: `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`.
+- Discovery parser smoke passed; candidate rows `317036`; duplicate
+  `ms1_feature_row_id` count `0`.
+- `300.1605 -> 184.113`: `FAM011499`, 85/85,
+  `product_matrix_identity_complete`, high confidence.
+- `301.165 -> 185.116`: `FAM011783`, 83/85,
+  `product_matrix_identity_complete`, centered at
+  `family_center_mz=301.165`, `family_product_mz=185.116`.
+  Residual risk: `identity_confidence=review` with backfill-evidence review
+  flags, so this preserves row identity but does not by itself justify default
+  activation.
+- TumorBC2312 provenance for preserved 301 row:
+  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`,
+  `write_matrix_value=TRUE`, `include_in_primary_matrix=TRUE`.
+- TumorBC2312 Discovery source state:
+  `discovery_candidate_state=ms1_feature_nl_rescued`,
+  `ms1_feature_row_id=TumorBC2312_DNA|DNA_dR|301.164978|23.341692`.
 
-## Active Decisions
+## Code Decisions
 
-- `discovery.models` owns `discovery_candidate_state` vocabulary and
-  `ms1_feature_row_id` construction.
-- `DiscoveryCandidate.from_values` assigns:
-  - `scan_precursor` + MS1 peak: `ms1_feature_nl_supported`;
-  - `product_plus_neutral_loss` or `mixed` + MS1 peak:
-    `ms1_feature_nl_rescued`;
-  - no MS1 peak: `review_only_orphan_nl` with blank `ms1_feature_row_id`.
-- `ms1_feature_row_id` is sample/tag/precursor/RT-feature based and does not use
-  representative MS2 scan id.
-- `alignment.csv_io` rejects invalid state enums, blank normal/rescued
-  `ms1_feature_row_id`, normal/rescued rows without MS1 peak,
-  orphan rows with MS1 peak or nonblank id, and duplicate normal/rescued
-  `ms1_feature_row_id` in the same sample/tag scope.
-- `alignment.csv_io` also validates that nonblank `ms1_feature_row_id` matches
-  the candidate row's sample, neutral-loss tag, precursor identity, and MS1
-  feature RT within parser tolerance.
-- `alignment.csv_io` still reads legacy candidate CSVs that predate the two
-  additive successor columns; the successor checker remains the authority for
-  requiring those fields in new A/B evidence.
-- CSV writer remains render-only.
+- Discovery candidate merging may merge seed evidence by shared
+  `ms1_feature_row_id` when product identity matches and each candidate is
+  compatible with the configured neutral loss.
+- Alignment primary consolidation may use shared-MS1 fallback only across
+  different neutral-loss tags. Same-tag rows with distinct product identity must
+  stay separate unless they pass the normal product/loss identity tolerances.
+- This keeps B's useful concept, feature/MS1-primary identity, inside the
+  existing A owner path instead of creating a second Discovery system.
 
 ## Boundaries
 
 - Do not maintain two Discovery systems.
 - Do not make CID-NL/MS2 evidence direct ProductWriter authority.
-- Do not change default matrix/ProductWriter/workbook/GUI/Backfill authority.
-- Do not run default activation in this CID-NL owner-deepening slice.
-- Do not run 85RAW unless a later product decision explicitly requires it.
 - Do not treat candidates as matrix rows.
-- Do not demote or delete `301.165 -> 185.116` when it carries its own tag
-  evidence.
-- Do not hide any B temporary adapter behind `scripts/run_discovery.py`
-  CLI/config flags.
+- Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
+- Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
+- Do not run or update default activation without a separate expected-diff goal.
 
 ## Latest Local Checks
 
-- `python -m pytest tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/test_discovery_ms1_backfill.py tests/test_discovery_precursor_inference_artifact.py -q`
-  passed: `92 passed`.
-- `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor/discovery/models.py xic_extractor/discovery/ms1_backfill.py xic_extractor/alignment/csv_io.py tests/test_discovery_csv.py tests/test_alignment_csv_io.py tests/test_discovery_architecture_ab_artifact.py tests/alignment_pipeline_helpers.py tests/test_shared_peak_identity_candidate_ms2_pattern.py`
-  passed.
-- `python scripts/check_productization_state.py` passed.
-- One-RAW discovery rerun succeeded for `TumorBC2312_DNA` RT `22-25`.
-- Legacy precursor checker passed with 157 rows and SHA256
-  `5267A602D520FAE4F3B11E2CDB99525849D7FD2C01F33ACC37F6D4548194114D`.
-- Successor architecture checker passed with `diagnostic_only` readiness label.
-- One-RAW state counts: 46 `ms1_feature_nl_rescued`, 5
-  `ms1_feature_nl_supported`, 106 `review_only_orphan_nl`.
+- `python -m pytest tests/test_alignment_primary_consolidation.py -q`
+  passed: `9 passed`.
+- `python -m pytest tests/test_discovery_ms1_backfill.py -q`
+  passed: `20 passed`.
+- 8RAW alignment preflight and rerun completed.
+- 85RAW alignment preflight and rerun completed with canonical
+  `validation-fast`, `raw-workers 11`, `super-window`,
+  `production-equivalent`, and `audit-evidence-mode none`.
 
 ## Next Actions
 
-1. Finish subagent review and commit the task-scoped code/tests/docs.
-2. Keep default matrix activation separate; only open that expected-diff task
-   when the public default `quant_matrix.tsv` should materialize the
-   `300.1605 -> 184.113` row.
-3. Reopen B only with new evidence that materially beats A on the one-RAW
-   oracle and names a deletion/facade endpoint; do not hide B behind
-   `scripts/run_discovery.py` flags.
+1. Run focused integration checks and productization-state checker after the
+   current code/docs edits.
+2. Request subagent review of the consolidation/merge rule and evidence
+   wording; fix any actionable findings.
+3. Commit the task-scoped code/tests/docs.
+4. Open a separate expected-diff/default-activation goal if the released
+   default `quant_matrix.tsv` should materialize the recovered `300.1605` row.

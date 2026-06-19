@@ -172,6 +172,7 @@ def _can_merge_by_ms1_peak(
     *,
     settings: DiscoverySettings,
 ) -> bool:
+    same_ms1_feature_row = _same_ms1_feature_row_identity(first, second)
     if not (
         first.raw_file == second.raw_file
         and first.sample_stem == second.sample_stem
@@ -185,20 +186,49 @@ def _can_merge_by_ms1_peak(
             settings.precursor_mz_tolerance_ppm,
         )
         and _peak_intervals_overlap(first, second)
-        and _seed_ranges_touch_shared_peak(first, second)
+        and (_seed_ranges_touch_shared_peak(first, second) or same_ms1_feature_row)
     ):
         return False
     if first.neutral_loss_tag == second.neutral_loss_tag:
-        return _within_ppm(
+        if not _within_ppm(
             first.product_mz,
             second.product_mz,
             settings.product_mz_tolerance_ppm,
-        ) and _within_ppm(
+        ):
+            return False
+        if same_ms1_feature_row:
+            return _configured_neutral_loss_compatible(
+                first,
+                settings=settings,
+            ) and _configured_neutral_loss_compatible(second, settings=settings)
+        return _within_ppm(
             first.observed_neutral_loss_da,
             second.observed_neutral_loss_da,
             settings.nl_tolerance_ppm,
         )
     return settings.tag_combine_mode == "union"
+
+
+def _same_ms1_feature_row_identity(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> bool:
+    return (
+        bool(first.ms1_feature_row_id)
+        and first.ms1_feature_row_id == second.ms1_feature_row_id
+    )
+
+
+def _configured_neutral_loss_compatible(
+    candidate: DiscoveryCandidate,
+    *,
+    settings: DiscoverySettings,
+) -> bool:
+    return _within_ppm(
+        candidate.observed_neutral_loss_da,
+        candidate.configured_neutral_loss_da,
+        settings.nl_tolerance_ppm,
+    )
 
 
 def _merge_candidate_pair(
