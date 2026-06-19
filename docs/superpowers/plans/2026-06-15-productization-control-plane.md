@@ -335,6 +335,12 @@ Phase 7 reference `quant_matrix`, `cell_provenance`, `row_summary`, and
 unused expected-diff rows. The gate allows Product Ready closeout review to
 proceed, but it still writes no default matrix files and changes no
 ProductWriter/default behavior.
+Phase 10 closes that evidence chain as
+`product_ready_default_matrix_candidate`: Phase 8 and Phase 9 both validate,
+the closeout checklist has six passing checks, and the activation contract is
+ready for a separate explicit ProductWriter activation commit. This does not
+itself change default outputs, workbook/GUI, selected peak/area, counted
+detection, current 511-cell authority, or broad Backfill status.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2853,6 +2859,51 @@ at that older checkpoint, not the latest release claim.
   owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
+
+### 2026-06-19 - QuantMatrix Product Ready Closeout v1
+
+- Lane: Backfill default QuantMatrix Product Ready candidate closeout /
+  Phase 10.
+- Previous tier: Phase 9 default activation dry-run gate passed, but Product
+  Ready closeout had not yet collected Phase 8 packet readiness and Phase 9
+  activation replay into one explicit activation contract.
+- New tier: `product_ready_default_matrix_candidate`. This means the current
+  511-cell default QuantMatrix candidate is ready for a separate explicit
+  ProductWriter activation commit. It is not itself ProductWriter activation,
+  default matrix output writing, or expanded matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_product_ready_closeout_schema.v1.json`,
+  `scripts/build_quant_matrix_product_ready_closeout.py`,
+  `tests/test_quant_matrix_product_ready_closeout.py`, and
+  `docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/`.
+- Product surface changed: additive Phase 10 closeout outputs only:
+  `quant_matrix_product_ready_closeout_summary.json` and
+  `quant_matrix_product_ready_closeout_checks.tsv`.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. The checker revalidates Phase 8 promotion
+  packet v2 and Phase 9 default activation dry-run, checks their source hashes,
+  and rebuilds the closeout checklist from those inputs.
+- Current validation result: closeout status is `pass`; checklist rows
+  `promotion_packet_v2_validated`, `science_evidence_complete`,
+  `default_activation_dry_run_passed`, `expected_diff_closed`,
+  `authority_unchanged`, and `product_ready_candidate_closeout` all pass. The
+  summary records `product_ready_candidate=true`,
+  `default_quant_matrix_product_ready_candidate=true`,
+  `may_activate_default_quant_matrix_with_explicit_contract=true`,
+  `requires_product_writer_activation_commit=true`,
+  `explicit_activation_not_in_this_commit=true`, `write_authority=false`, and
+  `default_matrix_files_written=false`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix files, workbook, GUI, selected peak, selected area, counted detection,
+  review/replay behavior, current 511-cell writer authority, or broad Backfill
+  authority changed.
+- Status-index update: not needed for Phase 10 because no active lane authority,
+  writer scope, row count, or output-changing flag changed. The status-index
+  writer row remains the current 511-cell Backfill scope only.
+- Next checkpoint: explicit ProductWriter activation commit, if/when requested,
+  with expected-diff output tests and public-surface review.
 
 ### 2026-06-19 - QuantMatrix Default Activation Dry-Run v1
 

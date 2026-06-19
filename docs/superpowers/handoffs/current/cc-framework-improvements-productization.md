@@ -2,40 +2,41 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Checkpoint: Phase 9 complete. The real 511-cell bundle is bound into promotion
-packet v2, and default activation dry-run expected-diff gate now passes. Next
-checkpoint is Phase 10 Product Ready closeout.
+Checkpoint: Phase 10 complete pending commit. Product Ready closeout artifact
+is generated, focused verification passed, and sub-agent review found one P2
+handoff-staleness issue that this update resolves.
 
 Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`. This
-handoff is only the current continuation snapshot.
+handoff is the current continuation snapshot, not the tier source of truth.
 
-## Current Objective
+## Objective
 
-Move Backfill productization toward a default quant matrix that includes
-detected values plus accepted Backfill values, while keeping detection claims,
-truth claims, scientific confidence, and write authority separate.
+Move Backfill productization toward a default quant matrix containing detected
+values plus accepted Backfill values, while keeping detection claims, truth
+claims, scientific confidence, and write authority separate.
 
 Active goal scope: finish Phases 8-10 with per-phase focused verification,
 sub-agent review, fixes, commit, and handoff/control-plane updates.
 
 ## Active References
 
-- Product blueprint:
+- Blueprint:
   `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`.
-- Cleanup map:
-  `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md`.
 - Control plane:
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
 - Current real bundle:
   `docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
-- Current promotion packet v1:
-  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
+- Promotion packet v2:
+  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`.
+- Default activation dry-run:
+  `docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`.
+- Product Ready closeout:
+  `docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/`.
 
 ## Product Contract
 
-- Backfill values are accepted quantification values, not detections or truth
-  claims.
+- Backfill values are accepted quantification values, not detections or truth.
 - Future default `quant_matrix` should include detected plus accepted Backfill
   values.
 - Detection claims remain based on detected cells only.
@@ -43,13 +44,13 @@ sub-agent review, fixes, commit, and handoff/control-plane updates.
 - Production write authority must come from `ProductionAcceptanceManifest`
   keyed by `peak_hypothesis_id + sample_stem`.
 - Shadow/report/gallery/readiness/validation artifacts remain non-authority
-  unless a later expected-diff promotion packet explicitly grants authority.
+  unless a later expected-diff activation explicitly grants authority.
 
 ## Lane State
 
 - Current Backfill product authority remains exactly 511 cells.
 - Broad Backfill auto-write remains parked.
-- `4613` remains the candidate/audit universe, not a writable pool.
+- `4613` remains candidate/audit universe, not a writable pool.
 - `3015` trace-matched unresolved rows remain review/adjudication targets.
 - `1087` missing-overlay rows remain evidence gaps, not negative truth.
 - Low seed/high Backfill dependency are report-only prevalence uncertainty
@@ -85,69 +86,54 @@ Status-index anchors retained for `check_productization_state.py`:
 - Phase 7: real 511-cell `QuantMatrixVersion` bundle assembly.
 - Phase 8: promotion packet v2 / real-bundle readiness candidate.
 - Phase 9: default activation dry-run expected-diff gate.
+- Phase 10: Product Ready closeout packet.
 
 No scorer was run. No RAW/85RAW was run in this sequence.
 
-## Current Real Bundle
+## Current Evidence Chain
 
-`docs/superpowers/validation/quant_matrix_real_bundle_v1/` was generated from
-source run
-`seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`
-with `downstream_scope=current_511_authority_replay`.
+Phase 7 real bundle:
 
-Current result:
-
-- accepted Backfill count: `511`;
+- source run:
+  `seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`;
+- `downstream_scope=current_511_authority_replay`;
 - expected diff: `511` expected, `511` written, `0` unused;
 - cell provenance: `18000` rows, `511` accepted Backfill, `17489` detected;
 - downstream-impact smoke: `pass`;
-- readiness: `contract_ready_science_inconclusive`;
-- `production_ready=false`;
-- `may_promote_default_quant_matrix=false`.
+- readiness before rebound: `contract_ready_science_inconclusive`.
 
-Default Phase 7 `--check-only` fail-closes to that source run,
-`downstream_scope=current_511_authority_replay`, and exactly `511` accepted
-Backfill cells. Synthetic or partial bundles need explicit test overrides.
+Phase 8 promotion packet v2:
 
-## Current Promotion Packet v2
-
-`docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`
-binds the Phase 7 real downstream-impact smoke artifact with existing
-large-cohort and heldout-oracle evidence, then runs promotion readiness against
-the real bundle inputs.
-
-Current result:
-
-- `quant_matrix_validation_evidence_v1.json` with three passing science tiers;
-- `real_bundle_readiness/quant_matrix_promotion_readiness_summary.json`;
-- readiness label `production_ready_candidate_packet`;
-- `production_ready=true` and `may_promote_default_quant_matrix=true` only for
-  the candidate packet;
-- accepted Backfill count remains `511`;
+- readiness label: `production_ready_candidate_packet`;
+- `production_ready=true`;
+- `may_promote_default_quant_matrix=true`;
+- three science tiers pass: large cohort, heldout oracle, downstream impact;
 - `write_authority=false`;
-- `default_quant_matrix_changed=false`;
-- `raw_or_85raw_ran=false`;
-- `product_writer_changed=false`.
+- `default_quant_matrix_changed=false`.
 
-## Current Dry-Run Gate
-
-`docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`
-reruns manifest-driven `QuantMatrixVersion` activation in a temporary directory
-and compares the outputs to the Phase 7 real bundle.
-
-Current result:
+Phase 9 default activation dry-run:
 
 - `default_activation_dry_run_gate_status=pass`;
 - expected diff: `511` expected, `511` written, `0` unused;
 - reference hashes match for `quant_matrix`, `cell_provenance`, `row_summary`,
   and `expected_diff_summary`;
 - `dry_run_only=true`;
-- `write_authority=false`;
-- `default_quant_matrix_changed=false`;
 - `default_matrix_files_written=false`;
 - `may_enter_product_ready_closeout=true`.
 
-Still out of scope:
+Phase 10 Product Ready closeout:
+
+- closeout label: `product_ready_default_matrix_candidate`;
+- six closeout checks pass;
+- `product_ready_candidate=true`;
+- `default_quant_matrix_product_ready_candidate=true`;
+- `may_activate_default_quant_matrix_with_explicit_contract=true`;
+- `requires_product_writer_activation_commit=true`;
+- `explicit_activation_not_in_this_commit=true`;
+- `write_authority=false`;
+- `default_matrix_files_written=false`.
+
+## Still Out Of Scope
 
 - no ProductWriter/default extraction activation;
 - no workbook/GUI/selected peak/selected area/counting changes;
@@ -166,27 +152,30 @@ Still out of scope:
 
 ## Last Verified State
 
-Phase 9 validation passed:
+Phase 10 validation passed:
 
-- `uv run pytest tests/test_quant_matrix_default_activation_dry_run.py -v --tb=short`;
-- `uv run ruff check scripts/build_quant_matrix_default_activation_dry_run.py tests/test_quant_matrix_default_activation_dry_run.py`;
-- `uv run mypy scripts/build_quant_matrix_default_activation_dry_run.py`;
-- `uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only`;
-- `uv run pytest tests/test_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_validation_packet.py tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_productization_state_index.py -v --tb=short`;
-- `uv run ruff check scripts/build_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_promotion_packet_v2.py tests/test_productization_state_index.py`;
-- `uv run mypy scripts/build_quant_matrix_promotion_packet_v2.py`;
+- `uv run pytest tests/test_quant_matrix_product_ready_closeout.py -v --tb=short`;
+- `uv run pytest tests/test_quant_matrix_product_ready_closeout.py tests/test_productization_state_index.py -v --tb=short`;
+- `uv run pytest tests/test_quant_matrix_product_ready_closeout.py tests/test_quant_matrix_default_activation_dry_run.py tests/test_quant_matrix_promotion_packet_v2.py tests/test_quant_matrix_validation_packet.py tests/test_quant_matrix_real_bundle.py tests/test_quant_matrix_downstream_impact_smoke.py tests/test_quant_matrix_promotion_readiness.py tests/test_productization_state_index.py -v --tb=short`;
+- `uv run ruff check scripts/build_quant_matrix_product_ready_closeout.py tests/test_quant_matrix_product_ready_closeout.py`;
+- `uv run ruff check scripts/build_quant_matrix_product_ready_closeout.py tests/test_quant_matrix_product_ready_closeout.py tests/test_productization_state_index.py`;
+- `uv run mypy scripts/build_quant_matrix_product_ready_closeout.py`;
 - `uv run python scripts/build_quant_matrix_promotion_packet_v2.py --check-only`;
+- `uv run python scripts/build_quant_matrix_default_activation_dry_run.py --check-only`;
+- `uv run python scripts/build_quant_matrix_product_ready_closeout.py --check-only`;
 - `uv run python scripts/check_productization_state.py`;
 - `git diff --check`;
-- credential/local-path scans found no Phase 8 issues.
+- local-path and secret scans found no Phase 10 issues.
 
-Latest sub-agent review found no P1/P2 blockers for Phase 9. Residual risk:
-Phase 8/9 are no-RAW artifact-bound validation gates; they are not a new truth
-source or ProductWriter activation.
+Latest sub-agent review found one P2 handoff-staleness blocker and no code or
+authority blockers. This handoff update resolves that blocker. Residual risk:
+Phase 10 remains no-RAW closeout evidence; actual ProductWriter/default output
+activation still needs a separate expected-diff-backed commit and public-surface
+review.
 
 ## Next Actions
 
-1. Commit Phase 9 after final local checks.
-2. Phase 10: Product Ready closeout packet.
-3. Keep ProductWriter/default behavior unchanged until Phase 10 explicitly
-   states the activation contract and residual risk.
+1. Rerun focused handoff/state checks after this P2 fix.
+2. Commit Phase 10.
+3. Next development phase is the explicit ProductWriter/default output
+   activation commit, only if requested.

@@ -173,6 +173,25 @@ def test_control_plane_quant_matrix_validation_packet_is_current() -> None:
     assert "Do not treat this packet as `production_ready`" in section
 
 
+def test_control_plane_quant_matrix_product_ready_closeout_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Product Ready Closeout v1",
+        "### 2026-06-19 - QuantMatrix Default Activation Dry-Run v1",
+    )
+
+    assert "quant_matrix_product_ready_closeout_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_product_ready_closeout.py" in section
+    assert "quant_matrix_product_ready_closeout_v1" in section
+    assert "`product_ready_default_matrix_candidate`" in section
+    assert "`requires_product_writer_activation_commit=true`" in section
+    assert "`explicit_activation_not_in_this_commit=true`" in section
+    assert "Status-index update: not needed" in section
+    assert "No ProductWriter default extraction" in section
+    assert "current 511-cell writer authority" in section
+
+
 def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
@@ -213,6 +232,11 @@ def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     assert "511 expected, 511 written, and 0\nunused expected-diff rows" in summary
     assert "writes no default matrix files" in summary
     assert "changes no\nProductWriter/default behavior" in summary
+    assert "Phase 10" in summary
+    assert "`product_ready_default_matrix_candidate`" in summary
+    assert "separate explicit ProductWriter activation commit" in summary
+    assert "default outputs, workbook/GUI" in summary
+    assert "current 511-cell authority" in summary
     assert "large-cohort" in summary
     assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
@@ -293,6 +317,17 @@ def test_specs_readme_lists_quant_matrix_default_activation_dry_run_schema() -> 
     assert "expected-diff summary hashes" in text
     assert "comparison/summary artifacts" in text
     assert "ProductWriter defaults and default matrix outputs remain unchanged" in text
+
+
+def test_specs_readme_lists_quant_matrix_product_ready_closeout_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_product_ready_closeout_schema.v1.json" in text
+    assert "`product_ready_default_matrix_candidate`" in text
+    assert "separate explicit ProductWriter activation commit" in text
+    assert "default outputs or matrix authority" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:

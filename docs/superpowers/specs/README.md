@@ -64,6 +64,11 @@ automatic implementation goals.
   candidate quant matrix/provenance/row summary/expected-diff summary hashes
   with the Phase 7 real bundle, and writes only comparison/summary artifacts;
   ProductWriter defaults and default matrix outputs remain unchanged.
+- `quant_matrix_product_ready_closeout_schema.v1.json`: Phase 10 no-RAW Product
+  Ready closeout packet. It collects Phase 8 promotion packet v2 and Phase 9
+  dry-run evidence into a `product_ready_default_matrix_candidate` statement,
+  while still requiring a separate explicit ProductWriter activation commit
+  before default outputs or matrix authority can change.
 
 ## Rule
 
