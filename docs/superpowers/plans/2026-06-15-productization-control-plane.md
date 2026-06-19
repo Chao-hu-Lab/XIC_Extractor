@@ -4011,3 +4011,27 @@ the later low-height writer entry above as the current tier source.
 - Product surface changed: docs wording only; production level is `alignment_results.xlsx`, `alignment_matrix_identity.tsv`, and `review_report.html`; `alignment_matrix.tsv` remains machine/validation
 - Validation: `python -m pytest tests\test_alignment_output_levels.py tests\test_alignment_pipeline_outputs.py::test_run_alignment_production_level_writes_user_artifacts_and_identity_tsv tests\test_alignment_pipeline_outputs.py::test_run_alignment_default_stays_machine_until_owner_validation_acceptance tests\test_run_alignment.py::test_run_alignment_cli_accepts_output_level_debug tests\test_run_alignment.py::test_run_alignment_cli_accepts_validation_minimal_output_level -q`
 - Remaining blocker: release gate should continue guarding production/machine/debug/validation artifact separation; this does not claim full untargeted scientific production readiness
+
+### 2026-06-19 - discovery_row_identity_and_claim_resolved_matrix_decision_v1
+
+- Previous tier: `product_ready_default_matrix_activated` for the tracked
+  default matrix bundle; new Discovery/alignment rerun evidence was
+  `diagnostic_only`.
+- New tier: unchanged. No active lane or Backfill writer authority change.
+- Product surface changed: future alignment matrix decision behavior changes
+  for a narrow resolved-claim case. A rescued cell that was moved into its
+  duplicate-claim winner family by primary consolidation can write as
+  `accepted_rescue`; a true wrong-hypothesis duplicate loser remains
+  `review_rescue`.
+- Evidence: `xic_extractor.alignment.csv_io` accepts discovery writer display
+  rounding in candidate row identity checks; `xic_extractor.alignment.promotion_policy`
+  treats duplicate claims as blocking only when the current row is not the claim
+  winner. The QC3 `d4-N6-2HE-dA` cell at apex RT `23.261` now writes in the
+  8RAW validation-minimal matrix row `Mz=300.16`, `RT=23.4313`.
+- Validation: parser regression was RED before fix; focused parser/discovery
+  tests passed (`44 passed`); production decision tests passed (`23 passed`);
+  8RAW alignment preflight and rerun completed under
+  `output/alignment/step3_precursor_inference_8raw_20260619_parserfix_claimfix/`.
+- Remaining blocker: this does not regenerate the tracked default activation
+  bundle. A separate default activation expected-diff task is still required
+  before claiming the tracked default `quant_matrix.tsv` contains this row.

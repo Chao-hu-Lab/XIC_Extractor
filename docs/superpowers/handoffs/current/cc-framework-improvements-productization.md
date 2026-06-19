@@ -1,6 +1,6 @@
 # XIC productization handoff
 
-Updated: 2026-06-19 21:16 +08:00
+Updated: 2026-06-20 00:20 +08:00
 Branch: `cc/framework-improvements`
 
 This is the compact current-state snapshot. Tier authority remains in
@@ -8,43 +8,31 @@ This is the compact current-state snapshot. Tier authority remains in
 
 ## Current Verdict
 
-The default numeric matrix is usable for downstream analysis as the current
-detected + 511 accepted-Backfill product output. The latest retention and
-fixture cleanup did not change ProductWriter behavior, matrix values,
-workbook/GUI behavior, selected peak/area, counted detection, default
-extraction, scorer behavior, or Backfill authority.
+The default numeric matrix remains usable for downstream analysis as the current
+detected + 511 accepted-Backfill product output. ProductWriter default output is
+activated for detected values plus the current accepted Backfill cells.
 
-The `d4-N6-2HE-dA` monoisotopic `300.1605 -> 184.113` absence was traced to
-Discovery row creation and that Discovery generation path is fixed. The already
-activated default matrix bundle still predates that fix, so do not claim the
-activated `quant_matrix.tsv` contains that exact target row until a later
-discovery/alignment/default-activation expected-diff rerun regenerates it.
+The missing `d4-N6-2HE-dA` monoisotopic row has been traced to Discovery row
+creation and the Discovery precursor-inference path is fixed. New 8RAW
+diagnostic validation confirms that the `300.1605 -> 184.113` feature now
+survives into alignment and is emitted as a primary matrix row in the
+validation-minimal base alignment output.
 
-Validation status for the current cleanup and retention reuse refactor:
-`diagnostic_only`.
+Important boundary: the already activated default matrix bundle still predates
+this Discovery/alignment rerun. Do not claim the tracked default activation
+bundle already contains the `300.1605 -> 184.113` row until a later default
+activation expected-diff rerun regenerates and locks that public surface.
 
-## Active References
+Validation status for the new Discovery/alignment evidence:
+`diagnostic_only`. The parser and winner-resolved duplicate-claim fixes are
+test-covered, but this run does not promote a new maturity tier or writer
+authority.
 
-- Control plane:
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-- Validation retention policy/inventory:
-  `docs/superpowers/validation/RETENTION.md`,
-  `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv`
-- Fixture retention policy/inventory:
-  `docs/superpowers/fixtures/RETENTION.md`,
-  `docs/superpowers/fixtures/ARTIFACT_INVENTORY.tsv`
-- Validation retention checker:
-  `scripts/check_validation_artifact_retention.py`
-- Fixture retention checker:
-  `scripts/check_superpowers_fixture_retention.py`
-- Shared retention mechanics:
-  `xic_extractor/artifact_retention.py`,
-  `xic_extractor/alignment/quant_matrix_artifacts.py`,
-  `docs/superpowers/notes/2026-06-19-retention-reuse-duplication-ledger.md`
-- Default matrix activation bundle:
-  `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`
-- Externalized local validation artifacts:
-  `local_validation_artifacts/externalized_superpowers_validation/`
+The current follow-up direction is a CID-NL Discovery architecture decision, not
+another default matrix activation. Two docs now define the next gate:
+
+- `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md`
+- `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
 
 ## Product State
 
@@ -52,142 +40,132 @@ Validation status for the current cleanup and retention reuse refactor:
 - Product authority scope: `backfill_policy_write_ready_rows`.
 - Current Backfill writer authority: exactly 511 accepted Backfill cells.
 - Broad 4613-row Backfill remains parked.
-- ProductWriter default matrix output is activated for detected values plus the
-  current 511 accepted Backfill values.
-- Large QuantMatrix provenance/review TSV validation dumps are no longer part
-  of the tracked contract surface; they have tracked summary/hash/minimal
-  fixture replacements and ignored local replay copies.
-- The retention cleanup changes docs/artifact storage policy and metadata gates
-  only. It does not alter product tier or write authority.
-- The retention/QuantMatrix artifact reuse refactors deepen checker and
-  JSON/path/hash/bundle replay mechanics only. They do not change maturity
-  tier, active lane, matrix output, review authority, selected area/counting,
-  or Backfill writer authority. No control-plane tier update is needed.
+- No scorer was run.
+- No ProductWriter/default activation rerun was launched in this validation.
+- No workbook, GUI, default extraction, selected peak/area, counted detection,
+  or Backfill authority changed.
+- Control plane maintenance note updated for the matrix-decision behavior fix.
+  Maturity tier, active lane, matrix schema, and Backfill writer authority are
+  unchanged.
 
-Status-index handoff anchors retained for the fail-closed checker: `product_ready_default_matrix_activated`; Broad Backfill auto-write remains parked; Goal 0/1 hardening added; machine-adjudicated without granting new writer authority; Goal 2 added Review Packet / Approval Workflow v1; lockbox_shadow_automation_experiment_v1; Goal 4 added Missing-Overlay Evidence Recovery v1; keep only as explanation/triage; Targeted MS1 shape identity limited rescue remains production-ready; GUI and broader targets remain blocked; `sample_metadata_v1` remains production-ready for no-output ordering; roles/batch/matrix/exclusion must not alter quant output; ReviewAction selected-candidate switch and manual-boundary area recompute remain parked; classification and planning only.
-Do not reinterpret diagnostic/lockbox/review-packet surfaces as product
-authority from this handoff alone.
+Status-index anchors remain fail-closed only: `product_ready_default_matrix_activated`; Broad Backfill auto-write remains parked; Goal 0/1 hardening added; machine-adjudicated without granting new writer authority; Goal 2 added Review Packet / Approval Workflow v1; lockbox_shadow_automation_experiment_v1; Goal 4 added Missing-Overlay Evidence Recovery v1; keep only as explanation/triage; Targeted MS1 shape identity limited rescue remains production-ready; GUI and broader targets remain blocked; `sample_metadata_v1` remains production-ready for no-output ordering; roles/batch/matrix/exclusion must not alter quant output; ReviewAction selected-candidate switch and manual-boundary area recompute remain parked; manual-boundary area recompute remain parked; classification and planning only.
 
-## Validation Retention
+## Active References
 
-`docs/superpowers/validation/RETENTION.md` defines which validation artifacts
-belong in git. The current inventory has 304 rows:
+- Control plane:
+  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+- Default matrix activation bundle:
+  `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`
+- Current 8RAW Discovery output:
+  `output/discovery/step3_precursor_inference_8raw_20260619/`
+- Current 8RAW alignment output after parser + claim fix:
+  `output/alignment/step3_precursor_inference_8raw_20260619_parserfix_claimfix/`
+- Discovery parser contract:
+  `xic_extractor/alignment/csv_io.py`
+- Discovery CSV writer contract:
+  `xic_extractor/discovery/csv_writer.py`
+- Focused parser tests:
+  `tests/test_alignment_csv_io.py`
+- CID-NL Discovery architecture plan:
+  `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery plan.md`
+- CID-NL A/B alternatives brief:
+  `docs/superpowers/plans/LC-MS CID Neutral Loss Discovery Architecture Alternatives Brief.md`
+- Deep research input:
+  `docs/deepresearch/LC-MS CID Neutral Loss Discovery.md`
 
-- 126 `keep_contract`
-- 39 `keep_summary`
-- 4 `keep_minimal_fixture`
-- 135 `externalize`
+## Discovery And Alignment Evidence
 
-The validation surface now has 169 retained files and 0 `shrink_later` rows.
-Three full QuantMatrix TSV dumps were externalized to ignored local storage:
+Single-RAW TumorBC2312_DNA Discovery at RT 22-25 passed the checker with 157
+candidates. The fixed precursor inference recovered product-plus-neutral-loss
+rows including the missing `300/184` evidence, proving the issue was not limited
+to one manually noticed feature. Full 8RAW Discovery completed with 31,807
+candidates: 28,906 `product_plus_neutral_loss`, 1,513 `scan_precursor`, and
+1,388 `mixed`. For `300.1605 -> 184.113` near RT 23.x, 8RAW Discovery found 21
+candidate rows; TumorBC2312_DNA contributed
+`TumorBC2312_DNA#19561@mz300.160635_p184.113235`, priority `HIGH`, tier `A`,
+apex RT `23.3417`, area `2.05086e+08`, basis `product_plus_neutral_loss`.
 
-- `quant_matrix_real_bundle_v1/quant_matrix_version/cell_provenance.tsv`
-- `quant_matrix_real_bundle_v1/review/quant_matrix_review_rows.tsv`
-- `quant_matrix_default_product_activation_v1/default_output/cell_provenance.tsv`
+The first 8RAW alignment attempt failed before RAW work because the alignment
+CSV reader compared high-precision `candidate_id` mz values against display
+rounded discovery CSV columns with a fixed 0.001 Da tolerance. The parser now
+uses CSV display precision for this guard while preserving sample, scan,
+precursor, and product identity checks.
 
-Tracked replacements are summary JSON files plus minimal fixtures. Contract
-indexes, status files, source hashes, and checker inputs remain in git.
-Rendered review HTML/PNG, QuantMatrix review HTML, duplicated
-promotion-packet downstream input copies, and full provenance/review TSV dumps
-are local replay artifacts, not durable version-controlled product contracts.
-Clean checkout validation still reruns temporary QuantMatrix activation and
-compares fresh `cell_provenance.tsv` hashes against tracked summary
-`source_sha256` values before accepting externalized full TSVs.
-The validation checker now reuses `xic_extractor.artifact_retention` for shared
-policy/inventory/git/path mechanics; validation-specific rendered-reference and
-externalized-local rules remain local.
-QuantMatrix productization scripts now reuse
-`xic_extractor.alignment.quant_matrix_artifacts` for bundle-relative artifact
-resolution, source-summary hash checks, and `cell_provenance` rerun hash
-binding. Promotion packet v2 build/check-only now materializes missing
-externalized `cell_provenance.tsv` from tracked full TSV, a SHA-checked
-externalized local copy, or a no-RAW activation replay. Durable summaries keep
-bundle/reference paths; temp replay paths are not written into retained
-artifacts.
+The parser + claim-fix 8RAW alignment completed successfully:
 
-Remaining validation work: keep future generated outputs out of
-`docs/superpowers/validation` unless they are contract/index/hash/summary or
-minimal fixture files.
+- `alignment_review.tsv`: 5,765 rows
+- `alignment_matrix.tsv`: 815 rows
+- `alignment_matrix_identity.tsv`: 815 rows
+- `alignment_backfill_cell_evidence.tsv`: 17,745 rows
+- `skipped_evidence_ledger.tsv`: 8,015 rows
 
-## Fixture Retention
+`300.1605 -> 184.113` now has a primary matrix row:
 
-`docs/superpowers/fixtures/RETENTION.md` defines the canonical fixture-retention
-policy. `docs/superpowers/fixtures/ARTIFACT_INVENTORY.tsv` inventories 28
-retained fixture files, excluding the inventory file itself to avoid self-hash
-churn:
+- review family: `FAM001390`
+- identity row index: `182`
+- matrix row: `Mz=300.16`, `RT=23.4313`
+- accepted cells: 8/8
+- Breast_Cancer_Tissue_pooled_QC3 matrix value: `1.7552e+08`
+- Breast_Cancer_Tissue_pooled_QC3 apex RT: `23.261`
+- TumorBC2312_DNA matrix value: `1.7986e+08`
+- TumorBC2312_DNA source candidate:
+  `TumorBC2312_DNA#19561@mz300.160635_p184.113235`
 
-- 4 `keep_contract`
-- 3 `keep_manual_oracle`
-- 1 `keep_manifest`
-- 12 `keep_ledger_snapshot`
-- 3 `keep_summary`
-- 1 `needs_human_review`
-- 4 `archive_later`
+QC3 was present all along: Discovery and the sidecar had apex RT `23.261`.
+The bug was matrix decision ownership, not peak detection. The QC3 cell had
+been moved into the correct winner family but still carried loser claim state;
+resolved winner claims now write as `accepted_rescue`, while true wrong-
+hypothesis claims remain review-only.
 
-Active fixture paths remain stable. The dated packet
-`docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/README.md` records two
-duplicate snapshot groups and historical hash-drift observations without
-rewriting ledger conclusions.
-The fixture checker now reuses `xic_extractor.artifact_retention` for shared
-policy/inventory/git/path/metadata mechanics; fixture-specific authority,
-ledger, and human-review rules remain local.
+## Tailing And Duplicate Hypotheses
 
-Remaining fixture work: resolve
-`chrom_peak_segment_presence_review_manual_oracle_v1.tsv` as either an active
-manual oracle with consumer coverage or an archived note-only oracle.
+The user-supplied Thermo screenshots are consistent with tailing/baseline
+duplicate hypotheses around the same tag/product families. The fix intentionally
+does not suppress these in Discovery; Discovery should be permissive enough to
+avoid missing seeded tag features. Alignment/model selection must decide which
+hypotheses become matrix rows.
+
+The 8RAW alignment already suppresses many duplicate/tailing hypotheses into
+`audit_family`, `provisional_discovery`, `duplicate_claim_pressure`,
+`rescue_only_review`, or `ambiguous_only` rows. Remaining multi-sample primary
+rows are follow-up model-selection evidence, not a reason to revert precursor
+inference.
 
 ## Boundaries
 
-- No RAW or 85RAW run was launched for this cleanup.
-- No scorer was run.
-- No ProductWriter/default extraction/workbook/GUI run was launched.
-- No workbook/GUI/default extraction behavior changed.
-- No current 511-cell writer authority or broad Backfill authority changed.
-- Do not demote/delete the `301.165` isotope row.
-- Externalized full QuantMatrix TSVs are local replay/audit copies only; clean
-  checkout validation uses tracked summary/minimal fixture contracts.
-- `docs/superpowers/fixtures/ARTIFACT_INVENTORY.tsv` metadata for three
-  markdown policy/summary files was aligned to current working-tree bytes only.
+- Do not demote or delete the `301.165` isotope row. It can legitimately be a
+  product row when it carries its own tag evidence.
+- Do not treat Discovery candidates as matrix rows. Candidate volume is high by
+  design after precursor inference is restored.
+- Do not treat the parser-fixed 8RAW alignment as default matrix activation.
+- Do not launch 85RAW unless the next step names a product decision that 8RAW
+  cannot close.
+- Keep broad Backfill parked.
+- Keep all generated validation outputs under `output/` unless a later contract
+  explicitly promotes a summary, hash, index, or minimal fixture.
 
 ## Verification
 
-Fixture retention closeout passed: checker accepted 28 retained files with the
-known `needs_human_review` warning, focused consumer pytest passed, and scoped
-ruff passed.
-
-Current validation retention closeout passed:
-
-- retention checker passed with `169` retained validation files, `135`
-  externalized artifacts, and `0` `shrink_later` rows
-- strict retention checker with local externalized copies passed
-- QuantMatrix real bundle, promotion packet v2, dry-run, closeout, and default
-  activation check-only gates pass without RAW
-- focused QuantMatrix retention/replay pytest: `49 passed`
-- focused validation + fixture retention pytest: `21 passed`
-- scoped ruff for validation retention checker/tests passed
-- fixture consumer shard passed: `59 passed`
-
-Retention reuse refactor smoke passed:
-
-- focused ruff for `artifact_retention`, both retention checkers, and tests
-- `tests/test_artifact_retention.py`,
-  `tests/test_validation_artifact_retention.py`,
-  `tests/test_superpowers_fixture_retention.py`: `27 passed`
-- `uv run mypy xic_extractor`: passed
-- `uv run python .codex/hooks/fixtures/assert_hook_outputs.py`: passed
-- `git diff --check`: no whitespace errors; Windows line-ending warnings only
-- secret/local-path scan over changed files: no matches
-- QuantMatrix artifact reuse focused tests passed:
-  `tests/test_quant_matrix_artifacts.py` plus default dry-run, promotion packet
-  v2, product-ready closeout, and default product activation tests: `35 passed`
-- Full pytest was attempted and stopped at unrelated stale candidate-id fixture:
-  `tests/test_alignment_identity_coherence_pipeline.py::test_run_alignment_emits_identity_coherence_diagnostic_when_opted_in`.
+- `uv run pytest tests/test_alignment_csv_io.py tests/test_discovery_csv.py -v --tb=short`:
+  44 passed.
+- `uv run pytest tests/test_alignment_production_decisions.py -v --tb=short`:
+  23 passed.
+- `uv run ruff check xic_extractor/alignment/csv_io.py tests/test_alignment_csv_io.py`:
+  passed.
+- `uv run python scripts/check_productization_state.py`: passed,
+  fail-closed state index consistent.
+- `git diff --check`: passed with Windows line-ending warnings only.
+- Parser regression coverage includes the failing rounded-mz case, a writer to
+  reader roundtrip, and a just-outside-tolerance negative case.
+- Single-RAW Discovery checker, 8RAW Discovery, 8RAW alignment preflight, and
+  parser + claim-fix 8RAW alignment completed successfully.
 
 ## Next Actions
 
-1. Commit the artifact reuse refactor if the diff is accepted.
-2. Resolve the chrom-peak-segment manual oracle as active fixture or archive.
-3. Deepen the next duplicated seam only when a third caller needs the same
-   phase-local replay orchestration or schema-check mechanics.
-4. Open a separate regeneration goal when the product matrix should materialize
-   the `300.1605` target row.
+1. Commit the parser/claim fixes, productization state update, pulse report, and
+   CID-NL architecture docs in purpose-split commits.
+2. In the next session, choose whether B deserves a short design spike. If yes,
+   write the successor expected-diff checker first; if no, implement A directly.
+3. Keep default matrix activation separate. Only open that expected-diff task
+   when the public default `quant_matrix.tsv` should materialize the
+   `300.1605 -> 184.113` row.
