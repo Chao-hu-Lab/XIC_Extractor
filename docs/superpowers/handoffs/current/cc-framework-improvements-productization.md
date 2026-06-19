@@ -2,12 +2,11 @@
 
 Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-Checkpoint: Phase 0-5 Backfill quant-matrix product spine is complete.
+Checkpoint: Phase 0-5 Backfill quant-matrix product spine is complete;
+`QuantMatrix Promotion Validation Packet v1` exists but remains science-inconclusive.
 
-Next work is an explicit validation packet, not another scoring/backlog loop.
-Tier authority lives in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
-machine-readable validation indexes.
+Tier authority lives in `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+plus the machine-readable validation indexes.
 
 ## Current Objective
 
@@ -22,10 +21,10 @@ Completed spine:
 - Phase 2: `ProductionAcceptanceManifest v1` schema/checker.
 - Phase 3: explicit `QuantMatrixVersion v1` activation outputs.
 - Phase 4: review-only `QuantMatrixVersion` report/gallery alignment.
-- Phase 5: read-only promotion readiness checker separating contract
-  correctness from scientific confidence.
+- Phase 5: read-only promotion readiness checker.
+- Phase 5 follow-up: no-RAW artifact-bound validation evidence packet.
 
-No scorer was run. No RAW/85RAW was run in this Phase 0-5 sequence.
+No scorer was run. No RAW/85RAW was run in this sequence.
 
 ## Active References
 
@@ -37,7 +36,8 @@ No scorer was run. No RAW/85RAW was run in this Phase 0-5 sequence.
   `production_acceptance_manifest_schema.v1.json`,
   `quant_matrix_version_schema.v1.json`,
   `quant_matrix_review_report_schema.v1.json`,
-  `quant_matrix_promotion_readiness_schema.v1.json`.
+  `quant_matrix_promotion_readiness_schema.v1.json`, and
+  `quant_matrix_validation_evidence_schema.v1.json`.
 
 ## Product Contract
 
@@ -49,7 +49,7 @@ No scorer was run. No RAW/85RAW was run in this Phase 0-5 sequence.
 - `quant_available_count = detected_count + accepted_backfilled_count`.
 - Production write authority must come from `ProductionAcceptanceManifest`
   keyed by `peak_hypothesis_id + sample_stem`.
-- Shadow/report/gallery/readiness/candidate artifacts remain non-authority
+- Shadow/report/gallery/readiness/validation artifacts remain non-authority
   unless a later expected-diff promotion packet explicitly grants authority.
 
 ## Lane State
@@ -79,6 +79,31 @@ Status-index anchors retained for `check_productization_state.py`:
 - manual-boundary area recompute remain parked.
 - classification and planning only.
 
+## Current Validation Packet
+
+`QuantMatrix Promotion Validation Packet v1` lives at
+`docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
+
+- `quant_matrix_validation_evidence_v1.json`
+- `quant_matrix_validation_evidence_rows.tsv`
+- `quant_matrix_validation_evidence_summary.json`
+- copied `artifacts/*`
+- `readiness_integration_fixture/*`
+
+Current packet status:
+
+- large-cohort evidence: `pass`, bound to the existing no-RAW 85RAW
+  consolidated standard-peak activation input summary.
+- heldout-oracle evidence: `pass`, bound to the existing 20-case heldout trace
+  reintegration oracle smoke summary.
+- downstream-impact evidence: `missing`.
+- Phase 5 fixture readiness: `contract_ready_science_inconclusive`.
+- `production_ready=false`.
+- `may_promote_default_quant_matrix=false`.
+
+The readiness fixture is synthetic contract input used to prove checker
+integration only. It is not a real `QuantMatrixVersion` production bundle.
+
 ## Phase Artifacts
 
 - Phase 1:
@@ -101,25 +126,10 @@ Status-index anchors retained for `check_productization_state.py`:
   `xic_extractor/alignment/quant_matrix_promotion.py`,
   `scripts/check_quant_matrix_promotion_readiness.py`, and
   `tests/test_quant_matrix_promotion_readiness.py`.
-
-## Phase 5 Contract
-
-`QuantMatrix Promotion Readiness v1` writes
-`quant_matrix_promotion_readiness_summary.json` and
-`quant_matrix_promotion_readiness_checks.tsv`.
-
-Required guards:
-
-- separate `contract_correctness_status` from
-  `scientific_confidence_status`;
-- focused tests and 8RAW smoke evidence cannot claim `production_ready`;
-- required science pass rows must bind artifact relpath, artifact SHA, and
-  tier-specific provenance such as cohort/run, oracle packet, or downstream
-  scope;
-- duplicate validation tiers fail closed;
-- accepted-cell source/row/manifest hashes must be 64-hex;
-- no ProductWriter, workbook, GUI, selected peak/area, counted detection,
-  review/replay behavior, broad Backfill, or matrix-authority change.
+- Validation packet:
+  `xic_extractor/alignment/quant_matrix_validation_packet.py`,
+  `scripts/build_quant_matrix_promotion_validation_packet.py`, and
+  `tests/test_quant_matrix_validation_packet.py`.
 
 ## Rejected Paths
 
@@ -128,7 +138,7 @@ Required guards:
 - Do not treat owner-clean challenge rows, AI challenge evidence, manual
   negative controls, missing-overlay rows, or summary scores as truth
   completion.
-- Do not let shadow/report/gallery/readiness/candidate artifacts feed
+- Do not let shadow/report/gallery/readiness/validation artifacts feed
   ProductWriter, matrix/workbook output, selected peak/area, counted detection,
   GUI, default extraction, reviewer slot 2, or broad Backfill authority.
 - Do not treat low detected support or high Backfill dependency as standalone
@@ -137,37 +147,53 @@ Required guards:
 
 ## Validation Status
 
-Latest Phase 5 final checks:
+Current checks in this goal:
 
-- Shadow design check-only: pass.
-- Phase 1-5 focused shard: 73 passed.
-- Phase 3-5 focused shard after typing cleanup: 43 passed.
-- Changed-file ruff: pass.
-- `uv run mypy xic_extractor/alignment/quant_matrix_promotion.py`: pass.
-- `uv run python scripts/check_productization_state.py`: pass.
-- `uv run python scripts/check_quant_matrix_promotion_readiness.py --help`:
+- `uv run pytest tests/test_quant_matrix_validation_packet.py -v --tb=short`:
+  11 passed.
+- `uv run pytest tests/test_quant_matrix_promotion_readiness.py -v --tb=short`:
+  10 passed.
+- `uv run pytest tests/test_productization_state_index.py -v --tb=short`:
+  21 passed.
+- `uv run ruff check xic_extractor/alignment/quant_matrix_validation_packet.py scripts/build_quant_matrix_promotion_validation_packet.py tests/test_quant_matrix_validation_packet.py`:
   pass.
-- `git diff --check`: pass with only Git CRLF warnings.
-- Scoped changed-files secret/local-path scan: no matches after excluding the
-  literal verification phrase.
+- `uv run mypy xic_extractor/alignment/quant_matrix_validation_packet.py xic_extractor/alignment/quant_matrix_promotion.py`:
+  pass.
+- `uv run python scripts/build_quant_matrix_promotion_validation_packet.py --write-readiness-fixture`:
+  pass.
+- `uv run python scripts/build_quant_matrix_promotion_validation_packet.py --check-only`:
+  pass.
+- Repo-external `uv run --project ... build_quant_matrix_promotion_validation_packet.py --check-only`:
+  pass.
+
+Remaining closeout checks before commit:
+
+- productization state check after final edits.
+- `git diff --check`.
 
 Sub-agent review:
 
-- Docs/control-plane reviewer found no blockers and confirmed Phase 5 does not
-  overclaim production readiness.
-- Implementation reviewer found three blockers, all fixed and re-checked:
-  unauthenticated tier/status strings, duplicate validation tiers, and
-  non-validated accepted-cell hash formats.
+- Product/control-plane reviewer found no blockers and confirmed this does not
+  change maturity tier, active lane, ProductWriter/default matrix authority,
+  review/replay behavior, selected peak/area/counting, or production readiness.
+- Implementation reviewer found three blockers, fixed with tests: check-only
+  now rejects top-level authority drift, resolves source artifacts relative to
+  a source root instead of cwd, and validates rows TSV, summary hashes, and any
+  readiness fixture inputs/outputs against a fresh checker rerun.
+- Final focused re-review found no code-level blocker; the only remaining note
+  was that untracked fixture outputs must be staged/committed with this goal.
 
 ## Control Plane Note
 
-Control plane was updated because Phase 5 adds a public readiness schema and
-checker script. No maturity tier, active lane, current matrix authority,
-selected peak/area, counted detection, ProductWriter default extraction,
-review/replay behavior, or broad Backfill state changed.
+Control plane was updated because this goal adds a public validation evidence
+packet schema, builder/checker script, and durable validation packet. No
+maturity tier, active lane, current matrix authority, selected peak/area,
+counted detection, ProductWriter default extraction, review/replay behavior, or
+broad Backfill state changed.
 
 ## Next Actions
 
-1. Commit Phase 5 by purpose.
-2. Prepare the next goal as a named validation packet only if it names the
-   validation tier and evidence source up front.
+1. Define the downstream-impact evidence source for accepted Backfill values.
+2. Bind that downstream artifact into the validation packet.
+3. Re-run Phase 5 readiness on a real `QuantMatrixVersion` bundle before any
+   default-matrix promotion claim.

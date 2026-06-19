@@ -307,10 +307,15 @@ from scientific confidence, writes readiness summary/check sidecars, and cannot
 claim `production_ready` from focused tests, 8RAW smoke evidence, or unbound
 tier/status strings alone. Required science pass rows must bind artifact relpath,
 SHA, and tier-specific provenance such as cohort/run, oracle packet, or
-downstream scope. The Phase 0-5 product spine is complete. Next checkpoint is
-an explicitly named validation packet with large-cohort,
-heldout-oracle/manual-review, and downstream-impact evidence, not a scorer
-revival or broad Backfill writer.
+downstream scope. `QuantMatrix Promotion Validation Packet v1` now materializes
+the first no-RAW evidence packet from existing artifacts: large-cohort and
+heldout-oracle evidence are artifact-bound and pass, while downstream-impact
+evidence is explicitly missing, so the Phase 5 readiness fixture remains
+`contract_ready_science_inconclusive` with
+`may_promote_default_quant_matrix=false`. The Phase 0-5 product spine is
+complete, but promotion remains blocked on a real downstream-impact evidence
+packet and real `QuantMatrixVersion` bundle, not a scorer revival or broad
+Backfill writer.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2830,6 +2835,46 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrix Promotion Validation Packet v1
+
+- Lane: Backfill validation/promotion evidence packet / Phase 5 follow-up.
+- Previous tier: `QuantMatrix Promotion Readiness v1` could parse validation
+  evidence rows, but no durable packet existed to bind source artifacts, copied
+  packet artifacts, hashes, and science-evidence gaps.
+- New tier: unchanged. This is a no-RAW, read-only validation evidence packet
+  and checker/builder surface, not a maturity-tier promotion, ProductWriter
+  default extraction, or new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_validation_evidence_schema.v1.json`,
+  `scripts/build_quant_matrix_promotion_validation_packet.py`,
+  `xic_extractor/alignment/quant_matrix_validation_packet.py`, and
+  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
+- Product surface changed: additive validation packet outputs only:
+  `quant_matrix_validation_evidence_v1.json`,
+  `quant_matrix_validation_evidence_rows.tsv`,
+  `quant_matrix_validation_evidence_summary.json`, copied `artifacts/*`, and a
+  labeled readiness integration fixture under
+  `readiness_integration_fixture/`.
+- Evidence: the packet copies and hash-binds the existing no-RAW 85RAW
+  consolidated standard-peak activation input summary and the 20-case heldout
+  trace reintegration oracle smoke summary. Focused tests cover schema parity,
+  source/copy hash recording, copied-artifact hash drift rejection, authority
+  drift rejection, source-root binding, Phase 5 checker integration, rows/summary
+  drift rejection, readiness fixture rerun, and CLI `--check-only` round trip.
+- Current validation result: large-cohort evidence is `pass`,
+  heldout-oracle evidence is `pass`, downstream-impact evidence is `missing`.
+  The readiness integration fixture is `contract_ready_science_inconclusive`,
+  `production_ready=false`, and `may_promote_default_quant_matrix=false`.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: production-ready promotion still needs a real
+  downstream-impact smoke artifact and a real `QuantMatrixVersion` contract
+  bundle. Do not treat this packet as `production_ready`.
+- Next checkpoint: define and validate the downstream-impact evidence source
+  for accepted Backfill values; do not revive scoring or broad Backfill as the
+  promotion path.
+
 ### 2026-06-19 - QuantMatrix Promotion Readiness v1
 
 - Lane: Backfill validation/promotion readiness / Phase 5.
@@ -2861,9 +2906,10 @@ at that older checkpoint, not the latest release claim.
   validation packet supplies artifact-bound passing large-cohort,
   heldout-oracle or manual review, and downstream-impact evidence.
 - Remaining blocker: actual promotion still needs a named validation tier and
-  evidence packet. Do not run RAW/85RAW unless an active goal names that tier.
-- Next checkpoint: build or review an explicit validation packet; do not revive
-  scoring or broad Backfill as the promotion path.
+  evidence packet with downstream-impact evidence. Do not run RAW/85RAW unless
+  an active goal names that tier.
+- Next checkpoint: current evidence packet is represented by
+  `QuantMatrix Promotion Validation Packet v1` above.
 
 ### 2026-06-19 - QuantMatrixVersion Review Report v1
 

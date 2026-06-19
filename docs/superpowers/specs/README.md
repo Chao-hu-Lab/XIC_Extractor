@@ -36,6 +36,11 @@ automatic implementation goals.
   focused tests and 8RAW smoke evidence cannot claim `production_ready` without
   artifact-bound large-cohort, heldout-oracle/manual-review, and
   downstream-impact evidence.
+- `quant_matrix_validation_evidence_schema.v1.json`: no-RAW artifact-bound
+  evidence packet consumed by Phase 5 promotion readiness. It records copied
+  packet artifact paths/hashes, source artifact paths/hashes, tier metadata,
+  and missing science evidence while staying read-only with
+  `write_authority=false`.
 
 ## Rule
 

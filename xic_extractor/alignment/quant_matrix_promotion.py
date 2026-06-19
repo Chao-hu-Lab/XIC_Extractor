@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, cast
 
 from xic_extractor.alignment.quant_matrix_report import QUANT_MATRIX_REVIEW_SCHEMA
+from xic_extractor.alignment.quant_matrix_validation_packet import (
+    VALIDATION_EVIDENCE_SCHEMA,
+)
 from xic_extractor.alignment.quant_matrix_version import (
     CELL_PROVENANCE_COLUMNS,
     CELL_PROVENANCE_SCHEMA,
@@ -34,7 +37,6 @@ PROMOTION_CHECK_COLUMNS = (
     "next_action",
 )
 
-_VALIDATION_EVIDENCE_SCHEMA = "quant_matrix_validation_evidence_v1"
 _LARGE_COHORT_TIERS = {"85raw_large_cohort", "large_cohort_validation"}
 _ORACLE_TIERS = {"heldout_oracle", "manual_review_oracle"}
 _DOWNSTREAM_TIERS = {"downstream_impact_smoke"}
@@ -362,7 +364,7 @@ def _check_review_summary(
 def _load_validation_evidence(path: Path | None) -> Mapping[str, Any]:
     if path is None:
         return {
-            "schema_version": _VALIDATION_EVIDENCE_SCHEMA,
+            "schema_version": VALIDATION_EVIDENCE_SCHEMA,
             "requested_readiness_label": "",
             "evidence": [],
         }
@@ -376,7 +378,7 @@ def _evaluate_science_evidence(
     validation_evidence_json: Path | None,
 ) -> dict[str, object]:
     blockers: list[str] = []
-    if evidence.get("schema_version") != _VALIDATION_EVIDENCE_SCHEMA:
+    if evidence.get("schema_version") != VALIDATION_EVIDENCE_SCHEMA:
         blockers.append("validation_evidence_schema_invalid")
         _append_check(
             checks,

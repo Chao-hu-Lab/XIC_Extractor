@@ -147,7 +147,30 @@ def test_control_plane_quant_matrix_promotion_readiness_is_current() -> None:
     assert "artifact-bound passing large-cohort" in section
     assert "No ProductWriter default extraction" in section
     assert "broad Backfill authority changed" in section
-    assert "Do not run RAW/85RAW unless an active goal names that tier" in section
+    assert "Do not run RAW/85RAW unless" in section
+    assert "an active goal names that tier" in section
+
+
+def test_control_plane_quant_matrix_validation_packet_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Promotion Validation Packet v1",
+        "### 2026-06-19 - QuantMatrix Promotion Readiness v1",
+    )
+
+    assert "quant_matrix_validation_evidence_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_promotion_validation_packet.py" in section
+    assert "quant_matrix_validation_evidence_v1.json" in section
+    assert "quant_matrix_validation_evidence_rows.tsv" in section
+    assert "readiness_integration_fixture" in section
+    assert "large-cohort evidence is `pass`" in section
+    assert "heldout-oracle evidence is `pass`" in section
+    assert "downstream-impact evidence is `missing`" in section
+    assert "`production_ready=false`" in section
+    assert "`may_promote_default_quant_matrix=false`" in section
+    assert "No ProductWriter default extraction" in section
+    assert "Do not treat this packet as `production_ready`" in section
 
 
 def test_control_plane_current_summary_routes_to_validation_packet() -> None:
@@ -169,11 +192,15 @@ def test_control_plane_current_summary_routes_to_validation_packet() -> None:
     assert "`Validation/Promotion Readiness` is now" in summary
     assert "contract correctness" in summary
     assert "scientific confidence" in summary
-    assert "Phase 0-5 product spine is complete" in summary
+    assert "`QuantMatrix Promotion Validation Packet v1`" in summary
+    assert "`contract_ready_science_inconclusive`" in summary
+    assert "`may_promote_default_quant_matrix=false`" in summary
+    assert "Phase 0-5 product spine is" in summary
+    assert "complete, but promotion remains blocked" in summary
     assert "unbound" in summary
     assert "tier/status strings" in summary
     assert "large-cohort" in summary
-    assert "heldout-oracle/manual-review" in summary
+    assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
     assert "`QuantMatrixVersion Activation`" in summary
     assert "Next checkpoint is Phase 2" not in summary
@@ -216,6 +243,17 @@ def test_specs_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
     assert "contract correctness from scientific confidence" in text
     assert "focused tests and 8RAW smoke evidence cannot claim" in text
     assert "artifact-bound large-cohort" in text
+
+
+def test_specs_readme_lists_quant_matrix_validation_evidence_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_validation_evidence_schema.v1.json" in text
+    assert "artifact-bound" in text
+    assert "source artifact paths/hashes" in text
+    assert "`write_authority=false`" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:
