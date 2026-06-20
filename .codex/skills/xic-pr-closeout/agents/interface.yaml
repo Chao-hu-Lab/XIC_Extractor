@@ -1,0 +1,24 @@
+interface:
+  display_name: "XIC PR Closeout"
+  short_description: "Apply XIC readiness, validation, artifact, and overclaim gates to PR closeout"
+  default_prompt: "Use $xic-pr-closeout with global $pr-closeout when an XIC PR or branch needs durable readiness, validation, artifact, and residual-risk context."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

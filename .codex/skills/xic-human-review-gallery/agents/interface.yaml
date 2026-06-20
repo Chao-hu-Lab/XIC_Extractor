@@ -1,0 +1,24 @@
+interface:
+  display_name: "XIC Human Review Gallery"
+  short_description: "Design and verify XIC Gallery, overlay, and guide artifacts for human evidence review"
+  default_prompt: "Use $xic-human-review-gallery when creating or fixing XIC Gallery, overlay, guide HTML, browser smoke, or review UX evidence artifacts."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

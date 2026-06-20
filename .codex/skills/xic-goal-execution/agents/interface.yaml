@@ -1,0 +1,24 @@
+interface:
+  display_name: "XIC Goal Execution"
+  short_description: "Apply XIC validation and productization gates to goal execution"
+  default_prompt: "Use $xic-goal-execution with global $goal-execution for XIC work that needs one measurable finish line, validation tier, stop rules, and handoff discipline."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

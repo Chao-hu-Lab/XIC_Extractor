@@ -74,3 +74,10 @@ Claims that must not be inferred from the current evidence.
 ## Closeout
 
 End with the saved report path and one short "read this first next time" line.
+
+## References
+
+- Trigger and near-neighbor cases:
+  `evals/trigger-cases.md`
+- Portable skill interface metadata:
+  `agents/interface.yaml`

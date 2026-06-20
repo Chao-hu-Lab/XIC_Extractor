@@ -1,0 +1,24 @@
+interface:
+  display_name: "XIC Product Gate Advancement"
+  short_description: "Decide whether XIC evidence can advance product readiness or authority"
+  default_prompt: "Use $xic-product-gate-advancement when evidence may change XIC readiness tier, active lane, ProductWriter authority, activation, or control-plane state."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

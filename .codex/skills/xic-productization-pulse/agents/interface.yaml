@@ -1,0 +1,24 @@
+interface:
+  display_name: "XIC Productization Pulse"
+  short_description: "Read-side plain-language productization status report"
+  default_prompt: "Use $xic-productization-pulse for an XIC productization pulse, lane snapshot, readiness check, blocker summary, or evidence freshness report."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths: []
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from tools.diagnostics import family_ms1_overlay_rendering as rendering
 from tools.diagnostics.family_ms1_overlay_models import TraceOverlayRow
 from tools.diagnostics.family_ms1_overlay_rendering import (
     _family_overlay_panel_layout,
@@ -10,7 +11,10 @@ from tools.diagnostics.family_ms1_overlay_rendering import (
     _selected_peak_window_bounds,
     _single_anchor_review_note,
 )
-from tools.diagnostics.family_ms1_overlay_rendering_styles import _plot_unified_legend
+from tools.diagnostics.family_ms1_overlay_rendering_styles import (
+    _line_style,
+    _plot_unified_legend,
+)
 
 
 def test_family_overlay_panel_layout_keeps_only_family_context_graphs() -> None:
@@ -91,7 +95,7 @@ def test_single_detected_anchor_note_marks_review_only_consensus() -> None:
     assert _single_anchor_review_note((anchor, anchor)) == ""
 
 
-def test_unified_legend_does_not_draw_detected_median() -> None:
+def test_unified_legend_keeps_review_roles_without_median_summary_trace() -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -104,10 +108,64 @@ def test_unified_legend_does_not_draw_detected_median() -> None:
         assert legend is not None
         labels = [text.get_text() for text in legend.get_texts()]
         assert "detected NL seed" in labels
+        assert "top rescued backfill" in labels
+        assert "other context" in labels
         assert "detected median" not in labels
-        assert "rescued median" in labels
+        assert "rescued median" not in labels
     finally:
         plt.close(fig)
+
+
+def test_backfill_review_panels_do_not_add_in_axes_notes(monkeypatch) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    row = _trace_row(
+        "rescued",
+        selected_peak_height=90.0,
+        global_peak_height=100.0,
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        rendering,
+        "_add_panel_note",
+        lambda *_args, **_kwargs: calls.append("note"),
+    )
+
+    fig, axes = plt.subplots(1, 3)
+    try:
+        rendering._plot_normalized_overlay(
+            axes[0],
+            (row,),
+            family_center_rt=10.0,
+            rt_min=9.0,
+            rt_max=11.0,
+        )
+        rendering._plot_raw_highlights(
+            axes[1],
+            (row,),
+            family_center_rt=10.0,
+            rt_min=9.0,
+            rt_max=11.0,
+        )
+        rendering._plot_apex_aligned_overlay(axes[2], (row,))
+    finally:
+        plt.close(fig)
+
+    assert calls == []
+
+
+def test_backfill_review_line_styles_prioritize_signal_over_context() -> None:
+    detected = _line_style("detected_seed")
+    rescued = _line_style("top_rescued_ms1_area")
+    qc = _line_style("pooled_qc")
+    context = _line_style("rescued_other")
+
+    assert detected[2] > rescued[2] > qc[2] > context[2]
+    assert context[1] < 0.2
+    assert len({detected[0], rescued[0], qc[0], context[0]}) == 4
 
 
 def _trace_row(

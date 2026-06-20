@@ -26,7 +26,6 @@ from tools.diagnostics.family_ms1_overlay_models import (
 from tools.diagnostics.family_ms1_overlay_rendering_styles import (
     DETECTED_COLOR,
     PLOT_GAUSSIAN_SMOOTH_POINTS,
-    RESCUED_MEDIAN_COLOR,
     _draw_center_rt,
     _line_style,
     _plot_unified_legend,
@@ -59,7 +58,6 @@ def render_family_ms1_overlay(
     # stays two-panel. Drift/iRT belongs to the typed hypothesis/mode evidence
     # slice, not this family-level context image.
     _ = drift_lookup
-    rescued = [row for row in rows if row.status == "rescued"]
     focus_rows = _selected_peak_focus_rows(rows)
 
     plt.rcParams.update(
@@ -96,15 +94,7 @@ def render_family_ms1_overlay(
     _plot_unified_legend(axes["legend"])
 
     fig.suptitle(
-        (
-            f"{family_id} family MS1 pattern context: m/z {mz:g} +/-{ppm:g} ppm\n"
-            f"selected RT segment {_selected_peak_segment_label(focus_rows)}; "
-            f"{len(rows)} traces; "
-            f"{len([row for row in rows if row.group == 'detected_seed'])} "
-            "detected NL seeds; "
-            f"{len(rescued)} rescued MS1 backfill cells; "
-            f"{len(focus_rows)} selected-peak membership traces"
-        ),
+        f"{family_id} Backfill MS1 review: m/z {mz:g} +/-{ppm:g} ppm",
     )
     fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
     if pdf_path is not None:
@@ -165,10 +155,8 @@ def render_hypothesis_ms1_overlay(
 
     fig.suptitle(
         (
-            f"{family_id} hypothesis MS1 evidence: m/z {mz:g} +/-{ppm:g} ppm\n"
-            f"selected RT segment {_selected_peak_segment_label(focus_rows)}; "
-            f"{len(focus_detected)} detected NL anchor traces; "
-            f"{len(focus_rows)} selected-peak membership traces"
+            f"{family_id} Backfill hypothesis view: m/z {mz:g} "
+            f"+/-{ppm:g} ppm"
             f"{_single_anchor_review_note(focus_detected)}"
         ),
     )
@@ -215,7 +203,6 @@ def _plot_normalized_overlay(
     rt_max: float,
     total_trace_count: int | None = None,
 ) -> None:
-    total_trace_count = total_trace_count or len(rows)
     _draw_selected_peak_segment(ax, rows)
     for row in rows:
         rt = np.asarray(row.rt, dtype=float)
@@ -237,31 +224,13 @@ def _plot_normalized_overlay(
             lw=line_width,
             zorder=zorder,
         )
-    _plot_group_median_trace(
-        ax,
-        rows,
-        group="rescued",
-        color=RESCUED_MEDIAN_COLOR,
-        label="rescued median",
-        rt_min=rt_min,
-        rt_max=rt_max,
-        linestyle="--",
-    )
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("Family RT context: own-max scaled selected-peak membership")
+    ax.set_title("Peak-shape context (Gaussian15, own-max scaled)")
     ax.set_xlabel("RT (min)")
-    ax.set_ylabel("Per-trace scaled intensity (0-1; not abundance)")
+    ax.set_ylabel("Scaled intensity (0-1)")
     ax.set_xlim(*_selected_peak_window_bounds(rows, rt_min=rt_min, rt_max=rt_max))
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
-    _add_panel_note(
-        ax,
-        (
-            "Shaded band = selected/cell peak segment "
-            f"{_selected_peak_segment_label(rows)}; "
-            f"{len(rows)}/{total_trace_count} detected/rescued traces shown."
-        ),
-    )
 
 
 def _plot_irt_overlay(
@@ -344,7 +313,6 @@ def _plot_raw_highlights(
     rt_max: float,
     total_trace_count: int | None = None,
 ) -> None:
-    total_trace_count = total_trace_count or len(rows)
     labels_seen: set[str] = set()
     _draw_selected_peak_segment(ax, rows)
     for row in rows:
@@ -367,16 +335,11 @@ def _plot_raw_highlights(
         )
         labels_seen.add(label)
     _draw_center_rt(ax, family_center_rt)
-    ax.set_title("Selected-peak raw intensity: DDA trigger / signal height")
+    ax.set_title("Raw intensity context (Gaussian15)")
     ax.set_xlabel("RT (min)")
-    ax.set_ylabel("Raw MS1 intensity (smoothed)")
+    ax.set_ylabel("MS1 intensity")
     ax.set_xlim(*_selected_peak_window_bounds(rows, rt_min=rt_min, rt_max=rt_max))
     ax.grid(True, alpha=0.2)
-    _add_panel_note(
-        ax,
-        f"Raw height for selected peak {_selected_peak_segment_label(rows)} only; "
-        f"{len(rows)}/{total_trace_count} detected/rescued traces shown.",
-    )
 
 
 def _plot_apex_aligned_overlay(
@@ -386,7 +349,6 @@ def _plot_apex_aligned_overlay(
     total_trace_count: int | None = None,
     anchor_rows: Sequence[TraceOverlayRow] = (),
 ) -> None:
-    total_trace_count = total_trace_count or len(rows)
     detected_anchor_rows = tuple(anchor_rows) or tuple(
         row for row in rows if row.group == "detected_seed"
     )
@@ -411,31 +373,13 @@ def _plot_apex_aligned_overlay(
             lw=line_width,
             zorder=zorder,
         )
-    _plot_group_median_trace(
-        ax,
-        rows,
-        group="rescued",
-        color=RESCUED_MEDIAN_COLOR,
-        label="rescued median",
-        rt_min=-APEX_ALIGN_HALF_WINDOW_MIN,
-        rt_max=APEX_ALIGN_HALF_WINDOW_MIN,
-        linestyle="--",
-        align_to_apex=True,
-    )
     ax.axvline(0.0, color="black", lw=1, ls="--", alpha=0.6)
-    ax.set_title("Detected-anchor apex-aligned MS1 shape")
+    ax.set_title("Apex-aligned peak shape (Gaussian15)")
     ax.set_xlabel("RT relative to selected/cell apex (min)")
-    ax.set_ylabel("Per-trace scaled intensity (0-1)")
+    ax.set_ylabel("Scaled intensity (0-1)")
     ax.set_xlim(-APEX_ALIGN_HALF_WINDOW_MIN, APEX_ALIGN_HALF_WINDOW_MIN)
     ax.set_ylim(-0.03, 1.08)
     ax.grid(True, alpha=0.2)
-    _add_panel_note(
-        ax,
-        "Reference = detected NL peak segment "
-        f"{_selected_peak_segment_label(detected_anchor_rows or rows)}; "
-        "traces are aligned to each row's selected/cell apex; "
-        f"{len(rows)}/{total_trace_count} detected/rescued traces shown.",
-    )
 
 
 def _selected_peak_focus_rows(
