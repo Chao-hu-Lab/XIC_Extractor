@@ -55,7 +55,7 @@
   "mz_tolerance_da": 0.02,
   "next_step": "define_stronger_canonical_identity_bridge_or_regenerate_authority",
   "outputs": {
-    "bridge_audit_tsv": "docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_audit.tsv"
+    "bridge_audit_tsv": "output/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_audit.tsv"
   },
   "overall_status": "blocked",
   "peak_bridge_status_counts": {

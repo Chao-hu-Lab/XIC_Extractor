@@ -21,7 +21,8 @@ audit is diagnostic evidence, not a replacement manifest.
 python scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py
 ```
 
-Outputs:
+Generated outputs are written under ignored
+`output/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/`:
 
 - `cid_nl_default_activation_authority_reconstruction_gate_summary.json`
 - `cid_nl_default_activation_authority_reconstruction_audit.tsv`

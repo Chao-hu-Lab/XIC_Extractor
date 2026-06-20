@@ -53,7 +53,7 @@ DEFAULT_TARGET_PREFLIGHT_SUMMARY_JSON = (
     / "cid_nl_default_activation_preflight_summary.json"
 )
 DEFAULT_OUTPUT_DIR = (
-    ROOT / "docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1"
+    ROOT / "output/validation/cid_nl_default_activation_bridge_gate_v1"
 )
 
 DEFAULT_MZ_TOLERANCE_DA = 0.02

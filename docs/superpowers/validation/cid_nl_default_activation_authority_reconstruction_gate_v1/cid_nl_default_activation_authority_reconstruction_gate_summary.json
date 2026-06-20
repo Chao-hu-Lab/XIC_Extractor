@@ -66,7 +66,7 @@
   "expected_diff_row_count": 511,
   "next_step": "resolve_missing_or_ambiguous_canonical_identity",
   "outputs": {
-    "reconstruction_audit_tsv": "docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_audit.tsv"
+    "reconstruction_audit_tsv": "output/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_audit.tsv"
   },
   "overall_status": "blocked",
   "product_surface_changed": false,

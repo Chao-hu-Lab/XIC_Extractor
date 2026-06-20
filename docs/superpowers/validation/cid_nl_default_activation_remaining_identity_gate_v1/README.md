@@ -26,7 +26,8 @@ bundle.
 python scripts/check_cid_nl_default_activation_remaining_identity_gate.py --require-pass
 ```
 
-Outputs:
+Generated outputs are written under ignored
+`output/validation/cid_nl_default_activation_remaining_identity_gate_v1/`:
 
 - `cid_nl_default_activation_remaining_identity_gate_summary.json`
 - `cid_nl_default_activation_remaining_identity_audit.tsv`

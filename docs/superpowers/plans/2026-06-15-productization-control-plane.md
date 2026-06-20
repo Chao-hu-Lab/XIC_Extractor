@@ -4297,3 +4297,42 @@ the later low-height writer entry above as the current tier source.
   detected/no-write cells, omits the 27 scope removals, and continues to prove
   that CID-NL/MS2 evidence and candidate rows are not direct ProductWriter
   authority.
+
+### 2026-06-20 - CID-NL default activation successor authority contract v1
+
+- Lane: CID-NL default activation successor authority / candidate adoption
+  gate.
+- Previous tier: unchanged active default bundle plus resolved CID-NL remaining
+  identity gate evidence.
+- New tier: active default bundle unchanged. CID-NL default activation now has
+  a `production_candidate` successor authority packet: it is a formal
+  allow-list and replay artifact, but it is not installed as the active default
+  ProductWriter output. No active lane, workbook/GUI behavior, selected
+  peak/area, counted detection, broad Backfill state, or active default matrix
+  bundle changed.
+- Product surface changed: additive authority-candidate builder/report only:
+  `scripts/build_cid_nl_default_activation_successor_authority_contract.py`.
+  It reuses the remaining-identity gate, writes a successor
+  `ProductionAcceptanceManifest v1` allow-list, writes matching expected-diff
+  rows, writes a 511-cell human-readable decision ledger, and uses
+  `QuantMatrixVersion` replay as the acceptance oracle. It does not treat
+  CID-NL/MS2 evidence as direct ProductWriter authority and does not install the
+  candidate as default output.
+- Evidence: versioned report
+  `docs/superpowers/validation/cid_nl_default_activation_successor_authority_contract_v1/README.md`
+  plus ignored generated packet under
+  `output/validation/cid_nl_default_activation_successor_authority_contract_v1/`.
+  The packet records `overall_status=pass`, 147 successor write-authority
+  manifest rows, 147 expected-diff rows, 511 decision rows, 337
+  `no_write_detected_baseline_preserved`, 27 `no_write_omitted`, and 0
+  unresolved decisions. Candidate replay writes exactly 147 cells with 0 unused
+  expected-diff rows. Matrix delta summary records 147 changed cells, 0 missing
+  writes, and 0 unexpected writes.
+- Validation: focused checker tests passed `32`; focused ruff passed;
+  `python -m scripts.check_production_acceptance_manifest --manifest output/validation/cid_nl_default_activation_successor_authority_contract_v1/successor_authority_manifest.tsv`
+  passed; the real successor authority command with `--require-pass` exited `0`
+  and wrote the passing authority packet under ignored `output/validation/`.
+- Remaining blocker: human review / adoption gate must decide whether this
+  successor authority candidate should become the active default activation.
+  That later gate is the first point where default ProductWriter output or
+  active default matrix files may change.

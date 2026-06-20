@@ -25,7 +25,8 @@ workbook/GUI behavior, or grant new Backfill authority.
 python scripts/check_cid_nl_default_activation_cell_local_identity_gate.py
 ```
 
-Outputs:
+Generated outputs are written under ignored
+`output/validation/cid_nl_default_activation_cell_local_identity_gate_v1/`:
 
 - `cid_nl_default_activation_cell_local_identity_gate_summary.json`
 - `cid_nl_default_activation_cell_local_identity_audit.tsv`

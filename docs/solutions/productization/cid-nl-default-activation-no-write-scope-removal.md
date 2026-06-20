@@ -56,7 +56,10 @@ omit explicit scope removals.
   `uv run ruff check scripts/check_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py`;
   `python scripts/check_cid_nl_default_activation_remaining_identity_gate.py --require-pass`.
 - Artifact paths:
-  `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`.
+  versioned report under
+  `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`;
+  full generated audit under ignored
+  `output/validation/cid_nl_default_activation_remaining_identity_gate_v1/`.
 - Reviewer: subagent review found no findings and independently confirmed 511
   classified cells, 147 writes, 337 detected/no-write cells, 27 scope removals,
   and 0 unresolved cells.
@@ -75,3 +78,5 @@ for the next expected-diff/default-activation candidate gate.
    coordinates or unknown blocked states.
 3. Make the next candidate gate prove writes, detected no-write preservation,
    and scope removals separately.
+4. Keep full audit TSVs and matrix sidecars under ignored `output/validation`,
+   not under version-controlled `docs/superpowers/validation`.

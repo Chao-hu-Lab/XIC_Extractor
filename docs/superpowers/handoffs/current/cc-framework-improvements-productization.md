@@ -19,9 +19,10 @@ recovers `300.1605 -> 184.113` as a primary row and preserves
 matrix, workbook, GUI behavior, selected peak/area, counted detection, active
 lane, maturity tier, or Backfill writer authority changed.
 
-Default activation identity blocking is now resolved for the CID-NL candidate
-contract: all 511 accepted authority cells are classified, with 0 unresolved
-identity cells. This does not mean default activation has been written.
+CID-NL default activation now has a successor authority candidate. It is a
+formal 147-row write allow-list plus expected-diff replay and a 511-row
+decision ledger. This does not mean default activation has been installed as
+the active ProductWriter output.
 
 ## Latest Evidence
 
@@ -55,16 +56,29 @@ Default activation gates:
 - Remaining identity:
   `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`
   passes with 511 classified cells and 0 unresolved identity cells.
+- Successor authority:
+  versioned report at
+  `docs/superpowers/validation/cid_nl_default_activation_successor_authority_contract_v1/README.md`;
+  full generated packet under ignored
+  `output/validation/cid_nl_default_activation_successor_authority_contract_v1/`
+  passes with a 147-row `ProductionAcceptanceManifest v1` successor allow-list,
+  147 expected-diff rows, 511 decision rows, and a candidate replay that writes
+  exactly 147 cells with 0 unexpected writes.
+- Validation artifact retention:
+  CID-NL default-activation full audit TSVs are externalized under ignored
+  `output/validation/`; versioned validation docs keep README/summary records
+  indexed in `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv`.
 
-Remaining-identity contract:
+Successor authority contract:
 
-- 147 `write_ready_blank` candidate writes.
-- 337 detected-baseline/no-write cells.
-- 27 explicit no-write scope removals:
+- 147 `write_authorized` cells in `successor_authority_manifest.tsv`.
+- 337 `no_write_detected_baseline_preserved` cells.
+- 27 `no_write_omitted` cells:
   19 missing bridge identity, 5 all-blank ambiguity, 3 multiple-detected
   ambiguity.
-- The gate records row identity/source context and still treats candidates as
-  non-authoritative.
+- The candidate QuantMatrixVersion sidecar changes 147 cells, with 0 missing
+  writes and 0 unexpected writes.
+- The active default bundle remains unchanged until a later adoption gate.
 
 Heartbeat audit:
 
@@ -78,17 +92,23 @@ Heartbeat audit:
 - Do not treat candidates as matrix rows.
 - Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
 - Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
-- Do not run or update default activation without the next expected-diff /
-  candidate-build gate.
+- Do not install the CID-NL successor authority candidate as active default
+  output without a separate adoption gate.
 
 ## Latest Local Checks
 
-- `python -m pytest tests/test_cid_nl_default_activation_remaining_identity_gate.py -q`
-  passed: `8 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py`
+- `python -m pytest tests/test_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_cell_local_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_successor_authority_contract.py -q`
+  passed: `32 passed`.
+- `uv run ruff check scripts/check_cid_nl_default_activation_bridge_gate.py scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py scripts/check_cid_nl_default_activation_cell_local_identity_gate.py scripts/check_cid_nl_default_activation_remaining_identity_gate.py scripts/build_cid_nl_default_activation_successor_authority_contract.py tests/test_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_cell_local_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_successor_authority_contract.py`
   passed.
-- `python scripts/check_cid_nl_default_activation_remaining_identity_gate.py --require-pass`
-  exited `0` and wrote the passing summary/audit.
+- `python -m scripts.check_production_acceptance_manifest --manifest output/validation/cid_nl_default_activation_successor_authority_contract_v1/successor_authority_manifest.tsv`
+  passed.
+- `python scripts/build_cid_nl_default_activation_successor_authority_contract.py --require-pass`
+  exited `0` and wrote the passing authority packet.
+- `uv run python scripts/check_validation_artifact_retention.py`
+  passed: `181 retained files, 139 externalized, 0 shrink_later`.
+- `uv run pytest tests/test_validation_artifact_retention.py -q`
+  passed: `10 passed`.
 
 Residual from the previous full test run: full pytest still had an unrelated
 stale lockbox shadow automation artifact failure after 2080 passed. This slice
@@ -96,10 +116,9 @@ did not modify that lockbox area.
 
 ## Next Product Step
 
-Build the default-activation expected-diff/candidate gate. It must write only
-the 147 blank cells, preserve the 337 detected/no-write cells, omit the 27
-scope removals, and continue proving that CID-NL/MS2 evidence and candidate
-rows are not direct ProductWriter authority.
+Run the human review / adoption gate for the successor authority candidate.
+That is the first gate where active default ProductWriter output or active
+default matrix files may change.
 
 ## Status Index Anchors
 
