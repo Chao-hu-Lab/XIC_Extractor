@@ -15,9 +15,10 @@ for the existing detected cells plus exactly 511 accepted Backfill cells under
 
 CID-NL Discovery/alignment row identity is now `production_candidate` evidence:
 the A owner-deepened path recovers `300.1605 -> 184.113` as a primary row and
-preserves `301.165 -> 185.116` as its own dR-tag row. The new default activation
-preflight is blocked because the old 511-cell authority IDs do not replay on
-the new 85RAW alignment identity.
+preserves `301.165 -> 185.116` as its own dR-tag row. The default activation
+preflight target evidence passes, but the bridge gate is blocked: the old
+511-cell authority cannot be safely replayed onto the new CID-NL 85RAW matrix
+identity with a simple m/z/RT bridge.
 
 No ProductWriter output, default matrix, workbook, GUI behavior, selected
 peak/area, counted detection, Backfill writer authority, active lane, or
@@ -29,6 +30,7 @@ Validation packets:
 
 - `docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`
 - `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/README.md`
+- `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/README.md`
 
 85RAW alignment output:
 
@@ -58,6 +60,22 @@ Default activation preflight:
 - First blocker:
   `FAM000380/BenignfatBC0980_DNA: peak_hypothesis_id missing from matrix identity`.
 
+Default activation bridge gate:
+
+- Summary:
+  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_gate_summary.json`.
+- Audit:
+  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_audit.tsv`.
+- `overall_status=blocked`.
+- `target_preflight.status=pass`.
+- Accepted authority cells: `511`; expected-diff rows: `511`.
+- Expected-diff content problems: `0`.
+- Peak bridge counts: `72 pass`, `11 blocked`.
+- Cell bridge counts: `147 pass`, `364 blocked`.
+- Blocker split: `263 new_baseline_already_has_value`,
+  `82 new_identity_ambiguous`, `19 new_identity_missing`.
+- `activation_replay.status=not_run` because bridge blockers are present.
+
 Heartbeat audit:
 
 - Alignment reruns have `timing.live.json` for both 8RAW and 85RAW.
@@ -71,7 +89,7 @@ Heartbeat audit:
 - Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
 - Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
 - Do not run or update default activation without a separate expected-diff /
-  ID-bridge goal.
+  canonical-identity authority reconstruction gate.
 
 ## Latest Local Checks
 
@@ -81,6 +99,12 @@ Heartbeat audit:
   passed.
 - `python scripts/check_cid_nl_default_activation_preflight.py` exited `0` and
   wrote the blocked preflight summary.
+- `python -m pytest tests/test_cid_nl_default_activation_bridge_gate.py -q`
+  passed: `7 passed`.
+- `uv run ruff check scripts/check_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_bridge_gate.py`
+  passed.
+- `python scripts/check_cid_nl_default_activation_bridge_gate.py` exited `0`
+  and wrote the blocked bridge summary/audit.
 
 Residual from the previous full test run: full pytest still had an unrelated
 stale lockbox shadow automation artifact failure after 2080 passed. This latest
@@ -88,11 +112,12 @@ slice did not modify that lockbox area.
 
 ## Next Product Step
 
-Implement an explicit ID bridge / expected-diff contract that can prove the
-current 511-cell Backfill authority remains exactly preserved while the
-recovered `300.1605 -> 184.113` row is materialized in the released default
-matrix. Until that bridge passes, CID-NL stays `production_candidate` and the
-default bundle remains the current 511-cell product-ready activation.
+Implement canonical row identity / authority reconstruction before any default
+activation candidate. The next gate must distinguish current-authority cells
+that are still blank-and-writable from cells that are now detected in the new
+baseline, and must resolve missing/ambiguous identity mappings. Until that
+passes, CID-NL stays `production_candidate_blocked` for default activation and
+the default bundle remains the current 511-cell product-ready activation.
 
 ## Status Index Anchors
 

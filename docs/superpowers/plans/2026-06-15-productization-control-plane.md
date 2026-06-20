@@ -4138,3 +4138,42 @@ the later low-height writer entry above as the current tier source.
   preserved exactly while the recovered `300.1605 -> 184.113` row is
   materialized. Do not promote by treating Discovery candidates as matrix rows
   or by letting CID-NL/MS2 evidence directly become ProductWriter authority.
+
+### 2026-06-20 - CID-NL default activation bridge gate v1
+
+- Lane: CID-NL Discovery-to-alignment row identity / default-output unblocker.
+- Previous tier: unchanged from the tracked default
+  `product_ready_default_matrix_activated` bundle plus CID-NL
+  `production_candidate` alignment evidence and blocked preflight.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state changed.
+  Current default matrix authority remains exactly the existing 511-cell
+  `backfill_policy_write_ready_rows` activation.
+- Product surface changed: additive no-write checker/report only:
+  `scripts/check_cid_nl_default_activation_bridge_gate.py`. It reads the old
+  default activation identity, the new CID-NL alignment identity/matrix, the
+  current ProductionAcceptanceManifest, expected-diff rows, and the target
+  preflight summary. It emits a diagnostic bridge summary/audit; it does not
+  write default ProductWriter outputs and does not create a replacement
+  authority manifest.
+- Evidence:
+  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/`
+  records `overall_status=blocked`, `target_preflight.status=pass`, 511
+  accepted authority cells, 511 expected-diff rows, 0 expected-diff content
+  problems, and 83 accepted peak IDs. Peak-level bridge counts are 72 `pass`
+  and 11 `blocked`; cell-level bridge counts are 147 `pass` and 364 `blocked`.
+  The blocked cells split into 263 `new_baseline_already_has_value`, 82
+  `new_identity_ambiguous`, and 19 `new_identity_missing`. Because bridge
+  blockers are present, `activation_replay.status=not_run`.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_bridge_gate.py -q`
+  passed `7`, including review-driven negative tests for expected-diff content
+  mismatch and stale identity-to-matrix coordinates; `uv run ruff check scripts/check_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_bridge_gate.py`
+  passed; the real bridge gate command exited `0` and wrote the blocked
+  summary/audit.
+- Remaining blocker: a simple m/z/RT identity bridge cannot safely promote the
+  CID-NL alignment artifact to default activation. The next product gate must
+  reconstruct canonical row identity / authority classification first,
+  separating still-blank accepted Backfill cells from cells that are now
+  detected in the new baseline, before any expected-diff packet can be used for
+  default activation.
