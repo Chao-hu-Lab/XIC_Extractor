@@ -4093,3 +4093,48 @@ the later low-height writer entry above as the current tier source.
   artifacts change the released default `quant_matrix.tsv`. That future goal
   must not treat Discovery candidates as matrix rows and must not let CID-NL/MS2
   evidence directly become ProductWriter authority.
+
+### 2026-06-20 - CID-NL default activation preflight v1
+
+- Lane: CID-NL Discovery-to-alignment row identity / default-output unblocker.
+- Previous tier: unchanged from the tracked default
+  `product_ready_default_matrix_activated` bundle plus CID-NL
+  `production_candidate` alignment evidence.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state changed.
+  Current default matrix authority remains exactly the existing 511-cell
+  `backfill_policy_write_ready_rows` activation.
+- Product surface changed: additive no-write checker/report only:
+  `scripts/check_cid_nl_default_activation_preflight.py`. It reads existing
+  alignment/default-activation artifacts and reports whether the current
+  authority bundle can replay on the new CID-NL alignment identity. It does not
+  write ProductWriter/default matrix outputs and does not add a new manifest.
+- Evidence:
+  `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/`
+  records `overall_status=blocked`, `target_alignment_evidence_status=pass`,
+  `replay.status=blocked`, 511 accepted authority cells, 511 expected-diff rows,
+  and 506 accepted cells whose old `peak_hypothesis_id` is missing from the new
+  85RAW matrix identity. The first replay blocker is
+  `FAM000380/BenignfatBC0980_DNA: peak_hypothesis_id missing from matrix identity`.
+  The same checker confirms `300.1605 -> 184.113` as `FAM011499`, 85/85,
+  high-confidence `DNA_dR` evidence with unique TumorBC2312 provenance,
+  matching family/public/group identity, and exact TumorBC2312 source
+  `TumorBC2312_DNA#19561@mz300.160635_p184.113235`, and preserves
+  `301.165 -> 185.116` as `FAM011783`, 83/85, review-confidence `DNA_dR`
+  evidence with unique TumorBC2312 provenance, matching family/public/group
+  identity, and exact TumorBC2312 source
+  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`.
+- Heartbeat audit: the 8RAW and 85RAW alignment reruns have
+  `timing.live.json`; the Discovery input artifacts have `timing.json` only.
+  No new RAW or default activation run was launched for this preflight.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_preflight.py -q`
+  passed `7`, including focused negative tests for wrong source ID,
+  family/public identity mismatch, and duplicate target provenance rows;
+  `uv run ruff check scripts/check_cid_nl_default_activation_preflight.py tests/test_cid_nl_default_activation_preflight.py`
+  passed; the real preflight command exited `0` and wrote the blocked summary.
+- Remaining blocker: default activation needs an explicit ID bridge /
+  expected-diff contract that proves the current 511-cell Backfill authority is
+  preserved exactly while the recovered `300.1605 -> 184.113` row is
+  materialized. Do not promote by treating Discovery candidates as matrix rows
+  or by letting CID-NL/MS2 evidence directly become ProductWriter authority.

@@ -9,34 +9,94 @@ active lane, and promotion-gate authority remain in
 
 ## Current Verdict
 
-The tracked default QuantMatrix remains the current detected + 511 accepted
-Backfill product output. ProductWriter default output and Backfill authority did
-not change in this slice.
+The tracked default QuantMatrix remains `product_ready_default_matrix_activated`
+for the existing detected cells plus exactly 511 accepted Backfill cells under
+`backfill_policy_write_ready_rows`.
 
-CID-NL Discovery/alignment row identity has moved beyond one-RAW diagnostic
-evidence. The A owner-deepened path now has focused tests plus 8RAW and 85RAW
-alignment evidence showing that `300.1605 -> 184.113` can become a primary
-matrix identity while `301.165 -> 185.116` remains a valid dR-tag row identity.
+CID-NL Discovery/alignment row identity is now `production_candidate` evidence:
+the A owner-deepened path recovers `300.1605 -> 184.113` as a primary row and
+preserves `301.165 -> 185.116` as its own dR-tag row. The new default activation
+preflight is blocked because the old 511-cell authority IDs do not replay on
+the new 85RAW alignment identity.
 
-Readiness for this CID-NL packet is `production_candidate` for
-Discovery-to-alignment row identity. It is not
-`product_ready_default_matrix_activated` because the tracked default activation
-bundle was not regenerated from the new 85RAW artifacts.
+No ProductWriter output, default matrix, workbook, GUI behavior, selected
+peak/area, counted detection, Backfill writer authority, active lane, or
+maturity tier changed in the latest slice.
 
-## Product State
+## Latest CID-NL Evidence
 
-- Current default tier: `product_ready_default_matrix_activated`.
-- Product authority scope: `backfill_policy_write_ready_rows`.
-- Current Backfill writer authority: exactly 511 accepted Backfill cells.
-- Broad 4613-row Backfill remains parked.
-- Default matrix/ProductWriter/workbook/GUI/Backfill authority were not changed.
-- CID-NL/MS2 evidence remains evidence-provider input; it is not direct
-  ProductWriter authority.
+Validation packets:
+
+- `docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`
+- `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/README.md`
+
+85RAW alignment output:
+
+- Path: `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`.
+- `300.1605 -> 184.113`: `FAM011499`, `Mz=300.161`, `RT=23.3493`,
+  `85/85`, `identity_confidence=high`, `neutral_loss_tag=DNA_dR`,
+  unique TumorBC2312 provenance with matching family/public/group identity,
+  source
+  `TumorBC2312_DNA#19561@mz300.160635_p184.113235`.
+- `301.165 -> 185.116`: `FAM011783`, `Mz=301.165`, `RT=23.3413`,
+  `83/85`, `identity_confidence=review`, `neutral_loss_tag=DNA_dR`,
+  unique TumorBC2312 provenance with matching family/public/group identity,
+  source
+  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`.
+- The 301 row is preserved as its own product row and must not be used as
+  authority for the 300 row.
+
+Default activation preflight:
+
+- Summary:
+  `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/cid_nl_default_activation_preflight_summary.json`.
+- `overall_status=blocked`.
+- `target_alignment_evidence_status=pass`.
+- `replay.status=blocked`.
+- 511 accepted authority cells and 511 expected-diff rows were supplied.
+- 506 accepted cells are missing from the new matrix identity.
+- First blocker:
+  `FAM000380/BenignfatBC0980_DNA: peak_hypothesis_id missing from matrix identity`.
+
+Heartbeat audit:
+
+- Alignment reruns have `timing.live.json` for both 8RAW and 85RAW.
+- Discovery input artifacts have `timing.json` only, no live heartbeat files.
+
+## Boundaries
+
+- Do not maintain two Discovery systems.
+- Do not make CID-NL/MS2 evidence direct ProductWriter authority.
+- Do not treat candidates as matrix rows.
+- Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
+- Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
+- Do not run or update default activation without a separate expected-diff /
+  ID-bridge goal.
+
+## Latest Local Checks
+
+- `python -m pytest tests/test_cid_nl_default_activation_preflight.py -q`
+  passed: `7 passed`.
+- `uv run ruff check scripts/check_cid_nl_default_activation_preflight.py tests/test_cid_nl_default_activation_preflight.py`
+  passed.
+- `python scripts/check_cid_nl_default_activation_preflight.py` exited `0` and
+  wrote the blocked preflight summary.
+
+Residual from the previous full test run: full pytest still had an unrelated
+stale lockbox shadow automation artifact failure after 2080 passed. This latest
+slice did not modify that lockbox area.
+
+## Next Product Step
+
+Implement an explicit ID bridge / expected-diff contract that can prove the
+current 511-cell Backfill authority remains exactly preserved while the
+recovered `300.1605 -> 184.113` row is materialized in the released default
+matrix. Until that bridge passes, CID-NL stays `production_candidate` and the
+default bundle remains the current 511-cell product-ready activation.
 
 ## Status Index Anchors
 
-These anchors keep `scripts/check_productization_state.py` fail-closed. They do
-not make this handoff the tier authority.
+These strings keep `scripts/check_productization_state.py` fail-closed:
 
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
@@ -52,80 +112,3 @@ not make this handoff the tier authority.
 - ReviewAction selected-candidate switch and manual-boundary area recompute remain parked
 - manual-boundary area recompute remain parked
 - classification and planning only
-
-## CID-NL Evidence
-
-Validation note:
-`docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`.
-
-8RAW alignment:
-
-- Input Discovery: `output/discovery/cid_nl_product_ready_8raw_20260620_fix2`.
-- Output alignment: `output/discovery/cid_nl_product_ready_alignment_8raw_20260620_fix3`.
-- `300.1605 -> 184.113`: `FAM001386`, 8/8,
-  `product_matrix_identity_complete`, high confidence.
-- `301.165 -> 185.116`: `FAM001414`, 8/8,
-  `product_matrix_identity_complete`, high confidence,
-  `consolidation_state=not_consolidated`.
-
-85RAW alignment:
-
-- Input Discovery: `output/discovery/cid_nl_product_ready_85raw_20260620_fix2`.
-- Output alignment: `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`.
-- Discovery parser smoke passed; candidate rows `317036`; duplicate
-  `ms1_feature_row_id` count `0`.
-- `300.1605 -> 184.113`: `FAM011499`, 85/85,
-  `product_matrix_identity_complete`, high confidence.
-- `301.165 -> 185.116`: `FAM011783`, 83/85,
-  `product_matrix_identity_complete`, centered at
-  `family_center_mz=301.165`, `family_product_mz=185.116`.
-  Residual risk: `identity_confidence=review` with backfill-evidence review
-  flags, so this preserves row identity but does not by itself justify default
-  activation.
-- TumorBC2312 provenance for preserved 301 row:
-  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`,
-  `write_matrix_value=TRUE`, `include_in_primary_matrix=TRUE`.
-- TumorBC2312 Discovery source state:
-  `discovery_candidate_state=ms1_feature_nl_rescued`,
-  `ms1_feature_row_id=TumorBC2312_DNA|DNA_dR|301.164978|23.341692`.
-
-## Code Decisions
-
-- Discovery candidate merging may merge seed evidence by shared
-  `ms1_feature_row_id` when product identity matches and each candidate is
-  compatible with the configured neutral loss.
-- Alignment primary consolidation may use shared-MS1 fallback only across
-  different neutral-loss tags. Same-tag rows with distinct product identity must
-  stay separate unless they pass the normal product/loss identity tolerances.
-- This keeps B's useful concept, feature/MS1-primary identity, inside the
-  existing A owner path instead of creating a second Discovery system.
-
-## Boundaries
-
-- Do not maintain two Discovery systems.
-- Do not make CID-NL/MS2 evidence direct ProductWriter authority.
-- Do not treat candidates as matrix rows.
-- Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
-- Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
-- Do not run or update default activation without a separate expected-diff goal.
-
-## Latest Local Checks
-
-- `python -m pytest tests/test_alignment_primary_consolidation.py -q`
-  passed: `9 passed`.
-- `python -m pytest tests/test_discovery_ms1_backfill.py -q`
-  passed: `20 passed`.
-- 8RAW alignment preflight and rerun completed.
-- 85RAW alignment preflight and rerun completed with canonical
-  `validation-fast`, `raw-workers 11`, `super-window`,
-  `production-equivalent`, and `audit-evidence-mode none`.
-
-## Next Actions
-
-1. Run focused integration checks and productization-state checker after the
-   current code/docs edits.
-2. Request subagent review of the consolidation/merge rule and evidence
-   wording; fix any actionable findings.
-3. Commit the task-scoped code/tests/docs.
-4. Open a separate expected-diff/default-activation goal if the released
-   default `quant_matrix.tsv` should materialize the recovered `300.1605` row.
