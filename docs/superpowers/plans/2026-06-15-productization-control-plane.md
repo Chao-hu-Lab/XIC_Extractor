@@ -4250,3 +4250,50 @@ the later low-height writer entry above as the current tier source.
 - Remaining blocker: 27 cells still need a durable canonical identity decision
   or explicit product-scope removal before any default activation candidate can
   be built.
+
+### 2026-06-20 - CID-NL default activation remaining identity gate v1
+
+- Lane: CID-NL default activation canonical identity unblocker / scope-removal
+  contract.
+- Previous tier: unchanged from `product_ready_default_matrix_activated` plus
+  blocked CID-NL cell-local identity evidence.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state changed.
+  Current default matrix authority remains exactly the existing 511-cell
+  `backfill_policy_write_ready_rows` activation.
+- Product surface changed: additive no-write checker/report only:
+  `scripts/check_cid_nl_default_activation_remaining_identity_gate.py`. It
+  reuses the cell-local identity gate and converts only the three known
+  terminal blocker classes into explicit no-write scope removals:
+  `blocked_identity_missing`,
+  `blocked_ambiguous_all_blank`, and
+  `blocked_ambiguous_multiple_detected_candidates`. It fails closed for stale
+  candidate coordinates or unknown blocked states. It does not write
+  ProductWriter/default matrix outputs, choose ambiguous candidate rows, or
+  create a replacement authority manifest.
+- Evidence:
+  `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`
+  records `overall_status=pass`, 511 accepted authority cells, input unresolved
+  authority cells `27`, and output unresolved authority cells `0`. The future
+  activation-candidate contract is 147 `write_ready_blank` candidate writes,
+  337 detected-baseline/no-write cells, and 27 explicit no-write scope
+  removals. The 27 split into 19
+  `scope_removed_missing_identity_no_write`, 5
+  `scope_removed_ambiguous_blank_no_write`, and 3
+  `scope_removed_ambiguous_multiple_detected_no_write`. The audit records row
+  identity/source context, including the `FAM017604` exact/source identity row
+  that is not a safe bridge replay target.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_remaining_identity_gate.py -q`
+  passed `8`, covering write-ready pass-through, missing identity scope
+  removal, non-bridge source identity context, all-blank ambiguity removal,
+  multiple-detected ambiguity removal without choosing a candidate, unique
+  detected no-write pass-through, stale candidate coordinate fail-closed, and
+  CLI artifact writes; focused ruff passed; the real remaining-identity gate
+  command with `--require-pass` exited `0` and wrote the passing
+  summary/audit.
+- Remaining blocker: default activation now needs a separate expected-diff /
+  candidate-build gate that writes only the 147 blank cells, preserves the 337
+  detected/no-write cells, omits the 27 scope removals, and continues to prove
+  that CID-NL/MS2 evidence and candidate rows are not direct ProductWriter
+  authority.

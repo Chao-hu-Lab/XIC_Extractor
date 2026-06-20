@@ -13,103 +13,58 @@ The tracked default QuantMatrix remains `product_ready_default_matrix_activated`
 for the existing detected cells plus exactly 511 accepted Backfill cells under
 `backfill_policy_write_ready_rows`.
 
-CID-NL Discovery/alignment row identity is now `production_candidate` evidence:
-the A owner-deepened path recovers `300.1605 -> 184.113` as a primary row and
-preserves `301.165 -> 185.116` as its own dR-tag row. The default activation
-preflight target evidence passes, but default activation is still blocked. The
-cell-local identity gate has reduced the blocker: 484/511 cells are now
-classified, while 27 cells still need durable canonical identity decisions.
+CID-NL Discovery/alignment row identity is `production_candidate` evidence. It
+recovers `300.1605 -> 184.113` as a primary row and preserves
+`301.165 -> 185.116` as its own dR-tag row. No ProductWriter output, default
+matrix, workbook, GUI behavior, selected peak/area, counted detection, active
+lane, maturity tier, or Backfill writer authority changed.
 
-No ProductWriter output, default matrix, workbook, GUI behavior, selected
-peak/area, counted detection, Backfill writer authority, active lane, or
-maturity tier changed in the latest slice.
+Default activation identity blocking is now resolved for the CID-NL candidate
+contract: all 511 accepted authority cells are classified, with 0 unresolved
+identity cells. This does not mean default activation has been written.
 
-## Latest CID-NL Evidence
-
-Validation packets:
-
-- `docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`
-- `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/README.md`
-- `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/README.md`
-- `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/README.md`
-- `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/README.md`
+## Latest Evidence
 
 85RAW alignment output:
 
-- Path: `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`.
+- `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`
 - `300.1605 -> 184.113`: `FAM011499`, `Mz=300.161`, `RT=23.3493`,
   `85/85`, `identity_confidence=high`, `neutral_loss_tag=DNA_dR`,
-  unique TumorBC2312 provenance with matching family/public/group identity,
-  source
-  `TumorBC2312_DNA#19561@mz300.160635_p184.113235`.
+  source `TumorBC2312_DNA#19561@mz300.160635_p184.113235`.
 - `301.165 -> 185.116`: `FAM011783`, `Mz=301.165`, `RT=23.3413`,
   `83/85`, `identity_confidence=review`, `neutral_loss_tag=DNA_dR`,
-  unique TumorBC2312 provenance with matching family/public/group identity,
-  source
-  `TumorBC2312_DNA#19561@mz301.164978_p185.115845`.
-- The 301 row is preserved as its own product row and must not be used as
-  authority for the 300 row.
+  source `TumorBC2312_DNA#19561@mz301.164978_p185.115845`.
 
-Default activation preflight:
+Default activation gates:
 
-- Summary:
-  `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/cid_nl_default_activation_preflight_summary.json`.
-- `overall_status=blocked`.
-- `target_alignment_evidence_status=pass`.
-- `replay.status=blocked`.
-- 511 accepted authority cells and 511 expected-diff rows were supplied.
-- 506 accepted cells are missing from the new matrix identity.
-- First blocker:
-  `FAM000380/BenignfatBC0980_DNA: peak_hypothesis_id missing from matrix identity`.
+- Preflight:
+  `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/`
+  target alignment evidence passes, replay remains blocked by identity
+  compatibility.
+- Bridge gate:
+  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/`
+  classifies 147 pass and 364 blocked bridge cells.
+- Authority reconstruction:
+  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/`
+  proves 147 blank writes replay in memory and reduces the problem to 101
+  identity cells.
+- Cell-local identity:
+  `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/`
+  resolves 74 ambiguous cells as detected-baseline no-write supersession,
+  leaving 27.
+- Remaining identity:
+  `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`
+  passes with 511 classified cells and 0 unresolved identity cells.
 
-Default activation bridge gate:
+Remaining-identity contract:
 
-- Summary:
-  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_gate_summary.json`.
-- Audit:
-  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/cid_nl_default_activation_bridge_audit.tsv`.
-- `overall_status=blocked`.
-- `target_preflight.status=pass`.
-- Accepted authority cells: `511`; expected-diff rows: `511`.
-- Expected-diff content problems: `0`.
-- Peak bridge counts: `72 pass`, `11 blocked`.
-- Cell bridge counts: `147 pass`, `364 blocked`.
-- Blocker split: `263 new_baseline_already_has_value`,
-  `82 new_identity_ambiguous`, `19 new_identity_missing`.
-- `activation_replay.status=not_run` because bridge blockers are present.
-
-Authority reconstruction gate:
-
-- Summary:
-  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_gate_summary.json`.
-- Audit:
-  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_audit.tsv`.
-- `overall_status=blocked`.
-- `candidate_replay.status=pass`; `written_backfill_count=147`.
-- Resolution counts: `147 write_ready_blank`,
-  `263 superseded_by_detected_baseline`,
-  `82 blocked_identity_ambiguous`, `19 blocked_identity_missing`.
-- Unresolved authority cells: `101`.
-- Detected-baseline supersession is a no-write resolved state, not Backfill
-  writer authority.
-
-Cell-local identity gate:
-
-- Summary:
-  `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/cid_nl_default_activation_cell_local_identity_gate_summary.json`.
-- Audit:
-  `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/cid_nl_default_activation_cell_local_identity_audit.tsv`.
-- `overall_status=blocked`.
-- It resolves `74` ambiguous cells as
-  `cell_local_unique_detected_candidate_supersession`.
-- Remaining unresolved authority cells: `27`.
-- Remaining blockers: `19 blocked_identity_missing`,
-  `5 blocked_ambiguous_all_blank`,
-  `3 blocked_ambiguous_multiple_detected_candidates`.
-- Cell-local detected candidates are no-write detected-baseline supersession,
-  not Backfill writer authority and not blank-write authorization.
-- Candidate identity-to-matrix coordinate mismatches are `0` in the real packet;
-  stale candidate coordinates are covered by a focused negative test.
+- 147 `write_ready_blank` candidate writes.
+- 337 detected-baseline/no-write cells.
+- 27 explicit no-write scope removals:
+  19 missing bridge identity, 5 all-blank ambiguity, 3 multiple-detected
+  ambiguity.
+- The gate records row identity/source context and still treats candidates as
+  non-authoritative.
 
 Heartbeat audit:
 
@@ -123,51 +78,30 @@ Heartbeat audit:
 - Do not treat candidates as matrix rows.
 - Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
 - Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
-- Do not run or update default activation without a separate expected-diff /
-  canonical-identity gate that resolves the remaining 27 authority cells.
+- Do not run or update default activation without the next expected-diff /
+  candidate-build gate.
 
 ## Latest Local Checks
 
-- `python -m pytest tests/test_cid_nl_default_activation_preflight.py -q`
-  passed: `7 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_preflight.py tests/test_cid_nl_default_activation_preflight.py`
+- `python -m pytest tests/test_cid_nl_default_activation_remaining_identity_gate.py -q`
+  passed: `8 passed`.
+- `uv run ruff check scripts/check_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py`
   passed.
-- `python scripts/check_cid_nl_default_activation_preflight.py` exited `0` and
-  wrote the blocked preflight summary.
-- `python -m pytest tests/test_cid_nl_default_activation_bridge_gate.py -q`
-  passed: `7 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_bridge_gate.py`
-  passed.
-- `python scripts/check_cid_nl_default_activation_bridge_gate.py` exited `0`
-  and wrote the blocked bridge summary/audit.
-- `python -m pytest tests/test_cid_nl_default_activation_authority_reconstruction_gate.py -q`
-  passed: `6 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py`
-  passed.
-- `python scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py`
-  exited `0` and wrote the blocked reconstruction summary/audit.
-- `python -m pytest tests/test_cid_nl_default_activation_cell_local_identity_gate.py -q`
-  passed: `6 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_cell_local_identity_gate.py tests/test_cid_nl_default_activation_cell_local_identity_gate.py`
-  passed.
-- `python scripts/check_cid_nl_default_activation_cell_local_identity_gate.py`
-  exited `0` and wrote the blocked cell-local identity summary/audit.
+- `python scripts/check_cid_nl_default_activation_remaining_identity_gate.py --require-pass`
+  exited `0` and wrote the passing summary/audit.
 
 Residual from the previous full test run: full pytest still had an unrelated
-stale lockbox shadow automation artifact failure after 2080 passed. This latest
-slice did not modify that lockbox area.
+stale lockbox shadow automation artifact failure after 2080 passed. This slice
+did not modify that lockbox area.
 
 ## Next Product Step
 
-Resolve the remaining 27 cells: 19 missing identity cells, 5 all-blank
-ambiguous cells, and 3 multiple-detected ambiguous cells. Until unresolved
-authority cells reach `0`, CID-NL stays `production_candidate_blocked` for
-default activation and the default bundle remains the current 511-cell
-product-ready activation.
+Build the default-activation expected-diff/candidate gate. It must write only
+the 147 blank cells, preserve the 337 detected/no-write cells, omit the 27
+scope removals, and continue proving that CID-NL/MS2 evidence and candidate
+rows are not direct ProductWriter authority.
 
 ## Status Index Anchors
-
-These strings keep `scripts/check_productization_state.py` fail-closed:
 
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
