@@ -16,9 +16,10 @@ for the existing detected cells plus exactly 511 accepted Backfill cells under
 CID-NL Discovery/alignment row identity is now `production_candidate` evidence:
 the A owner-deepened path recovers `300.1605 -> 184.113` as a primary row and
 preserves `301.165 -> 185.116` as its own dR-tag row. The default activation
-preflight target evidence passes, but the bridge gate is blocked: the old
-511-cell authority cannot be safely replayed onto the new CID-NL 85RAW matrix
-identity with a simple m/z/RT bridge.
+preflight target evidence passes, but default activation is still blocked. The
+authority reconstruction gate explains the block: 410/511 cells are now
+classified, while 101 cells remain missing/ambiguous canonical identity
+blockers.
 
 No ProductWriter output, default matrix, workbook, GUI behavior, selected
 peak/area, counted detection, Backfill writer authority, active lane, or
@@ -31,6 +32,7 @@ Validation packets:
 - `docs/superpowers/validation/cid_nl_product_ready_alignment_v1/README.md`
 - `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/README.md`
 - `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/README.md`
+- `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/README.md`
 
 85RAW alignment output:
 
@@ -76,6 +78,21 @@ Default activation bridge gate:
   `82 new_identity_ambiguous`, `19 new_identity_missing`.
 - `activation_replay.status=not_run` because bridge blockers are present.
 
+Authority reconstruction gate:
+
+- Summary:
+  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_gate_summary.json`.
+- Audit:
+  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/cid_nl_default_activation_authority_reconstruction_audit.tsv`.
+- `overall_status=blocked`.
+- `candidate_replay.status=pass`; `written_backfill_count=147`.
+- Resolution counts: `147 write_ready_blank`,
+  `263 superseded_by_detected_baseline`,
+  `82 blocked_identity_ambiguous`, `19 blocked_identity_missing`.
+- Unresolved authority cells: `101`.
+- Detected-baseline supersession is a no-write resolved state, not Backfill
+  writer authority.
+
 Heartbeat audit:
 
 - Alignment reruns have `timing.live.json` for both 8RAW and 85RAW.
@@ -89,7 +106,7 @@ Heartbeat audit:
 - Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
 - Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
 - Do not run or update default activation without a separate expected-diff /
-  canonical-identity authority reconstruction gate.
+  canonical-identity gate that resolves the remaining 101 authority cells.
 
 ## Latest Local Checks
 
@@ -105,6 +122,12 @@ Heartbeat audit:
   passed.
 - `python scripts/check_cid_nl_default_activation_bridge_gate.py` exited `0`
   and wrote the blocked bridge summary/audit.
+- `python -m pytest tests/test_cid_nl_default_activation_authority_reconstruction_gate.py -q`
+  passed: `6 passed`.
+- `uv run ruff check scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py`
+  passed.
+- `python scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py`
+  exited `0` and wrote the blocked reconstruction summary/audit.
 
 Residual from the previous full test run: full pytest still had an unrelated
 stale lockbox shadow automation artifact failure after 2080 passed. This latest
@@ -112,12 +135,10 @@ slice did not modify that lockbox area.
 
 ## Next Product Step
 
-Implement canonical row identity / authority reconstruction before any default
-activation candidate. The next gate must distinguish current-authority cells
-that are still blank-and-writable from cells that are now detected in the new
-baseline, and must resolve missing/ambiguous identity mappings. Until that
-passes, CID-NL stays `production_candidate_blocked` for default activation and
-the default bundle remains the current 511-cell product-ready activation.
+Resolve the 11 old authority peaks behind the 101 missing/ambiguous cells into
+durable canonical identity decisions. Until unresolved authority cells reach
+`0`, CID-NL stays `production_candidate_blocked` for default activation and the
+default bundle remains the current 511-cell product-ready activation.
 
 ## Status Index Anchors
 

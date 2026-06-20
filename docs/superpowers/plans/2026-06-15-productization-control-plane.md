@@ -4177,3 +4177,37 @@ the later low-height writer entry above as the current tier source.
   separating still-blank accepted Backfill cells from cells that are now
   detected in the new baseline, before any expected-diff packet can be used for
   default activation.
+
+### 2026-06-20 - CID-NL default activation authority reconstruction gate v1
+
+- Lane: CID-NL default activation authority reconstruction / canonical identity
+  unblocker.
+- Previous tier: unchanged from `product_ready_default_matrix_activated` plus
+  blocked CID-NL bridge evidence.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state changed.
+  Current default matrix authority remains exactly the existing 511-cell
+  `backfill_policy_write_ready_rows` activation.
+- Product surface changed: additive no-write checker/report only:
+  `scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py`.
+  It reuses the bridge gate evaluation and `QuantMatrixVersion` in-memory
+  replay oracle, emits a diagnostic reconstruction summary/audit, and does not
+  write ProductWriter/default matrix outputs or create a replacement authority
+  manifest.
+- Evidence:
+  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/`
+  records `overall_status=blocked`, 511 accepted authority cells, 511
+  expected-diff rows, `candidate_replay.status=pass`, and 147 candidate
+  Backfill writes. The 511 authority cells classify as 147 `write_ready_blank`,
+  263 `superseded_by_detected_baseline`, 82 `blocked_identity_ambiguous`, and
+  19 `blocked_identity_missing`; unresolved authority cells are therefore 101.
+  Detected-baseline supersession is explicitly not Backfill writer authority.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_authority_reconstruction_gate.py -q`
+  passed `6`, covering blank write-ready replay, detected-baseline no-write
+  supersession, missing/ambiguous identity blockers, expected-diff content
+  mismatch, and CLI artifact writes; focused ruff passed; the real
+  reconstruction gate command exited `0` and wrote the blocked summary/audit.
+- Remaining blocker: resolve the 11 old authority peaks behind the 101
+  missing/ambiguous cells into durable canonical identity decisions before any
+  default activation candidate can be built.
