@@ -4211,3 +4211,42 @@ the later low-height writer entry above as the current tier source.
 - Remaining blocker: resolve the 11 old authority peaks behind the 101
   missing/ambiguous cells into durable canonical identity decisions before any
   default activation candidate can be built.
+
+### 2026-06-20 - CID-NL default activation cell-local identity gate v1
+
+- Lane: CID-NL default activation canonical identity unblocker.
+- Previous tier: unchanged from `product_ready_default_matrix_activated` plus
+  blocked CID-NL authority reconstruction evidence.
+- New tier: unchanged. No maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default activation bundle, or broad Backfill state changed.
+  Current default matrix authority remains exactly the existing 511-cell
+  `backfill_policy_write_ready_rows` activation.
+- Product surface changed: additive no-write checker/report only:
+  `scripts/check_cid_nl_default_activation_cell_local_identity_gate.py`. It
+  reuses the authority reconstruction gate and resolves ambiguous cells only
+  when exactly one candidate row already has a detected baseline value for the
+  same sample. This is no-write detected-baseline supersession, not Backfill
+  writer authority, and cannot authorize blank writes. Ambiguous candidates must
+  also pass identity-to-matrix `Mz`/`RT` coordinate checks before their sample
+  value can be considered.
+- Evidence:
+  `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/`
+  records `overall_status=blocked`. The previous unresolved authority cell
+  count was 101; this gate resolves 74 ambiguous cells as
+  `cell_local_unique_detected_candidate_supersession`, leaving 27 unresolved
+  cells. Full classification is 147 `write_ready_blank`, 263
+  `superseded_by_detected_baseline`, 74
+  `cell_local_unique_detected_candidate_supersession`, 19
+  `blocked_identity_missing`, 5 `blocked_ambiguous_all_blank`, and 3
+  `blocked_ambiguous_multiple_detected_candidates`; candidate coordinate
+  mismatches are 0 in the real packet.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_cell_local_identity_gate.py -q`
+  passed `6`, covering unique-detected candidate resolution, all-blank
+  ambiguous blocking, multiple-detected ambiguous blocking, missing identity
+  blocking, stale ambiguous identity-to-matrix coordinate rejection, and CLI
+  artifact writes; focused ruff passed; the real cell-local identity gate
+  command exited `0` and wrote the blocked summary/audit.
+- Remaining blocker: 27 cells still need a durable canonical identity decision
+  or explicit product-scope removal before any default activation candidate can
+  be built.
