@@ -4904,3 +4904,69 @@ the later low-height writer entry above as the current tier source.
 - Next checkpoint: do not open another expansion slice for the current CID-NL
   universe. Future CID-NL expansion requires new evidence or a new product
   question plus its own expected-diff/provenance/row-identity gate.
+
+### 2026-06-21 - CID-NL 85RAW Universe Closure v1
+
+- Lane: CID-NL Discovery 85RAW-derived universe closure for the already active
+  default scope.
+- Tier change: none. `cid_nl_default_product_activation_v1` remains
+  `production_ready` / `product_ready_default_matrix_activated` for exactly the
+  same 95 cells. No active lane, writer scope, matrix value, workbook/GUI,
+  selected peak/area, counted detection, or Backfill authority changed.
+- Product surface changed: validation/replay surface only. Added
+  `scripts/check_cid_nl_85raw_universe_closure.py` and retained the compact
+  summary/checks/manifest under
+  `docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/`.
+- Closure decision: the current 85RAW-derived successor-authority universe is
+  closed for the active CID-NL Discovery product question. The checker binds
+  the activation to the 85RAW fix3 alignment inputs and proves 511 successor
+  decisions = 147 write-authorized candidate cells + 337 detected-baseline
+  preserved cells + 27 omitted no-target cells. The 147 write-authorized
+  candidates are exactly 95 accepted default-active cells + 24 held cells + 28
+  blocked cells.
+- Evidence: the checker passes with `successor_decision_total_count=pass`,
+  `successor_decision_partition=pass`,
+  `candidate_transition_partition_exact=pass`,
+  `accepted_default_keyset_exact=pass`,
+  `default_matrix_delta_stays_95=pass`, and `85raw_fix3_input_binding=pass`.
+  The release-slice checker now calls this closure checker so the 95-cell
+  release claim cannot drift away from the 511-cell 85RAW-derived successor
+  decision universe.
+- Control-plane decision: no maturity tier or active lane update is needed.
+  This gate adds proof around the existing default activation; it does not
+  register new ProductWriter authority or broaden CID-NL/Backfill scope.
+- Next checkpoint: future CID-NL expansion requires new evidence or a new
+  product question plus its own expected-diff/provenance/row-identity gate. Do
+  not reopen the current 147-cell candidate universe as another expansion slice.
+
+### 2026-06-21 - CID-NL Discovery Feature-Inclusion Boundary Clarification v1
+
+- Lane: CID-NL Discovery default activation contract wording and release-gate
+  hardening for the already active 95-cell scope.
+- Tier change: none. `cid_nl_default_product_activation_v1` remains
+  `production_ready` / `product_ready_default_matrix_activated` for exactly the
+  same 95 cells. No active lane, writer scope, matrix value, workbook/GUI,
+  selected peak/area, counted detection, or Backfill authority changed.
+- Product surface changed: compact validation/replay surface only. The CID-NL
+  default activation summary/checks/README now explicitly records
+  `feature_inclusion_authority_basis=successor_self_evidence_manifest_expected_diff_and_cid_nl_tag`,
+  `matrix_row_universe_policy=discovery_expanded_85raw_alignment_rows`,
+  `low_prevalence_feature_policy=allowed_for_untargeted_downstream_filter`,
+  and
+  `source_successor_identity_scope=identity_review_only_not_feature_inclusion_blocker`.
+- Decision correction: sparse untargeted rows are not a CID-NL false-positive
+  blocker by themselves; downstream feature filtering owns prevalence and
+  missingness filtering. Source/successor m/z or RT similarity is also not the
+  feature-inclusion gate. It only belongs to identity authority questions such
+  as merge, dedupe, replacement, or migration.
+- Evidence: the activation builder now emits
+  `successor_self_evidence_contract=pass`,
+  `matrix_row_universe_policy=pass`, and
+  `source_successor_identity_scope=pass`. The release-slice checker requires
+  these checks and the new summary fields, so the 95-cell activation can only
+  be replayed when successor-self tag/quant/manifest/provenance evidence is
+  explicit.
+- Control-plane decision: no maturity tier or active lane update is needed.
+  This entry updates the product-gate contract language and checker surface
+  only; it does not register new ProductWriter authority or broaden CID-NL /
+  Backfill scope.

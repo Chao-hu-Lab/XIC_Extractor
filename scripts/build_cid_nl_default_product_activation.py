@@ -64,6 +64,14 @@ SCHEMA_VERSION = "cid_nl_default_product_activation_v1"
 ACTIVATION_LABEL = "product_ready_default_matrix_activated"
 PRODUCT_AUTHORITY_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
 DISCOVERY_DEFAULT_EFFECT = "write_cid_nl_discovery_default_cell"
+FEATURE_INCLUSION_AUTHORITY_BASIS = (
+    "successor_self_evidence_manifest_expected_diff_and_cid_nl_tag"
+)
+MATRIX_ROW_UNIVERSE_POLICY = "discovery_expanded_85raw_alignment_rows"
+LOW_PREVALENCE_FEATURE_POLICY = "allowed_for_untargeted_downstream_filter"
+SOURCE_SUCCESSOR_IDENTITY_SCOPE = (
+    "identity_review_only_not_feature_inclusion_blocker"
+)
 LEGACY_QUANT_MATRIX_EFFECT = "write_accepted_backfill"
 LEGACY_PROVENANCE_STATUS = "accepted_backfill"
 DEFAULT_OUTPUT_DIR = ROOT / "output/validation/cid_nl_default_product_activation_v1"
@@ -155,6 +163,10 @@ def build_cid_nl_default_product_activation(
         successor_authority_manifest_tsv,
         PRODUCTION_ACCEPTANCE_COLUMNS,
     )
+    successor_evidence_summary = _successor_self_evidence_summary(
+        contract_rows=contract_rows,
+        authority_rows=authority_rows,
+    )
     manifest_rows = _activation_manifest_rows(
         contract_rows=contract_rows,
         authority_rows=authority_rows,
@@ -233,6 +245,7 @@ def build_cid_nl_default_product_activation(
             expected_existing_successor_context_cell_count
         ),
         expected_omitted_no_target_cell_count=(expected_omitted_no_target_cell_count),
+        successor_evidence_summary=successor_evidence_summary,
     )
     failed_checks = [row["check_id"] for row in check_rows if row["status"] != "pass"]
     if failed_checks:
@@ -271,6 +284,7 @@ def build_cid_nl_default_product_activation(
         check_rows=check_rows,
         contract_rows=contract_rows,
         adopt_summary=adopt_summary,
+        successor_evidence_summary=successor_evidence_summary,
     )
     summary_json.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -305,6 +319,10 @@ def validate_cid_nl_default_product_activation(
         ("product_lane", "cid_nl_discovery"),
         ("product_scope_kind", "discovery_default_activation"),
         ("default_activation_effect", DISCOVERY_DEFAULT_EFFECT),
+        ("feature_inclusion_authority_basis", FEATURE_INCLUSION_AUTHORITY_BASIS),
+        ("matrix_row_universe_policy", MATRIX_ROW_UNIVERSE_POLICY),
+        ("low_prevalence_feature_policy", LOW_PREVALENCE_FEATURE_POLICY),
+        ("source_successor_identity_scope", SOURCE_SUCCESSOR_IDENTITY_SCOPE),
         ("accepted_discovery_cell_count", expected_contract_cell_count),
         ("accepted_backfill_count", expected_contract_cell_count),
         ("candidate_transition_count", expected_transition_count),
@@ -328,6 +346,14 @@ def validate_cid_nl_default_product_activation(
     for field, expected in expected_fields:
         if payload.get(field) != expected:
             problems.append(f"{field} mismatch")
+    successor_evidence = payload.get("successor_self_evidence_summary")
+    if (
+        not isinstance(successor_evidence, Mapping)
+        or successor_evidence.get("status") != "pass"
+        or successor_evidence.get("checked_cell_count")
+        != expected_contract_cell_count
+    ):
+        problems.append("successor_self_evidence_summary must pass")
     checks_path = summary_json.parent / "cid_nl_default_product_activation_checks.tsv"
     try:
         checks = read_tsv_required(checks_path, CHECK_COLUMNS)
@@ -446,6 +472,10 @@ def _validate_contract_shape(
             "sample_stem",
             "source_peak_hypothesis_id",
             "successor_peak_hypothesis_id",
+            "successor_mz",
+            "successor_rt",
+            "successor_product_mz",
+            "successor_neutral_loss_tag",
             "candidate_quant_value",
         ):
             if not text_value(row.get(field)):
@@ -537,6 +567,83 @@ def _activation_manifest_rows(
     for row in manifest_rows:
         row["manifest_sha256"] = manifest_sha
     return manifest_rows
+
+
+def _successor_self_evidence_summary(
+    *,
+    contract_rows: Sequence[Mapping[str, str]],
+    authority_rows: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    authority_by_key: dict[tuple[str, str], Mapping[str, str]] = {}
+    duplicate_manifest_keys = 0
+    for row in authority_rows:
+        key = (
+            text_value(row.get("peak_hypothesis_id")),
+            text_value(row.get("sample_stem")),
+        )
+        if not all(key):
+            continue
+        if key in authority_by_key:
+            duplicate_manifest_keys += 1
+        authority_by_key[key] = row
+
+    contract_keys: list[tuple[str, str]] = []
+    problem_count = duplicate_manifest_keys
+    missing_manifest = 0
+    tag_missing = 0
+    quant_mismatch = 0
+    provenance_missing = 0
+    authority_flag_mismatch = 0
+
+    for contract in contract_rows:
+        successor = text_value(contract.get("successor_peak_hypothesis_id"))
+        sample = text_value(contract.get("sample_stem"))
+        contract_keys.append((successor, sample))
+        if not text_value(contract.get("successor_neutral_loss_tag")):
+            tag_missing += 1
+            problem_count += 1
+        authority = authority_by_key.get((successor, sample))
+        if authority is None:
+            missing_manifest += 1
+            problem_count += 1
+            continue
+        if (
+            authority.get("write_authority") != "TRUE"
+            or authority.get("matrix_write_allowed") != "TRUE"
+            or authority.get("shadow_only") != "FALSE"
+        ):
+            authority_flag_mismatch += 1
+            problem_count += 1
+        if not numeric_equal(
+            authority.get("quant_value"),
+            contract.get("candidate_quant_value"),
+        ):
+            quant_mismatch += 1
+            problem_count += 1
+        if not (
+            text_value(authority.get("source_artifact_relpath"))
+            and text_value(authority.get("source_artifact_sha256"))
+            and text_value(authority.get("source_row_sha256"))
+        ):
+            provenance_missing += 1
+            problem_count += 1
+
+    duplicate_contract_keys = len(contract_keys) - len(set(contract_keys))
+    problem_count += duplicate_contract_keys
+    return {
+        "status": "pass" if problem_count == 0 else "fail",
+        "checked_cell_count": len(contract_rows),
+        "unique_successor_sample_count": len(set(contract_keys)),
+        "problem_count": problem_count,
+        "missing_manifest_count": missing_manifest,
+        "duplicate_manifest_key_count": duplicate_manifest_keys,
+        "duplicate_contract_key_count": duplicate_contract_keys,
+        "successor_tag_missing_count": tag_missing,
+        "authority_flag_mismatch_count": authority_flag_mismatch,
+        "quant_mismatch_count": quant_mismatch,
+        "provenance_missing_count": provenance_missing,
+        "basis": FEATURE_INCLUSION_AUTHORITY_BASIS,
+    }
 
 
 def _quant_expected_diff_rows(
@@ -708,6 +815,7 @@ def _check_rows(
     expected_transition_count: int,
     expected_existing_successor_context_cell_count: int,
     expected_omitted_no_target_cell_count: int,
+    successor_evidence_summary: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     transition_count = len(
         {text_value(row.get("transition_key")) for row in contract_rows}
@@ -793,6 +901,23 @@ def _check_rows(
             == expected_contract_cell_count,
         ),
         _check(
+            "successor_self_evidence_contract",
+            (
+                f"status={successor_evidence_summary.get('status')};"
+                f"problems={successor_evidence_summary.get('problem_count')}"
+            ),
+            "pass;problems=0",
+            successor_evidence_summary.get("status") == "pass"
+            and successor_evidence_summary.get("problem_count") == 0
+            and successor_evidence_summary.get("checked_cell_count")
+            == expected_contract_cell_count,
+            (
+                "Feature inclusion is based on successor tag, quant value, "
+                "write authority, and provenance; source/successor similarity "
+                "is reserved for identity review."
+            ),
+        ),
+        _check(
             "discovery_terminology_boundary",
             (
                 f"default_activation_effect={DISCOVERY_DEFAULT_EFFECT};"
@@ -805,6 +930,21 @@ def _check_rows(
             "product_surface_flags",
             "product_writer/default_matrix TRUE; workbook/gui FALSE",
             "explicit public default activation",
+            True,
+        ),
+        _check(
+            "matrix_row_universe_policy",
+            MATRIX_ROW_UNIVERSE_POLICY,
+            (
+                "Discovery-expanded untargeted matrix; downstream filters "
+                "handle low prevalence"
+            ),
+            True,
+        ),
+        _check(
+            "source_successor_identity_scope",
+            SOURCE_SUCCESSOR_IDENTITY_SCOPE,
+            "identity review only",
             True,
         ),
         _check(
@@ -855,6 +995,7 @@ def _summary_payload(
     check_rows: Sequence[Mapping[str, Any]],
     contract_rows: Sequence[Mapping[str, str]],
     adopt_summary: Mapping[str, Any],
+    successor_evidence_summary: Mapping[str, Any],
 ) -> dict[str, Any]:
     transition_count = len(
         {text_value(row.get("transition_key")) for row in contract_rows}
@@ -871,6 +1012,10 @@ def _summary_payload(
         "product_lane": "cid_nl_discovery",
         "product_scope_kind": "discovery_default_activation",
         "default_activation_effect": DISCOVERY_DEFAULT_EFFECT,
+        "feature_inclusion_authority_basis": FEATURE_INCLUSION_AUTHORITY_BASIS,
+        "matrix_row_universe_policy": MATRIX_ROW_UNIVERSE_POLICY,
+        "low_prevalence_feature_policy": LOW_PREVALENCE_FEATURE_POLICY,
+        "source_successor_identity_scope": SOURCE_SUCCESSOR_IDENTITY_SCOPE,
         "accepted_discovery_cell_count": len(contract_rows),
         "accepted_backfill_count": len(contract_rows),
         "candidate_transition_count": transition_count,
@@ -912,6 +1057,7 @@ def _summary_payload(
         "full_matrix_retention": "externalized_output_only",
         "matrix_delta_summary": delta_summary,
         "cell_provenance_summary": provenance_summary,
+        "successor_self_evidence_summary": dict(successor_evidence_summary),
         "input_artifacts": {
             "adopt_summary_json": _artifact(adopt_summary_json, source_root),
             "successor_authority_manifest_tsv": _artifact(
@@ -966,6 +1112,19 @@ def _summary_payload(
             "replay. Existing successor context cells and omitted no-target cells "
             "are preserved as no-write context."
         ),
+        "row_universe_statement": (
+            "The default output uses the current 85RAW-derived Discovery-expanded "
+            "alignment row universe. Low-prevalence features are allowed in this "
+            "untargeted handoff and are expected to be filtered downstream; low "
+            "prevalence is not a CID-NL false-positive blocker by itself."
+        ),
+        "identity_statement": (
+            "Source/successor m/z or RT similarity is not the feature-inclusion "
+            "gate. It belongs to identity authority questions such as merge, "
+            "dedupe, replacement, or migration. A successor may enter this "
+            "activation scope only through its own CID-NL tag, quant value, "
+            "write-ready manifest row, and provenance."
+        ),
         "terminology_statement": (
             "This artifact is Discovery-first at the product boundary. Legacy "
             "QuantMatrixVersion fields such as accepted_backfill_count, "
@@ -1007,6 +1166,16 @@ def _write_readme(
         "`accepted_backfill` / `write_accepted_backfill` values are retained only "
         "inside the shared QuantMatrixVersion writer and provenance compatibility "
         "surface.",
+        "",
+        "Row-universe boundary: the output matrix uses the current 85RAW-derived "
+        "Discovery-expanded alignment row universe. Sparse rows are acceptable "
+        "for this untargeted handoff; prevalence filtering belongs downstream, "
+        "not in this CID-NL activation gate.",
+        "",
+        "Feature-inclusion boundary: source/successor m/z or RT similarity is an "
+        "identity-review question only. The 95 active writes are accepted because "
+        "the successor cell itself has CID-NL tag context, quant value, "
+        "write-ready manifest authority, and provenance.",
         "",
         "## Counts",
         "",

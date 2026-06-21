@@ -17,7 +17,7 @@
     "checks_tsv": {
       "path": "cid_nl_default_product_activation_checks.tsv",
       "retention_decision": "keep_summary",
-      "sha256": "FC0F36187EB2041020FC62BDFA9F5276AB72BEA5274D5B139676B9678DD06978"
+      "sha256": "923088ABC398062A7CBFC21C89865A9A47FF38BBFBDDAE8AE77D2C33C74550FF"
     },
     "compact_manifest_tsv": {
       "path": "cid_nl_default_product_activation_manifest.tsv",
@@ -70,14 +70,16 @@
     "unexpected_provenance_count": 0,
     "value_mismatch_count": 0
   },
-  "check_count": 15,
+  "check_count": 18,
   "cid_nl_ms2_direct_productwriter_authority": false,
   "default_activation_effect": "write_cid_nl_discovery_default_cell",
   "default_matrix_files_written": true,
   "default_quant_matrix_changed": true,
   "existing_successor_context_cell_count": 337,
   "expected_diff_count": "95",
+  "feature_inclusion_authority_basis": "successor_self_evidence_manifest_expected_diff_and_cid_nl_tag",
   "full_matrix_retention": "externalized_output_only",
+  "identity_statement": "Source/successor m/z or RT similarity is not the feature-inclusion gate. It belongs to identity authority questions such as merge, dedupe, replacement, or migration. A successor may enter this activation scope only through its own CID-NL tag, quant value, write-ready manifest row, and provenance.",
   "input_artifacts": {
     "adopt_summary_json": {
       "path": "output/validation/cid_nl_default_activation_gallery_review_v1/activation_adopt_gate/cid_nl_activation_adopt_gate_summary.json",
@@ -124,6 +126,7 @@
   },
   "legacy_provenance_status": "accepted_backfill",
   "legacy_quant_matrix_effect": "write_accepted_backfill",
+  "low_prevalence_feature_policy": "allowed_for_untargeted_downstream_filter",
   "matrix_delta_summary": {
     "changed_cell_count": 95,
     "expected_write_count": 95,
@@ -135,6 +138,7 @@
     "value_mismatch_count": 0,
     "value_mismatches": []
   },
+  "matrix_row_universe_policy": "discovery_expanded_85raw_alignment_rows",
   "omitted_no_target_cell_count": 27,
   "product_authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
   "product_lane": "cid_nl_discovery",
@@ -142,6 +146,7 @@
   "product_writer_changed": true,
   "raw_or_85raw_ran": false,
   "read_only": false,
+  "row_universe_statement": "The default output uses the current 85RAW-derived Discovery-expanded alignment row universe. Low-prevalence features are allowed in this untargeted handoff and are expected to be filtered downstream; low prevalence is not a CID-NL false-positive blocker by itself.",
   "schema_version": "cid_nl_default_product_activation_v1",
   "selected_peak_area_or_counting_changed": false,
   "source_contract_counts": {
@@ -149,7 +154,22 @@
     "manual_resolved": 13,
     "primary_supported": 73
   },
+  "source_successor_identity_scope": "identity_review_only_not_feature_inclusion_blocker",
   "status": "pass",
+  "successor_self_evidence_summary": {
+    "authority_flag_mismatch_count": 0,
+    "basis": "successor_self_evidence_manifest_expected_diff_and_cid_nl_tag",
+    "checked_cell_count": 95,
+    "duplicate_contract_key_count": 0,
+    "duplicate_manifest_key_count": 0,
+    "missing_manifest_count": 0,
+    "problem_count": 0,
+    "provenance_missing_count": 0,
+    "quant_mismatch_count": 0,
+    "status": "pass",
+    "successor_tag_missing_count": 0,
+    "unique_successor_sample_count": 95
+  },
   "terminology_statement": "This artifact is Discovery-first at the product boundary. Legacy QuantMatrixVersion fields such as accepted_backfill_count, written_backfill_count, cell_status=accepted_backfill, and expected_matrix_effect=write_accepted_backfill are compatibility terms from the shared matrix writer, not Backfill product scope.",
   "unused_expected_diff_count": "0",
   "validation_label": "product_ready_cid_nl_default_activation",

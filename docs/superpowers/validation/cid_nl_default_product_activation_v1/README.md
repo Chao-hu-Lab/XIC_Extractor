@@ -8,6 +8,10 @@ It does not rerun RAW, change workbook/GUI behavior, change selected peak/area/c
 
 Terminology boundary: this is a Discovery product scope. The compact summary uses `accepted_discovery_cell_count` and `write_cid_nl_discovery_default_cell` for the public decision. Legacy `accepted_backfill` / `write_accepted_backfill` values are retained only inside the shared QuantMatrixVersion writer and provenance compatibility surface.
 
+Row-universe boundary: the output matrix uses the current 85RAW-derived Discovery-expanded alignment row universe. Sparse rows are acceptable for this untargeted handoff; prevalence filtering belongs downstream, not in this CID-NL activation gate.
+
+Feature-inclusion boundary: source/successor m/z or RT similarity is an identity-review question only. The 95 active writes are accepted because the successor cell itself has CID-NL tag context, quant value, write-ready manifest authority, and provenance.
+
 ## Counts
 
 - Accepted Discovery default writes: `95`

@@ -22,13 +22,20 @@ from scripts.build_cid_nl_default_product_activation import (  # noqa: E402
     COMPACT_MANIFEST_COLUMNS,
     DEFAULT_DOCS_DIR,
     DISCOVERY_DEFAULT_EFFECT,
+    FEATURE_INCLUSION_AUTHORITY_BASIS,
     LEGACY_PROVENANCE_STATUS,
     LEGACY_QUANT_MATRIX_EFFECT,
+    LOW_PREVALENCE_FEATURE_POLICY,
+    MATRIX_ROW_UNIVERSE_POLICY,
     PRODUCT_AUTHORITY_SCOPE,
+    SOURCE_SUCCESSOR_IDENTITY_SCOPE,
     validate_cid_nl_default_product_activation,
 )
 from scripts.check_bounded_product_lanes import (
     check_bounded_product_lanes,  # noqa: E402
+)
+from scripts.check_cid_nl_85raw_universe_closure import (  # noqa: E402
+    check_cid_nl_85raw_universe_closure,
 )
 from scripts.check_cid_nl_discovery_full_scope_classification import (  # noqa: E402
     check_cid_nl_discovery_full_scope_classification,
@@ -84,6 +91,8 @@ def check_cid_nl_discovery_release_slice(
     )
     for problem in check_cid_nl_discovery_full_scope_classification():
         problems.append(f"full_scope_classification: {problem}")
+    for problem in check_cid_nl_85raw_universe_closure():
+        problems.append(f"85raw_universe_closure: {problem}")
     for problem in check_productization_state():
         problems.append(f"productization_state: {problem}")
     for problem in check_productization_authority():
@@ -106,6 +115,10 @@ def _check_summary(payload: Mapping[str, Any], problems: list[str]) -> None:
         "product_scope_kind": "discovery_default_activation",
         "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
         "default_activation_effect": DISCOVERY_DEFAULT_EFFECT,
+        "feature_inclusion_authority_basis": FEATURE_INCLUSION_AUTHORITY_BASIS,
+        "matrix_row_universe_policy": MATRIX_ROW_UNIVERSE_POLICY,
+        "low_prevalence_feature_policy": LOW_PREVALENCE_FEATURE_POLICY,
+        "source_successor_identity_scope": SOURCE_SUCCESSOR_IDENTITY_SCOPE,
         "accepted_discovery_cell_count": 95,
         "written_discovery_cell_count": "95",
         "candidate_transition_count": 20,
@@ -151,9 +164,29 @@ def _check_summary(payload: Mapping[str, Any], problems: list[str]) -> None:
     elif provenance.get("accepted_discovery_cell_count") != 95:
         problems.append("accepted_discovery_cell_count in provenance must be 95")
 
+    successor_evidence = payload.get("successor_self_evidence_summary")
+    if (
+        not isinstance(successor_evidence, Mapping)
+        or successor_evidence.get("status") != "pass"
+        or successor_evidence.get("checked_cell_count") != 95
+        or successor_evidence.get("problem_count") != 0
+    ):
+        problems.append("successor_self_evidence_summary must pass")
+
     terminology = text_value(payload.get("terminology_statement"))
     if "not Backfill product scope" not in terminology:
         problems.append("terminology_statement must separate Discovery from Backfill")
+    row_universe = text_value(payload.get("row_universe_statement"))
+    if "Low-prevalence features are allowed" not in row_universe:
+        problems.append("row_universe_statement must allow sparse untargeted rows")
+    identity = text_value(payload.get("identity_statement"))
+    identity_anchor = (
+        "Source/successor m/z or RT similarity is not the feature-inclusion gate"
+    )
+    if identity_anchor not in identity:
+        problems.append(
+            "identity_statement must separate identity review from feature inclusion"
+        )
 
 
 def _check_checks_tsv(path: Path, problems: list[str]) -> None:
@@ -166,8 +199,15 @@ def _check_checks_tsv(path: Path, problems: list[str]) -> None:
     if failed:
         problems.append("failed release checks: " + ", ".join(failed))
     check_ids = {row.get("check_id", "") for row in rows}
-    if "discovery_terminology_boundary" not in check_ids:
-        problems.append("checks_tsv missing discovery_terminology_boundary")
+    required_ids = {
+        "discovery_terminology_boundary",
+        "successor_self_evidence_contract",
+        "matrix_row_universe_policy",
+        "source_successor_identity_scope",
+    }
+    missing = sorted(required_ids - check_ids)
+    if missing:
+        problems.append("checks_tsv missing required ids: " + ";".join(missing))
 
 
 def _check_compact_manifest(path: Path, problems: list[str]) -> None:
@@ -221,6 +261,7 @@ def _check_docs(
             "Do not reopen broad Backfill",
             "accepted_discovery_cell_count",
             "cid_nl_discovery_full_scope_classification_v1",
+            "cid_nl_85raw_universe_closure_v1",
         ],
         handoff: [
             "The immediate product direction is Discovery first",
@@ -228,12 +269,14 @@ def _check_docs(
             "Do not reopen broad Backfill while the active goal is "
             "Discovery productization",
             "CID-NL Discovery full-scope classification v1",
+            "CID-NL 85RAW Universe Closure v1",
         ],
         control_plane: [
             "CID-NL Discovery Lane Terminology Cleanup v1",
             "accepted_discovery_cell_count=95",
             "legacy_quant_matrix_effect",
             "CID-NL Discovery Full-Scope Classification v1",
+            "CID-NL 85RAW Universe Closure v1",
         ],
     }
     for path, anchors in required.items():

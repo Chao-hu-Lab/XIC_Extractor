@@ -47,6 +47,18 @@ def test_builds_cid_nl_default_activation_from_adopt_ready_bundle(
     assert payload["product_lane"] == "cid_nl_discovery"
     assert payload["product_scope_kind"] == "discovery_default_activation"
     assert payload["default_activation_effect"] == "write_cid_nl_discovery_default_cell"
+    assert payload["feature_inclusion_authority_basis"] == (
+        "successor_self_evidence_manifest_expected_diff_and_cid_nl_tag"
+    )
+    assert payload["matrix_row_universe_policy"] == (
+        "discovery_expanded_85raw_alignment_rows"
+    )
+    assert payload["low_prevalence_feature_policy"] == (
+        "allowed_for_untargeted_downstream_filter"
+    )
+    assert payload["source_successor_identity_scope"] == (
+        "identity_review_only_not_feature_inclusion_blocker"
+    )
     assert payload["accepted_discovery_cell_count"] == 2
     assert payload["accepted_backfill_count"] == 2
     assert payload["candidate_transition_count"] == 1
@@ -62,6 +74,20 @@ def test_builds_cid_nl_default_activation_from_adopt_ready_bundle(
     assert payload["cid_nl_ms2_direct_productwriter_authority"] is False
     assert payload["candidate_rows_are_matrix_rows"] is False
     assert payload["full_matrix_retention"] == "externalized_output_only"
+    assert payload["successor_self_evidence_summary"] == {
+        "status": "pass",
+        "checked_cell_count": 2,
+        "unique_successor_sample_count": 2,
+        "problem_count": 0,
+        "missing_manifest_count": 0,
+        "duplicate_manifest_key_count": 0,
+        "duplicate_contract_key_count": 0,
+        "successor_tag_missing_count": 0,
+        "authority_flag_mismatch_count": 0,
+        "quant_mismatch_count": 0,
+        "provenance_missing_count": 0,
+        "basis": "successor_self_evidence_manifest_expected_diff_and_cid_nl_tag",
+    }
 
     matrix = _read_tsv(tmp_path / "out" / "default_output" / "quant_matrix.tsv")
     assert matrix[0]["SampleA"] == "111"
@@ -115,6 +141,16 @@ def test_builds_cid_nl_default_activation_from_adopt_ready_bundle(
     readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
     assert "Accepted Discovery default writes" in readme
     assert "Terminology boundary" in readme
+    assert "Row-universe boundary" in readme
+    assert "Feature-inclusion boundary" in readme
+
+    checks = _read_tsv(
+        tmp_path / "docs" / "cid_nl_default_product_activation_checks.tsv"
+    )
+    check_ids = {row["check_id"] for row in checks}
+    assert "successor_self_evidence_contract" in check_ids
+    assert "matrix_row_universe_policy" in check_ids
+    assert "source_successor_identity_scope" in check_ids
 
 
 def test_default_activation_refuses_hold_adopt_summary(tmp_path: Path) -> None:
@@ -161,11 +197,35 @@ def test_default_activation_refuses_missing_manifest_authority(
         )
 
 
+def test_default_activation_requires_successor_tag_for_feature_inclusion(
+    tmp_path: Path,
+) -> None:
+    paths = _write_fixture(tmp_path, successor_neutral_loss_tag="")
+
+    with pytest.raises(ValueError, match="missing successor_neutral_loss_tag"):
+        build_cid_nl_default_product_activation(
+            output_dir=tmp_path / "out",
+            docs_dir=tmp_path / "docs",
+            source_root=tmp_path,
+            expected_diff_contract_tsvs=(paths["contract"],),
+            adopt_summary_json=paths["adopt_summary"],
+            successor_authority_manifest_tsv=paths["successor_manifest"],
+            input_quant_matrix_tsv=paths["matrix"],
+            input_matrix_identity_tsv=paths["identity"],
+            value_delta_tsv=paths["value_delta"],
+            expected_contract_cell_count=2,
+            expected_transition_count=1,
+            expected_existing_successor_context_cell_count=3,
+            expected_omitted_no_target_cell_count=1,
+        )
+
+
 def _write_fixture(
     tmp_path: Path,
     *,
     adopt_status: str = "adopt_ready",
     manifest_samples: tuple[str, ...] = ("SampleA", "SampleB"),
+    successor_neutral_loss_tag: str = "DNA_dR",
 ) -> dict[str, Path]:
     matrix = tmp_path / "alignment_matrix.tsv"
     identity = tmp_path / "alignment_matrix_identity.tsv"
@@ -197,8 +257,16 @@ def _write_fixture(
         ],
     )
     contract_rows = [
-        _contract_row("SampleA", "111"),
-        _contract_row("SampleB", "222"),
+        _contract_row(
+            "SampleA",
+            "111",
+            successor_neutral_loss_tag=successor_neutral_loss_tag,
+        ),
+        _contract_row(
+            "SampleB",
+            "222",
+            successor_neutral_loss_tag=successor_neutral_loss_tag,
+        ),
     ]
     _write_tsv(contract, feature_gate.EXPECTED_DIFF_COLUMNS, contract_rows)
     _write_tsv(
@@ -278,7 +346,12 @@ def _identity_row(index: int, peak_id: str, mz: str, rt: str) -> dict[str, str]:
     }
 
 
-def _contract_row(sample: str, value: str) -> dict[str, str]:
+def _contract_row(
+    sample: str,
+    value: str,
+    *,
+    successor_neutral_loss_tag: str = "DNA_dR",
+) -> dict[str, str]:
     return {
         "schema_version": feature_gate.SCHEMA_VERSION,
         "expected_diff_contract_status": "expected_diff_design_candidate",
@@ -294,7 +367,7 @@ def _contract_row(sample: str, value: str) -> dict[str, str]:
         "successor_mz": "300.1605",
         "successor_rt": "22.2",
         "successor_product_mz": "184.113",
-        "successor_neutral_loss_tag": "DNA_dR",
+        "successor_neutral_loss_tag": successor_neutral_loss_tag,
         "successor_identity_decision": "production_family",
         "candidate_quant_value": value,
         "legacy_successor_matrix_effect": "write_accepted_backfill",

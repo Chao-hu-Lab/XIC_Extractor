@@ -32,11 +32,21 @@ Public CID-NL artifacts now use Discovery-first language:
 - `accepted_discovery_cell_count=95`
 - `written_discovery_cell_count=95`
 - `default_activation_effect=write_cid_nl_discovery_default_cell`
+- `feature_inclusion_authority_basis=successor_self_evidence_manifest_expected_diff_and_cid_nl_tag`
+- `matrix_row_universe_policy=discovery_expanded_85raw_alignment_rows`
+- `low_prevalence_feature_policy=allowed_for_untargeted_downstream_filter`
+- `source_successor_identity_scope=identity_review_only_not_feature_inclusion_blocker`
 
 Legacy `accepted_backfill`, `written_backfill_count`,
 `cell_status=accepted_backfill`, and `write_accepted_backfill` terms are kept
 only as `QuantMatrixVersion` compatibility fields. They are not Backfill product
 scope.
+
+Sparse untargeted rows are allowed in the current Discovery-expanded matrix
+handoff. Do not treat low prevalence as a CID-NL false-positive blocker by
+itself; downstream feature filtering owns prevalence and missingness filtering.
+Source/successor m/z or RT similarity is an identity-authority question only,
+not the feature-inclusion gate.
 
 Primary Discovery roadmap:
 
@@ -51,14 +61,20 @@ Current release-slice checker:
 - `uv run python -m scripts.check_cid_nl_discovery_release_slice`
 - Focused test: `uv run pytest tests/test_cid_nl_discovery_release_slice.py -q`
 - Coverage: default activation replay, full-scope classification,
-  productization state/authority, validation artifact retention, and bounded
-  non-broad lane checks.
+  85RAW universe closure, productization state/authority, validation artifact
+  retention, and bounded non-broad lane checks.
 
 CID-NL Discovery full-scope classification v1:
 
 - `uv run python -m scripts.check_cid_nl_discovery_full_scope_classification`
 - Retained compact artifact:
   `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
+
+CID-NL 85RAW Universe Closure v1:
+
+- `uv run python -m scripts.check_cid_nl_85raw_universe_closure`
+- Retained compact artifact:
+  `docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/`
 
 ## Current Discovery Evidence
 
@@ -75,8 +91,19 @@ CID-NL Discovery full-scope classification v1:
   changes.
 - Cell provenance: exact keyset pass through the shared
   `ProductionAcceptanceManifest -> QuantMatrixVersion` writer.
+- Successor-self evidence: pass. Each active write is tied to the successor
+  cell's CID-NL tag context, quant value, write-ready manifest row, and
+  provenance; source/successor similarity is not required for feature inclusion.
+- Row-universe policy: pass. The output uses the 85RAW-derived
+  Discovery-expanded alignment row universe; low-prevalence rows are expected
+  to be filtered downstream, not blocked at CID-NL activation.
 - Full-scope classification: 147 candidate cells partitioned into 95 accepted,
   24 held, and 28 blocked; 0 user-review cells remain.
+- 85RAW universe closure: 511 successor decisions are closed as 147
+  write-authorized candidate cells, 337 detected-baseline preserved context
+  cells, and 27 omitted no-target cells.
+- The 147 write-authorized candidate cells are fully accounted for as 95
+  default-active accepted cells, 24 held cells, and 28 blocked cells.
 - Preserved context: 337 existing-successor cells and 27 omitted no-target
   cells remain no-write context.
 - Target guardrails: `300.1605 -> 184.113` is preserved as source context, and
@@ -95,6 +122,8 @@ CID-NL Discovery full-scope classification v1:
   `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv`
 - CID-NL full-scope classification summary/checks/manifest:
   `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
+- CID-NL 85RAW universe closure summary/checks/manifest:
+  `docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/`
 - Full generated CID-NL default outputs:
   `output/validation/cid_nl_default_product_activation_v1/`
 - Pre-activation Gallery/adopt evidence:
@@ -112,6 +141,9 @@ CID-NL Discovery full-scope classification v1:
 - Do not reopen broad Backfill while the active goal is Discovery productization.
 - Do not reopen the current 147-cell Discovery universe as another expansion
   slice; it is already partitioned into accepted/held/blocked buckets.
+- Do not use low prevalence alone as a CID-NL false-positive reason.
+- Do not use source/successor RT or m/z difference to block feature inclusion;
+  use it only for merge/dedupe/replace/migration identity authority.
 
 ## Status Index Anchors
 
@@ -126,6 +158,7 @@ Anchor phrases retained for the status checker:
 - `CID-NL default product activation v1`
 - `CID-NL Discovery Release Slice Checker v1`
 - `CID-NL Discovery Full-Scope Classification v1`
+- `CID-NL 85RAW Universe Closure v1`
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
 - machine-adjudicated without granting new writer authority
@@ -143,8 +176,8 @@ Anchor phrases retained for the status checker:
 
 ## Next Step
 
-Continue with Discovery only: either stabilize the current 95-cell release slice
-or start a new Discovery product question with its own expected-diff,
-provenance, row-identity, and artifact-retention gate. The current 147-cell
-candidate universe is already classified; do not route this through broad
-Backfill.
+Continue with Discovery only. The current 85RAW-derived CID-NL universe is
+already classified and closed for the active product question. Future CID-NL
+expansion needs new evidence or a new product question with its own
+expected-diff, successor-self evidence, provenance, row-identity, and
+artifact-retention gate; do not route this through broad Backfill.
