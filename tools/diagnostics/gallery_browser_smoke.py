@@ -37,7 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     results: list[SmokeResult] = []
     try:
         with sync_playwright() as playwright:
-            browser = _launch_browser(playwright, args.browser_channel)
+            browser = _launch_browser(
+                playwright,
+                args.browser_channel,
+                launch_timeout_ms=args.launch_timeout_ms,
+            )
             try:
                 results.extend(
                     _run_viewport_smoke(
@@ -90,25 +94,36 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if failed else 0
 
 
-def _launch_browser(playwright: Any, channel: str) -> Any:
-    attempts = (
-        ("bundled Chromium", {}),
-        ("system Chrome", {"channel": "chrome"}),
-        ("system Edge", {"channel": "msedge"}),
-    )
-    if channel != "auto":
+def _launch_browser(
+    playwright: Any,
+    channel: str,
+    *,
+    launch_timeout_ms: int,
+) -> Any:
+    attempts = (("bundled Chromium", {}),)
+    if channel == "auto":
+        attempts = (
+            ("bundled Chromium", {}),
+            ("system Chrome", {"channel": "chrome"}),
+            ("system Edge", {"channel": "msedge"}),
+        )
+    elif channel != "bundled":
         attempts = tuple(
             (name, kwargs)
-            for name, kwargs in attempts
-            if (
-                (channel == "bundled" and not kwargs)
-                or kwargs.get("channel") == channel
+            for name, kwargs in (
+                ("system Chrome", {"channel": "chrome"}),
+                ("system Edge", {"channel": "msedge"}),
             )
+            if kwargs.get("channel") == channel
         )
     errors: list[str] = []
     for name, kwargs in attempts:
         try:
-            return playwright.chromium.launch(headless=True, **kwargs)
+            return playwright.chromium.launch(
+                headless=True,
+                timeout=launch_timeout_ms,
+                **kwargs,
+            )
         except Exception as exc:  # pragma: no cover - host browser dependent
             errors.append(f"{name}: {exc}")
     raise RuntimeError(SETUP_HINT + "\n\nLaunch attempts:\n" + "\n".join(errors))
@@ -385,10 +400,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--timeout-ms", type=int, default=15000)
     parser.add_argument(
+        "--launch-timeout-ms",
+        type=int,
+        default=8000,
+        help=(
+            "Browser launch timeout. Keep short so missing browser installs "
+            "fail fast."
+        ),
+    )
+    parser.add_argument(
         "--browser-channel",
         choices=("auto", "bundled", "chrome", "msedge"),
-        default="auto",
-        help="Use bundled Playwright Chromium first by default, then Chrome/Edge.",
+        default="bundled",
+        help=(
+            "Use bundled Playwright Chromium only by default. Pass auto or an "
+            "explicit channel to opt into system Chrome/Edge fallback."
+        ),
     )
     return parser.parse_args(argv)
 

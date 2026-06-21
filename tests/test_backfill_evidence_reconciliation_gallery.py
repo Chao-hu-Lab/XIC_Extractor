@@ -1418,6 +1418,8 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     )
 
     text = html_path.read_text(encoding="utf-8")
+    guide_html_copy = html_path.parent / "evidence_overlay_interpretation_guide.html"
+    assert guide_html_copy.exists()
     png_href = os.path.relpath(png_path, html_path.parent).replace("\\", "/")
     review_href = os.path.relpath(review_tsv, html_path.parent).replace("\\", "/")
     assert '<html lang="zh-Hant">' in text
@@ -1426,6 +1428,8 @@ def test_html_gallery_is_table_first_accessible_and_safe(tmp_path: Path) -> None
     assert "artifact consumer only" in text
     assert "does not write matrix" in text
     assert "Candidate is not a matrix write." in text
+    assert "How to read these overlays" in text
+    assert "evidence_overlay_interpretation_guide.html" in text
     assert "diagnostic_only" in text
     assert (
         "benchmark context only；target benchmark 可作驗收/定位 target context"

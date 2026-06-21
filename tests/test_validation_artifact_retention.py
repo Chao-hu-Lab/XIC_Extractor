@@ -98,6 +98,30 @@ def test_checker_accepts_contract_tsv_and_summary_markdown(tmp_path: Path) -> No
     assert result.problems == ()
 
 
+def test_checker_accepts_handwritten_human_guide_html(tmp_path: Path) -> None:
+    root, inventory, policy = _fixture_root(tmp_path)
+    guide = "docs/superpowers/validation/evidence_overlay_interpretation_guide.html"
+    _write_text(
+        root / guide,
+        "<!doctype html><html><body><main>How to read overlays</main></body></html>",
+    )
+    _write_inventory(
+        inventory,
+        [
+            _row(
+                guide,
+                category="human_guide_html",
+                decision="keep_summary",
+                required_by="Gallery overlay interpretation guide",
+            ),
+        ],
+    )
+
+    result = _check(root, inventory, policy, candidate_paths=[guide])
+
+    assert result.problems == ()
+
+
 def test_checker_accepts_minimal_fixture_tsv(tmp_path: Path) -> None:
     root, inventory, policy = _fixture_root(tmp_path)
     fixture = "docs/superpowers/validation/readiness/inputs/cell_provenance.tsv"

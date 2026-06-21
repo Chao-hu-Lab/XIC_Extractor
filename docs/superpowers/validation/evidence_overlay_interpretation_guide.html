@@ -1068,7 +1068,7 @@
         <article class="focus-card" data-lane="discovery">
           <b>2</b>
           <h3>Review lens 2 — Discovery</h3>
-          <p>source 與 successor 兩個 row identity，哪一個更能解釋同一組 samples？</p>
+          <p>先看 successor 是否有 MS1-backed feature support，再看 source / successor 關係是否支持 migration、dedupe 或共存。</p>
         </article>
         <article class="focus-card" data-lane="firewall">
           <b>!</b>
@@ -1227,7 +1227,7 @@
         </ul>
         <div class="lane-answer">
           <strong>允許的結論</strong>
-          <p>支持 identity migration 或 hold/reject；仍是 review evidence。</p>
+          <p>支持 feature inclusion、identity migration 或 hold/reject；仍是 review evidence。</p>
         </div>
       </article>
 
@@ -1534,9 +1534,10 @@
     <!-- discovery scenario -->
     <article id="discovery" class="figure-card">
       <header>
-        <h2>Discovery lens：比 row identity</h2>
+        <h2>Discovery lens：先看 feature，再比 row identity</h2>
         <p>
-          這張圖的重點是「哪個 row identity 更能解釋同一組 samples」。
+          這張圖的第一個問題是 successor 是否有 MS1-backed feature support；
+          第二個問題才是 source / successor 是否支持 identity migration、dedupe 或共存。
           source/successor m/z 不需要相同；Gaussian15 visual smoothing 只協助讀圖。
           下面 1–4 是<strong>主線第 2–3 步（確認 row identity/provenance → 用這個 lens 看 pattern）在 Discovery 裡的展開</strong>。
           <span style="color:var(--muted);">hover、focus 或點各步驟可高亮對應圖塊；不靠互動也能照文字讀。</span>
@@ -1624,8 +1625,8 @@
           <div class="reader-step" data-step="2" data-target-svg="discovery-svg" data-target-group="disc-g2">
             <b class="step-dot green">2</b>
             <div>
-              <strong>再確認 successor row：這是另一個 identity。</strong>
-              <span>Discovery differential 問的是哪個 identity story 更能解釋同一批 samples。</span>
+              <strong>再確認 successor row：這是候選 feature identity。</strong>
+              <span>先判斷 successor 是否有 MS1-backed feature support；source 有峰不代表 successor 失敗。</span>
               <div class="cannot-infer">兩張 trace 必須同峰型才合理</div>
             </div>
           </div>
@@ -1633,7 +1634,7 @@
             <b class="step-dot amber">3</b>
             <div>
               <strong>看整組 sample pattern：不是看單一漂亮峰。</strong>
-              <span>下方趨勢要回答同一組 samples 是否一致偏向 successor，這才是 identity migration 的支持理由。</span>
+              <span>下方趨勢要回答同一組 samples 是否支持 successor feature，或只是留下 co-existing / unresolved identity 關係。</span>
               <div class="cannot-infer">一個 sample 高就代表 mapping 成立</div>
             </div>
           </div>
@@ -1679,8 +1680,8 @@
         <span class="trap-label" data-lens="discovery">Discovery 誤讀</span>
         <h3>source/successor 不是同一個 m/z 的重畫</h3>
         <p>
-          Discovery differential 比的是兩個 row identity。m/z 不同是正常的；
-          你要看哪個 identity story 比較一致，而不是拿同 m/z 疊圖比高低。
+          Discovery differential 先問 successor 是否是 MS1-backed feature，再問 source/successor 關係。
+          m/z 不同是正常的；你要看 feature support 與 relationship，而不是拿同 m/z 疊圖比高低。
         </p>
       </article>
       <article class="warning-card" data-lens="discovery">

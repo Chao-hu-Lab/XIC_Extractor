@@ -22,6 +22,27 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
 - Separate machine artifacts from human review surfaces. TSV/JSON may be
   exhaustive; Markdown specs are mostly for agents; human-facing reports should
   be short, visual or indexed, and decision-oriented.
+- Before creating a new HTML review surface, search for an existing review or
+  gallery owner and reuse it when the artifact is the same kind of human
+  decision surface. Prefer the established gallery shape (`review-table`,
+  `data-filter-control`, `data-search-control`, PNG lightbox/overlay links, and
+  `tools/diagnostics/gallery_browser_smoke.py`) over a task-specific standalone
+  HTML renderer. A new HTML renderer needs an explicit owner-gap note and exit
+  rule.
+- Reusing the Gallery means reusing the interaction shell, not automatically
+  reusing Backfill domain semantics. Discovery identity, Backfill authority,
+  model selection, and MS2 evidence review modes must label their question,
+  counts, blockers, overlays, and exit rule in their own vocabulary.
+- Overlay/Gallery semantics need a maintained reader guide. If a change alters
+  how Backfill, Discovery, or other evidence-review plots should be read,
+  update `docs/superpowers/validation/evidence_overlay_interpretation_guide.html`
+  in the same change, or state why the existing guide still applies.
+- For Codex interactive HTML review, use the in-app Browser by default. Do not
+  use Chrome, Computer Use, or standalone browser-control surfaces unless the
+  task specifically depends on existing Chrome cookies, profile state, or an
+  external browser. If the in-app Browser blocks a local `file://` URL, serve
+  only the exact artifact directory on `127.0.0.1` and open that localhost URL
+  in the in-app Browser.
 - Manual review requests should include a compact review index with identifiers:
   sample, label or family id, m/z, RT/window, status, reason, and linked
   artifact path.

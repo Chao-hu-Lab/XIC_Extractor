@@ -54,6 +54,7 @@ KEEP_DECISIONS = {
 DROP_DECISIONS = {"externalize", "delete_generated"}
 TEXT_SUFFIXES = {".csv", ".json", ".md", ".tsv", ".txt", ".yml", ".yaml"}
 RENDERED_SUFFIXES = {".html", ".htm", ".png", ".jpg", ".jpeg", ".gif", ".svg"}
+HUMAN_GUIDE_CATEGORIES = {"human_guide_html"}
 RENDERED_REFERENCE_RE = re.compile(
     r"docs[/\\]superpowers[/\\]validation[/\\][^\s\t;,)]+?\.(?:html|png)",
     re.IGNORECASE,
@@ -298,6 +299,8 @@ def _check_rendered_references(
 
 
 def _is_rendered_artifact(path: str, category: str) -> bool:
+    if category in HUMAN_GUIDE_CATEGORIES:
+        return False
     suffix = Path(path).suffix.lower()
     return suffix in RENDERED_SUFFIXES or category in {
         "rendered_html",

@@ -33,6 +33,9 @@ from xic_extractor.diagnostics.shadow_production_projection import (
 )
 
 SCHEMA_VERSION = "backfill_evidence_reconciliation_v0"
+OVERLAY_INTERPRETATION_GUIDE_PATH = Path(
+    "docs/superpowers/validation/evidence_overlay_interpretation_guide.html",
+)
 SHIFT_AWARE_SAME_PATTERN_SUPPORT_MIN_R = 0.98
 SHIFT_AWARE_SAME_PATTERN_CONFLICT_MAX_R = 0.90
 
@@ -286,6 +289,9 @@ class RepresentativeCell:
     apex_delta_sec: str = ""
     boundary_overlap: str = ""
     interference_signal: str = ""
+    source_peak_hypothesis_id: str = ""
+    successor_peak_hypothesis_id: str = ""
+    successor_decision: str = ""
     representative_reason: str = ""
     source_row_key: str = ""
 
@@ -1125,14 +1131,19 @@ def write_reconciliation_gallery_html(
     """Render a table-first human review gallery from a reconciliation index."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    local_interpretation_guide = _write_local_overlay_interpretation_guide(
+        path.parent
+    )
     render_context = _gallery_render_context(index)
+    gallery_title = _gallery_document_title(render_context.html_groups)
+    hero = _gallery_hero_copy(render_context.html_groups)
     lines = [
         "<!doctype html>",
         '<html lang="zh-Hant">',
         "<head>",
         '<meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>Backfill evidence reconciliation gallery</title>",
+        f"<title>{_escape(gallery_title)}</title>",
         "<style>",
         _gallery_css(),
         "</style>",
@@ -1140,21 +1151,22 @@ def write_reconciliation_gallery_html(
         "<body>",
         "<main>",
         '<header class="gallery-hero" aria-label="gallery introduction">',
-        '<div class="hero-kicker">Matrix-decision audit surface</div>',
-        "<h1>Backfill Evidence Reconciliation</h1>",
-        (
-            '<p class="hero-copy">Production decisions, same-peak evidence, '
-            "missing artifacts, and review-only context are reconciled here "
-            "without recalculating domain evidence.</p>"
-        ),
+        f'<div class="hero-kicker">{_escape(hero["kicker"])}</div>',
+        f"<h1>{_escape(hero['heading'])}</h1>",
+        f'<p class="hero-copy">{_escape(hero["copy"])}</p>',
         '<div class="hero-status-strip" aria-label="gallery role">',
-        "<span>artifact consumer only</span>",
-        "<span>does not write matrix</span>",
-        "<span>hypothesis first</span>",
-        "<span>human review ready</span>",
+        *[
+            f"<span>{_escape(label)}</span>"
+            for label in hero["status_labels"]
+        ],
         "</div>",
         "</header>",
-        *_summary_html(index, output_paths, html_path=path),
+        *_summary_html(
+            index,
+            output_paths,
+            html_path=path,
+            local_interpretation_guide=local_interpretation_guide,
+        ),
         *_html_scope_notice(render_context.all_groups, render_context.html_groups),
         *_filter_html(
             total_families=len(_family_groups(render_context.html_groups)),
@@ -1197,6 +1209,49 @@ def write_reconciliation_gallery_html(
         lines.extend(_lightbox_html())
     lines.extend(["</main>", _lightbox_script(), "</body>", "</html>"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _gallery_document_title(groups: Sequence[ReconciliationGroup]) -> str:
+    if _is_cid_nl_successor_review_index(groups):
+        return "Evidence Review Gallery - CID-NL Feature Inclusion Review"
+    return "Backfill evidence reconciliation gallery"
+
+
+def _gallery_hero_copy(
+    groups: Sequence[ReconciliationGroup],
+) -> dict[str, str | tuple[str, ...]]:
+    if _is_cid_nl_successor_review_index(groups):
+        return {
+            "kicker": "Evidence review surface",
+            "heading": "CID-NL Feature Inclusion / Identity Review",
+            "copy": (
+                "CID-NL/MS2 evidence, MS1 feature context, source/successor "
+                "identity relationships, representative cells, and adoption "
+                "candidate decisions are shown here without granting "
+                "ProductWriter authority."
+            ),
+            "status_labels": (
+                "feature inclusion first",
+                "identity authority separate",
+                "MS1 trace context only",
+                "does not write matrix",
+            ),
+        }
+    return {
+        "kicker": "Matrix-decision audit surface",
+        "heading": "Backfill Evidence Reconciliation",
+        "copy": (
+            "Production decisions, same-peak evidence, missing artifacts, "
+            "and review-only context are reconciled here without recalculating "
+            "domain evidence."
+        ),
+        "status_labels": (
+            "artifact consumer only",
+            "does not write matrix",
+            "hypothesis first",
+            "human review ready",
+        ),
+    }
 
 
 def _gallery_render_context(index: ReconciliationIndex) -> _GalleryRenderContext:
@@ -2456,6 +2511,9 @@ def _representative_as_row(cell: RepresentativeCell) -> dict[str, Any]:
         "apex_delta_sec": cell.apex_delta_sec,
         "boundary_overlap": cell.boundary_overlap,
         "interference_signal": cell.interference_signal,
+        "source_peak_hypothesis_id": cell.source_peak_hypothesis_id,
+        "successor_peak_hypothesis_id": cell.successor_peak_hypothesis_id,
+        "successor_decision": cell.successor_decision,
         "representative_reason": cell.representative_reason,
         "source_row_key": cell.source_row_key,
     }
@@ -2550,6 +2608,7 @@ def _summary_html(
     output_paths: Mapping[str, Path],
     *,
     html_path: Path,
+    local_interpretation_guide: Path | None,
 ) -> list[str]:
     summary = _summary(
         index.groups,
@@ -2567,6 +2626,11 @@ def _summary_html(
     return [
         '<section class="summary" aria-label="reconciliation summary">',
         _decision_legend_html(),
+        _interpretation_guide_callout_html(
+            summary,
+            html_path=html_path,
+            local_interpretation_guide=local_interpretation_guide,
+        ),
         _summary_item("validation", "Validation", validation_label),
         _summary_item("groups", "Groups", str(summary["group_count"])),
         _summary_item(
@@ -2642,6 +2706,46 @@ def _summary_html(
         ),
         "</section>",
     ]
+
+
+def _interpretation_guide_callout_html(
+    summary: Mapping[str, object],
+    *,
+    html_path: Path,
+    local_interpretation_guide: Path | None,
+) -> str:
+    guide_path = str(local_interpretation_guide) if local_interpretation_guide else (
+        text_value(summary.get("overlay_interpretation_guide_path"))
+        or str(OVERLAY_INTERPRETATION_GUIDE_PATH)
+    )
+    link = _path_link_html(
+        guide_path,
+        html_path=html_path,
+        label="Open overlay interpretation guide",
+    )
+    return (
+        '<div class="interpretation-guide" aria-label="overlay interpretation guide">'
+        "<strong>How to read these overlays</strong>"
+        "<p>Backfill overlays answer why a matrix/backfill decision is supported; "
+        "Discovery differential overlays compare evidence for two row identities, "
+        "even when source and successor m/z differ.</p>"
+        f"<p>{link}</p>"
+        "</div>"
+    )
+
+
+def _write_local_overlay_interpretation_guide(output_dir: Path) -> Path | None:
+    source = Path.cwd() / OVERLAY_INTERPRETATION_GUIDE_PATH
+    if not source.exists():
+        return None
+    target = output_dir / OVERLAY_INTERPRETATION_GUIDE_PATH.name
+    try:
+        if source.resolve() == target.resolve():
+            return target
+    except OSError:
+        return None
+    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    return target
 
 
 def _decision_legend_html() -> str:
@@ -3234,12 +3338,42 @@ def _state_html_for_shadow(
     )
 
 
+def _is_cid_nl_successor_review_group(group: ReconciliationGroup) -> bool:
+    return group.seed_group_basis in {
+        "cid_nl_successor_authority",
+        "cid_nl_feature_inclusion_review",
+    }
+
+
+def _is_cid_nl_differential_review_group(group: ReconciliationGroup) -> bool:
+    return (
+        _is_cid_nl_successor_review_group(group)
+        and group.seed_group_id.startswith("cid_nl_differential::")
+    )
+
+
+def _cid_nl_transition_label(group: ReconciliationGroup) -> str:
+    if not _is_cid_nl_differential_review_group(group):
+        return group.feature_family_id
+    return group.seed_group_id.removeprefix("cid_nl_differential::")
+
+
+def _is_cid_nl_successor_review_index(
+    groups: Sequence[ReconciliationGroup],
+) -> bool:
+    return bool(groups) and all(
+        _is_cid_nl_successor_review_group(group) for group in groups
+    )
+
+
 def _counts_html(
     group: ReconciliationGroup,
     shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
 ) -> str:
     if shadow_projection_cells:
         return _projection_counts_html(group, shadow_projection_cells)
+    if _is_cid_nl_successor_review_group(group):
+        return _cid_nl_successor_counts_html(group)
     return _impact_counts_html(
         detected=group.detected_cell_count,
         rescued=group.rescued_cell_count,
@@ -3274,6 +3408,40 @@ def _projection_counts_html(
             "projection candidate pool; Write is new projected matrix writes; "
             "Block is hard projection blockers."
         ),
+    )
+
+
+def _cid_nl_successor_counts_html(group: ReconciliationGroup) -> str:
+    items = [
+        _count_pill(
+            "Candidate",
+            "successor MS1-backed feature-inclusion candidate cells; "
+            "not active matrix writes",
+            group.rescued_cell_count,
+        ),
+        _count_pill(
+            "Existing",
+            "cells where the successor feature already has a detected baseline value",
+            group.detected_cell_count,
+        ),
+    ]
+    if group.provisional_cell_count:
+        items.append(
+            _count_pill(
+                "Omit",
+                "legacy cells omitted because no safe successor write target exists",
+                group.provisional_cell_count,
+            ),
+        )
+    return (
+        '<dl class="count-stack cid-nl-successor-counts" '
+        'aria-label="CID-NL feature-inclusion review counts. '
+        'Candidate is successor MS1 feature-inclusion candidate cells; Existing '
+        'is detected-baseline successor feature context; Omit is no safe '
+        'successor target. These are not NL-tag coverage counts and are not '
+        'active matrix writes.">'
+        f"{''.join(items)}"
+        "</dl>"
     )
 
 
@@ -3341,6 +3509,28 @@ def _count_pill(label: str, title: str, value: int) -> str:
 def _compact_issue_label(value: str) -> str:
     text = text_value(value)
     replacements = {
+        "cid_nl_adoption_candidate": "CID-NL adoption candidate",
+        "cid_nl_feature_inclusion_candidate": "feature inclusion candidate",
+        "cid_nl_feature_inclusion_not_assessable": "CID-NL not assessable",
+        "cid_nl_feature_already_present_preserve": "CID-NL existing feature",
+        "cid_nl_no_write_preserve": "CID-NL preserve baseline",
+        "cid_nl_no_write_omit": "CID-NL omitted no-write",
+        "feature_inclusion_supported": "feature inclusion supported",
+        "feature_inclusion_already_supported": "feature already supported",
+        "feature_inclusion_visual_context": "feature inclusion visual context",
+        "cid_nl_feature_inclusion_existing_row_preserved": (
+            "existing feature preserved"
+        ),
+        "cid_nl_identity_relationship_review": "identity relationship review",
+        "cid_nl_ms1_feature_inclusion_supported": "MS1 feature inclusion support",
+        "cid_nl_existing_feature_preserved": "existing feature preserved",
+        "successor_authority_candidate": "successor authority candidate",
+        "successor_detected_baseline_context": "successor detected baseline",
+        "cid_nl_successor_write_candidate": "successor write candidate",
+        "cid_nl_successor_no_write_preserve": "successor preserve no-write",
+        "cid_nl_successor_no_safe_write_target": "no safe successor target",
+        "successor_authority_write_candidate": "successor write candidate",
+        "successor_detected_baseline_preserve": "successor preserve baseline",
         "seed_request_provenance": "seed provenance",
         "review_required_neighboring_ms1_interference": "neighboring MS1 review",
         "review_required_interference": "interference review",
@@ -3719,6 +3909,8 @@ def _consolidated_counts_html(
 ) -> str:
     if shadow_projection_cells:
         return _projection_counts_html(groups[0], shadow_projection_cells)
+    if groups and all(_is_cid_nl_successor_review_group(group) for group in groups):
+        return _cid_nl_successor_consolidated_counts_html(groups)
     detected = max((group.detected_cell_count for group in groups), default=0)
     rescued = sum(group.rescued_cell_count for group in groups)
     duplicate = max(
@@ -3738,6 +3930,23 @@ def _consolidated_counts_html(
             "candidate/provisional cells, not matrix-written counts; "
             "Dup is family duplicate-assigned "
             "cell context."
+        ),
+    )
+
+
+def _cid_nl_successor_consolidated_counts_html(
+    groups: Sequence[ReconciliationGroup],
+) -> str:
+    return _cid_nl_successor_counts_html(
+        ReconciliationGroup(
+            feature_family_id=groups[0].feature_family_id,
+            seed_group_id=groups[0].seed_group_id,
+            seed_group_basis=groups[0].seed_group_basis,
+            detected_cell_count=sum(group.detected_cell_count for group in groups),
+            rescued_cell_count=sum(group.rescued_cell_count for group in groups),
+            provisional_cell_count=sum(
+                group.provisional_cell_count for group in groups
+            ),
         ),
     )
 
@@ -3864,6 +4073,10 @@ def _consolidated_overlay_readout(
     input_artifacts: object,
     html_path: Path,
 ) -> str:
+    if groups and all(_is_cid_nl_differential_review_group(group) for group in groups):
+        if any(_href_for_path(group.overlay_png_path, html_path) for group in groups):
+            return "hypothesis differential overlay available"
+        return _missing_overlay_reason_text(input_artifacts)
     if any(_hypothesis_overlay_path(group, html_path) for group in groups):
         return "hypothesis overlay available"
     if any(_href_for_path(group.overlay_png_path, html_path) for group in groups):
@@ -4286,6 +4499,16 @@ def _family_pattern_link_html(
         href = _href_for_path(group.overlay_png_path, html_path)
         if not href:
             continue
+        if _is_cid_nl_differential_review_group(group):
+            return _overlay_link_html(
+                group,
+                html_path,
+                label="hypothesis differential",
+                caption=(
+                    f"{_cid_nl_transition_label(group)} | paired "
+                    "source/successor PeakHypothesis MS1 overlay"
+                ),
+            )
         caption = f"{group.feature_family_id} | family MS1 context fallback"
         return (
             f'<a class="png-link pattern-link" href="{_escape_attr(href)}" '
@@ -4359,6 +4582,34 @@ def _overlay_link_html(
     png_href = _href_for_path(group.overlay_png_path, html_path)
     if not png_href:
         return ""
+    if _is_cid_nl_differential_review_group(group):
+        transition = _cid_nl_transition_label(group)
+        if "family context" in label:
+            label = label.replace("family context", "hypothesis differential")
+        if label == "PNG":
+            label = "hypothesis differential PNG"
+        if scope == "FAMILY CONTEXT":
+            scope = "HYPOTHESIS DIFFERENTIAL OVERLAY"
+        if caption is None or "family context" in caption:
+            caption = (
+                f"{transition} | paired source/successor PeakHypothesis MS1 "
+                "overlay"
+            )
+        if interpretation == (
+            "Family-level MS1 context; use hypothesis evidence when available."
+        ):
+            interpretation = (
+                "Source and successor PeakHypothesis MS1 trace comparison; "
+                "Gaussian15-smoothed visual evidence only, not NL-tag coverage "
+                "and not ProductWriter authority."
+            )
+    elif _is_cid_nl_successor_review_group(group) and interpretation == (
+        "Family-level MS1 context; use hypothesis evidence when available."
+    ):
+        interpretation = (
+            "MS1 detected/rescued trace context only; not NL-tag coverage "
+            "and not ProductWriter authority."
+        )
     lightbox_caption = (
         caption
         if caption is not None
@@ -4426,6 +4677,22 @@ def _hypothesis_overlay_link_html(
     path = _hypothesis_overlay_path(group, html_path)
     if not path:
         return ""
+    if _is_cid_nl_successor_review_group(group):
+        caption = (
+            f"{group.feature_family_id} | m/z {group.seed_mz or 'unknown'} | "
+            f"RT {group.seed_rt or 'unknown'} | CID-NL successor MS1 trace context"
+        )
+        return _path_overlay_link_html(
+            path,
+            html_path,
+            label="MS1 context PNG" if label == "hypothesis PNG" else label,
+            caption=caption,
+            scope="MS1 TRACE CONTEXT",
+            interpretation=(
+                "MS1 detected/rescued trace context only; not NL-tag coverage "
+                "and not ProductWriter authority."
+            ),
+        )
     caption = (
         f"{group.feature_family_id} | m/z {group.seed_mz or 'unknown'} | "
         f"RT {group.seed_rt or 'unknown'} | detected-anchor hypothesis evidence"
@@ -4727,8 +4994,8 @@ def _details_html(
             ),
         )
         + _chain_item_html(
-            "Hypothesis MS1 evidence",
-            "visual evidence",
+            _ms1_evidence_chain_title(group),
+            _ms1_evidence_chain_subtitle(group),
             _overlay_evidence_notes_html(group.overlay_evidence_notes)
             or '<p class="chain-note">No overlay metric notes supplied.</p>',
         )
@@ -4812,6 +5079,8 @@ def _detail_summary_html(
     )
     return (
         '<div class="detail-summary-grid" aria-label="hypothesis summary">'
+        + _cid_nl_review_focus_card_html(group)
+        + _cid_nl_discovery_identity_card_html(group, representatives)
         + _detail_summary_card_html(
             "decision",
             "current product / evidence state",
@@ -4832,7 +5101,7 @@ def _detail_summary_html(
         )
         + _detail_summary_card_html(
             "visual evidence",
-            "hypothesis evidence / family context",
+            _visual_summary_subtitle(group),
             _detail_visual_summary_html(group, html_path, input_artifacts),
         )
         + _detail_summary_card_html(
@@ -4840,12 +5109,47 @@ def _detail_summary_html(
             f"{len(representatives)} representative cells",
             (
                 _counts_html(group, shadow_projection_cells)
-                + _cell_impact_legend_note_html(shadow_projection_cells)
+                + _cell_impact_legend_note_html(group, shadow_projection_cells)
                 + _shadow_projection_summary_note_html(shadow_projection_cells)
                 + _shadow_policy_summary_note_html(shadow_policy_cells)
             ),
         )
         + "</div>"
+    )
+
+
+def _cid_nl_review_focus_card_html(group: ReconciliationGroup) -> str:
+    if not _is_cid_nl_successor_review_group(group):
+        return ""
+    return _detail_summary_card_html(
+        "Review focus",
+        "separate feature inclusion from identity authority",
+        (
+            "<p><strong>Feature inclusion question</strong> "
+            "Does CID-NL/MS2 evidence plus MS1 trace context support carrying "
+            "this successor as an untargeted feature candidate?</p>"
+            "<p><strong>Identity authority question</strong> "
+            "Should source and successor be replaced, merged, deduped, or "
+            "kept as co-existing features? Current answer: review only.</p>"
+        ),
+    )
+
+
+def _cid_nl_discovery_identity_card_html(
+    group: ReconciliationGroup,
+    representatives: Sequence[RepresentativeCell],
+) -> str:
+    if not _is_cid_nl_successor_review_group(group):
+        return ""
+    return _detail_summary_card_html(
+        "Feature / identity relationship",
+        "source row -> successor hypothesis",
+        (
+            "<p><strong>Source/successor relationship</strong></p>"
+            + _cid_nl_identity_transition_list_html(group, representatives)
+            + "<p><strong>successor cell decisions</strong></p>"
+            + _cid_nl_successor_decision_list_html(representatives)
+        ),
     )
 
 
@@ -4857,6 +5161,24 @@ def _detail_summary_card_html(title: str, subtitle: str, body_html: str) -> str:
         f'<div class="summary-body">{body_html}</div>'
         "</section>"
     )
+
+
+def _visual_summary_subtitle(group: ReconciliationGroup) -> str:
+    if _is_cid_nl_successor_review_group(group):
+        return "MS1 feature context / identity review only"
+    return "hypothesis evidence / family context"
+
+
+def _ms1_evidence_chain_title(group: ReconciliationGroup) -> str:
+    if _is_cid_nl_successor_review_group(group):
+        return "MS1 trace context"
+    return "Hypothesis MS1 evidence"
+
+
+def _ms1_evidence_chain_subtitle(group: ReconciliationGroup) -> str:
+    if _is_cid_nl_successor_review_group(group):
+        return "not NL-tag authority"
+    return "visual evidence"
 
 
 def _review_answer_html(
@@ -4874,8 +5196,12 @@ def _review_answer_html(
         html_path,
         label="family context",
     )
-    if overlay:
+    if overlay and _is_cid_nl_successor_review_group(group):
+        overlay_text = "MS1 context PNG available; not NL-tag evidence"
+    elif overlay:
         overlay_text = "hypothesis overlay available"
+    elif family_context and _is_cid_nl_differential_review_group(group):
+        overlay_text = "hypothesis differential overlay available"
     elif family_context:
         overlay_text = "family context only, hypothesis overlay not generated"
     else:
@@ -4898,6 +5224,14 @@ def _review_answer_decision_text(
     group: ReconciliationGroup,
     shadow_projection_cells: Sequence[ShadowProjectionCell],
 ) -> str:
+    if _is_cid_nl_successor_review_group(group):
+        return (
+            "結論：CID-NL adoption review only；"
+            f"Write {group.rescued_cell_count}、"
+            f"Preserve {group.detected_cell_count}、"
+            f"Omit {group.provisional_cell_count}。"
+            "這不是 active default matrix，也不是 ProductWriter authority。"
+        )
     if shadow_projection_cells:
         current = sum(cell.current_matrix_written for cell in shadow_projection_cells)
         review = sum(cell.review_rescued_cell for cell in shadow_projection_cells)
@@ -4999,6 +5333,14 @@ def _detail_visual_summary_html(
 
 
 def _anchor_review_context_html(group: ReconciliationGroup) -> str:
+    if _is_cid_nl_successor_review_group(group):
+        return (
+            '<p class="review-note">CID-NL feature review: Candidate/Existing/Omit '
+            "counts come from the diagnostic decision packet. Overlay orange "
+            "detected/rescued traces are MS1 trace status only; they do not prove "
+            "NL-tag coverage, force source/successor replacement, or grant "
+            "ProductWriter authority.</p>"
+        )
     if group.seed_detected_anchor_count == 0:
         return (
             '<p class="review-note">No detected NL anchor on this hypothesis; '
@@ -5050,6 +5392,7 @@ def _shadow_policy_chain_subtitle(
 
 
 def _cell_impact_legend_note_html(
+    group: ReconciliationGroup,
     shadow_projection_cells: Sequence[ShadowProjectionCell],
 ) -> str:
     if shadow_projection_cells:
@@ -5059,6 +5402,14 @@ def _cell_impact_legend_note_html(
             "Review=只有 review/candidate context，尚未寫入 matrix；"
             "Write=這輪 projection/activation 可寫入的新 cells；"
             "Block=hard blockers。Context/review-only 不會直接改 matrix。</p>"
+        )
+    if _is_cid_nl_successor_review_group(group):
+        return (
+            '<p class="chain-note">Write=successor adoption candidate writes；'
+            "Preserve=successor baseline already has a detected value, so no "
+            "Backfill write；Omit=no safe successor write target。"
+            "These are authority-review counts, not NL-tag coverage and not "
+            "active matrix writes.</p>"
         )
     return (
         '<p class="chain-note">NL=detected required-tag anchors；'
@@ -5426,6 +5777,13 @@ def _component_list_html(items: Sequence[str]) -> str:
 def _representative_cells_table_html(
     representatives: Sequence[RepresentativeCell],
 ) -> str:
+    if any(
+        cell.source_peak_hypothesis_id
+        or cell.successor_peak_hypothesis_id
+        or cell.successor_decision
+        for cell in representatives
+    ):
+        return _representative_cells_identity_table_html(representatives)
     rep_rows = "".join(
         "<tr>"
         f"<td>{_escape(';'.join(cell.representative_roles))}</td>"
@@ -5450,6 +5808,100 @@ def _representative_cells_table_html(
         "</tr></thead>"
         f"<tbody>{rep_rows}</tbody></table>"
     )
+
+
+def _representative_cells_identity_table_html(
+    representatives: Sequence[RepresentativeCell],
+) -> str:
+    rep_rows = "".join(
+        "<tr>"
+        f"<td>{_escape(';'.join(cell.representative_roles))}</td>"
+        f"<td>{_escape(_identity_transition_text(cell))}</td>"
+        f"<td>{_escape(cell.sample_stem)}</td>"
+        f"<td>{_escape(cell.successor_decision)}</td>"
+        f"<td>{_escape(_compact_issue_label(cell.product_cell_state))}</td>"
+        f"<td>{_escape(_compact_issue_label(cell.cell_status))}</td>"
+        f"<td>{_escape(cell.representative_reason)}</td>"
+        "</tr>"
+        for cell in representatives
+    )
+    if not rep_rows:
+        rep_rows = (
+            '<tr><td colspan="7">沒有可安全選出的 representative cell。</td></tr>'
+        )
+    return (
+        '<table class="rep-table rep-table-identity">'
+        "<thead><tr>"
+        '<th scope="col">roles</th><th scope="col">identity</th>'
+        '<th scope="col">sample</th><th scope="col">decision</th>'
+        '<th scope="col">cell effect</th><th scope="col">status</th>'
+        '<th scope="col">reason</th>'
+        "</tr></thead>"
+        f"<tbody>{rep_rows}</tbody></table>"
+    )
+
+
+def _cid_nl_identity_transition_list_html(
+    group: ReconciliationGroup,
+    representatives: Sequence[RepresentativeCell],
+) -> str:
+    counts = Counter(
+        _identity_transition_text(cell)
+        for cell in representatives
+        if cell.source_peak_hypothesis_id or cell.successor_peak_hypothesis_id
+    )
+    if not counts:
+        if any(
+            item.startswith("target_guardrail:")
+            for item in group.dependent_context_components
+        ):
+            return (
+                '<p class="chain-note">'
+                "Target benchmark context only: this verifies Discovery "
+                "recovered or preserved the target family, not a Backfill "
+                "old-to-successor write candidate.</p>"
+            )
+        return (
+            '<p class="chain-note">'
+            "No old-to-successor identity mapping supplied.</p>"
+        )
+    return _summary_count_list_html(counts)
+
+
+def _cid_nl_successor_decision_list_html(
+    representatives: Sequence[RepresentativeCell],
+) -> str:
+    counts = Counter(
+        cell.successor_decision for cell in representatives if cell.successor_decision
+    )
+    if not counts:
+        return '<p class="chain-note">No successor decision supplied.</p>'
+    return _summary_count_list_html(counts)
+
+
+def _summary_count_list_html(counts: Counter[str]) -> str:
+    items = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    limit = 6
+    visible = items[:limit]
+    extra = len(items) - limit
+    html = (
+        '<ul class="component-list identity-transition-list">'
+        + "".join(
+            f"<li>{_escape(label)} <span class=\"muted\">x{count}</span></li>"
+            for label, count in visible
+        )
+    )
+    if extra > 0:
+        html += f'<li class="muted">+{extra} more</li>'
+    return html + "</ul>"
+
+
+def _identity_transition_text(cell: RepresentativeCell) -> str:
+    if not (cell.source_peak_hypothesis_id or cell.successor_peak_hypothesis_id):
+        return ""
+    old_peak = cell.source_peak_hypothesis_id or "<unknown>"
+    successor = cell.successor_peak_hypothesis_id or "<none>"
+    return f"{old_peak} -> {successor}"
 
 
 def _lightbox_html() -> list[str]:
@@ -5650,6 +6102,7 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 }
 .summary-item,
 .authority-note,
+.interpretation-guide,
 .artifact-strip,
 .provenance-panel,
 .html-scope-note,
@@ -5684,6 +6137,19 @@ summary:focus-visible { outline: 3px solid var(--focus); }
   border-left: 5px solid var(--red);
   color: #742525;
   font-weight: 700;
+}
+.interpretation-guide {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border-left: 5px solid var(--green);
+}
+.interpretation-guide strong {
+  display: block;
+  margin-bottom: 4px;
+}
+.interpretation-guide p {
+  margin: 4px 0;
+  color: #334155;
 }
 .artifact-strip {
   grid-column: 1 / -1;
@@ -6077,6 +6543,12 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 }
 .badge.product_grade_support,
 .badge.product_primary_backfilled,
+.badge.cid_nl_no_write_preserve,
+.badge.cid_nl_feature_already_present_preserve,
+.badge.feature_inclusion_already_supported,
+.badge.cid_nl_feature_inclusion_existing_row_preserved,
+.badge.successor_detected_baseline_context,
+.badge.cid_nl_successor_no_write_preserve,
 .badge.product_accepts_and_product_grade_supports { border-left-color: var(--green); }
 .badge.review_only_visual_support,
 .badge.product_rejects_but_visual_supports { border-left-color: var(--blue); }
@@ -6084,12 +6556,21 @@ summary:focus-visible { outline: 3px solid var(--focus); }
 .badge.product_accepts_but_evidence_conflicts,
 .badge.product_rejects_and_evidence_blocks { border-left-color: var(--red); }
 .badge.not_assessable,
+.badge.cid_nl_no_write_omit,
+.badge.cid_nl_feature_inclusion_not_assessable,
 .badge.not_assessable_missing_overlay,
 .badge.not_assessable_missing_seed_provenance,
 .badge.not_assessable_join_gap { border-left-color: var(--amber); }
 .badge.evidence_inconclusive,
 .badge.human_visual_judgment_only,
 .badge.product_rescued_context_only,
+.badge.cid_nl_adoption_candidate,
+.badge.cid_nl_feature_inclusion_candidate,
+.badge.feature_inclusion_supported,
+.badge.feature_inclusion_visual_context,
+.badge.cid_nl_identity_relationship_review,
+.badge.successor_authority_candidate,
+.badge.cid_nl_successor_write_candidate,
 .badge.product_provisional { border-left-color: var(--purple); }
 .top-issue {
   display: inline-grid;
@@ -6577,6 +7058,7 @@ h1 {
 }
 .summary-item,
 .authority-note,
+.interpretation-guide,
 .artifact-strip,
 .provenance-panel,
 .html-scope-note,
@@ -6593,6 +7075,20 @@ h1 {
   padding: 11px 12px;
   border-left: 0;
   box-shadow: inset 0 4px 0 var(--blue), var(--shadow-soft);
+}
+.interpretation-guide {
+  grid-column: 1 / -1;
+  padding: 13px 15px;
+  border-left: 5px solid var(--green);
+}
+.interpretation-guide strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #13211c;
+}
+.interpretation-guide p {
+  margin: 5px 0;
+  color: #334155;
 }
 .decision-legend {
   grid-column: 1 / -1;
@@ -6880,6 +7376,12 @@ h1 {
 }
 .badge.product_grade_support,
 .badge.product_primary_backfilled,
+.badge.cid_nl_no_write_preserve,
+.badge.cid_nl_feature_already_present_preserve,
+.badge.feature_inclusion_already_supported,
+.badge.cid_nl_feature_inclusion_existing_row_preserved,
+.badge.successor_detected_baseline_context,
+.badge.cid_nl_successor_no_write_preserve,
 .badge.product_accepts_and_product_grade_supports {
   border-left-color: var(--green);
 }
@@ -6895,13 +7397,22 @@ h1 {
 .badge.product_rescued_context_only,
 .badge.product_provisional,
 .badge.not_assessable,
+.badge.cid_nl_no_write_omit,
+.badge.cid_nl_feature_inclusion_not_assessable,
 .badge.not_assessable_missing_overlay,
 .badge.not_assessable_missing_seed_provenance,
 .badge.not_assessable_join_gap {
   border-left-color: var(--amber);
 }
 .badge.evidence_inconclusive,
-.badge.human_visual_judgment_only {
+.badge.human_visual_judgment_only,
+.badge.cid_nl_adoption_candidate,
+.badge.cid_nl_feature_inclusion_candidate,
+.badge.feature_inclusion_supported,
+.badge.feature_inclusion_visual_context,
+.badge.cid_nl_identity_relationship_review,
+.badge.successor_authority_candidate,
+.badge.cid_nl_successor_write_candidate {
   border-left-color: var(--purple);
 }
 .top-issue {
@@ -7272,6 +7783,21 @@ def _badge_label(value: str) -> str:
         "product_review_only": "review only",
         "product_not_backfilled": "not written",
         "product_unknown": "unknown",
+        "cid_nl_adoption_candidate": "CID-NL adoption candidate",
+        "cid_nl_feature_inclusion_candidate": "CID-NL feature candidate",
+        "cid_nl_feature_inclusion_not_assessable": "CID-NL not assessable",
+        "cid_nl_feature_already_present_preserve": "CID-NL existing feature",
+        "cid_nl_no_write_preserve": "CID-NL preserve",
+        "cid_nl_no_write_omit": "CID-NL omit",
+        "feature_inclusion_supported": "feature supported",
+        "feature_inclusion_already_supported": "feature already present",
+        "feature_inclusion_visual_context": "feature visual",
+        "cid_nl_feature_inclusion_existing_row_preserved": "existing feature",
+        "cid_nl_identity_relationship_review": "identity review",
+        "successor_authority_candidate": "successor candidate",
+        "successor_detected_baseline_context": "successor baseline",
+        "cid_nl_successor_write_candidate": "successor write candidate",
+        "cid_nl_successor_no_write_preserve": "successor preserve",
         "pattern_context_only": "family map",
         "pattern_available": "context available",
         "pattern_unavailable": "context unavailable",

@@ -23,6 +23,8 @@ Use one of these retention decisions in `ARTIFACT_INVENTORY.tsv`.
 ## Keep In Git
 
 - Validation README files, short notes, and source-backed summaries.
+- Small hand-written human guide HTML may be kept as `human_guide_html` when it
+  is the maintained reader surface, not a generated review gallery or packet.
 - JSON/TSV manifests that are the only source of a contract or case universe.
 - Status and authority indexes checked by productization scripts.
 - Minimal golden fixtures used by tests or checkers.
