@@ -31,12 +31,22 @@ from xic_extractor.diagnostics.diagnostic_io import (
 SCHEMA_VERSION = "standard_peak_ms1_authority_bundle_v0"
 AUTHORITY_MODE_MANUAL_ORACLE = "manual-oracle"
 AUTHORITY_MODE_MACHINE_GATE = "machine-gate"
-AUTHORITY_MODES = (AUTHORITY_MODE_MANUAL_ORACLE, AUTHORITY_MODE_MACHINE_GATE)
+AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE = "machine-selective-source-gate"
+AUTHORITY_MODES = (
+    AUTHORITY_MODE_MANUAL_ORACLE,
+    AUTHORITY_MODE_MACHINE_GATE,
+    AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE,
+)
 DEFAULT_MANUAL_AUTHORITY_SOURCE = "manual_standard_peak_gate_calibration"
 DEFAULT_MACHINE_AUTHORITY_SOURCE = "machine_shift_aware_standard_peak_gate"
+DEFAULT_SELECTIVE_AUTHORITY_SOURCE = (
+    "machine_selective_source_family_shift_aware_gate"
+)
 DEFAULT_AUTHORITY_SOURCE = DEFAULT_MANUAL_AUTHORITY_SOURCE
 STANDARD_PEAK_SUPPORTED = "standard_peak_gate_supported"
 MANUAL_AUTHORIZED_CALL = "authorize_standard_peak_backfill"
+STANDARD_PEAK_SHAPE_METRIC_SOURCE = "shift_aware_standard_peak_gate"
+SELECTIVE_SHAPE_METRIC_SOURCE = "selective_source_family_shift_aware_gate"
 
 STANDARD_PEAK_GATE_COLUMNS = (
     "feature_family_id",
@@ -71,6 +81,21 @@ TRACE_SUMMARY_COLUMNS = (
     "apex_aligned_shape_similarity",
     "absolute_own_max_shape_similarity",
 )
+SELECTIVE_SHIFT_COLUMNS = (
+    "peak_hypothesis_id",
+    "sample_stem",
+    "source_family",
+    "standard_peak_boundary_status",
+    "whole_family_gate_call",
+    "source_family_shift_status",
+    "source_family_shape_r",
+    "source_family_shift_sec",
+    "own_max_metric_status",
+    "own_max_metric_value",
+    "selective_evidence_status",
+    "primary_blocker",
+    "secondary_blockers",
+)
 MS1_PATTERN_EXTRA_COLUMNS = (
     "shape_metric_source",
     "anchor_peak_own_max_shape_similarity",
@@ -80,6 +105,11 @@ MS1_PATTERN_EXTRA_COLUMNS = (
     "standard_peak_gate_call",
     "standard_peak_gate_min_shape_r_after_best_shift",
     "standard_peak_gate_max_abs_shift_sec",
+    "selective_source_family",
+    "selective_source_family_shift_status",
+    "selective_source_family_shape_r",
+    "selective_source_family_shift_sec",
+    "selective_evidence_status",
 )
 MS1_PATTERN_COLUMNS = (
     *authority.required_ms1_pattern_columns(),
@@ -120,6 +150,7 @@ def run_standard_peak_ms1_authority_bundle(
     min_anchor_own_max_shape_similarity: float = (
         authority.DEFAULT_MIN_ANCHOR_OWN_MAX_SHAPE_SIMILARITY
     ),
+    selective_shift_cells_tsv: Path | None = None,
 ) -> StandardPeakAuthorityBundleOutputs:
     if authority_mode not in AUTHORITY_MODES:
         allowed = ", ".join(AUTHORITY_MODES)
@@ -129,6 +160,10 @@ def run_standard_peak_ms1_authority_bundle(
     )
     gate_rows = read_tsv_required(standard_peak_gate_tsv, STANDARD_PEAK_GATE_COLUMNS)
     overlay_rows = read_tsv_required(overlay_batch_summary_tsv, OVERLAY_BATCH_COLUMNS)
+    selective_rows_by_family_sample = _load_selective_rows_by_family_sample(
+        selective_shift_cells_tsv=selective_shift_cells_tsv,
+        authority_mode=authority_mode,
+    )
     overlay_by_family = {
         text_value(row.get("feature_family_id")): row for row in overlay_rows
     }
@@ -146,7 +181,12 @@ def run_standard_peak_ms1_authority_bundle(
         if not family_id:
             skipped["missing_family_id"] += 1
             continue
-        if not _gate_row_is_authorized_standard_peak(
+        selective_rows_by_sample = selective_rows_by_family_sample.get(family_id, {})
+        if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+            if not selective_rows_by_sample:
+                skipped["selective_gate_no_pass_cells"] += 1
+                continue
+        elif not _gate_row_is_authorized_standard_peak(
             gate_row,
             authority_mode=authority_mode,
         ):
@@ -175,6 +215,7 @@ def run_standard_peak_ms1_authority_bundle(
             output_dir=output_dir,
             cache=overlay_artifact_cache,
         )
+        matched_selective_samples: set[str] = set()
         for trace_row in artifacts.trace_summary_rows:
             if text_value(trace_row.get("status")) != "rescued":
                 continue
@@ -182,6 +223,14 @@ def run_standard_peak_ms1_authority_bundle(
             if not sample_stem:
                 skipped["trace_sample_missing"] += 1
                 continue
+            selective_row = selective_rows_by_sample.get(sample_stem)
+            if (
+                authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE
+                and selective_row is None
+            ):
+                continue
+            if selective_row is not None:
+                matched_selective_samples.add(sample_stem)
             source_rows.append(
                 _source_row(
                     family_id=family_id,
@@ -189,6 +238,8 @@ def run_standard_peak_ms1_authority_bundle(
                     trace_row=trace_row,
                     overlay_row=overlay_row,
                     gate_row=gate_row,
+                    selective_row=selective_row,
+                    authority_mode=authority_mode,
                     relative_trace_path=artifacts.relative_trace_path,
                 )
             )
@@ -200,11 +251,16 @@ def run_standard_peak_ms1_authority_bundle(
                     authority_reason=_authority_reason(
                         gate_row,
                         authority_mode=authority_mode,
+                        selective_row=selective_row,
                     ),
                     relative_trace_path=artifacts.relative_trace_path,
                     trace_sha256=artifacts.trace_sha256,
                     min_shape_similarity=min_anchor_own_max_shape_similarity,
                 )
+            )
+        if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+            skipped["selective_pass_trace_row_not_rescued"] += len(
+                set(selective_rows_by_sample) - matched_selective_samples,
             )
 
     ms1_pattern_tsv = output_dir / "standard_peak_ms1_pattern_coherence_evidence.tsv"
@@ -248,6 +304,14 @@ def run_standard_peak_ms1_authority_bundle(
         "authority_source": resolved_authority_source,
         "standard_peak_gate_tsv": str(standard_peak_gate_tsv),
         "standard_peak_gate_sha256": file_sha256(standard_peak_gate_tsv),
+        "selective_shift_cells_tsv": (
+            str(selective_shift_cells_tsv) if selective_shift_cells_tsv else ""
+        ),
+        "selective_shift_cells_sha256": (
+            file_sha256(selective_shift_cells_tsv)
+            if selective_shift_cells_tsv
+            else ""
+        ),
         "overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
         "overlay_batch_summary_sha256": file_sha256(overlay_batch_summary_tsv),
         "source_row_count": len(source_rows),
@@ -327,7 +391,33 @@ def _gate_row_is_authorized_standard_peak(
 def _gate_skip_reason(authority_mode: str) -> str:
     if authority_mode == AUTHORITY_MODE_MACHINE_GATE:
         return "gate_not_machine_supported_standard_peak"
+    if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+        return "gate_not_selective_supported_standard_peak"
     return "gate_not_manual_authorized_standard_peak"
+
+
+def _load_selective_rows_by_family_sample(
+    *,
+    selective_shift_cells_tsv: Path | None,
+    authority_mode: str,
+) -> dict[str, dict[str, Mapping[str, str]]]:
+    if authority_mode != AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+        return {}
+    if selective_shift_cells_tsv is None:
+        raise ValueError(
+            "selective_shift_cells_tsv is required for "
+            f"{AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE}",
+        )
+    by_family: dict[str, dict[str, Mapping[str, str]]] = {}
+    for row in read_tsv_required(selective_shift_cells_tsv, SELECTIVE_SHIFT_COLUMNS):
+        if text_value(row.get("selective_evidence_status")) != "pass":
+            continue
+        family = text_value(row.get("peak_hypothesis_id"))
+        sample = text_value(row.get("sample_stem"))
+        if not family or not sample:
+            continue
+        by_family.setdefault(family, {})[sample] = row
+    return by_family
 
 
 def _source_row(
@@ -337,6 +427,8 @@ def _source_row(
     trace_row: Mapping[str, str],
     overlay_row: Mapping[str, str],
     gate_row: Mapping[str, str],
+    selective_row: Mapping[str, str] | None,
+    authority_mode: str,
     relative_trace_path: str,
 ) -> dict[str, str]:
     own_max = optional_float(trace_row.get("absolute_own_max_shape_similarity"))
@@ -346,6 +438,12 @@ def _source_row(
     )
     local_interference = _local_interference_score(
         trace_row.get("local_window_to_global_max_ratio")
+    )
+    selective = selective_row or {}
+    shape_metric_source = (
+        SELECTIVE_SHAPE_METRIC_SOURCE
+        if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE
+        else STANDARD_PEAK_SHAPE_METRIC_SOURCE
     )
     return {
         "feature_family_id": family_id,
@@ -364,7 +462,7 @@ def _source_row(
         "drift_compatible_status": "compatible",
         "reason": STANDARD_PEAK_GATE_MS1_SUPPORT_REASON,
         "diagnostic_only": "TRUE",
-        "shape_metric_source": "shift_aware_standard_peak_gate",
+        "shape_metric_source": shape_metric_source,
         "anchor_peak_own_max_shape_similarity": _format_float(own_max),
         "family_ms1_overlay_trace_data_json": relative_trace_path,
         "peak_quality_vector_status": "supportive",
@@ -375,6 +473,19 @@ def _source_row(
         ),
         "standard_peak_gate_max_abs_shift_sec": text_value(
             gate_row.get("max_abs_shift_sec")
+        ),
+        "selective_source_family": text_value(selective.get("source_family")),
+        "selective_source_family_shift_status": text_value(
+            selective.get("source_family_shift_status")
+        ),
+        "selective_source_family_shape_r": text_value(
+            selective.get("source_family_shape_r")
+        ),
+        "selective_source_family_shift_sec": text_value(
+            selective.get("source_family_shift_sec")
+        ),
+        "selective_evidence_status": text_value(
+            selective.get("selective_evidence_status")
         ),
     }
 
@@ -446,10 +557,10 @@ def _standard_peak_authority_decision(
         != "trace_constellation"
     ):
         return "rejected", "source_ms1_pattern_not_trace_constellation", ""
-    if (
-        text_value(source_row.get("shape_metric_source"))
-        != "shift_aware_standard_peak_gate"
-    ):
+    if text_value(source_row.get("shape_metric_source")) not in {
+        STANDARD_PEAK_SHAPE_METRIC_SOURCE,
+        SELECTIVE_SHAPE_METRIC_SOURCE,
+    }:
         return "rejected", "source_shape_metric_not_standard_peak_gate", ""
     if not has_semicolon_token(
         source_row.get("reason"),
@@ -468,7 +579,30 @@ def _standard_peak_authority_decision(
     ).upper()
     if trace_sha256 != expected_sha256:
         return "rejected", "allowlist_overlay_trace_sha256_mismatch", trace_sha256
+    observed = optional_float(source_row.get("anchor_peak_own_max_shape_similarity"))
+    if observed is None:
+        return "rejected", "source_anchor_own_max_similarity_missing", trace_sha256
+    threshold = _anchor_own_max_threshold(allowlist_row)
+    if threshold < authority.DEFAULT_MIN_ANCHOR_OWN_MAX_SHAPE_SIMILARITY:
+        return (
+            "rejected",
+            "allowlist_anchor_own_max_threshold_below_default",
+            trace_sha256,
+        )
+    if observed <= threshold:
+        return (
+            "rejected",
+            "source_anchor_own_max_similarity_below_threshold",
+            trace_sha256,
+        )
     return "authorized", "standard_peak_gate_product_authorized", trace_sha256
+
+
+def _anchor_own_max_threshold(row: Mapping[str, str]) -> float:
+    value = optional_float(row.get("min_anchor_own_max_shape_similarity"))
+    if value is None:
+        return authority.DEFAULT_MIN_ANCHOR_OWN_MAX_SHAPE_SIMILARITY
+    return value
 
 
 def _standard_peak_authorized_row(
@@ -568,21 +702,40 @@ def _allowlist_row(
     }
 
 
-def _authority_reason(row: Mapping[str, str], *, authority_mode: str) -> str:
-    authority_token = (
-        "machine_standard_peak_gate_authorized"
-        if authority_mode == AUTHORITY_MODE_MACHINE_GATE
-        else "manual_standard_peak_gate_authorized"
-    )
+def _authority_reason(
+    row: Mapping[str, str],
+    *,
+    authority_mode: str,
+    selective_row: Mapping[str, str] | None = None,
+) -> str:
+    if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+        authority_token = "machine_selective_source_gate_authorized"
+    elif authority_mode == AUTHORITY_MODE_MACHINE_GATE:
+        authority_token = "machine_standard_peak_gate_authorized"
+    else:
+        authority_token = "manual_standard_peak_gate_authorized"
     parts = [
         authority_token,
         text_value(row.get("calibration_outcome")),
         text_value(row.get("standard_peak_gate_reasons")),
     ]
+    if selective_row is not None:
+        parts.extend(
+            [
+                "selective_source_family="
+                + text_value(selective_row.get("source_family")),
+                "selective_source_family_shift_status="
+                + text_value(selective_row.get("source_family_shift_status")),
+                "selective_evidence_status="
+                + text_value(selective_row.get("selective_evidence_status")),
+            ],
+        )
     return ";".join(part for part in parts if part)
 
 
 def _default_authority_source(authority_mode: str) -> str:
+    if authority_mode == AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE:
+        return DEFAULT_SELECTIVE_AUTHORITY_SOURCE
     if authority_mode == AUTHORITY_MODE_MACHINE_GATE:
         return DEFAULT_MACHINE_AUTHORITY_SOURCE
     return DEFAULT_MANUAL_AUTHORITY_SOURCE

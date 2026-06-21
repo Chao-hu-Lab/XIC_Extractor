@@ -1,10 +1,10 @@
-"""Build/check the 666-cell Backfill expansion default activation bundle.
+"""Build/check the 666-cell Backfill expansion candidate replay bundle.
 
-This is the explicit public default activation change after the Backfill
-expansion expected-diff provenance gate. It reuses the existing
-ProductionAcceptanceManifest and QuantMatrixVersion writer; it does not create a
-second ProductWriter, rerun RAW, update workbooks, change GUI behavior, or alter
-selected peak/area/counting.
+This is a candidate replay after the Backfill expansion expected-diff
+provenance gate. It reuses the existing ProductionAcceptanceManifest and
+QuantMatrixVersion writer path as a dry-run replay, but it does not grant public
+ProductWriter authority because shift-aware standard-peak support and MS1
+own-max evidence are not yet wired into this 666-cell packet.
 """
 
 from __future__ import annotations
@@ -55,10 +55,10 @@ from xic_extractor.tabular_io import (  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = "backfill_expansion_default_product_activation_v1"
 CHECK_SCHEMA_VERSION = "backfill_expansion_default_product_activation_check_v1"
-ACTIVATION_LABEL = "product_ready_default_matrix_activated"
-PRODUCT_AUTHORITY_SCOPE = "backfill_expansion_raw_trace_expected_diff_666_cells"
+ACTIVATION_LABEL = "backfill_expansion_candidate_packet_held"
+PRODUCT_AUTHORITY_SCOPE = ""
 PRODUCT_LANE = "backfill"
-PRODUCT_SCOPE_KIND = "backfill_expansion_default_activation"
+PRODUCT_SCOPE_KIND = "backfill_expansion_candidate_replay"
 DEFAULT_DOCS_DIR = (
     ROOT
     / "docs/superpowers/validation/"
@@ -129,8 +129,10 @@ EXPECTED_CHECK_IDS = (
     "unused_expected_diff_count",
     "cell_provenance_accepted_count",
     "matrix_changed_cell_count",
-    "product_writer_changed",
-    "default_quant_matrix_changed",
+    "candidate_quant_matrix_replay_changed",
+    "no_public_product_writer_change",
+    "no_public_default_quant_matrix_change",
+    "shift_aware_own_max_evidence_not_wired",
     "no_workbook_gui_selected_area_counting_change",
 )
 
@@ -409,15 +411,17 @@ def _check_rows(
                 else "changed matrix keyset mismatch"
             ),
         ),
-        _bool_check("product_writer_changed", True, True),
-        _bool_check("default_quant_matrix_changed", True, True),
+        _bool_check("candidate_quant_matrix_replay_changed", True, True),
+        _bool_check("no_public_product_writer_change", True, True),
+        _bool_check("no_public_default_quant_matrix_change", True, True),
+        _bool_check("shift_aware_own_max_evidence_not_wired", True, True),
         {
             "schema_version": CHECK_SCHEMA_VERSION,
             "check_id": "no_workbook_gui_selected_area_counting_change",
             "status": "pass",
             "observed": "FALSE",
             "expected": "FALSE",
-            "notes": "activation writes matrix TSV artifacts only",
+            "notes": "candidate replay writes externalized matrix TSV artifacts only",
         },
     ]
     for check in checks:
@@ -485,7 +489,7 @@ def _summary_payload(
         "schema_version": SCHEMA_VERSION,
         "status": "pass" if checks_pass else "fail",
         "activation_label": ACTIVATION_LABEL,
-        "validation_status": "production_ready",
+        "validation_status": "production_candidate",
         "product_lane": PRODUCT_LANE,
         "product_scope_kind": PRODUCT_SCOPE_KIND,
         "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
@@ -502,10 +506,19 @@ def _summary_payload(
         ],
         "matrix_changed_cell_count": len(activation_facts["changed_keys"]),
         "held_cell_count": EXPECTED_COUNTS["held_cell_count"],
-        "write_authority": True,
-        "product_writer_changed": True,
-        "default_quant_matrix_changed": True,
-        "default_matrix_files_written": True,
+        "write_authority": False,
+        "product_writer_changed": False,
+        "default_quant_matrix_changed": False,
+        "default_matrix_files_written": False,
+        "candidate_matrix_replay_written": True,
+        "candidate_replay_written_backfill_count": str(
+            activation_facts["written_backfill_count"],
+        ),
+        "authority_blocker": (
+            "shift-aware standard-peak support and MS1 own-max evidence are "
+            "not wired into this candidate packet"
+        ),
+        "public_write_blocked_cell_count": EXPECTED_COUNTS["accepted_backfill_count"],
         "workbook_or_gui_changed": False,
         "selected_peak_area_or_counting_changed": False,
         "selected_peak_changed": False,
@@ -516,9 +529,12 @@ def _summary_payload(
         "broad_backfill_unparked": False,
         "candidate_rows_are_matrix_rows": False,
         "authority_statement": (
-            "The default quant matrix is explicitly activated from the bounded "
-            "666-cell Backfill expansion ProductionAcceptanceManifest and "
-            "expected-diff contract. The 263 held cells remain outside authority."
+            "This packet replays 666 Backfill expansion candidate cells through "
+            "ProductionAcceptanceManifest and expected-diff provenance, but it "
+            "does not grant public write authority because shift-aware "
+            "standard-peak support and MS1 own-max evidence are not wired by "
+            "stable row/cell keys. The 666 replayed cells and the 263 "
+            "earlier-held cells remain outside public ProductWriter authority."
         ),
         "future_preset_requirement": (
             "After this rule is stable for future sample batches, delivery must "
@@ -563,7 +579,7 @@ def _compact_manifest_rows(path: Path) -> list[dict[str, str]]:
                 "missing_cell_count": row["missing_cell_count"],
                 "metric_warning_cell_count": row["metric_warning_cell_count"],
                 "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
-                "default_activation_effect": "write_backfill_expansion_default_cell",
+                "default_activation_effect": "candidate_replay_no_public_write",
             },
         )
     return compact
@@ -571,27 +587,30 @@ def _compact_manifest_rows(path: Path) -> list[dict[str, str]]:
 
 def _write_readme(path: Path, *, payload: Mapping[str, Any]) -> None:
     lines = [
-        "# Backfill Expansion Default Product Activation v1",
+        "# Backfill Expansion Candidate Replay v1",
         "",
         f"Status: `{payload['activation_label']}`.",
         "",
-        "This bundle is the explicit public default activation change for the",
-        "bounded 666-cell Backfill expansion packet.",
+        "This bundle is a candidate replay for the bounded 666-cell Backfill",
+        "expansion packet. It is not public default activation because",
+        "shift-aware standard-peak support and MS1 own-max evidence are not",
+        "wired into the per-cell evidence chain.",
         "",
-        f"- Accepted Backfill cells: `{payload['accepted_backfill_count']}`.",
+        f"- Candidate replay cells: `{payload['accepted_backfill_count']}`.",
         f"- Rows: `{payload['candidate_peak_count']}`.",
-        f"- Written cells: `{payload['written_backfill_count']}`.",
+        f"- Dry-run written cells: `{payload['written_backfill_count']}`.",
         f"- Unused expected-diff rows: `{payload['unused_expected_diff_count']}`.",
-        f"- Held cells outside authority: `{payload['held_cell_count']}`.",
+        f"- Candidate cells blocked from public authority: `{payload['public_write_blocked_cell_count']}`.",
+        f"- Earlier held cells outside authority: `{payload['held_cell_count']}`.",
         "",
-        "The full default matrix, full provenance, row summary, source summary,",
+        "The full replay matrix, full provenance, row summary, source summary,",
         "candidate manifest, and expected-diff TSV stay externalized under",
         "`output/validation/`. Version control keeps only this compact summary,",
         "checks, and row manifest.",
         "",
-        "Future batches should not repeat this manual multi-gate rhythm. Once the",
-        "rule is stable, delivery should be a CLI/GUI preset that runs the same",
-        "bounded evidence and activation chain directly.",
+        "Before this can become public writer authority, a checker must join",
+        "shift-aware standard-peak support and MS1 own-max evidence by stable",
+        "row/cell keys. Missing or unjoinable evidence must keep the cell held.",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -602,7 +621,7 @@ def _check_summary_fields(payload: Mapping[str, Any], problems: list[str]) -> No
         ("schema_version", SCHEMA_VERSION),
         ("status", "pass"),
         ("activation_label", ACTIVATION_LABEL),
-        ("validation_status", "production_ready"),
+        ("validation_status", "production_candidate"),
         ("product_lane", PRODUCT_LANE),
         ("product_scope_kind", PRODUCT_SCOPE_KIND),
         ("product_authority_scope", PRODUCT_AUTHORITY_SCOPE),
@@ -616,10 +635,19 @@ def _check_summary_fields(payload: Mapping[str, Any], problems: list[str]) -> No
         ),
         ("matrix_changed_cell_count", EXPECTED_COUNTS["matrix_changed_cell_count"]),
         ("held_cell_count", EXPECTED_COUNTS["held_cell_count"]),
-        ("write_authority", True),
-        ("product_writer_changed", True),
-        ("default_quant_matrix_changed", True),
-        ("default_matrix_files_written", True),
+        ("write_authority", False),
+        ("product_writer_changed", False),
+        ("default_quant_matrix_changed", False),
+        ("default_matrix_files_written", False),
+        ("candidate_matrix_replay_written", True),
+        (
+            "candidate_replay_written_backfill_count",
+            str(EXPECTED_COUNTS["written_backfill_count"]),
+        ),
+        (
+            "public_write_blocked_cell_count",
+            EXPECTED_COUNTS["accepted_backfill_count"],
+        ),
         ("workbook_or_gui_changed", False),
         ("selected_peak_area_or_counting_changed", False),
         ("selected_peak_changed", False),

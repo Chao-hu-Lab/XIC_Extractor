@@ -94,7 +94,7 @@ def render_family_ms1_overlay(
     _plot_unified_legend(axes["legend"])
 
     fig.suptitle(
-        f"{family_id} Backfill MS1 review: m/z {mz:g} +/-{ppm:g} ppm",
+        f"{family_id} Backfill MS1 review: m/z {_format_mz(mz)} +/-{ppm:g} ppm",
     )
     fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
     if pdf_path is not None:
@@ -155,7 +155,7 @@ def render_hypothesis_ms1_overlay(
 
     fig.suptitle(
         (
-            f"{family_id} Backfill hypothesis view: m/z {mz:g} "
+            f"{family_id} Backfill hypothesis view: m/z {_format_mz(mz)} "
             f"+/-{ppm:g} ppm"
             f"{_single_anchor_review_note(focus_detected)}"
         ),
@@ -171,6 +171,10 @@ def _family_overlay_panel_layout() -> list[list[str]]:
         ["norm", "raw"],
         ["legend", "legend"],
     ]
+
+
+def _format_mz(value: float) -> str:
+    return f"{value:.4f}"
 
 
 def _hypothesis_overlay_panel_layout() -> list[list[str]]:

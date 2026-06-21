@@ -25,8 +25,8 @@ def test_current_backfill_expansion_default_activation_is_stable() -> None:
         ).read_text(encoding="utf-8"),
     )
 
-    assert summary["validation_status"] == "production_ready"
-    assert summary["activation_label"] == "product_ready_default_matrix_activated"
+    assert summary["validation_status"] == "production_candidate"
+    assert summary["activation_label"] == "backfill_expansion_candidate_packet_held"
     assert summary["product_authority_scope"] == PRODUCT_AUTHORITY_SCOPE
     assert summary["accepted_backfill_count"] == 666
     assert summary["candidate_peak_count"] == 20
@@ -36,14 +36,20 @@ def test_current_backfill_expansion_default_activation_is_stable() -> None:
     assert summary["cell_provenance_accepted_count"] == 666
     assert summary["matrix_changed_cell_count"] == 666
     assert summary["held_cell_count"] == 263
-    assert summary["write_authority"] is True
-    assert summary["product_writer_changed"] is True
-    assert summary["default_quant_matrix_changed"] is True
+    assert summary["write_authority"] is False
+    assert summary["product_writer_changed"] is False
+    assert summary["default_quant_matrix_changed"] is False
+    assert summary["default_matrix_files_written"] is False
+    assert summary["candidate_matrix_replay_written"] is True
+    assert summary["candidate_replay_written_backfill_count"] == "666"
+    assert summary["public_write_blocked_cell_count"] == 666
+    assert "shift-aware" in summary["authority_blocker"]
+    assert "own-max" in summary["authority_blocker"]
     assert summary["workbook_or_gui_changed"] is False
     assert summary["selected_peak_area_or_counting_changed"] is False
     assert summary["broad_backfill_unparked"] is False
     assert summary["candidate_rows_are_matrix_rows"] is False
-    assert "CLI/GUI preset" in summary["future_preset_requirement"]
+    assert "stable row/cell keys" in summary["authority_statement"]
 
 
 def test_missing_required_activation_check_fails_closed(tmp_path: Path) -> None:
