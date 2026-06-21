@@ -100,7 +100,7 @@ def _launch_browser(
     *,
     launch_timeout_ms: int,
 ) -> Any:
-    attempts = (("bundled Chromium", {}),)
+    attempts: tuple[tuple[str, dict[str, str]], ...] = (("bundled Chromium", {}),)
     if channel == "auto":
         attempts = (
             ("bundled Chromium", {}),
