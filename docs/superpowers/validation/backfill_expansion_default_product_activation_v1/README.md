@@ -1,21 +1,24 @@
-# Backfill Expansion Default Product Activation v1
+# Backfill Expansion Candidate Replay v1
 
-Status: `product_ready_default_matrix_activated`.
+Status: `backfill_expansion_candidate_packet_held`.
 
-This bundle is the explicit public default activation change for the
-bounded 666-cell Backfill expansion packet.
+This bundle is a candidate replay for the bounded 666-cell Backfill
+expansion packet. It is not public default activation because
+shift-aware standard-peak support and MS1 own-max evidence are not
+wired into the per-cell evidence chain.
 
-- Accepted Backfill cells: `666`.
+- Candidate replay cells: `666`.
 - Rows: `20`.
-- Written cells: `666`.
+- Dry-run written cells: `666`.
 - Unused expected-diff rows: `0`.
-- Held cells outside authority: `263`.
+- Candidate cells blocked from public authority: `666`.
+- Earlier held cells outside authority: `263`.
 
-The full default matrix, full provenance, row summary, source summary,
+The full replay matrix, full provenance, row summary, source summary,
 candidate manifest, and expected-diff TSV stay externalized under
 `output/validation/`. Version control keeps only this compact summary,
 checks, and row manifest.
 
-Future batches should not repeat this manual multi-gate rhythm. Once the
-rule is stable, delivery should be a CLI/GUI preset that runs the same
-bounded evidence and activation chain directly.
+Before this can become public writer authority, a checker must join
+shift-aware standard-peak support and MS1 own-max evidence by stable
+row/cell keys. Missing or unjoinable evidence must keep the cell held.
