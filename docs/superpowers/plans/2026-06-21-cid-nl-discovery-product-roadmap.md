@@ -33,20 +33,29 @@ which CID-NL discovered feature evidence can become default product output?
 
 1. Stabilize the current 95-cell Discovery scope.
    The current scope must stay reproducible through check-only replay, status
-   index validation, authority validation, and artifact-retention validation.
+   index validation, authority validation, artifact-retention validation, and
+   bounded non-broad lane validation.
    Current shortcut:
    `uv run python -m scripts.check_cid_nl_discovery_release_slice`.
 
-2. Define the next Discovery-only expansion slice.
-   The slice must be expressed as CID-NL Discovery candidates, not Backfill
-   candidates. A candidate can move forward only when it has row identity,
-   tag/source provenance, value delta, and expected matrix effect.
+2. Lock the current Discovery full-scope classification.
+   The current 147 candidate-cell universe must stay fully partitioned into
+   accepted, held, and blocked buckets. Current shortcut:
+   `uv run python -m scripts.check_cid_nl_discovery_full_scope_classification`.
+   The retained compact artifact is
+   `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`.
 
-3. Build an expected-diff/provenance gate for that slice.
+3. Define a future Discovery-only expansion only when there is new evidence or
+   a new product question. The slice must be expressed as CID-NL Discovery
+   candidates, not Backfill candidates. A candidate can move forward only when
+   it has row identity, tag/source provenance, value delta, and expected matrix
+   effect.
+
+4. Build an expected-diff/provenance gate for any future slice.
    The gate must prove exact keyset, exact values, preserved existing successor
    context, omitted no-target handling, and no unrelated matrix drift.
 
-4. Activate only the passing slice.
+5. Activate only the passing slice.
    A passing slice may become a new registered Discovery writer scope. Failed,
    held, or ambiguous candidates stay outside default output.
 

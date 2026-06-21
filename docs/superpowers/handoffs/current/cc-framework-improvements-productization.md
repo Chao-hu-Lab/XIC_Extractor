@@ -50,6 +50,15 @@ Current release-slice checker:
 
 - `uv run python -m scripts.check_cid_nl_discovery_release_slice`
 - Focused test: `uv run pytest tests/test_cid_nl_discovery_release_slice.py -q`
+- Coverage: default activation replay, full-scope classification,
+  productization state/authority, validation artifact retention, and bounded
+  non-broad lane checks.
+
+CID-NL Discovery full-scope classification v1:
+
+- `uv run python -m scripts.check_cid_nl_discovery_full_scope_classification`
+- Retained compact artifact:
+  `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
 
 ## Current Discovery Evidence
 
@@ -66,6 +75,12 @@ Current release-slice checker:
   changes.
 - Cell provenance: exact keyset pass through the shared
   `ProductionAcceptanceManifest -> QuantMatrixVersion` writer.
+- Full-scope classification: 147 candidate cells partitioned into 95 accepted,
+  24 held, and 28 blocked; 0 user-review cells remain.
+- Preserved context: 337 existing-successor cells and 27 omitted no-target
+  cells remain no-write context.
+- Target guardrails: `300.1605 -> 184.113` is preserved as source context, and
+  `301.165 -> 185.116` remains its own `DNA_dR` source-tag context.
 - Release-slice checker: pass.
 - RAW/85RAW rerun: not run for this cleanup; the activation remains no-RAW
   replay from existing 85RAW-derived artifacts.
@@ -78,6 +93,8 @@ Current release-slice checker:
   `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv`
 - CID-NL compact activation manifest:
   `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv`
+- CID-NL full-scope classification summary/checks/manifest:
+  `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
 - Full generated CID-NL default outputs:
   `output/validation/cid_nl_default_product_activation_v1/`
 - Pre-activation Gallery/adopt evidence:
@@ -93,6 +110,8 @@ Current release-slice checker:
 - Do not make CID-NL/MS2 evidence direct ProductWriter authority.
 - Do not demote/delete `301.165 -> 185.116` while it has its own tag evidence.
 - Do not reopen broad Backfill while the active goal is Discovery productization.
+- Do not reopen the current 147-cell Discovery universe as another expansion
+  slice; it is already partitioned into accepted/held/blocked buckets.
 
 ## Status Index Anchors
 
@@ -106,6 +125,7 @@ Anchor phrases retained for the status checker:
 - `product_ready_default_matrix_activated`
 - `CID-NL default product activation v1`
 - `CID-NL Discovery Release Slice Checker v1`
+- `CID-NL Discovery Full-Scope Classification v1`
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
 - machine-adjudicated without granting new writer authority
@@ -124,7 +144,7 @@ Anchor phrases retained for the status checker:
 ## Next Step
 
 Continue with Discovery only: either stabilize the current 95-cell release slice
-or define the next CID-NL expansion slice with its own expected-diff,
-provenance, row-identity, and artifact-retention gate. The release-slice checker
-is now the quickest current-state sanity check. Do not route this through broad
+or start a new Discovery product question with its own expected-diff,
+provenance, row-identity, and artifact-retention gate. The current 147-cell
+candidate universe is already classified; do not route this through broad
 Backfill.

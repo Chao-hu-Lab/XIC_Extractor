@@ -27,10 +27,19 @@ from scripts.build_cid_nl_default_product_activation import (  # noqa: E402
     PRODUCT_AUTHORITY_SCOPE,
     validate_cid_nl_default_product_activation,
 )
+from scripts.check_bounded_product_lanes import (
+    check_bounded_product_lanes,  # noqa: E402
+)
+from scripts.check_cid_nl_discovery_full_scope_classification import (  # noqa: E402
+    check_cid_nl_discovery_full_scope_classification,
+)
 from scripts.check_productization_authority import (  # noqa: E402
     check_productization_authority,
 )
 from scripts.check_productization_state import check_productization_state  # noqa: E402
+from scripts.check_validation_artifact_retention import (  # noqa: E402
+    check_validation_artifact_retention,
+)
 from xic_extractor.tabular_io import read_tsv_required, text_value  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,10 +82,17 @@ def check_cid_nl_discovery_release_slice(
         control_plane=control_plane,
         problems=problems,
     )
+    for problem in check_cid_nl_discovery_full_scope_classification():
+        problems.append(f"full_scope_classification: {problem}")
     for problem in check_productization_state():
         problems.append(f"productization_state: {problem}")
     for problem in check_productization_authority():
         problems.append(f"productization_authority: {problem}")
+    retention = check_validation_artifact_retention()
+    for problem in retention.problems:
+        problems.append(f"validation_artifact_retention: {problem}")
+    for problem in check_bounded_product_lanes():
+        problems.append(f"bounded_product_lanes: {problem}")
     return problems
 
 
@@ -204,17 +220,20 @@ def _check_docs(
             "CID-NL Discovery Product Roadmap",
             "Do not reopen broad Backfill",
             "accepted_discovery_cell_count",
+            "cid_nl_discovery_full_scope_classification_v1",
         ],
         handoff: [
             "The immediate product direction is Discovery first",
             "accepted_discovery_cell_count=95",
             "Do not reopen broad Backfill while the active goal is "
             "Discovery productization",
+            "CID-NL Discovery full-scope classification v1",
         ],
         control_plane: [
             "CID-NL Discovery Lane Terminology Cleanup v1",
             "accepted_discovery_cell_count=95",
             "legacy_quant_matrix_effect",
+            "CID-NL Discovery Full-Scope Classification v1",
         ],
     }
     for path, anchors in required.items():

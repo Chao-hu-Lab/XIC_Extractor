@@ -4875,3 +4875,32 @@ the later low-height writer entry above as the current tier source.
 - Next checkpoint: after committing this cleanup, continue Discovery-only work.
   Either keep the 95-cell slice as the release claim, or define the next CID-NL
   expansion slice with a new expected-diff/provenance/row-identity gate.
+
+### 2026-06-21 - CID-NL Discovery Full-Scope Classification v1
+
+- Lane: CID-NL Discovery full-scope classification for the current candidate
+  universe.
+- Tier change: none. `cid_nl_default_product_activation_v1` remains
+  `production_ready` / `product_ready_default_matrix_activated` for exactly the
+  same 95 cells. No active lane, writer scope, matrix value, workbook/GUI,
+  selected peak/area, counted detection, or Backfill authority changed.
+- Product surface changed: validation/replay surface only. Added
+  `scripts/check_cid_nl_discovery_full_scope_classification.py` and retained
+  the compact summary/checks/manifest under
+  `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`.
+- Classification decision: the current 147 candidate-cell Discovery universe is
+  now explicitly partitioned into 95 accepted default-output cells, 24 held
+  cells, and 28 blocked cells. The same gate also preserves 337
+  existing-successor context cells and 27 omitted no-target cells as no-write
+  context.
+- Evidence: the checker passes with `candidate_partition_complete=pass`,
+  `accepted_matches_default_activation=pass`,
+  `no_product_authority_in_classifier=pass`,
+  `target_300_184_source_context_preserved=pass`, and
+  `target_301_185_exact_pair_preserved=pass`. The release-slice checker now
+  calls this full-scope checker, validation artifact retention, and bounded
+  non-broad lane validation so the 95-cell release claim cannot drift away from
+  the 147-cell Discovery classification or retained product-gate surface.
+- Next checkpoint: do not open another expansion slice for the current CID-NL
+  universe. Future CID-NL expansion requires new evidence or a new product
+  question plus its own expected-diff/provenance/row-identity gate.
