@@ -292,6 +292,8 @@ Owners:
 - `xic_extractor/alignment/shared_peak_identity_explanation/machine_evidence_support.py`
 - `scripts/check_backfill_expansion_*`
 - `scripts/build_backfill_expansion_default_product_activation.py`
+- `scripts/build_backfill_expansion_clean_target_selective_product_activation.py`
+- `scripts/check_backfill_expansion_full_evidence_chain.py`
 
 Purpose: decide whether a currently blank/rescued cell has enough evidence to
 be accepted, reviewed, held, or written inside a bounded Backfill lane.
@@ -311,6 +313,58 @@ Evidence states:
 - MS1 product authority requires allowlist status, source evidence, overlay
   JSON provenance/hash, same family/sample/vector, own-max metric, supportive
   quality vector, and threshold compliance.
+- Backfill expansion full-chain status requires expected diff, sample-local
+  source evidence, RAW trace identity, shift-aware standard-peak support,
+  own-max metric support, and a product-authorized MS1 sidecar joined by stable
+  row/cell keys.
+- Backfill expansion selective shift-aware replay is a diagnostic gate that
+  evaluates `PeakHypothesis + sample cell` by source-family best-shift support,
+  standard-peak boundary support, and per-cell own-max support. It can identify
+  cells eligible for later expected-diff design, but it does not grant
+  ProductWriter authority.
+- The standard-peak MS1 authority sidecar can be generated from either the
+  original machine/manual standard-peak gate or the selective source-family gate.
+  In selective mode, authority remains the same sidecar schema and stable
+  `feature_family_id + sample_stem` key, but only cells with
+  `selective_evidence_status=pass` can become product-authorized MS1 sidecar
+  rows. This consumes selective evidence; it does not create a second writer
+  system.
+- Backfill expansion peak-mode decomposition is a diagnostic gate that compares
+  sample-local candidate apex RT against each family's detected/reference mode.
+  It identifies mixed target/off-target RT hypotheses and boundary-bridge
+  cells before selective gate output can be interpreted as product-ready.
+  RT coherence should be interpreted with sample subtype context: same-subtype
+  outliers are stronger wrong-peak or boundary evidence, while cross-subtype
+  Tumor/Normal/Benignfat shifts may be plausible but remain diagnostic until
+  backed by sample-local MS1, same-peak, provenance, and expected-diff evidence.
+  The current filename-prefix diagnostic flags same-subtype RT span above
+  `0.50 min` for review; product code should use `sample_metadata_v1` instead
+  of filename prefixes before this becomes an activation gate.
+  A compact subtype split review queue can summarize flagged cells by
+  `family + sample_subtype` for review priority; it remains diagnostic-only.
+  A compact split decision packet may then route flagged cells into clean
+  target-mode candidates, boundary-review target cells, off-target hold/remap
+  cells, and missing/unclassified cells. This routing isolates what may feed a
+  later full evidence chain, but it is not a write allowlist.
+  A clean-target full-chain replay may project only clean target-mode cells back
+  onto the existing evidence chain and the selective MS1 authority sidecar to
+  ask whether peak-mode cleanup plus selective source-family evidence is enough.
+  Its pass subset can inform expected-diff design, but held cells remain held
+  and the replay is not ProductWriter authority.
+  A clean-target selective default activation may then filter the existing
+  expected-diff/provenance contract to only the projected-pass clean target
+  cells and replay a matrix/provenance packet through the existing
+  `ProductionAcceptanceManifest` and `QuantMatrixVersion` writer path. The
+  current bounded activation covers 84 cells across 7 rows, excludes the 28
+  projected-held cells, excludes the 37 boundary-review cells, and excludes the
+  29 off-target hold/remap cells. Its registered scope is
+  `backfill_expansion_clean_target_selective_activation_84_cells`. It changes
+  only the bounded default matrix output/provenance artifacts for those 84
+  cells and does not change workbook, GUI, selected peak, selected area, counted
+  detection, broad Backfill, or the parked 666-cell replay boundary.
+  Optional manual review labels may annotate peak-mode, boundary, and review
+  action for remap/boundary debugging; they are reviewer evidence, not a manual
+  allowlist and not ProductWriter authority.
 - Candidate MS2 product authority requires supportive/partial support,
   `sample_candidate_aligned` or `sample_boundary_aligned` level, source hash,
   schema version, source match, and similarity threshold compliance.
@@ -328,6 +382,7 @@ Owners:
 - `scripts/build_quant_matrix_default_product_activation.py`
 - `scripts/build_cid_nl_default_product_activation.py`
 - `scripts/build_backfill_expansion_default_product_activation.py`
+- `scripts/build_backfill_expansion_clean_target_selective_product_activation.py`
 
 Purpose: make matrix-writing changes explicit, replayable, and auditable.
 
@@ -384,7 +439,7 @@ numbers, and active scope sizes belong in the machine-readable artifacts.
 | --- | --- | --- |
 | Backfill current | Backfill policy, same-peak support, sample-local evidence, value provenance, and expected diff. | Writer authority is limited to the registered scope in the authority manifest and status index. |
 | CID-NL Discovery | Successor self evidence, CID-NL tag evidence, MS1/RT/family context, identity reconstruction, expected diff, and quant matrix replay. | CID-NL/MS2 evidence is not direct writer authority; it must be consumed by a bounded activation contract. |
-| Backfill expansion | Census, availability, sample-local MS1 identity, RAW trace identity, expected diff/provenance, and activation replay. | Expansion does not unlock broad Backfill; held or unproven cells remain outside writer authority. |
+| Backfill expansion | Census, availability, sample-local MS1 identity, RAW trace identity, expected diff/provenance, activation replay, shift-aware standard-peak support, own-max metric support, selective source-family projection, and MS1 product-authority sidecar. | Expansion does not unlock broad Backfill. The current 84-cell clean-target selective scope is active writer authority only because the bounded full-chain gate, expected diff, provenance replay, authority manifest, status index, and control plane explicitly adopted it. The remaining 666-cell packet and diagnostic pass sets are not authority. |
 | Broad Backfill candidate universe | Candidate, review, overlay, lockbox, recovery, economics, and locality evidence. | No write authority unless a new activation/export contract and manifest scope are added. |
 | Targeted review actions | Expected-diff gate over product state, counted detection, review state, candidate sidecar, or manual-boundary state. | Mutating actions require approved expected diff and fail closed on stale/missing baseline. |
 
@@ -394,11 +449,10 @@ numbers, and active scope sizes belong in the machine-readable artifacts.
    active writer scope to its required evidence columns, artifacts, and
    authority outcome. This file is the human source of truth until that checker
    exists.
-2. Backfill expansion can be activated only within a bounded, explicit scope
-   while still needing a clearer machine-readable link to ownership,
-   shift-aware standard-peak
-   support, and MS1 own-max evidence. The documentation should name this as an
-   integration concern without turning it into a permanent lane-specific rule.
+2. Backfill expansion now has a machine-readable full-chain checker for the
+   current 666-cell packet, but it is still packet-specific. If this lane is
+   promoted later, the same evidence-map shape should be generalized without
+   turning this dataset slice into broad Backfill policy.
 3. Similar vocabulary appears in multiple layers: `own_max`, `ambiguous`,
    `rescue`, `accepted_rescue`, `backfill`, and `authority` have layer-specific
    meanings. Reports must name the layer, not only the word.

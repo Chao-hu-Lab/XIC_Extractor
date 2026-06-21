@@ -24,6 +24,7 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics.standard_peak_ms1_authority_bundle import (
     AUTHORITY_MODE_MACHINE_GATE,
+    AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE,
     run_standard_peak_ms1_authority_bundle,
 )
 
@@ -320,6 +321,40 @@ def test_machine_gate_authorizes_supported_standard_peak_without_manual_allowlis
     )
 
 
+def test_standard_peak_authority_rejects_below_own_max_threshold(
+    tmp_path: Path,
+) -> None:
+    trace_json = _write_trace_json(tmp_path, "FAM_LOW")
+    relative_trace_json = trace_json.relative_to(tmp_path).as_posix()
+    trace_sha256 = hashlib.sha256(trace_json.read_bytes()).hexdigest().upper()
+    source_row = _standard_peak_source_row(
+        family_id="FAM_LOW",
+        sample_stem="S1",
+        relative_trace_json=relative_trace_json,
+    )
+    source_row["anchor_peak_own_max_shape_similarity"] = "0.49"
+    allowlist_row = _standard_peak_allowlist_row(
+        family_id="FAM_LOW",
+        sample_stem="S1",
+        relative_trace_json=relative_trace_json,
+        trace_sha256=trace_sha256,
+    )
+
+    authorized_rows, audit_rows = bundle_module._authorize_standard_peak_rows(
+        source_rows=[source_row],
+        allowlist_rows=[allowlist_row],
+        artifact_base_dir=tmp_path,
+    )
+
+    assert authorized_rows == ()
+    assert len(audit_rows) == 1
+    assert audit_rows[0]["decision"] == "rejected"
+    assert (
+        audit_rows[0]["decision_reason"]
+        == "source_anchor_own_max_similarity_below_threshold"
+    )
+
+
 def test_standard_peak_authority_reuses_trace_json_validation_for_multiple_samples(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -371,6 +406,174 @@ def test_standard_peak_authority_reuses_trace_json_validation_for_multiple_sampl
     assert len(authorized_rows) == 2
     assert {row["decision"] for row in audit_rows} == {"authorized"}
     assert len(read_paths) == 1
+
+
+def test_selective_source_gate_authorizes_only_selective_pass_cells(
+    tmp_path: Path,
+) -> None:
+    overlay_dir = tmp_path / "overlay"
+    trace_json = _write_trace_json(overlay_dir, "FAM_SPLIT")
+    trace_summary = overlay_dir / "fam_split_trace_summary.tsv"
+    _write_tsv(
+        trace_summary,
+        (
+            "sample_stem",
+            "status",
+            "cell_area",
+            "cell_height",
+            "cell_apex_rt",
+            "cell_start_rt",
+            "cell_end_rt",
+            "local_window_apex_delta_min",
+            "local_window_to_global_max_ratio",
+            "apex_aligned_shape_similarity",
+            "absolute_own_max_shape_similarity",
+        ),
+        [
+            {
+                "sample_stem": "S1",
+                "status": "rescued",
+                "cell_area": "1234",
+                "cell_height": "200",
+                "cell_apex_rt": "10.0",
+                "cell_start_rt": "9.8",
+                "cell_end_rt": "10.2",
+                "local_window_apex_delta_min": "0.01",
+                "local_window_to_global_max_ratio": "0.95",
+                "apex_aligned_shape_similarity": "0.91",
+                "absolute_own_max_shape_similarity": "0.92",
+            },
+            {
+                "sample_stem": "S2",
+                "status": "rescued",
+                "cell_area": "1200",
+                "cell_height": "180",
+                "cell_apex_rt": "10.0",
+                "cell_start_rt": "9.8",
+                "cell_end_rt": "10.2",
+                "local_window_apex_delta_min": "0.02",
+                "local_window_to_global_max_ratio": "0.90",
+                "apex_aligned_shape_similarity": "0.89",
+                "absolute_own_max_shape_similarity": "0.91",
+            },
+        ],
+    )
+    overlay_summary = tmp_path / "family_ms1_overlay_batch_summary.tsv"
+    _write_tsv(
+        overlay_summary,
+        (
+            "feature_family_id",
+            "family_verdict",
+            "detected_count",
+            "rescued_count",
+            "detected_rescued_count",
+            "absolute_own_max_shape_supported_count",
+            "trace_summary_tsv",
+            "trace_data_json",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_SPLIT",
+                "family_verdict": "ms1_shape_supports_family_backfill",
+                "detected_count": "1",
+                "rescued_count": "2",
+                "detected_rescued_count": "3",
+                "absolute_own_max_shape_supported_count": "3",
+                "trace_summary_tsv": str(trace_summary),
+                "trace_data_json": str(trace_json),
+            }
+        ],
+    )
+    standard_gate = tmp_path / "standard_gate.tsv"
+    _write_tsv(
+        standard_gate,
+        (
+            "feature_family_id",
+            "standard_peak_gate_call",
+            "standard_peak_gate_reasons",
+            "standard_peak_gate_blockers",
+            "manual_backfill_authority_call",
+            "calibration_outcome",
+            "min_shape_r_after_best_shift",
+            "max_abs_shift_sec",
+        ),
+        [
+            {
+                "feature_family_id": "FAM_SPLIT",
+                "standard_peak_gate_call": "standard_peak_gate_blocked",
+                "standard_peak_gate_reasons": "",
+                "standard_peak_gate_blockers": "not_same_hypothesis",
+                "manual_backfill_authority_call": "",
+                "calibration_outcome": "unlabeled_machine_blocked",
+                "min_shape_r_after_best_shift": "0.99",
+                "max_abs_shift_sec": "1.8",
+            }
+        ],
+    )
+    selective_cells = tmp_path / "selective_cells.tsv"
+    _write_tsv(
+        selective_cells,
+        bundle_module.SELECTIVE_SHIFT_COLUMNS,
+        [
+            {
+                "peak_hypothesis_id": "FAM_SPLIT",
+                "sample_stem": "S1",
+                "source_family": "FAM_SOURCE_A",
+                "standard_peak_boundary_status": "pass",
+                "whole_family_gate_call": "standard_peak_gate_blocked",
+                "source_family_shift_status": "pass",
+                "source_family_shape_r": "0.97",
+                "source_family_shift_sec": "1.2",
+                "own_max_metric_status": "pass",
+                "own_max_metric_value": "0.92",
+                "selective_evidence_status": "pass",
+                "primary_blocker": "",
+                "secondary_blockers": "",
+            },
+            {
+                "peak_hypothesis_id": "FAM_SPLIT",
+                "sample_stem": "S2",
+                "source_family": "FAM_SOURCE_B",
+                "standard_peak_boundary_status": "pass",
+                "whole_family_gate_call": "standard_peak_gate_blocked",
+                "source_family_shift_status": "not_same_hypothesis",
+                "source_family_shape_r": "0.40",
+                "source_family_shift_sec": "40.0",
+                "own_max_metric_status": "pass",
+                "own_max_metric_value": "0.91",
+                "selective_evidence_status": "held",
+                "primary_blocker": "source_family_shift_not_same_hypothesis",
+                "secondary_blockers": "",
+            },
+        ],
+    )
+
+    outputs = run_standard_peak_ms1_authority_bundle(
+        standard_peak_gate_tsv=standard_gate,
+        overlay_batch_summary_tsv=overlay_summary,
+        output_dir=tmp_path / "out",
+        authority_mode=AUTHORITY_MODE_MACHINE_SELECTIVE_SOURCE_GATE,
+        selective_shift_cells_tsv=selective_cells,
+    )
+
+    source_rows = _read_tsv(outputs.ms1_pattern_evidence_tsv)
+    authorized_rows = _read_tsv(outputs.authorized_ms1_pattern_tsv)
+    summary = json.loads(outputs.summary_json.read_text(encoding="utf-8"))
+
+    assert [row["sample_stem"] for row in source_rows] == ["S1"]
+    assert source_rows[0]["shape_metric_source"] == (
+        "selective_source_family_shift_aware_gate"
+    )
+    assert source_rows[0]["selective_source_family"] == "FAM_SOURCE_A"
+    assert [row["sample_stem"] for row in authorized_rows] == ["S1"]
+    assert authorized_rows[0][PRODUCT_AUTHORITY_SOURCE_FIELD] == (
+        "machine_selective_source_family_shift_aware_gate"
+    )
+    assert "machine_selective_source_gate_authorized" in authorized_rows[0][
+        "product_authority_reason"
+    ]
+    assert summary["authority_mode"] == "machine-selective-source-gate"
+    assert summary["authorized_row_count"] == 1
 
 
 def test_standard_peak_bundle_reuses_overlay_artifacts_for_duplicate_gate_rows(

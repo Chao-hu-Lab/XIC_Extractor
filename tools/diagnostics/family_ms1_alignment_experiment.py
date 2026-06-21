@@ -392,7 +392,7 @@ def render_alignment_experiment(
     _plot_unified_legend(axes["legend"])
     fig.suptitle(
         (
-            f"{family_id} MS1 RT interpretation experiment: m/z {mz:g} "
+            f"{family_id} MS1 RT interpretation experiment: m/z {_format_mz(mz)} "
             f"+/-{ppm:g} ppm\n"
             "Same raw traces, Gaussian15 smooth; panels differ only by RT "
             "coordinate interpretation."
@@ -451,7 +451,8 @@ def render_source_family_split(
         axes[-1][1].axis("off")
     fig.suptitle(
         (
-            f"{family_id} source-family split context: m/z {mz:g} +/-{ppm:g} ppm\n"
+            f"{family_id} source-family split context: "
+            f"m/z {_format_mz(mz)} +/-{ppm:g} ppm\n"
             "Rows are split by source_family provenance before visual review."
         ),
     )
@@ -636,7 +637,7 @@ def render_source_family_shift_alignment(
     fig.suptitle(
         (
             f"{family_id} source-family {_source_family_shift_basis_title(shifts)}: "
-            f"m/z {mz:g} "
+            f"m/z {_format_mz(mz)} "
             f"+/-{ppm:g} ppm\n"
             f"{_source_family_shift_basis_caption(shifts)} No per-trace manual "
             "alignment is used."
@@ -1958,6 +1959,10 @@ def _median(values: Sequence[float]) -> float | None:
 def _format_optional_float(value: float | None) -> str:
     if value is None:
         return ""
+    return f"{value:.4f}"
+
+
+def _format_mz(value: float) -> str:
     return f"{value:.4f}"
 
 
