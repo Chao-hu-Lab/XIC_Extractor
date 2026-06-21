@@ -3,147 +3,101 @@
 Updated: 2026-06-21
 Branch: `cc/framework-improvements`
 
-This is the current-state snapshot. Product authority remains anchored in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md` and
+This is the current-state snapshot. Product authority is anchored in
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+`docs/superpowers/specs/productization_authority_manifest.v1.json`, and
 `docs/superpowers/validation/productization_status_index_v1.tsv`.
 
 ## Current Verdict
 
-The product tier is `product_ready_default_matrix_activated`.
+The product tier remains `product_ready_default_matrix_activated`.
 
-Registered writer scopes:
+Active writer scopes:
 
-- Backfill current write-ready scope: 511 cells under
-  `backfill_policy_write_ready_rows`; broad Backfill remains parked.
-- CID-NL Discovery default product activation v1: 95 cells across 20
-  transitions under `cid_nl_adopt_ready_feature_inclusion_95_cells`.
+- `backfill_current_write_ready_scope`: 511 cells under
+  `backfill_policy_write_ready_rows`.
+- `cid_nl_default_product_activation_v1`: 95 cells under
+  `cid_nl_adopt_ready_feature_inclusion_95_cells`.
+- `backfill_expansion_default_product_activation_v1`: 666 cells under
+  `backfill_expansion_raw_trace_expected_diff_666_cells`.
 
-The immediate product direction is Discovery first. Backfill is not the next
-main line unless explicitly reopened with a separate goal.
+Broad Backfill auto-write remains parked. The 666-cell Backfill expansion scope
+is a bounded default activation packet, not permission to write the 929 pressure
+cells, the 263 held cells, or future sample batches without the same rule and
+expected-diff contract.
+
+## What Changed
+
+`backfill_expansion_default_product_activation_v1` is now the explicit public
+default activation change for the 666-cell packet. It reuses the existing
+ProductionAcceptanceManifest + expected-diff + QuantMatrixVersion writer path.
+
+The activation writes:
+
+- 666 Backfill values;
+- exactly 666 changed matrix cells;
+- 666 accepted cell-provenance rows from `ProductionAcceptanceManifest`;
+- 0 unused expected-diff rows.
+
+The 263 held cells are still excluded: 254 lack exact sample-local alignment
+evidence and 9 were trace-absent in the RAW overlay gate.
 
 ## Discovery Lane
 
-CID-NL is default-active only for the 95 adopt-ready Discovery cells.
+CID-NL Discovery is closed for the current 85RAW-derived product question.
+Default activation is limited to 95 adopt-ready Discovery cells across 20
+transitions.
 
-Public CID-NL artifacts now use Discovery-first language:
+Target guardrails still hold: `300.1605 -> 184.113` is recovered as source
+context, and `301.165 -> 185.116` remains its own `DNA_dR` source-tag context.
+CID-NL/MS2 evidence remains an evidence provider; it does not directly become
+ProductWriter authority.
 
-- `product_lane=cid_nl_discovery`
-- `product_scope_kind=discovery_default_activation`
-- `accepted_discovery_cell_count=95`
-- `written_discovery_cell_count=95`
-- `default_activation_effect=write_cid_nl_discovery_default_cell`
-- `feature_inclusion_authority_basis=successor_self_evidence_manifest_expected_diff_and_cid_nl_tag`
-- `matrix_row_universe_policy=discovery_expanded_85raw_alignment_rows`
-- `low_prevalence_feature_policy=allowed_for_untargeted_downstream_filter`
-- `source_successor_identity_scope=identity_review_only_not_feature_inclusion_blocker`
+## Backfill Expansion Chain
 
-Legacy `accepted_backfill`, `written_backfill_count`,
-`cell_status=accepted_backfill`, and `write_accepted_backfill` terms are kept
-only as `QuantMatrixVersion` compatibility fields. They are not Backfill product
-scope.
-
-Sparse untargeted rows are allowed in the current Discovery-expanded matrix
-handoff. Do not treat low prevalence as a CID-NL false-positive blocker by
-itself; downstream feature filtering owns prevalence and missingness filtering.
-Source/successor m/z or RT similarity is an identity-authority question only,
-not the feature-inclusion gate.
-
-Primary Discovery roadmap:
-
-- `docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md`
-
-Operational skill for future major workflow/productization work:
-
-- `.codex/skills/xic-rule-first-development/`
-
-Current release-slice checker:
-
-- `uv run python -m scripts.check_cid_nl_discovery_release_slice`
-- Focused test: `uv run pytest tests/test_cid_nl_discovery_release_slice.py -q`
-- Coverage: default activation replay, full-scope classification,
-  85RAW universe closure, productization state/authority, validation artifact
-  retention, and bounded non-broad lane checks.
-
-CID-NL Discovery full-scope classification v1:
-
-- `uv run python -m scripts.check_cid_nl_discovery_full_scope_classification`
-- Retained compact artifact:
-  `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
-
-CID-NL 85RAW Universe Closure v1:
-
-- `uv run python -m scripts.check_cid_nl_85raw_universe_closure`
-- Retained compact artifact:
-  `docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/`
-
-## Current Discovery Evidence
-
-- Activation status: `pass`.
-- Activation label: `product_ready_default_matrix_activated`.
-- Accepted Discovery default writes: 95 cells.
-- Transitions: 20.
-- Contract source split: 73 primary supported, 9 agent-resolved, 13
-  manual-resolved cells.
-- Existing successor detected context preserved: 337 cells.
-- Omitted no-target cells preserved: 27 cells.
-- Expected-diff replay: 95 expected, 95 written, 0 unused.
-- Matrix delta: exact keyset pass; 95 changed cells and no extra/missing
-  changes.
-- Cell provenance: exact keyset pass through the shared
-  `ProductionAcceptanceManifest -> QuantMatrixVersion` writer.
-- Successor-self evidence: pass. Each active write is tied to the successor
-  cell's CID-NL tag context, quant value, write-ready manifest row, and
-  provenance; source/successor similarity is not required for feature inclusion.
-- Row-universe policy: pass. The output uses the 85RAW-derived
-  Discovery-expanded alignment row universe; low-prevalence rows are expected
-  to be filtered downstream, not blocked at CID-NL activation.
-- Full-scope classification: 147 candidate cells partitioned into 95 accepted,
-  24 held, and 28 blocked; 0 user-review cells remain.
-- 85RAW universe closure: 511 successor decisions are closed as 147
-  write-authorized candidate cells, 337 detected-baseline preserved context
-  cells, and 27 omitted no-target cells.
-- The 147 write-authorized candidate cells are fully accounted for as 95
-  default-active accepted cells, 24 held cells, and 28 blocked cells.
-- Preserved context: 337 existing-successor cells and 27 omitted no-target
-  cells remain no-write context.
-- Target guardrails: `300.1605 -> 184.113` is preserved as source context, and
-  `301.165 -> 185.116` remains its own `DNA_dR` source-tag context.
-- Release-slice checker: pass.
-- RAW/85RAW rerun: not run for this cleanup; the activation remains no-RAW
-  replay from existing 85RAW-derived artifacts.
-
-## Current Artifacts
-
-- CID-NL default activation summary:
-  `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_summary.json`
-- CID-NL default activation checks:
-  `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv`
-- CID-NL compact activation manifest:
-  `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv`
-- CID-NL full-scope classification summary/checks/manifest:
-  `docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/`
-- CID-NL 85RAW universe closure summary/checks/manifest:
-  `docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/`
-- Full generated CID-NL default outputs:
-  `output/validation/cid_nl_default_product_activation_v1/`
-- Pre-activation Gallery/adopt evidence:
-  `output/validation/cid_nl_default_activation_gallery_review_v1/`
+- `backfill_expansion_census_v1`: 20 CID-NL active successor rows create a
+  1700-cell universe: 676 detected, 95 Discovery-written, 929 blank pressure
+  cells. The 1010 parked future-pressure cells remain parked.
+- `backfill_expansion_evidence_availability_v1`: existing mechanical/trace
+  recovery coverage is 0/929, so sample-local evidence was required.
+- `backfill_expansion_sample_local_ms1_evidence_v1`: exact sample-local
+  alignment evidence exists for 675/929 cells; 254 remain held.
+- `backfill_expansion_raw_overlay_trace_identity_v1`: evidence-only RAW overlay
+  confirms trace signal for 666/675 alignment-present cells; 9 trace-absent
+  cells remain held.
+- `backfill_expansion_expected_diff_provenance_v1`: the 666 RAW-observed cells
+  form a contract-valid packet with schema-valid manifest rows, expected diff,
+  dry-run writer output, and provenance.
+- `backfill_expansion_default_product_activation_v1`: the packet is now a
+  production-ready bounded default activation lane.
 
 ## Boundaries
 
-- Do not maintain a second Discovery/ProductWriter system.
-- Do not put full default matrices into version control.
+- Do not maintain a second Discovery or ProductWriter system.
+- Do not put full matrices, full opportunity maps, cell provenance dumps, or
+  generated overlay bundles into git; heavy outputs stay under `output/`.
 - Do not treat candidates as matrix rows.
-- Do not expand beyond the 95 CID-NL cells without a new Discovery
-  expected-diff/provenance gate.
-- Do not make CID-NL/MS2 evidence direct ProductWriter authority.
-- Do not demote/delete `301.165 -> 185.116` while it has its own tag evidence.
-- Do not reopen broad Backfill while the active goal is Discovery productization.
-- Do not reopen the current 147-cell Discovery universe as another expansion
-  slice; it is already partitioned into accepted/held/blocked buckets.
-- Do not use low prevalence alone as a CID-NL false-positive reason.
-- Do not use source/successor RT or m/z difference to block feature inclusion;
-  use it only for merge/dedupe/replace/migration identity authority.
+- Do not expand the 95 CID-NL lane without a new Discovery expected-diff gate.
+- Do not expand the 666 Backfill expansion lane beyond its exact packet without
+  a new expected-diff and authority update.
+- Do not route the 263 held cells into ProductWriter without exact sample-local
+  evidence and a new gate.
+- Do not project row/family evidence onto sample cells.
+- Do not unpark broad Backfill without an independent truth source plus
+  expected-diff authority update.
+- Do not change workbook/GUI, selected peak, selected area, or counted
+  detection from this activation.
+
+## Current Gate Commands
+
+- `uv run python -m scripts.check_backfill_expansion_census --check-only`
+- `uv run python -m scripts.check_backfill_expansion_evidence_availability --check-only`
+- `uv run python -m scripts.check_backfill_expansion_sample_local_ms1_evidence --check-only`
+- `uv run python -m scripts.check_backfill_expansion_raw_overlay_trace_identity --check-only`
+- `uv run python -m scripts.check_backfill_expansion_expected_diff_provenance --check-only`
+- `uv run python -m scripts.build_backfill_expansion_default_product_activation --check-only --require-pass`
+- `uv run python -m scripts.check_productization_state`
+- `uv run python -m scripts.check_validation_artifact_retention`
 
 ## Status Index Anchors
 
@@ -151,14 +105,13 @@ Active writer lanes:
 
 - `backfill_current_write_ready_scope`
 - `cid_nl_default_product_activation_v1`
+- `backfill_expansion_default_product_activation_v1`
 
-Anchor phrases retained for the status checker:
+Required anchor phrases:
 
 - `product_ready_default_matrix_activated`
 - `CID-NL default product activation v1`
-- `CID-NL Discovery Release Slice Checker v1`
-- `CID-NL Discovery Full-Scope Classification v1`
-- `CID-NL 85RAW Universe Closure v1`
+- `Backfill Expansion Default Product Activation v1`
 - Broad Backfill auto-write remains parked
 - Goal 0/1 hardening added
 - machine-adjudicated without granting new writer authority
@@ -176,8 +129,10 @@ Anchor phrases retained for the status checker:
 
 ## Next Step
 
-Continue with Discovery only. The current 85RAW-derived CID-NL universe is
-already classified and closed for the active product question. Future CID-NL
-expansion needs new evidence or a new product question with its own
-expected-diff, successor-self evidence, provenance, row-identity, and
-artifact-retention gate; do not route this through broad Backfill.
+For this 85RAW-derived packet, Discovery plus bounded Backfill expansion can be
+treated as product-ready default activation.
+
+For future sample batches, do not repeat this manual gate-by-gate rollout once
+the rule is stable. Collapse the evidence chain into a CLI/GUI preset that
+directly runs the same bounded rule, emits the activation outputs, and records
+the authority scope, expected diff, and provenance.

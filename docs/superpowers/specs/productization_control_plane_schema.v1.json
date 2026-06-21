@@ -39,7 +39,8 @@
     "unregistered_scope_policy": "fail_closed",
     "allowed_product_writer_scopes": [
       "backfill_policy_write_ready_rows",
-      "cid_nl_adopt_ready_feature_inclusion_95_cells"
+      "cid_nl_adopt_ready_feature_inclusion_95_cells",
+      "backfill_expansion_raw_trace_expected_diff_666_cells"
     ],
     "parked_blocked_diagnostic_frozen_out_of_scope_must_not_write": true,
     "quality_explanations_cannot_write": true,
@@ -49,6 +50,7 @@
   "required_lane_ids": [
     "backfill_current_write_ready_scope",
     "cid_nl_default_product_activation_v1",
+    "backfill_expansion_default_product_activation_v1",
     "broad_backfill_autowrite",
     "productization_authority_firewall_v1",
     "mechanical_adjudication_contract_v1",

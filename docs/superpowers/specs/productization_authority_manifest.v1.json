@@ -6,7 +6,8 @@
     "unregistered_scope_policy": "fail_closed",
     "product_writer_allowed_scopes": [
       "backfill_policy_write_ready_rows",
-      "cid_nl_adopt_ready_feature_inclusion_95_cells"
+      "cid_nl_adopt_ready_feature_inclusion_95_cells",
+      "backfill_expansion_raw_trace_expected_diff_666_cells"
     ],
     "matrix_write_requires": [
       "registered_product_authority_scope",
@@ -47,6 +48,19 @@
       "acceptance_artifact_sha256": "FC0F36187EB2041020FC62BDFA9F5276AB72BEA5274D5B139676B9678DD06978",
       "compact_manifest": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv",
       "compact_manifest_sha256": "73A2F4F9EF13BE669CFDC393F77230F9204B983D71846D0996DAD4C1124566D2"
+    },
+    "backfill_expansion_default_activation": {
+      "current_product_authority_rows": 666,
+      "candidate_peak_rows": 20,
+      "held_cell_rows": 263,
+      "authority_scope": "backfill_expansion_raw_trace_expected_diff_666_cells",
+      "authority_source": "backfill_expansion_expected_diff_provenance_v1",
+      "artifact": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_summary.json",
+      "artifact_sha256": "BAAA3EC1B62FD68C8315DDF7511CD4D8D8B0A74C1F31B8BF5D54705A9A1DC091",
+      "acceptance_artifact": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_checks.tsv",
+      "acceptance_artifact_sha256": "7C5F47A1A598B6DABCBE7CC0BE7C6432B9CC043FD0B698737479A022449F1EE2",
+      "compact_manifest": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_manifest.tsv",
+      "compact_manifest_sha256": "6D5D7845C395D0E753C8C3D0C2BEC7F8A944A61F88D782685D6777D91C9B777B"
     }
   },
   "parked_lanes": {
