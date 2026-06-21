@@ -68,6 +68,33 @@ def test_productization_authority_checker_rejects_stale_cid_nl_hash(
     )
 
 
+def test_productization_authority_checker_rejects_stale_clean_target_hash(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / DEFAULT_MANIFEST.name
+    schema = tmp_path / DEFAULT_SCHEMA.name
+    index = tmp_path / DEFAULT_INDEX.name
+    shutil.copyfile(DEFAULT_MANIFEST, manifest)
+    shutil.copyfile(DEFAULT_SCHEMA, schema)
+    shutil.copyfile(DEFAULT_INDEX, index)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["current_authority"][
+        "backfill_expansion_clean_target_selective_activation"
+    ]["artifact_sha256"] = "STALE"
+    manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = check_productization_authority(
+        manifest_path=manifest,
+        schema_path=schema,
+        index_path=index,
+    )
+
+    assert any(
+        "Backfill clean-target artifact hash does not match manifest" in problem
+        for problem in problems
+    )
+
+
 def _mutate_first_non_write_row_to_forbidden_scope(index: Path) -> None:
     with index.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")

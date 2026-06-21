@@ -70,7 +70,7 @@
     },
     "availability_summary_json": {
       "path": "docs/superpowers/validation/backfill_expansion_evidence_availability_v1/backfill_expansion_evidence_availability_summary.json",
-      "sha256": "B96CED3285341C6E80B76D03412C293699C127A81EBA182C07C8A12F316BE382",
+      "sha256": "342AA5688BED55B64B775D6C48774181BAF487D7DF60EF77AD3D0D4DAA0FF2FC",
       "size_bytes": 4821
     }
   },

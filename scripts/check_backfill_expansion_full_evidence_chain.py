@@ -37,6 +37,10 @@ from scripts.check_backfill_expansion_raw_overlay_trace_identity import (
 from scripts.check_backfill_expansion_raw_overlay_trace_identity import (
     check_backfill_expansion_raw_overlay_trace_identity,  # noqa: E402
 )
+from scripts.validation_artifact_contracts import (  # noqa: E402
+    check_summary_artifact_hashes,
+    is_declared_externalized_artifact_path,
+)
 from xic_extractor.tabular_io import (  # noqa: E402
     file_sha256,
     optional_float,
@@ -415,7 +419,15 @@ def validate_backfill_expansion_full_evidence_chain(
     _check_summary_counts(payload, problems)
     _check_checks_tsv(checks_tsv, payload, problems)
     _check_manifest_tsv(row_manifest_tsv, payload, problems)
-    _check_cells_tsv(cells_tsv, payload, problems)
+    if cells_tsv.exists():
+        _check_cells_tsv(cells_tsv, payload, problems)
+    elif not is_declared_externalized_artifact_path(
+        payload,
+        "cells_tsv",
+        cells_tsv,
+        root=ROOT,
+    ):
+        problems.append(f"cells TSV missing: {cells_tsv}")
     _check_artifact_hashes(payload, problems)
     if require_full_chain and payload.get("full_chain_complete") is not True:
         problems.append(
@@ -1021,29 +1033,12 @@ def _check_cells_tsv(
         problems.append("cells TSV product_authority_effect mismatch")
 
 
-def _check_artifact_hashes(
-    payload: Mapping[str, Any],
-    problems: list[str],
-) -> None:
-    for section_name in ("input_artifacts", "artifacts"):
-        section = payload.get(section_name)
-        if not isinstance(section, Mapping):
-            problems.append(f"summary {section_name} missing")
-            continue
-        for name, artifact in section.items():
-            if not isinstance(artifact, Mapping):
-                problems.append(f"summary {section_name} {name} must be object")
-                continue
-            path_text = text_value(artifact.get("path"))
-            if not path_text:
-                problems.append(f"summary {section_name} {name} path missing")
-                continue
-            path = ROOT / path_text
-            if not path.exists():
-                problems.append(f"summary {section_name} {name} path missing on disk")
-                continue
-            if file_sha256(path) != text_value(artifact.get("sha256")):
-                problems.append(f"summary {section_name} {name} sha256 mismatch")
+def _check_artifact_hashes(payload: Mapping[str, Any], problems: list[str]) -> None:
+    check_summary_artifact_hashes(
+        payload,
+        root=ROOT,
+        problems=problems,
+    )
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:

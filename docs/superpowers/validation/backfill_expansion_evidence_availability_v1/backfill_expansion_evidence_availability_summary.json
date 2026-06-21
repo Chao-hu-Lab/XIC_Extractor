@@ -55,7 +55,7 @@
     },
     "census_summary_json": {
       "path": "docs/superpowers/validation/backfill_expansion_census_v1/backfill_expansion_census_summary.json",
-      "sha256": "5F1E7124AB994C6153D7A6E5489CA0852F71FDAED8C7EFB2E24DF1E3BC99A3FB",
+      "sha256": "88E73C60C0674BD9AC6AC9B6BB41BBF8AFC258FC92D46DE60FC1013C65F20740",
       "size_bytes": 6158
     },
     "mechanical_adjudication_index_tsv": {
@@ -65,8 +65,8 @@
     },
     "trace_recovery_report_tsv": {
       "path": "docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv",
-      "sha256": "6271A73ECA48A686B83A5AE88AA5EDF87DA861108211AA76A927E77DF8678615",
-      "size_bytes": 2809711
+      "sha256": "18267597CDC4922E3874CF01AE1CF56B26F1B76473EB01E099D2C633190224CF",
+      "size_bytes": 2808623
     }
   },
   "parked_immediate_expected_diff_ready_cell_count": 0,

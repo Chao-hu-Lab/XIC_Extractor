@@ -87,13 +87,66 @@ def test_missing_required_full_chain_check_fails_closed(tmp_path: Path) -> None:
     assert any("checks missing required ids" in p for p in problems)
 
 
+def test_missing_declared_externalized_cells_tsv_is_not_clean_checkout_blocker(
+    tmp_path: Path,
+) -> None:
+    summary_json, checks_tsv, manifest_tsv, _cells_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    relpath = (
+        "output/validation/__missing_full_evidence_chain/"
+        "backfill_expansion_full_evidence_chain_cells.tsv"
+    )
+    payload["artifacts"]["cells_tsv"]["path"] = relpath
+    payload["artifacts"]["cells_tsv"]["sha256"] = "A" * 64
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    missing_cells_tsv = checker_path(relpath)
+    assert not missing_cells_tsv.exists()
+
+    problems = validate_backfill_expansion_full_evidence_chain(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        row_manifest_tsv=manifest_tsv,
+        cells_tsv=missing_cells_tsv,
+    )
+
+    assert problems == []
+
+
+def test_missing_retained_cells_tsv_fails_closed(tmp_path: Path) -> None:
+    summary_json, checks_tsv, manifest_tsv, _cells_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    relpath = (
+        "docs/superpowers/validation/"
+        "__missing_full_evidence_chain_cells.tsv"
+    )
+    payload["artifacts"]["cells_tsv"]["path"] = relpath
+    payload["artifacts"]["cells_tsv"]["sha256"] = "A" * 64
+    payload["artifacts"]["cells_tsv"]["retention_decision"] = "externalize"
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    missing_cells_tsv = checker_path(relpath)
+    assert not missing_cells_tsv.exists()
+
+    problems = validate_backfill_expansion_full_evidence_chain(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        row_manifest_tsv=manifest_tsv,
+        cells_tsv=missing_cells_tsv,
+    )
+
+    assert f"cells TSV missing: {missing_cells_tsv}" in problems
+    assert any("summary artifacts cells_tsv missing" in problem for problem in problems)
+
+
 def _copy_contract(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     summary_json = tmp_path / "summary.json"
     checks_tsv = tmp_path / "checks.tsv"
     manifest_tsv = tmp_path / "manifest.tsv"
-    cells_tsv = tmp_path / "cells.tsv"
+    cells_tsv = DEFAULT_CELLS_TSV
     shutil.copyfile(DEFAULT_SUMMARY_JSON, summary_json)
     shutil.copyfile(DEFAULT_CHECKS_TSV, checks_tsv)
     shutil.copyfile(DEFAULT_ROW_MANIFEST_TSV, manifest_tsv)
-    shutil.copyfile(DEFAULT_CELLS_TSV, cells_tsv)
     return summary_json, checks_tsv, manifest_tsv, cells_tsv
+
+
+def checker_path(relpath: str) -> Path:
+    return Path(__file__).resolve().parents[1] / relpath

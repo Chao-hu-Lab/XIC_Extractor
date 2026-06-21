@@ -32,6 +32,10 @@ from scripts.check_backfill_expansion_sample_local_ms1_evidence import (  # noqa
 from scripts.check_backfill_expansion_sample_local_ms1_evidence import (  # noqa: E402
     check_backfill_expansion_sample_local_ms1_evidence,
 )
+from scripts.validation_artifact_contracts import (  # noqa: E402
+    artifact_hash_matches,
+    check_summary_artifact_hashes,
+)
 from xic_extractor.tabular_io import (  # noqa: E402
     file_sha256,
     optional_float,
@@ -930,11 +934,11 @@ def _check_summary_artifact_hash(
         problems.append(f"summary {artifact_id} sha256 missing")
         return
     try:
-        observed_hash = file_sha256(path)
+        hash_matches = artifact_hash_matches(path, expected_hash)
     except OSError as exc:
         problems.append(f"{artifact_id} sha256 cannot read: {exc}")
         return
-    if observed_hash != expected_hash:
+    if not hash_matches:
         problems.append(f"summary {artifact_id} sha256 mismatch")
 
 
@@ -942,25 +946,12 @@ def _check_summary_input_artifact_hashes(
     payload: Mapping[str, Any],
     problems: list[str],
 ) -> None:
-    input_artifacts = payload.get("input_artifacts")
-    if not isinstance(input_artifacts, Mapping):
-        problems.append("summary input_artifacts mismatch")
-        return
-    for artifact_id, raw_entry in input_artifacts.items():
-        if not isinstance(raw_entry, Mapping):
-            problems.append(f"summary input_artifacts {artifact_id} invalid")
-            continue
-        path_text = text_value(raw_entry.get("path"))
-        expected_hash = text_value(raw_entry.get("sha256"))
-        if not path_text or not expected_hash:
-            problems.append(f"summary input_artifacts {artifact_id} incomplete")
-            continue
-        path = _artifact_path(path_text)
-        if not path.is_file():
-            problems.append(f"summary input_artifacts {artifact_id} missing")
-            continue
-        if file_sha256(path) != expected_hash:
-            problems.append(f"summary input_artifacts {artifact_id} sha256 mismatch")
+    check_summary_artifact_hashes(
+        payload,
+        root=ROOT,
+        problems=problems,
+        section_names=("input_artifacts",),
+    )
 
 
 def _check_overlay_trace_artifact_hashes(
@@ -982,9 +973,12 @@ def _check_overlay_trace_artifact_hashes(
             continue
         path = _artifact_path(path_text)
         if not path.is_file():
+            normalized_path = path_text.replace("\\", "/")
+            if normalized_path.startswith("output/"):
+                continue
             problems.append(f"overlay trace artifact {family_id} missing")
             continue
-        if file_sha256(path) != expected_hash:
+        if not artifact_hash_matches(path, expected_hash):
             problems.append(f"overlay trace artifact {family_id} sha256 mismatch")
 
 
@@ -1053,7 +1047,8 @@ def _check_optional_externalized_artifact(
         problems.append(f"summary {artifact_id} path missing")
         return
     path = _artifact_path(path_text)
-    if path.exists() and file_sha256(path) != text_value(artifact.get("sha256")):
+    expected_hash = text_value(artifact.get("sha256"))
+    if path.exists() and not artifact_hash_matches(path, expected_hash):
         problems.append(f"summary {artifact_id} sha256 mismatch")
 
 

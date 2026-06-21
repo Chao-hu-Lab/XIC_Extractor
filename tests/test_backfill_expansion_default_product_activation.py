@@ -137,6 +137,11 @@ def test_compact_manifest_scope_drift_fails_closed(tmp_path: Path) -> None:
 def test_summary_artifact_hash_binding_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, compact_manifest_tsv = _copy_contract(tmp_path)
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    payload["artifacts"]["quant_matrix"]["path"] = (
+        "docs/superpowers/validation/"
+        "backfill_expansion_default_product_activation_v1/"
+        "backfill_expansion_default_product_activation_summary.json"
+    )
     payload["artifacts"]["quant_matrix"]["sha256"] = "BAD"
     summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -148,6 +153,53 @@ def test_summary_artifact_hash_binding_fails_closed(tmp_path: Path) -> None:
 
     assert any(
         "summary artifacts quant_matrix sha256 mismatch" in problem
+        for problem in problems
+    )
+
+
+def test_missing_externalized_activation_artifacts_do_not_block_clean_checkout(
+    tmp_path: Path,
+) -> None:
+    summary_json, checks_tsv, compact_manifest_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    for label in ("expected_diff_summary", "cell_provenance", "quant_matrix"):
+        payload["artifacts"][label]["path"] = (
+            "output/validation/__missing_default_activation/"
+            f"{label}.tsv"
+        )
+        payload["artifacts"][label]["sha256"] = "A" * 64
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = validate_backfill_expansion_default_product_activation(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        compact_manifest_tsv=compact_manifest_tsv,
+    )
+
+    assert problems == []
+
+
+def test_missing_retained_activation_artifact_fails_closed(tmp_path: Path) -> None:
+    summary_json, checks_tsv, compact_manifest_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    payload["artifacts"]["expected_diff_summary"]["path"] = (
+        "docs/superpowers/validation/"
+        "__missing_default_activation_expected_diff_summary.tsv"
+    )
+    payload["artifacts"]["expected_diff_summary"]["sha256"] = "A" * 64
+    payload["artifacts"]["expected_diff_summary"]["retention_decision"] = (
+        "externalize"
+    )
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = validate_backfill_expansion_default_product_activation(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        compact_manifest_tsv=compact_manifest_tsv,
+    )
+
+    assert any(
+        "summary artifacts expected_diff_summary missing" in problem
         for problem in problems
     )
 

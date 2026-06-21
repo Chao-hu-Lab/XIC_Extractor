@@ -3,8 +3,23 @@
 Updated: 2026-06-24
 Branch: `codex/pr05-backfill-clean-target-rebuild-20260624`
 Status: #88, #93, #94, and #95 are merged on `master`; #89 was closed as
-superseded by #95. The remaining stack is being rebuilt one PR at a time from
-the current `master` so CI and review do not depend on ignored local artifacts.
+superseded by #95, and the stale stacked #90 was closed as superseded by #96.
+The remaining stack is being rebuilt one PR at a time from the current
+`master` so CI and review do not depend on ignored local artifacts.
+#96 is the active replacement PR. Its local clean-checkout portability fix has
+passed focused Backfill tests, productization/retention gates, and the full
+local CI-equivalent gate. A GitHub CI failure on the previously published #96
+head was traced to the same clean-checkout artifact boundary in the selective
+activation validator; the local fix now covers the provenance, default
+activation, and clean-target selective activation validators. The next step is
+to publish the amended branch and wait for GitHub CI/review before normal
+merge. A follow-up CI failure exposed a local-output-polluted hash-binding test;
+the test now points at retained clean-checkout artifacts before forcing a bad
+hash. A later CI failure exposed the same `cells_tsv` output coupling in full
+evidence-chain style validators; the shared helper now covers declared
+externalized cells artifacts for full evidence chain, peak-mode decomposition,
+selective shift-aware gate, and clean-target replay while retained cells still
+fail closed.
 
 This is a compact current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
@@ -13,10 +28,10 @@ This is a compact current-state snapshot. Tier authority lives in
 
 ## Current Objective
 
-Rebuild and close #90-#92 without carrying old stacked output, artifact, or
-global-ledger coupling:
+Rebuild and close #96, then #91-#92, without carrying old stacked output,
+artifact, or global-ledger coupling:
 
-- #90: clean-target Backfill expansion activation.
+- #96: clean-target Backfill expansion activation replacement for old #90.
 - #91: DNA-dR product-ready preset performance.
 - #92: row-completion confidence shadow gate.
 
@@ -30,8 +45,10 @@ description, and no required dependency on ignored `output/` or
   authority from #88.
 - `cid_nl_default_product_activation_v1` remains the 95-cell CID-NL Discovery
   authority from #95.
-- #90 introduces `backfill_expansion_default_product_activation_v1` as a
+- #96 introduces `backfill_expansion_default_product_activation_v1` as a
   bounded 666-cell Backfill expansion packet, not broad Backfill authority.
+- Backfill Expansion Clean-Target Selective Default Activation v1 is the #96
+  writer scope for the 84-cell clean-target subset.
 - Broad Backfill auto-write remains parked.
 - Diagnostics, galleries, review packets, and retained summaries are evidence
   surfaces only unless a ProductWriter scope, expected diff, and authority
@@ -43,25 +60,34 @@ description, and no required dependency on ignored `output/` or
   generated overlay bundles into git.
 - Do not use ignored `output/` or `local_validation_artifacts/` as clean-checkout
   CI prerequisites.
+- Missing externalized artifacts may be absent only when the retained summary
+  declares that exact artifact as externalized; retained artifacts must still
+  fail closed.
 - Do not expand CID-NL beyond 95 cells or Backfill expansion beyond 666 cells
   without a new expected-diff and authority update.
 - Do not change workbook/GUI behavior, selected peak, selected area, counted
-  detection, or broad Backfill authority in #90.
+  detection, or broad Backfill authority in #96.
 - Any CI red must be diagnosed from logs and stack boundary first, then fixed at
   the owner boundary.
 
 ## Required Gates
 
-For #90 before ready/merge:
+For #96 before ready/merge:
 
-- Backfill expansion focused checkers and tests.
-- `uv run python scripts/check_productization_state.py`
-- `uv run python scripts/check_productization_authority.py`
-- `uv run python scripts/check_validation_artifact_retention.py`
+- Backfill expansion focused checkers and tests: passed locally
+  (`134 passed`).
+- `uv run python scripts/check_productization_state.py`: passed locally.
+- `uv run python scripts/check_productization_authority.py`: passed locally.
+- `uv run python scripts/check_validation_artifact_retention.py`: passed
+  locally with the existing 6 `shrink_later` warnings.
+- `uv run python scripts/check_cid_nl_discovery_release_slice.py`: passed
+  locally.
 - CI-equivalent local gate:
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`:
+    passed.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`: passed.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`: passed
+    (`4294 passed, 1 skipped`).
 - GitHub CI green and review clear before normal merge.
 
 ## Status Index Anchors
@@ -88,9 +114,10 @@ Retain these anchor phrases for productization state checks:
 
 ## Next Actions
 
-1. Finish #90 rebuild conflict resolution on current `master`.
-2. Run focused Backfill/productization/retention gates.
-3. Run full local CI-equivalent gate.
-4. Push or API-create a clean replacement PR if old #90 remains stacked-dirty.
-5. Wait for GitHub CI and review, normal-merge if green.
-6. Repeat the same boundary-first process for #91 and #92.
+1. Amend the local #96 commit with the clean-checkout artifact portability fix.
+2. API-update the #96 branch and refresh the PR description if verification
+   wording changed.
+3. Wait for GitHub CI and review, normal-merge #96 only if green/clear.
+4. Rebuild or retarget #91 from updated `master`; do not reuse the stale stacked
+   base blindly.
+5. Repeat the same boundary-first process for #92 after #91 is clean.

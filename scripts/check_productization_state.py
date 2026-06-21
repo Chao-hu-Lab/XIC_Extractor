@@ -45,9 +45,9 @@ WRITER_LANE_AUTHORITY = {
         "authority_key": "cid_nl_default_activation",
         "scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
     },
-    "backfill_expansion_default_product_activation_v1": {
-        "authority_key": "backfill_expansion_default_activation",
-        "scope": "backfill_expansion_raw_trace_expected_diff_666_cells",
+    "backfill_expansion_clean_target_selective_product_activation_v1": {
+        "authority_key": "backfill_expansion_clean_target_selective_activation",
+        "scope": "backfill_expansion_clean_target_selective_activation_84_cells",
     },
 }
 WRITE_FORBIDDEN_STATUSES = {

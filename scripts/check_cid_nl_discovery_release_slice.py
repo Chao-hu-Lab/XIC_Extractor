@@ -264,12 +264,9 @@ def _check_docs(
             "cid_nl_85raw_universe_closure_v1",
         ],
         handoff: [
-            "The immediate product direction is Discovery first",
-            "accepted_discovery_cell_count=95",
-            "Do not reopen broad Backfill while the active goal is "
-            "Discovery productization",
-            "CID-NL Discovery full-scope classification v1",
-            "CID-NL 85RAW Universe Closure v1",
+            "CID-NL default product activation v1",
+            "Do not expand CID-NL beyond 95 cells",
+            "Broad Backfill auto-write remains parked",
         ],
         control_plane: [
             "CID-NL Discovery Lane Terminology Cleanup v1",

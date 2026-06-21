@@ -45,7 +45,7 @@
   "input_artifacts": {
     "backfill_activation_summary_json": {
       "path": "docs/superpowers/validation/quant_matrix_default_product_activation_v1/quant_matrix_default_product_activation_summary.json",
-      "sha256": "AA0CB17A1B209A5FC0FEB20B60E06F906F1C1EC299C8EFEE6AE1D50961784ECD",
+      "sha256": "354BE66BFD1804FDC1A13EED057792A40C63ECF6DF2598C3DB3169B2C6FC6675",
       "size_bytes": 4880
     },
     "cid_nl_activation_manifest_tsv": {
@@ -75,7 +75,7 @@
     },
     "cid_nl_universe_summary_json": {
       "path": "docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/cid_nl_85raw_universe_closure_summary.json",
-      "sha256": "E13C655CAB6772B4002707D8A091FA5B244BB0B64295DCFE2050B6CFBF3332EF",
+      "sha256": "1FF9364AE44D76AD9245B67B28E89BA452C3B4C3A538F77DD83238425F51816B",
       "size_bytes": 4821
     },
     "old_backfill_values_tsv": {

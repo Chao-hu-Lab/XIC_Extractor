@@ -33,6 +33,10 @@ from scripts.check_production_acceptance_manifest import (  # noqa: E402
 from scripts.check_production_acceptance_manifest import (
     production_acceptance_manifest_sha256,  # noqa: E402
 )
+from scripts.validation_artifact_contracts import (  # noqa: E402
+    check_summary_artifact_hashes,
+    resolve_existing_summary_artifact_path,
+)
 from xic_extractor.alignment.quant_matrix_version import (  # noqa: E402
     CELL_PROVENANCE_COLUMNS,
     EXPECTED_DIFF_COLUMNS,
@@ -316,18 +320,29 @@ def validate_backfill_expansion_clean_target_selective_product_activation(
     _check_compact_manifest(compact_manifest_tsv, payload, problems)
     artifacts = payload.get("artifacts")
     if isinstance(artifacts, Mapping):
-        _check_expected_diff_summary(
-            _artifact_path(artifacts, "expected_diff_summary"),
-            payload,
-            problems,
+        expected_summary = resolve_existing_summary_artifact_path(
+            artifacts,
+            "expected_diff_summary",
+            root=ROOT,
+            problems=problems,
         )
-        _check_cell_provenance(
-            _artifact_path(artifacts, "cell_provenance"),
-            payload,
-            problems,
+        cell_provenance = resolve_existing_summary_artifact_path(
+            artifacts,
+            "cell_provenance",
+            root=ROOT,
+            problems=problems,
         )
-        quant_matrix = _artifact_path(artifacts, "quant_matrix")
-        if not quant_matrix.exists():
+        quant_matrix = resolve_existing_summary_artifact_path(
+            artifacts,
+            "quant_matrix",
+            root=ROOT,
+            problems=problems,
+        )
+        if expected_summary is not None:
+            _check_expected_diff_summary(expected_summary, payload, problems)
+        if cell_provenance is not None:
+            _check_cell_provenance(cell_provenance, payload, problems)
+        if quant_matrix is not None and not quant_matrix.exists():
             problems.append("quant_matrix artifact missing")
     return problems
 
@@ -895,26 +910,11 @@ def _check_summary_fields(payload: Mapping[str, Any], problems: list[str]) -> No
 
 
 def _check_artifact_hashes(payload: Mapping[str, Any], problems: list[str]) -> None:
-    for group_name in ("artifacts", "input_artifacts"):
-        group = payload.get(group_name)
-        if not isinstance(group, Mapping):
-            problems.append(f"summary {group_name} must be an object")
-            continue
-        for label, entry in group.items():
-            if not isinstance(entry, Mapping):
-                problems.append(f"summary {group_name} {label} must be an object")
-                continue
-            relpath = entry.get("path")
-            expected_sha = entry.get("sha256")
-            if not isinstance(relpath, str) or not isinstance(expected_sha, str):
-                problems.append(f"summary {group_name} {label} artifact malformed")
-                continue
-            path = ROOT / relpath
-            if not path.exists():
-                problems.append(f"summary {group_name} {label} missing: {relpath}")
-                continue
-            if file_sha256(path) != expected_sha:
-                problems.append(f"summary {group_name} {label} sha256 mismatch")
+    check_summary_artifact_hashes(
+        payload,
+        root=ROOT,
+        problems=problems,
+    )
 
 
 def _check_checks_tsv(

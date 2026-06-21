@@ -124,7 +124,7 @@ def test_summary_trace_observed_count_drift_fails_closed(tmp_path: Path) -> None
 def test_summary_overlay_input_hash_binding_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
-    payload["input_artifacts"]["overlay_batch_summary_tsv"]["sha256"] = "BAD"
+    payload["input_artifacts"]["sample_local_checks_tsv"]["sha256"] = "BAD"
     summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     problems = check_backfill_expansion_raw_overlay_trace_identity(
@@ -134,7 +134,7 @@ def test_summary_overlay_input_hash_binding_fails_closed(tmp_path: Path) -> None
     )
 
     assert any(
-        "summary input_artifacts overlay_batch_summary_tsv sha256 mismatch"
+        "summary input_artifacts sample_local_checks_tsv sha256 mismatch"
         in problem
         for problem in problems
     )
@@ -144,6 +144,11 @@ def test_summary_trace_artifact_hash_binding_fails_closed(tmp_path: Path) -> Non
     summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
     first_family = sorted(payload["overlay_trace_summary_artifacts"])[0]
+    trace_artifact = tmp_path / "trace-summary.json"
+    trace_artifact.write_text("{}\n", encoding="utf-8")
+    payload["overlay_trace_summary_artifacts"][first_family]["path"] = str(
+        trace_artifact,
+    )
     payload["overlay_trace_summary_artifacts"][first_family]["sha256"] = "BAD"
     summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 

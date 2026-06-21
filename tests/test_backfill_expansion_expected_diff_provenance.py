@@ -125,6 +125,11 @@ def test_row_manifest_active_authority_overclaim_fails_closed(
 def test_summary_artifact_hash_binding_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    payload["artifacts"]["expected_diff"]["path"] = (
+        "docs/superpowers/validation/"
+        "backfill_expansion_expected_diff_provenance_v1/"
+        "backfill_expansion_expected_diff_provenance_summary.json"
+    )
     payload["artifacts"]["expected_diff"]["sha256"] = "BAD"
     summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
@@ -136,6 +141,58 @@ def test_summary_artifact_hash_binding_fails_closed(tmp_path: Path) -> None:
 
     assert any(
         "summary artifacts expected_diff sha256 mismatch" in problem
+        for problem in problems
+    )
+
+
+def test_missing_externalized_expected_diff_artifacts_do_not_block_clean_checkout(
+    tmp_path: Path,
+) -> None:
+    summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    for label in (
+        "production_acceptance_manifest",
+        "expected_diff",
+        "expected_diff_summary",
+        "cell_provenance",
+    ):
+        payload["artifacts"][label]["path"] = (
+            "output/validation/__missing_expected_diff_provenance/"
+            f"{label}.tsv"
+        )
+        payload["artifacts"][label]["sha256"] = "A" * 64
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = check_backfill_expansion_expected_diff_provenance(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        row_manifest_tsv=row_manifest_tsv,
+    )
+
+    assert problems == []
+
+
+def test_missing_retained_expected_diff_artifact_fails_closed(
+    tmp_path: Path,
+) -> None:
+    summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    payload["artifacts"]["expected_diff"]["path"] = (
+        "docs/superpowers/validation/"
+        "__missing_expected_diff_provenance_expected_diff.tsv"
+    )
+    payload["artifacts"]["expected_diff"]["sha256"] = "A" * 64
+    payload["artifacts"]["expected_diff"]["retention_decision"] = "externalize"
+    summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = check_backfill_expansion_expected_diff_provenance(
+        summary_json=summary_json,
+        checks_tsv=checks_tsv,
+        row_manifest_tsv=row_manifest_tsv,
+    )
+
+    assert any(
+        "summary artifacts expected_diff missing" in problem
         for problem in problems
     )
 

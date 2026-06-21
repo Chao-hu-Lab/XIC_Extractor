@@ -124,9 +124,7 @@ def test_summary_sample_local_count_drift_fails_closed(tmp_path: Path) -> None:
 def test_summary_input_hash_binding_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, row_manifest_tsv = _copy_contract(tmp_path)
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
-    payload["input_artifacts"]["alignment_backfill_cell_evidence_tsv"]["sha256"] = (
-        "BAD"
-    )
+    payload["input_artifacts"]["availability_checks_tsv"]["sha256"] = "BAD"
     summary_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
     problems = check_backfill_expansion_sample_local_ms1_evidence(
@@ -136,8 +134,8 @@ def test_summary_input_hash_binding_fails_closed(tmp_path: Path) -> None:
     )
 
     assert any(
-        "summary input_artifacts alignment_backfill_cell_evidence_tsv "
-        "sha256 mismatch" in problem
+        "summary input_artifacts availability_checks_tsv sha256 mismatch"
+        in problem
         for problem in problems
     )
 

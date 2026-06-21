@@ -64,7 +64,7 @@
     },
     "sample_local_summary_json": {
       "path": "docs/superpowers/validation/backfill_expansion_sample_local_ms1_evidence_v1/backfill_expansion_sample_local_ms1_evidence_summary.json",
-      "sha256": "2C8200942D918446CB25C83F08632F529CE35335B57DDE50BE53FF697D0509C1",
+      "sha256": "AFA54687B5D90E3D50CCE2AF9D53FAF29D67BA154BA15F8E126C975F6132558B",
       "size_bytes": 5740
     }
   },
