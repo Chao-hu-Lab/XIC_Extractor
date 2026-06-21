@@ -4795,10 +4795,11 @@ the later low-height writer entry above as the current tier source.
   `uv run python -m scripts.build_cid_nl_default_product_activation --require-pass`
   passed. The summary records `status=pass`,
   `activation_label=product_ready_default_matrix_activated`, 95 accepted
-  default writes, 20 transitions, 337 existing-successor context cells
-  preserved, 27 omitted no-target cells preserved, `expected_diff_count=95`,
-  `written_backfill_count=95`, `unused_expected_diff_count=0`, exact matrix
-  delta keyset pass, and cell provenance exact keyset pass.
+  Discovery default writes, 20 transitions, 337 existing-successor context
+  cells preserved, 27 omitted no-target cells preserved,
+  `expected_diff_count=95`, `written_discovery_cell_count=95`,
+  `unused_expected_diff_count=0`, exact matrix delta keyset pass, and cell
+  provenance exact keyset pass.
 - Retention: the full generated matrix/provenance/default-output TSVs stay
   externalized under ignored
   `output/validation/cid_nl_default_product_activation_v1/`. Version control
@@ -4820,3 +4821,57 @@ the later low-height writer entry above as the current tier source.
   expected-diff/provenance contract. Any expansion beyond these 95 cells, any
   source/successor deletion or migration, or any attempt to treat CID-NL/MS2
   evidence as direct ProductWriter authority requires a new expected-diff gate.
+
+### 2026-06-21 - CID-NL Discovery Lane Terminology Cleanup v1
+
+- Lane: CID-NL Discovery public artifact vocabulary and roadmap cleanup.
+- Tier change: none. `cid_nl_default_product_activation_v1` remains
+  `production_ready` / `product_ready_default_matrix_activated` for the same
+  95-cell scope only. Backfill remains 511 cells, and broad Backfill remains
+  parked.
+- Product surface changed: yes, but only the compact CID-NL public artifacts
+  changed schema/wording. The default matrix values, ProductWriter authority,
+  workbook/GUI behavior, selected peak/area, counted detection, and active lane
+  set did not change.
+- Cleanup decision: the CID-NL summary now exposes Discovery-first fields:
+  `product_lane=cid_nl_discovery`,
+  `product_scope_kind=discovery_default_activation`,
+  `accepted_discovery_cell_count=95`,
+  `written_discovery_cell_count=95`, and
+  `default_activation_effect=write_cid_nl_discovery_default_cell`. Legacy
+  `accepted_backfill`, `written_backfill_count`,
+  `cell_status=accepted_backfill`, and
+  `write_accepted_backfill` terms remain only as QuantMatrixVersion
+  compatibility fields, not as CID-NL product-scope language.
+- Evidence: `cid_nl_default_product_activation_checks.tsv` adds
+  `discovery_terminology_boundary=pass`, and the compact transition manifest
+  now separates `default_activation_effect` from
+  `legacy_quant_matrix_effect`.
+- Next checkpoint: finish Discovery first. Do not reopen broad Backfill while
+  the active product question is CID-NL Discovery expansion. Any CID-NL
+  expansion beyond the 95-cell scope needs its own Discovery expected-diff,
+  provenance, and row-identity gate.
+
+### 2026-06-21 - CID-NL Discovery Release Slice Checker v1
+
+- Lane: CID-NL Discovery release-slice stabilization for the already activated
+  95-cell scope.
+- Tier change: none. `cid_nl_default_product_activation_v1` remains
+  `production_ready` / `product_ready_default_matrix_activated` for the same
+  95 cells only. No active lane, writer scope, matrix value, workbook/GUI,
+  selected peak/area, counted detection, or Backfill authority changed.
+- Product surface changed: validation/replay surface only. Added
+  `scripts/check_cid_nl_discovery_release_slice.py` to assert the current
+  95-cell CID-NL Discovery release claim is stable without rerunning RAW or
+  producing product outputs.
+- The checker binds the release slice to the existing activation summary,
+  compact manifest, checks TSV, status index, authority manifest, roadmap,
+  handoff, and control-plane anchors. It requires Discovery-first public terms
+  while allowing legacy `QuantMatrixVersion` writer compatibility fields only
+  as compatibility.
+- Evidence: `uv run python -m scripts.check_cid_nl_discovery_release_slice`
+  passes; `uv run pytest tests/test_cid_nl_discovery_release_slice.py -q`
+  passes; focused ruff for the checker/test passes.
+- Next checkpoint: after committing this cleanup, continue Discovery-only work.
+  Either keep the 95-cell slice as the release claim, or define the next CID-NL
+  expansion slice with a new expected-diff/provenance/row-identity gate.

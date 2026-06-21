@@ -63,6 +63,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = "cid_nl_default_product_activation_v1"
 ACTIVATION_LABEL = "product_ready_default_matrix_activated"
 PRODUCT_AUTHORITY_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
+DISCOVERY_DEFAULT_EFFECT = "write_cid_nl_discovery_default_cell"
+LEGACY_QUANT_MATRIX_EFFECT = "write_accepted_backfill"
+LEGACY_PROVENANCE_STATUS = "accepted_backfill"
 DEFAULT_OUTPUT_DIR = ROOT / "output/validation/cid_nl_default_product_activation_v1"
 DEFAULT_DOCS_DIR = (
     ROOT / "docs/superpowers/validation/cid_nl_default_product_activation_v1"
@@ -96,6 +99,7 @@ COMPACT_MANIFEST_COLUMNS = (
     "successor_product_mz",
     "successor_neutral_loss_tag",
     "default_activation_effect",
+    "legacy_quant_matrix_effect",
     "product_authority_scope",
 )
 CHECK_COLUMNS = (
@@ -298,10 +302,17 @@ def validate_cid_nl_default_product_activation(
         ("status", "pass"),
         ("activation_label", ACTIVATION_LABEL),
         ("product_authority_scope", PRODUCT_AUTHORITY_SCOPE),
+        ("product_lane", "cid_nl_discovery"),
+        ("product_scope_kind", "discovery_default_activation"),
+        ("default_activation_effect", DISCOVERY_DEFAULT_EFFECT),
+        ("accepted_discovery_cell_count", expected_contract_cell_count),
         ("accepted_backfill_count", expected_contract_cell_count),
         ("candidate_transition_count", expected_transition_count),
         ("expected_diff_count", str(expected_contract_cell_count)),
+        ("written_discovery_cell_count", str(expected_contract_cell_count)),
         ("written_backfill_count", str(expected_contract_cell_count)),
+        ("legacy_quant_matrix_effect", LEGACY_QUANT_MATRIX_EFFECT),
+        ("legacy_provenance_status", LEGACY_PROVENANCE_STATUS),
         ("unused_expected_diff_count", "0"),
         ("product_writer_changed", True),
         ("default_quant_matrix_changed", True),
@@ -427,7 +438,7 @@ def _validate_contract_shape(
         ):
             raise ValueError("CID-NL activation contract overclaims authority")
         if text_value(row.get("legacy_successor_matrix_effect")) != (
-            "write_accepted_backfill"
+            LEGACY_QUANT_MATRIX_EFFECT
         ):
             raise ValueError("CID-NL activation contract matrix effect drift")
         for field in (
@@ -538,7 +549,7 @@ def _quant_expected_diff_rows(
             "sample_stem": text_value(row.get("sample_stem")),
             "baseline_value": "",
             "activated_value": text_value(row.get("candidate_quant_value")),
-            "expected_matrix_effect": "write_accepted_backfill",
+            "expected_matrix_effect": LEGACY_QUANT_MATRIX_EFFECT,
             "expected_reason": (
                 "cid_nl_default_product_activation_v1:"
                 f"transition={text_value(row.get('transition_key'))}"
@@ -572,7 +583,8 @@ def _compact_manifest_rows(
                 "successor_peak_hypothesis_id": first["successor_peak_hypothesis_id"],
                 "successor_product_mz": first["successor_product_mz"],
                 "successor_neutral_loss_tag": first["successor_neutral_loss_tag"],
-                "default_activation_effect": "write_accepted_backfill",
+                "default_activation_effect": DISCOVERY_DEFAULT_EFFECT,
+                "legacy_quant_matrix_effect": LEGACY_QUANT_MATRIX_EFFECT,
                 "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
             }
         )
@@ -647,7 +659,9 @@ def _cell_provenance_summary(
 ) -> dict[str, Any]:
     rows = read_tsv_required(cell_provenance_tsv, CELL_PROVENANCE_COLUMNS)
     accepted = [
-        row for row in rows if text_value(row.get("cell_status")) == "accepted_backfill"
+        row
+        for row in rows
+        if text_value(row.get("cell_status")) == LEGACY_PROVENANCE_STATUS
     ]
     accepted_keys = {
         (row["peak_hypothesis_id"], row["sample_stem"]) for row in accepted
@@ -673,6 +687,8 @@ def _cell_provenance_summary(
     return {
         "status": status,
         "accepted_backfill_cell_count": len(accepted),
+        "accepted_discovery_cell_count": len(accepted),
+        "legacy_provenance_status": LEGACY_PROVENANCE_STATUS,
         "expected_write_count": len(expected_keys),
         "missing_provenance_count": len(expected_keys - accepted_keys),
         "unexpected_provenance_count": len(accepted_keys - expected_keys),
@@ -777,6 +793,15 @@ def _check_rows(
             == expected_contract_cell_count,
         ),
         _check(
+            "discovery_terminology_boundary",
+            (
+                f"default_activation_effect={DISCOVERY_DEFAULT_EFFECT};"
+                f"legacy_quant_matrix_effect={LEGACY_QUANT_MATRIX_EFFECT}"
+            ),
+            "discovery public term with QuantMatrixVersion compatibility",
+            True,
+        ),
+        _check(
             "product_surface_flags",
             "product_writer/default_matrix TRUE; workbook/gui FALSE",
             "explicit public default activation",
@@ -843,10 +868,20 @@ def _summary_payload(
         "activation_label": ACTIVATION_LABEL,
         "validation_label": "product_ready_cid_nl_default_activation",
         "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
+        "product_lane": "cid_nl_discovery",
+        "product_scope_kind": "discovery_default_activation",
+        "default_activation_effect": DISCOVERY_DEFAULT_EFFECT,
+        "accepted_discovery_cell_count": len(contract_rows),
         "accepted_backfill_count": len(contract_rows),
         "candidate_transition_count": transition_count,
         "expected_diff_count": expected_summary.get("expected_diff_count", ""),
+        "written_discovery_cell_count": expected_summary.get(
+            "written_backfill_count",
+            "",
+        ),
         "written_backfill_count": expected_summary.get("written_backfill_count", ""),
+        "legacy_quant_matrix_effect": LEGACY_QUANT_MATRIX_EFFECT,
+        "legacy_provenance_status": LEGACY_PROVENANCE_STATUS,
         "unused_expected_diff_count": expected_summary.get(
             "unused_expected_diff_count",
             "",
@@ -931,6 +966,13 @@ def _summary_payload(
             "replay. Existing successor context cells and omitted no-target cells "
             "are preserved as no-write context."
         ),
+        "terminology_statement": (
+            "This artifact is Discovery-first at the product boundary. Legacy "
+            "QuantMatrixVersion fields such as accepted_backfill_count, "
+            "written_backfill_count, cell_status=accepted_backfill, and "
+            "expected_matrix_effect=write_accepted_backfill are compatibility "
+            "terms from the shared matrix writer, not Backfill product scope."
+        ),
     }
 
 
@@ -951,16 +993,25 @@ def _write_readme(
         "Status: `pass`.",
         "",
         "This is the explicit public default activation change for the narrowed "
-        "CID-NL bundle. It writes exactly 95 adopt-ready blank cells through the "
-        "existing ProductionAcceptanceManifest -> QuantMatrixVersion path.",
+        "CID-NL Discovery bundle. It writes exactly 95 adopt-ready blank cells "
+        "through the existing ProductionAcceptanceManifest -> QuantMatrixVersion "
+        "path.",
         "",
         "It does not rerun RAW, change workbook/GUI behavior, change selected "
         "peak/area/counting, treat candidate rows as matrix rows, or make "
         "CID-NL/MS2 evidence direct ProductWriter authority.",
         "",
+        "Terminology boundary: this is a Discovery product scope. The compact "
+        "summary uses `accepted_discovery_cell_count` and "
+        "`write_cid_nl_discovery_default_cell` for the public decision. Legacy "
+        "`accepted_backfill` / `write_accepted_backfill` values are retained only "
+        "inside the shared QuantMatrixVersion writer and provenance compatibility "
+        "surface.",
+        "",
         "## Counts",
         "",
-        f"- Accepted default writes: `{payload['accepted_backfill_count']}`",
+        "- Accepted Discovery default writes: "
+        f"`{payload['accepted_discovery_cell_count']}`",
         f"- Candidate transitions: `{payload['candidate_transition_count']}`",
         "- Existing successor context cells preserved: "
         f"`{payload['existing_successor_context_cell_count']}`",
@@ -1161,8 +1212,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"cid_nl_default_product_activation_summary: {summary_path}")
     print(f"cid_nl_default_product_activation_status: {payload['status']}")
     print(
-        "cid_nl_default_product_activation_accepted_backfill_count: "
-        f"{payload['accepted_backfill_count']}"
+        "cid_nl_default_product_activation_accepted_discovery_cell_count: "
+        f"{payload['accepted_discovery_cell_count']}"
     )
     if args.require_pass and payload.get("status") != "pass":
         return 2

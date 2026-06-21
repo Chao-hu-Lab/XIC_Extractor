@@ -42,11 +42,11 @@
       "authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
       "authority_source": "cid_nl_activation_adopt_gate_expected_diff",
       "artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_summary.json",
-      "artifact_sha256": "80BD48F1D27E1DF09B34562F1093C4130F2DA801586396AE3E7891E6B645B0D7",
+      "artifact_sha256": "72E3CA0E4EA5DF9F6AE0AED3A6A38748BCF796BBF9D6889671728133BE0DF242",
       "acceptance_artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv",
-      "acceptance_artifact_sha256": "69944E02D39F78273A1AB1F3840D7EE6EFAAB8739309572D4723BCB67317504C",
+      "acceptance_artifact_sha256": "FC0F36187EB2041020FC62BDFA9F5276AB72BEA5274D5B139676B9678DD06978",
       "compact_manifest": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv",
-      "compact_manifest_sha256": "5B73BD759CF70C3CC497BCB4AD375D30072D03DCB2CC7CF3EC61EEC09E7A4A7B"
+      "compact_manifest_sha256": "73A2F4F9EF13BE669CFDC393F77230F9204B983D71846D0996DAD4C1124566D2"
     }
   },
   "parked_lanes": {

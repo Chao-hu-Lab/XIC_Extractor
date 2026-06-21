@@ -11,5 +11,6 @@ cid_nl_default_product_activation_v1	matrix_delta_exact_keyset	pass	pass	pass
 cid_nl_default_product_activation_v1	matrix_delta_changed_count	pass	95	95	
 cid_nl_default_product_activation_v1	cell_provenance_exact_keyset	pass	pass	pass	
 cid_nl_default_product_activation_v1	cell_provenance_accepted_count	pass	95	95	
+cid_nl_default_product_activation_v1	discovery_terminology_boundary	pass	default_activation_effect=write_cid_nl_discovery_default_cell;legacy_quant_matrix_effect=write_accepted_backfill	discovery public term with QuantMatrixVersion compatibility	
 cid_nl_default_product_activation_v1	product_surface_flags	pass	product_writer/default_matrix TRUE; workbook/gui FALSE	explicit public default activation	
 cid_nl_default_product_activation_v1	contract_source_counts	pass	"{""agent_resolved"": 9, ""manual_resolved"": 13, ""primary_supported"": 73}"	tracked	

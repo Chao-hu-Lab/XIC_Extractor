@@ -44,8 +44,15 @@ def test_builds_cid_nl_default_activation_from_adopt_ready_bundle(
 
     assert payload["status"] == "pass"
     assert payload["activation_label"] == "product_ready_default_matrix_activated"
+    assert payload["product_lane"] == "cid_nl_discovery"
+    assert payload["product_scope_kind"] == "discovery_default_activation"
+    assert payload["default_activation_effect"] == "write_cid_nl_discovery_default_cell"
+    assert payload["accepted_discovery_cell_count"] == 2
     assert payload["accepted_backfill_count"] == 2
     assert payload["candidate_transition_count"] == 1
+    assert payload["written_discovery_cell_count"] == "2"
+    assert payload["legacy_quant_matrix_effect"] == "write_accepted_backfill"
+    assert payload["legacy_provenance_status"] == "accepted_backfill"
     assert payload["product_writer_changed"] is True
     assert payload["default_quant_matrix_changed"] is True
     assert payload["default_matrix_files_written"] is True
@@ -100,11 +107,14 @@ def test_builds_cid_nl_default_activation_from_adopt_ready_bundle(
             "successor_peak_hypothesis_id": "FAM_NEW",
             "successor_product_mz": "184.113",
             "successor_neutral_loss_tag": "DNA_dR",
-            "default_activation_effect": "write_accepted_backfill",
+            "default_activation_effect": "write_cid_nl_discovery_default_cell",
+            "legacy_quant_matrix_effect": "write_accepted_backfill",
             "product_authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
         }
     ]
-    assert (tmp_path / "docs" / "README.md").exists()
+    readme = (tmp_path / "docs" / "README.md").read_text(encoding="utf-8")
+    assert "Accepted Discovery default writes" in readme
+    assert "Terminology boundary" in readme
 
 
 def test_default_activation_refuses_hold_adopt_summary(tmp_path: Path) -> None:

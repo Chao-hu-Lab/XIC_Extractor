@@ -1,0 +1,288 @@
+"""Check the CID-NL Discovery release slice contract.
+
+This is a no-RAW release-slice guard for the currently activated 95-cell
+CID-NL Discovery scope. It does not write product outputs or expand authority.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import Counter
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.build_cid_nl_default_product_activation import (  # noqa: E402
+    CHECK_COLUMNS,
+    COMPACT_MANIFEST_COLUMNS,
+    DEFAULT_DOCS_DIR,
+    DISCOVERY_DEFAULT_EFFECT,
+    LEGACY_PROVENANCE_STATUS,
+    LEGACY_QUANT_MATRIX_EFFECT,
+    PRODUCT_AUTHORITY_SCOPE,
+    validate_cid_nl_default_product_activation,
+)
+from scripts.check_productization_authority import (  # noqa: E402
+    check_productization_authority,
+)
+from scripts.check_productization_state import check_productization_state  # noqa: E402
+from xic_extractor.tabular_io import read_tsv_required, text_value  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+SUMMARY_JSON = DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_summary.json"
+CHECKS_TSV = DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_checks.tsv"
+COMPACT_MANIFEST_TSV = (
+    DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_manifest.tsv"
+)
+ROADMAP = ROOT / "docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md"
+HANDOFF = (
+    ROOT
+    / "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
+)
+CONTROL_PLANE = (
+    ROOT / "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
+)
+
+
+def check_cid_nl_discovery_release_slice(
+    *,
+    summary_json: Path = SUMMARY_JSON,
+    checks_tsv: Path = CHECKS_TSV,
+    compact_manifest_tsv: Path = COMPACT_MANIFEST_TSV,
+    roadmap: Path = ROADMAP,
+    handoff: Path = HANDOFF,
+    control_plane: Path = CONTROL_PLANE,
+) -> list[str]:
+    problems: list[str] = []
+    problems.extend(
+        validate_cid_nl_default_product_activation(summary_json=summary_json)
+    )
+    payload = _read_json_object(summary_json, problems)
+    if payload:
+        _check_summary(payload, problems)
+    _check_checks_tsv(checks_tsv, problems)
+    _check_compact_manifest(compact_manifest_tsv, problems)
+    _check_docs(
+        roadmap=roadmap,
+        handoff=handoff,
+        control_plane=control_plane,
+        problems=problems,
+    )
+    for problem in check_productization_state():
+        problems.append(f"productization_state: {problem}")
+    for problem in check_productization_authority():
+        problems.append(f"productization_authority: {problem}")
+    return problems
+
+
+def _check_summary(payload: Mapping[str, Any], problems: list[str]) -> None:
+    expected: dict[str, object] = {
+        "schema_version": "cid_nl_default_product_activation_v1",
+        "status": "pass",
+        "activation_label": "product_ready_default_matrix_activated",
+        "validation_label": "product_ready_cid_nl_default_activation",
+        "product_lane": "cid_nl_discovery",
+        "product_scope_kind": "discovery_default_activation",
+        "product_authority_scope": PRODUCT_AUTHORITY_SCOPE,
+        "default_activation_effect": DISCOVERY_DEFAULT_EFFECT,
+        "accepted_discovery_cell_count": 95,
+        "written_discovery_cell_count": "95",
+        "candidate_transition_count": 20,
+        "expected_diff_count": "95",
+        "unused_expected_diff_count": "0",
+        "existing_successor_context_cell_count": 337,
+        "omitted_no_target_cell_count": 27,
+        "product_writer_changed": True,
+        "default_quant_matrix_changed": True,
+        "workbook_or_gui_changed": False,
+        "selected_peak_area_or_counting_changed": False,
+        "backfill_writer_authority_changed": False,
+        "cid_nl_ms2_direct_productwriter_authority": False,
+        "candidate_rows_are_matrix_rows": False,
+        "raw_or_85raw_ran": False,
+        "legacy_quant_matrix_effect": LEGACY_QUANT_MATRIX_EFFECT,
+        "legacy_provenance_status": LEGACY_PROVENANCE_STATUS,
+    }
+    for field, expected_value in expected.items():
+        if payload.get(field) != expected_value:
+            problems.append(
+                f"summary {field} mismatch: expected {expected_value!r}, "
+                f"found {payload.get(field)!r}"
+            )
+
+    source_counts = payload.get("source_contract_counts")
+    if source_counts != {
+        "agent_resolved": 9,
+        "manual_resolved": 13,
+        "primary_supported": 73,
+    }:
+        problems.append("summary source_contract_counts mismatch")
+
+    matrix_delta = payload.get("matrix_delta_summary")
+    if not isinstance(matrix_delta, Mapping) or matrix_delta.get("status") != "pass":
+        problems.append("matrix_delta_summary must pass")
+    elif matrix_delta.get("changed_cell_count") != 95:
+        problems.append("matrix_delta_summary changed_cell_count must be 95")
+
+    provenance = payload.get("cell_provenance_summary")
+    if not isinstance(provenance, Mapping) or provenance.get("status") != "pass":
+        problems.append("cell_provenance_summary must pass")
+    elif provenance.get("accepted_discovery_cell_count") != 95:
+        problems.append("accepted_discovery_cell_count in provenance must be 95")
+
+    terminology = text_value(payload.get("terminology_statement"))
+    if "not Backfill product scope" not in terminology:
+        problems.append("terminology_statement must separate Discovery from Backfill")
+
+
+def _check_checks_tsv(path: Path, problems: list[str]) -> None:
+    try:
+        rows = read_tsv_required(path, CHECK_COLUMNS)
+    except (OSError, ValueError) as exc:
+        problems.append(f"checks_tsv: {exc}")
+        return
+    failed = [row["check_id"] for row in rows if row.get("status") != "pass"]
+    if failed:
+        problems.append("failed release checks: " + ", ".join(failed))
+    check_ids = {row.get("check_id", "") for row in rows}
+    if "discovery_terminology_boundary" not in check_ids:
+        problems.append("checks_tsv missing discovery_terminology_boundary")
+
+
+def _check_compact_manifest(path: Path, problems: list[str]) -> None:
+    try:
+        rows = read_tsv_required(path, COMPACT_MANIFEST_COLUMNS)
+    except (OSError, ValueError) as exc:
+        problems.append(f"compact_manifest: {exc}")
+        return
+    if len(rows) != 20:
+        problems.append(
+            f"compact manifest must contain 20 transitions, found {len(rows)}"
+        )
+    cell_count = sum(_int(row.get("contract_cell_count")) for row in rows)
+    if cell_count != 95:
+        problems.append(
+            "compact manifest contract_cell_count sum must be 95, "
+            f"found {cell_count}"
+        )
+    source_counts = Counter(row.get("contract_source", "") for row in rows)
+    expected_sources = {
+        "agent_resolved": 2,
+        "manual_resolved": 4,
+        "primary_supported": 14,
+    }
+    if source_counts != expected_sources:
+        problems.append(
+            "compact manifest source row counts mismatch: "
+            f"{dict(source_counts)}"
+        )
+    for index, row in enumerate(rows, start=2):
+        if row.get("default_activation_effect") != DISCOVERY_DEFAULT_EFFECT:
+            problems.append(f"manifest row {index}: default_activation_effect mismatch")
+        if row.get("legacy_quant_matrix_effect") != LEGACY_QUANT_MATRIX_EFFECT:
+            problems.append(
+                f"manifest row {index}: legacy_quant_matrix_effect mismatch"
+            )
+        if row.get("product_authority_scope") != PRODUCT_AUTHORITY_SCOPE:
+            problems.append(f"manifest row {index}: product_authority_scope mismatch")
+
+
+def _check_docs(
+    *,
+    roadmap: Path,
+    handoff: Path,
+    control_plane: Path,
+    problems: list[str],
+) -> None:
+    required = {
+        roadmap: [
+            "CID-NL Discovery Product Roadmap",
+            "Do not reopen broad Backfill",
+            "accepted_discovery_cell_count",
+        ],
+        handoff: [
+            "The immediate product direction is Discovery first",
+            "accepted_discovery_cell_count=95",
+            "Do not reopen broad Backfill while the active goal is "
+            "Discovery productization",
+        ],
+        control_plane: [
+            "CID-NL Discovery Lane Terminology Cleanup v1",
+            "accepted_discovery_cell_count=95",
+            "legacy_quant_matrix_effect",
+        ],
+    }
+    for path, anchors in required.items():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            problems.append(f"{path}: cannot read: {exc}")
+            continue
+        missing = [anchor for anchor in anchors if anchor not in text]
+        if missing:
+            problems.append(f"{path}: missing anchors: {', '.join(missing)}")
+
+
+def _read_json_object(path: Path, problems: list[str]) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        problems.append(f"{path}: cannot read JSON: {exc}")
+        return {}
+    except json.JSONDecodeError as exc:
+        problems.append(f"{path}: invalid JSON: {exc}")
+        return {}
+    if not isinstance(payload, dict):
+        problems.append(f"{path}: expected JSON object")
+        return {}
+    return payload
+
+
+def _int(value: object) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--summary-json", type=Path, default=SUMMARY_JSON)
+    parser.add_argument("--checks-tsv", type=Path, default=CHECKS_TSV)
+    parser.add_argument(
+        "--compact-manifest-tsv",
+        type=Path,
+        default=COMPACT_MANIFEST_TSV,
+    )
+    parser.add_argument("--roadmap", type=Path, default=ROADMAP)
+    parser.add_argument("--handoff", type=Path, default=HANDOFF)
+    parser.add_argument("--control-plane", type=Path, default=CONTROL_PLANE)
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    problems = check_cid_nl_discovery_release_slice(
+        summary_json=args.summary_json,
+        checks_tsv=args.checks_tsv,
+        compact_manifest_tsv=args.compact_manifest_tsv,
+        roadmap=args.roadmap,
+        handoff=args.handoff,
+        control_plane=args.control_plane,
+    )
+    if problems:
+        print("CID-NL Discovery release slice failed:\n", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        return 1
+    print("CID-NL Discovery release slice is stable.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

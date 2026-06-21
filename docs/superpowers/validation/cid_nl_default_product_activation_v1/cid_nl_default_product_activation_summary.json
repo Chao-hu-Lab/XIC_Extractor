@@ -1,5 +1,6 @@
 {
   "accepted_backfill_count": 95,
+  "accepted_discovery_cell_count": 95,
   "activation_label": "product_ready_default_matrix_activated",
   "agent_hold_cell_count": 24,
   "artifacts": {
@@ -16,12 +17,12 @@
     "checks_tsv": {
       "path": "cid_nl_default_product_activation_checks.tsv",
       "retention_decision": "keep_summary",
-      "sha256": "69944E02D39F78273A1AB1F3840D7EE6EFAAB8739309572D4723BCB67317504C"
+      "sha256": "FC0F36187EB2041020FC62BDFA9F5276AB72BEA5274D5B139676B9678DD06978"
     },
     "compact_manifest_tsv": {
       "path": "cid_nl_default_product_activation_manifest.tsv",
       "retention_decision": "keep_contract",
-      "sha256": "5B73BD759CF70C3CC497BCB4AD375D30072D03DCB2CC7CF3EC61EEC09E7A4A7B"
+      "sha256": "73A2F4F9EF13BE669CFDC393F77230F9204B983D71846D0996DAD4C1124566D2"
     },
     "default_output_cell_provenance": {
       "path": "default_output/cell_provenance.tsv",
@@ -60,15 +61,18 @@
   "candidate_transition_count": 20,
   "cell_provenance_summary": {
     "accepted_backfill_cell_count": 95,
+    "accepted_discovery_cell_count": 95,
     "expected_write_count": 95,
+    "legacy_provenance_status": "accepted_backfill",
     "missing_provenance_count": 0,
     "source_mismatch_count": 0,
     "status": "pass",
     "unexpected_provenance_count": 0,
     "value_mismatch_count": 0
   },
-  "check_count": 14,
+  "check_count": 15,
   "cid_nl_ms2_direct_productwriter_authority": false,
+  "default_activation_effect": "write_cid_nl_discovery_default_cell",
   "default_matrix_files_written": true,
   "default_quant_matrix_changed": true,
   "existing_successor_context_cell_count": 337,
@@ -118,6 +122,8 @@
       "size_bytes": 29447
     }
   },
+  "legacy_provenance_status": "accepted_backfill",
+  "legacy_quant_matrix_effect": "write_accepted_backfill",
   "matrix_delta_summary": {
     "changed_cell_count": 95,
     "expected_write_count": 95,
@@ -131,6 +137,8 @@
   },
   "omitted_no_target_cell_count": 27,
   "product_authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
+  "product_lane": "cid_nl_discovery",
+  "product_scope_kind": "discovery_default_activation",
   "product_writer_changed": true,
   "raw_or_85raw_ran": false,
   "read_only": false,
@@ -142,9 +150,11 @@
     "primary_supported": 73
   },
   "status": "pass",
+  "terminology_statement": "This artifact is Discovery-first at the product boundary. Legacy QuantMatrixVersion fields such as accepted_backfill_count, written_backfill_count, cell_status=accepted_backfill, and expected_matrix_effect=write_accepted_backfill are compatibility terms from the shared matrix writer, not Backfill product scope.",
   "unused_expected_diff_count": "0",
   "validation_label": "product_ready_cid_nl_default_activation",
   "workbook_or_gui_changed": false,
   "write_authority": true,
-  "written_backfill_count": "95"
+  "written_backfill_count": "95",
+  "written_discovery_cell_count": "95"
 }
