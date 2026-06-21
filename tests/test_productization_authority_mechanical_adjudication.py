@@ -19,6 +19,7 @@ INDEX_PATH = (
 )
 
 APPROVED_SCOPE = "backfill_policy_write_ready_rows"
+CID_NL_APPROVED_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
 PARKED_SCOPE = "broad_backfill"
 NEGATIVE_SCOPE_IDS = {
     "all_stability",
@@ -35,7 +36,10 @@ def test_manifest_freezes_current_backfill_authority() -> None:
     backfill = manifest["current_authority"]["backfill"]
 
     assert policy["unregistered_scope_policy"] == "fail_closed"
-    assert policy["product_writer_allowed_scopes"] == [APPROVED_SCOPE]
+    assert set(policy["product_writer_allowed_scopes"]) == {
+        APPROVED_SCOPE,
+        CID_NL_APPROVED_SCOPE,
+    }
     assert "quality_blockers" in policy["forbidden_authority_sources"]
     assert "broad_backfill_candidate_universe" in (
         policy["forbidden_authority_sources"]
@@ -46,6 +50,12 @@ def test_manifest_freezes_current_backfill_authority() -> None:
     assert backfill["detected_flagged_rows"] == 0
     assert backfill["blocked_rows"] == 4102
     assert backfill["authority_scope"] == APPROVED_SCOPE
+
+    cid_nl = manifest["current_authority"]["cid_nl_default_activation"]
+    assert cid_nl["current_product_authority_rows"] == 95
+    assert cid_nl["existing_successor_context_rows"] == 337
+    assert cid_nl["omitted_no_target_rows"] == 27
+    assert cid_nl["authority_scope"] == CID_NL_APPROVED_SCOPE
 
     broad_backfill = manifest["parked_lanes"][PARKED_SCOPE]
     assert broad_backfill["status"] == "parked"

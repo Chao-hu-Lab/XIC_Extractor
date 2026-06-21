@@ -30,6 +30,8 @@ DEFAULT_INDEX = (
 )
 
 APPROVED_SCOPE = "backfill_policy_write_ready_rows"
+CID_NL_APPROVED_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
+APPROVED_SCOPES = {APPROVED_SCOPE, CID_NL_APPROVED_SCOPE}
 PARKED_BROAD_BACKFILL = "broad_backfill"
 NEGATIVE_SCOPE_IDS = {
     "all_stability",
@@ -68,10 +70,10 @@ def _check_manifest(manifest: Mapping[str, Any], problems: list[str]) -> None:
         return
     if policy.get("unregistered_scope_policy") != "fail_closed":
         problems.append("unregistered_scope_policy must be fail_closed")
-    if policy.get("product_writer_allowed_scopes") != [APPROVED_SCOPE]:
+    if set(policy.get("product_writer_allowed_scopes", [])) != APPROVED_SCOPES:
         problems.append(
-            "product_writer_allowed_scopes must contain only "
-            f"{APPROVED_SCOPE!r}"
+            "product_writer_allowed_scopes must match registered scopes: "
+            f"{sorted(APPROVED_SCOPES)!r}",
         )
 
     backfill = _mapping_path(manifest, "current_authority", "backfill")
@@ -88,6 +90,20 @@ def _check_manifest(manifest: Mapping[str, Any], problems: list[str]) -> None:
         for key, value in expected.items():
             if backfill.get(key) != value:
                 problems.append(f"manifest backfill {key} must be {value!r}")
+
+    cid_nl = _mapping_path(manifest, "current_authority", "cid_nl_default_activation")
+    if cid_nl is None:
+        problems.append("manifest missing current_authority.cid_nl_default_activation")
+    else:
+        expected_cid_nl = {
+            "current_product_authority_rows": 95,
+            "existing_successor_context_rows": 337,
+            "omitted_no_target_rows": 27,
+            "authority_scope": CID_NL_APPROVED_SCOPE,
+        }
+        for key, value in expected_cid_nl.items():
+            if cid_nl.get(key) != value:
+                problems.append(f"manifest CID-NL {key} must be {value!r}")
 
     parked = _mapping_path(manifest, "parked_lanes", PARKED_BROAD_BACKFILL)
     if parked is None:

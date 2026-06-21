@@ -4760,3 +4760,63 @@ the later low-height writer entry above as the current tier source.
   updates the default matrix/ProductWriter contract and proves the same 95-cell
   expected diff, provenance, preserved 337 existing-successor context cells,
   preserved 27 omitted no-target cells, and no unrelated output drift.
+
+### 2026-06-21 - CID-NL Default Product Activation v1
+
+- Lane: CID-NL Discovery explicit public default activation for the narrowed
+  adopt-ready bundle.
+- Previous tier: `production_candidate_activation_adopt_gate` for 95
+  CID-NL expected-diff cells across 20 transitions. The existing Backfill
+  default bundle remained `product_ready_default_matrix_activated` for exactly
+  511 cells under `backfill_policy_write_ready_rows`.
+- New tier: `production_ready` / `product_ready_default_matrix_activated` for
+  a new registered CID-NL writer scope:
+  `cid_nl_adopt_ready_feature_inclusion_95_cells`. This is an explicit
+  default matrix/ProductWriter authority change for the 95 CID-NL cells only.
+  The existing Backfill writer scope remains exactly 511 cells and broad
+  Backfill remains parked.
+- Product surface changed: yes. `scripts/build_cid_nl_default_product_activation.py`
+  is a fail-closed activation builder/checker that reuses
+  `ProductionAcceptanceManifest` and `QuantMatrixVersion` via
+  `scripts/build_quant_matrix_version.py`. It filters the successor-authority
+  manifest to the 95 adopt-ready keys, writes a generated activation manifest
+  and expected-diff packet under ignored `output/validation/`, runs the existing
+  activation writer, and publishes only compact docs artifacts under
+  `docs/superpowers/validation/cid_nl_default_product_activation_v1/`.
+- Authority boundary: CID-NL/MS2 evidence, overlays, Gallery review, and
+  candidate rows are not direct ProductWriter authority. Writer authority is
+  granted only by the generated `ProductionAcceptanceManifest` rows plus
+  `QuantMatrixVersion` expected-diff replay. `workbook_or_gui_changed=FALSE`,
+  `selected_peak_area_or_counting_changed=FALSE`,
+  `backfill_writer_authority_changed=FALSE`,
+  `cid_nl_ms2_direct_productwriter_authority=FALSE`, and
+  `candidate_rows_are_matrix_rows=FALSE`.
+- Evidence: the real no-RAW activation command
+  `uv run python -m scripts.build_cid_nl_default_product_activation --require-pass`
+  passed. The summary records `status=pass`,
+  `activation_label=product_ready_default_matrix_activated`, 95 accepted
+  default writes, 20 transitions, 337 existing-successor context cells
+  preserved, 27 omitted no-target cells preserved, `expected_diff_count=95`,
+  `written_backfill_count=95`, `unused_expected_diff_count=0`, exact matrix
+  delta keyset pass, and cell provenance exact keyset pass.
+- Retention: the full generated matrix/provenance/default-output TSVs stay
+  externalized under ignored
+  `output/validation/cid_nl_default_product_activation_v1/`. Version control
+  keeps only `README.md`, `cid_nl_default_product_activation_summary.json`,
+  `cid_nl_default_product_activation_checks.tsv`, and the 20-row compact
+  `cid_nl_default_product_activation_manifest.tsv`.
+- Control plane update: updated. `productization_status_index_v1.tsv` now
+  contains the new writer lane `cid_nl_default_product_activation_v1`, and
+  `productization_authority_manifest.v1.json` registers the new allowed writer
+  scope alongside the existing 511-cell Backfill scope. The state checker was
+  changed from "only Backfill can write" to "only registered writer lanes can
+  write".
+- Validation: focused tests pass for the new builder:
+  `uv run pytest tests/test_cid_nl_default_product_activation.py -q`; focused
+  lint passes for the new builder/test; the real activation command and
+  `--check-only` validation pass. Broader state/checker tests are required
+  after the control-plane/handoff/hash updates in this section.
+- Next checkpoint: keep CID-NL default activation bounded to the 95-cell
+  expected-diff/provenance contract. Any expansion beyond these 95 cells, any
+  source/successor deletion or migration, or any attempt to treat CID-NL/MS2
+  evidence as direct ProductWriter authority requires a new expected-diff gate.

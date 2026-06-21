@@ -1,0 +1,15 @@
+schema_version	check_id	status	observed	expected	notes
+cid_nl_default_product_activation_v1	adopt_gate_status	pass	adopt_ready	adopt_ready	
+cid_nl_default_product_activation_v1	contract_cell_count	pass	95	95	
+cid_nl_default_product_activation_v1	candidate_transition_count	pass	20	20	
+cid_nl_default_product_activation_v1	existing_successor_context_preserved	pass	337	337	
+cid_nl_default_product_activation_v1	omitted_no_target_preserved	pass	27	27	
+cid_nl_default_product_activation_v1	expected_diff_replay_status	pass	pass	pass	
+cid_nl_default_product_activation_v1	expected_diff_written_count	pass	95	95	
+cid_nl_default_product_activation_v1	expected_diff_unused_count	pass	0	0	
+cid_nl_default_product_activation_v1	matrix_delta_exact_keyset	pass	pass	pass	
+cid_nl_default_product_activation_v1	matrix_delta_changed_count	pass	95	95	
+cid_nl_default_product_activation_v1	cell_provenance_exact_keyset	pass	pass	pass	
+cid_nl_default_product_activation_v1	cell_provenance_accepted_count	pass	95	95	
+cid_nl_default_product_activation_v1	product_surface_flags	pass	product_writer/default_matrix TRUE; workbook/gui FALSE	explicit public default activation	
+cid_nl_default_product_activation_v1	contract_source_counts	pass	"{""agent_resolved"": 9, ""manual_resolved"": 13, ""primary_supported"": 73}"	tracked	
