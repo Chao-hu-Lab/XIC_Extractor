@@ -33,6 +33,7 @@ def test_registered_default_scopes_have_writer_authority() -> None:
     assert {row["lane_id"] for row in authority_rows} == {
         "backfill_current_write_ready_scope",
         "cid_nl_default_product_activation_v1",
+        "backfill_expansion_default_product_activation_v1",
     }
     authority_by_lane = {row["lane_id"]: row for row in authority_rows}
 
@@ -69,6 +70,30 @@ def test_registered_default_scopes_have_writer_authority() -> None:
     assert cid_nl["may_change_counted_detection"] == "FALSE"
     assert cid_nl["product_effect"] == "cid_nl_default_quant_matrix_product_output"
     assert cid_nl["public_surface"] == "cid_nl_default_product_activation_v1"
+
+    expansion = authority_by_lane["backfill_expansion_default_product_activation_v1"]
+    assert expansion["current_artifact"] == (
+        "docs/superpowers/validation/"
+        "backfill_expansion_default_product_activation_v1/"
+        "backfill_expansion_default_product_activation_summary.json"
+    )
+    assert expansion["product_authority_scope"] == (
+        "backfill_expansion_raw_trace_expected_diff_666_cells"
+    )
+    assert expansion["row_count"] == "666"
+    assert expansion["may_touch_matrix"] == "TRUE"
+    assert expansion["may_change_quant_output"] == "TRUE"
+    assert expansion["may_change_workbook"] == "FALSE"
+    assert expansion["may_change_selected_peak"] == "FALSE"
+    assert expansion["may_change_selected_area"] == "FALSE"
+    assert expansion["may_change_counted_detection"] == "FALSE"
+    assert expansion["product_effect"] == (
+        "backfill_expansion_default_quant_matrix_product_output"
+    )
+    assert (
+        expansion["public_surface"]
+        == "backfill_expansion_default_product_activation_v1"
+    )
 
 
 def test_peak_choice_lockbox_status_points_to_shadow_automation_design() -> None:
@@ -247,6 +272,23 @@ def test_control_plane_quant_matrix_default_product_activation_is_current() -> N
     assert "Status-index update: updated" in section
 
 
+def test_control_plane_backfill_expansion_default_activation_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    start = "### 2026-06-21 - Backfill Expansion Default Product Activation v1"
+    section = text[text.index(start) :]
+
+    assert "backfill_expansion_default_product_activation_v1" in section
+    assert "backfill_expansion_raw_trace_expected_diff_666_cells" in section
+    assert "exact 666-cell packet" in section
+    assert "writes 666 Backfill values" in section
+    assert "changes exactly 666 matrix cells" in section
+    assert "263 held cells" in section
+    assert "Broad\n  Backfill remains parked" in section
+    assert "no second ProductWriter" in section
+    assert "CLI/GUI preset" in section
+    assert "Control-plane decision: updated" in section
+
+
 def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
@@ -300,6 +342,10 @@ def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
     assert "`QuantMatrixVersion Activation`" in summary
+    assert "`backfill_expansion_default_product_activation_v1`" in summary
+    assert "`backfill_expansion_raw_trace_expected_diff_666_cells`" in summary
+    assert "The 263 held cells stay outside authority" in summary
+    assert "CLI/GUI preset" in summary
     assert "Next checkpoint is Phase 2" not in summary
     assert "Next checkpoint is Phase 3" not in summary
     assert "Next checkpoint is Phase 4" not in summary

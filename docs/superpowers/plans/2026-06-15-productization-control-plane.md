@@ -357,6 +357,17 @@ expected-diff rows. This activates the current 511-cell default matrix output
 only; it does not change workbook/GUI behavior, selected peak, selected area,
 counted detection, review/replay behavior, broad Backfill status, or the
 registered product authority scope.
+The 2026-06-21 Backfill expansion follow-up now performs a second explicit
+bounded default activation over exactly 666 CID-NL-created Backfill cells:
+`backfill_expansion_default_product_activation_v1` reuses the same
+ProductionAcceptanceManifest + expected-diff + QuantMatrixVersion writer path,
+registers `backfill_expansion_raw_trace_expected_diff_666_cells` as its own
+fail-closed ProductWriter scope, and writes default matrix/provenance artifacts
+only for that packet. The 263 held cells stay outside authority. This does not
+unpark broad Backfill, does not rewrite workbooks/GUI/selected peak/selected
+area/counted detection, and does not change the old 511 Backfill or 95 CID-NL
+writer scopes. Future sample batches must collapse this stable rule into a
+CLI/GUI preset instead of repeating a manual gate-by-gate rollout.
 The `d4-N6-2HE-dA` target-row identity stop-ship is now traced to discovery
 MS2 seed extraction, not ProductWriter or Backfill: Thermo MS2 filter precursor
 can be an isolation/trigger mass, so CID-NL discovery must allow
@@ -374,7 +385,8 @@ evidence explanation from "artifact link missing" to "trace recovered but still
 needs review/truth/reintegration decision"; it does not grant write authority.
 Goal 5 machine status lane ids are tracked in
 `docs/superpowers/validation/productization_status_index_v1.tsv`:
-`backfill_current_write_ready_scope`, `broad_backfill_autowrite`,
+`backfill_current_write_ready_scope`, `cid_nl_default_product_activation_v1`,
+`backfill_expansion_default_product_activation_v1`, `broad_backfill_autowrite`,
 `productization_authority_firewall_v1`, `mechanical_adjudication_contract_v1`,
 `review_packet_workflow_v1`, `peak_choice_truth_lockbox_v1`,
 `missing_overlay_evidence_recovery_v1`, `quality_explanation_sidecar_v1`,
@@ -4865,3 +4877,232 @@ the later low-height writer entry above as the current tier source.
   This entry updates the product-gate contract language and checker surface
   only; it does not register new ProductWriter authority or broaden CID-NL /
   Backfill scope.
+
+### 2026-06-21 - Backfill Expansion Census v1
+
+- Lane: Backfill diagnostic census after CID-NL Discovery default activation.
+- Tier change: none. `backfill_current_write_ready_scope` remains
+  `production_ready` for exactly 511 cells under
+  `backfill_policy_write_ready_rows`; `cid_nl_default_product_activation_v1`
+  remains `production_ready` for exactly 95 CID-NL Discovery cells. Broad
+  Backfill remains parked.
+- Product surface changed: additive validation/replay surface only. Added
+  `scripts/check_backfill_expansion_census.py` and retained compact docs
+  artifacts under
+  `docs/superpowers/validation/backfill_expansion_census_v1/`. The full
+  opportunity cell map is externalized under
+  `output/validation/backfill_expansion_census_v1/`.
+- Census decision: the 20 CID-NL active successor rows span 1700 sample-cells:
+  676 directly detected cells, 95 Discovery default-written cells, and 929
+  blank cells. Those 929 blank cells are Backfill pressure only, not writable
+  cells. They require sample-local MS1/identity evidence before any future
+  Backfill expected-diff gate.
+- Parked pressure: 23 write-authorized but non-active CID-NL rows add 1010
+  blank cells of future pressure. They remain parked until Discovery
+  feature-inclusion authority changes; they must not enter Backfill review as
+  active candidates.
+- Authority boundary: no RAW/85RAW rerun, ProductWriter change, default matrix
+  change, workbook/GUI change, selected peak/area change, counted-detection
+  change, Backfill writer authority change, or broad Backfill unpark happened.
+  Candidate blank cells are not matrix rows.
+- Evidence: `python -m scripts.check_backfill_expansion_census` and
+  `python -m scripts.check_backfill_expansion_census --check-only` pass from
+  existing 85RAW-derived artifacts.
+- Control-plane decision: no maturity tier, active lane, writer scope, or
+  default authority update is needed. This census is the next Backfill planning
+  gate, not a promotion.
+
+### 2026-06-21 - Backfill Expansion Evidence Availability v1
+
+- Lane: Backfill no-RAW evidence availability gate for the CID-NL-created
+  active blank cells.
+- Tier change: none. `backfill_current_write_ready_scope` remains
+  `production_ready` for exactly 511 cells under
+  `backfill_policy_write_ready_rows`; `cid_nl_default_product_activation_v1`
+  remains `production_ready` for exactly 95 CID-NL Discovery cells. Broad
+  Backfill remains parked.
+- Product surface changed: additive validation/replay surface only. Added
+  `scripts/check_backfill_expansion_evidence_availability.py` and retained
+  compact docs artifacts under
+  `docs/superpowers/validation/backfill_expansion_evidence_availability_v1/`.
+  The full 1939-cell availability map is externalized under
+  `output/validation/backfill_expansion_evidence_availability_v1/`.
+- Availability decision: exact sample-local matching is required by
+  `peak_hypothesis_id + sample_stem`. Existing mechanical adjudication and
+  trace recovery artifacts cover 0/929 active Backfill pressure cells; 0 cells
+  are immediate expected-diff-ready; all 929 active blank cells require new
+  sample-local MS1/identity evidence before any Backfill writer gate can be
+  proposed.
+- Parked pressure: the 1010 parked future-pressure cells remain parked. They
+  are not routed through Backfill until Discovery feature-inclusion authority
+  changes.
+- Authority boundary: no RAW/85RAW rerun, ProductWriter change, default matrix
+  change, workbook/GUI change, selected peak/area change, counted-detection
+  change, Backfill writer authority change, row/family evidence projection, or
+  broad Backfill unpark happened. Candidate blank cells are not matrix rows.
+- Evidence: `python -m scripts.check_backfill_expansion_evidence_availability`
+  and
+  `python -m scripts.check_backfill_expansion_evidence_availability --check-only`
+  pass from existing 85RAW-derived artifacts.
+- Control-plane decision: no maturity tier, active lane, writer scope, or
+  default authority update is needed. This gate is a hold decision:
+  `hold_for_new_sample_local_ms1_identity_evidence`.
+
+### 2026-06-21 - Backfill Expansion Sample-Local MS1 Evidence v1
+
+- Lane: Backfill no-RAW sample-local MS1/identity evidence gate for the
+  CID-NL-created active blank cells.
+- Tier change: none. `backfill_current_write_ready_scope` remains
+  `production_ready` for exactly 511 cells under
+  `backfill_policy_write_ready_rows`; `cid_nl_default_product_activation_v1`
+  remains `production_ready` for exactly 95 CID-NL Discovery cells. Broad
+  Backfill remains parked.
+- Product surface changed: additive validation/replay surface only. Added
+  `scripts/check_backfill_expansion_sample_local_ms1_evidence.py` and retained
+  compact docs artifacts under
+  `docs/superpowers/validation/backfill_expansion_sample_local_ms1_evidence_v1/`.
+  The full 929-cell evidence map and 20-row RAW overlay queue are externalized
+  under `output/validation/backfill_expansion_sample_local_ms1_evidence_v1/`.
+- Evidence decision: exact sample-local matching remains required by
+  `peak_hypothesis_id + sample_stem`. The current fix3 85RAW-derived alignment
+  evidence contains exact sample-local MS1/identity rows for 675/929 active
+  Backfill pressure cells. The remaining 254/929 cells have no exact
+  alignment cell evidence row and stay held.
+- Gate decision: the 675 present cells are bounded inputs for a future RAW
+  overlay trace/identity gate, not write-ready cells. The 254 missing cells
+  need separate missing-alignment-cell review. Row/family identity is not
+  projected onto sample cells.
+- Authority boundary: no RAW/85RAW rerun, ProductWriter change, default matrix
+  change, workbook/GUI change, selected peak/area change, counted-detection
+  change, Backfill writer authority change, row/family evidence projection, or
+  broad Backfill unpark happened. Candidate blank cells are not matrix rows.
+- Evidence: `python -m scripts.check_backfill_expansion_sample_local_ms1_evidence`
+  and
+  `python -m scripts.check_backfill_expansion_sample_local_ms1_evidence --check-only`
+  pass from existing 85RAW-derived artifacts.
+- Control-plane decision: no maturity tier, active lane, writer scope, or
+  default authority update is needed. This gate narrows the next Backfill
+  evidence work to `675 present -> RAW overlay trace/identity gate` and
+  `254 missing -> hold/review`.
+
+### 2026-06-21 - Backfill Expansion RAW Overlay Trace Identity v1
+
+- Lane: Backfill RAW-backed evidence-only overlay gate for the CID-NL-created
+  active blank cells that already had exact sample-local alignment evidence.
+- Tier change: none. `backfill_current_write_ready_scope` remains
+  `production_ready` for exactly 511 cells under
+  `backfill_policy_write_ready_rows`; `cid_nl_default_product_activation_v1`
+  remains `production_ready` for exactly 95 CID-NL Discovery cells. Broad
+  Backfill remains parked.
+- Product surface changed: additive validation/replay surface only. Added
+  `scripts/check_backfill_expansion_raw_overlay_trace_identity.py` and retained
+  compact docs artifacts under
+  `docs/superpowers/validation/backfill_expansion_raw_overlay_trace_identity_v1/`.
+  The full 929-cell RAW trace gate map and evidence-only overlay batch
+  summaries are externalized under
+  `output/validation/backfill_expansion_raw_overlay_trace_identity_v1/`.
+- RAW run: bounded foreground `family_ms1_overlay_batch.py --evidence-only`
+  over the 20-row overlay queue. This was not an 85RAW alignment rerun and did
+  not render PNG/PDF review artifacts. The batch succeeded for 20/20 families;
+  all 20 families returned `ms1_shape_supports_family_backfill`.
+- Gate decision: exact sample-local trace rows exist for all 675
+  alignment-present cells. RAW trace signal is observed in 666/675 cells. The
+  9 trace-absent cells plus the 254 missing-alignment cells remain held, so the
+  next expected-diff design universe is bounded to 666 cells. The 43 metric
+  warning cells stay in the candidate set with review notes; they are not
+  direct writer authority.
+- Authority boundary: no ProductWriter change, default matrix change,
+  workbook/GUI change, selected peak/area change, counted-detection change,
+  Backfill writer authority change, row/family evidence projection, or broad
+  Backfill unpark happened. Candidate blank cells are not matrix rows.
+- Evidence:
+  `python -m scripts.check_backfill_expansion_raw_overlay_trace_identity` and
+  `python -m scripts.check_backfill_expansion_raw_overlay_trace_identity --check-only`
+  pass from the evidence-only RAW overlay artifacts.
+- Control-plane decision: no maturity tier, active lane, writer scope, or
+  default authority update is needed. This gate narrows future Backfill
+  expected-diff design to 666 RAW-observed cells and holds 263 cells.
+
+### 2026-06-21 - Backfill Expansion Expected-Diff Provenance v1
+
+- Lane: Backfill candidate activation packet for the 666 RAW-observed,
+  sample-local CID-NL-created blank cells.
+- Tier change: none. `backfill_current_write_ready_scope` remains
+  `production_ready` for exactly 511 cells under
+  `backfill_policy_write_ready_rows`; `cid_nl_default_product_activation_v1`
+  remains `production_ready` for exactly 95 CID-NL Discovery cells. Broad
+  Backfill remains parked.
+- Product surface changed: additive validation/replay surface only. Added
+  `scripts/check_backfill_expansion_expected_diff_provenance.py` and retained
+  compact docs artifacts under
+  `docs/superpowers/validation/backfill_expansion_expected_diff_provenance_v1/`.
+  The full 666-row source evidence, candidate ProductionAcceptanceManifest,
+  expected-diff TSV, dry-run matrix, row summary, source summary, and full cell
+  provenance are externalized under
+  `output/validation/backfill_expansion_expected_diff_provenance_v1/`.
+- Gate decision: the 666 cells are now a bounded
+  `production_candidate_contract_only` packet. All 666 have blank baseline
+  values in the CID-NL default-activated baseline matrix, finite
+  `primary_matrix_area` values, schema-valid candidate manifest rows, 666
+  expected-diff rows, dry-run writer output with 666 written Backfill cells,
+  0 unused expected-diff rows, and 666 accepted cell-provenance rows from
+  `ProductionAcceptanceManifest`.
+- Held boundary: the 263 held cells remain out of this packet: 254 missing exact
+  sample-local alignment evidence plus 9 trace-absent cells. The 43 metric
+  warning cells remain in the packet as review notes only, not direct writer
+  authority.
+- Authority boundary: the dry-run writer output is validation-only. No public
+  default matrix, ProductWriter authority, active lane, workbook/GUI behavior,
+  selected peak/area, counted detection, row/family projection, or broad
+  Backfill unpark changed.
+- Evidence:
+  `python -m scripts.check_backfill_expansion_expected_diff_provenance` and
+  `python -m scripts.check_backfill_expansion_expected_diff_provenance --check-only`
+  pass from current artifacts.
+- Control-plane decision: no maturity tier, active lane, writer scope, or
+  default authority update is made by this gate. The next gate is an explicit
+  public default activation change decision over this 666-cell packet.
+
+### 2026-06-21 - Backfill Expansion Default Product Activation v1
+
+- Lane: Backfill bounded default activation for the exact 666-cell packet
+  created by `backfill_expansion_expected_diff_provenance_v1`.
+- Tier change: yes. A new production-ready writer lane is registered:
+  `backfill_expansion_default_product_activation_v1` with
+  `product_authority_scope=backfill_expansion_raw_trace_expected_diff_666_cells`.
+  Existing `backfill_current_write_ready_scope` remains exactly 511 cells and
+  `cid_nl_default_product_activation_v1` remains exactly 95 cells. Broad
+  Backfill remains parked.
+- Product surface changed: yes, but only for this bounded packet. Added
+  `scripts/build_backfill_expansion_default_product_activation.py` and retained
+  compact docs artifacts under
+  `docs/superpowers/validation/backfill_expansion_default_product_activation_v1/`.
+  The full default `quant_matrix.tsv`, full `cell_provenance.tsv`,
+  `row_summary.tsv`, `expected_diff_summary.tsv`, and `source_summary.tsv` are
+  externalized under
+  `output/validation/backfill_expansion_default_product_activation_v1/`.
+- Activation decision: the same `ProductionAcceptanceManifest` +
+  expected-diff + `QuantMatrixVersion` writer path is used. The activation
+  writes 666 Backfill values, changes exactly 666 matrix cells, records 666
+  accepted cell-provenance rows from `ProductionAcceptanceManifest`, and leaves
+  0 unused expected-diff rows.
+- Held boundary: the 263 held cells are explicitly outside ProductWriter
+  authority: 254 cells lack exact sample-local alignment evidence and 9 cells
+  were trace-absent in the RAW overlay trace identity gate. They are not
+  silently promoted and not treated as matrix rows.
+- Authority boundary: no second ProductWriter, workbook/GUI change, selected
+  peak change, selected area change, counted-detection change, row/family
+  projection, broad Backfill unpark, RAW rerun, scorer run, or 85RAW rerun.
+- Future preset requirement: once this rule is stable for future sample
+  batches, the user-facing delivery must become a CLI/GUI preset that emits
+  the activation result directly. Future batches should not repeat this manual
+  multi-gate rollout unless a new rule or evidence class is being calibrated.
+- Evidence:
+  `python -m scripts.build_backfill_expansion_default_product_activation --require-pass`
+  and
+  `python -m scripts.build_backfill_expansion_default_product_activation --check-only --require-pass`
+  pass from current artifacts. Focused tests cover stable counts, artifact hash
+  binding, compact authority scope, and fail-closed product-surface overclaims.
+- Control-plane decision: updated. The schema, authority manifest, status
+  index, handoff, and retention inventory register this bounded 666-cell
+  ProductWriter authority scope.
