@@ -1,138 +1,139 @@
 # XIC productization handoff
 
-Updated: 2026-06-20
+Updated: 2026-06-21
 Branch: `cc/framework-improvements`
 
-This is a compact current-state snapshot. It is not product authority. Tier,
-active lane, and promotion-gate authority remain in
+This is a current-state snapshot, not product authority. Tier and lane
+authority remain in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
 
 ## Current Verdict
 
-The tracked default QuantMatrix remains `product_ready_default_matrix_activated`
-for the existing detected cells plus exactly 511 accepted Backfill cells under
-`backfill_policy_write_ready_rows`.
+The active default QuantMatrix remains
+`product_ready_default_matrix_activated` for the existing detected cells plus
+exactly 511 accepted Backfill cells under `backfill_policy_write_ready_rows`.
 
-CID-NL Discovery/alignment row identity is `production_candidate` evidence. It
-recovers `300.1605 -> 184.113` as a primary row and preserves
-`301.165 -> 185.116` as its own dR-tag row. No ProductWriter output, default
-matrix, workbook, GUI behavior, selected peak/area, counted detection, active
-lane, maturity tier, or Backfill writer authority changed.
+CID-NL Discovery is now on the correct untargeted track:
 
-CID-NL default activation now has a successor authority candidate. It is a
-formal 147-row write allow-list plus expected-diff replay and a 511-row
-decision ledger. This does not mean default activation has been installed as
-the active ProductWriter output.
+1. Feature inclusion first: CID-NL/MS2 evidence plus a real MS1 feature can
+   justify carrying a successor hypothesis forward as an untargeted feature.
+2. Identity authority second: replacement, merge, dedupe, or old-cell migration
+   requires a separate expected-diff gate.
 
-## Latest Evidence
+No maturity tier, active lane, ProductWriter authority, Backfill writer
+authority, workbook/GUI behavior, selected peak/area, counted detection, or
+active default matrix bundle changed.
 
-85RAW alignment output:
+The narrowed CID-NL activation bundle is now
+`production_candidate_activation_adopt_gate`: 95 cells across 20 transitions
+are adopt-ready as input to a later explicit public activation change. This is
+not default activation and not ProductWriter authority.
 
-- `output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3`
-- `300.1605 -> 184.113`: `FAM011499`, `Mz=300.161`, `RT=23.3493`,
-  `85/85`, `identity_confidence=high`, `neutral_loss_tag=DNA_dR`,
-  source `TumorBC2312_DNA#19561@mz300.160635_p184.113235`.
-- `301.165 -> 185.116`: `FAM011783`, `Mz=301.165`, `RT=23.3413`,
-  `83/85`, `identity_confidence=review`, `neutral_loss_tag=DNA_dR`,
-  source `TumorBC2312_DNA#19561@mz301.164978_p185.115845`.
+## Current Review Surface
 
-Default activation gates:
+- Background note:
+  `docs/deepresearch/Untargeted LC-MS Feature Discovery Background.md`
+- Product report:
+  `docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`
+- Versioned manual verdicts:
+  `docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/cid_nl_manual_feature_inclusion_review.tsv`
+- Maintained reader guide:
+  `docs/superpowers/validation/evidence_overlay_interpretation_guide.html`
+- Main Gallery:
+  `output/validation/cid_nl_default_activation_gallery_review_v1/backfill_evidence_reconciliation_gallery.html`
+- Paired differential Gallery:
+  `output/validation/cid_nl_default_activation_gallery_review_v1/differential_overlays/cid_nl_differential_overlay_gallery.html`
+- Feature-inclusion gate:
+  `output/validation/cid_nl_default_activation_gallery_review_v1/feature_inclusion_gate/`
+- Activated-copy candidate and acceptance:
+  `output/validation/cid_nl_default_activation_gallery_review_v1/activation_copy_candidate/`
+- Activation adopt gate:
+  `output/validation/cid_nl_default_activation_gallery_review_v1/activation_adopt_gate/`
 
-- Preflight:
-  `docs/superpowers/validation/cid_nl_default_activation_preflight_v1/`
-  target alignment evidence passes, replay remains blocked by identity
-  compatibility.
-- Bridge gate:
-  `docs/superpowers/validation/cid_nl_default_activation_bridge_gate_v1/`
-  classifies 147 pass and 364 blocked bridge cells.
-- Authority reconstruction:
-  `docs/superpowers/validation/cid_nl_default_activation_authority_reconstruction_gate_v1/`
-  proves 147 blank writes replay in memory and reduces the problem to 101
-  identity cells.
-- Cell-local identity:
-  `docs/superpowers/validation/cid_nl_default_activation_cell_local_identity_gate_v1/`
-  resolves 74 ambiguous cells as detected-baseline no-write supersession,
-  leaving 27.
-- Remaining identity:
-  `docs/superpowers/validation/cid_nl_default_activation_remaining_identity_gate_v1/`
-  passes with 511 classified cells and 0 unresolved identity cells.
-- Successor authority:
-  versioned report at
-  `docs/superpowers/validation/cid_nl_default_activation_successor_authority_contract_v1/README.md`;
-  full generated packet under ignored
-  `output/validation/cid_nl_default_activation_successor_authority_contract_v1/`
-  passes with a 147-row `ProductionAcceptanceManifest v1` successor allow-list,
-  147 expected-diff rows, 511 decision rows, and a candidate replay that writes
-  exactly 147 cells with 0 unexpected writes.
-- Validation artifact retention:
-  CID-NL default-activation full audit TSVs are externalized under ignored
-  `output/validation/`; versioned validation docs keep README/summary records
-  indexed in `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv`.
+## Evidence Snapshot
 
-Successor authority contract:
-
-- 147 `write_authorized` cells in `successor_authority_manifest.tsv`.
-- 337 `no_write_detected_baseline_preserved` cells.
-- 27 `no_write_omitted` cells:
-  19 missing bridge identity, 5 all-blank ambiguity, 3 multiple-detected
-  ambiguity.
-- The candidate QuantMatrixVersion sidecar changes 147 cells, with 0 missing
-  writes and 0 unexpected writes.
-- The active default bundle remains unchanged until a later adoption gate.
-
-Heartbeat audit:
-
-- Alignment reruns have `timing.live.json` for both 8RAW and 85RAW.
-- Discovery input artifacts have `timing.json` only, no live heartbeat files.
+- Successor decision packet: pass; 511 decision rows, 147 legacy
+  `write_authorized` candidate cells, 337 detected-baseline existing-successor
+  cells, 27 omitted no-target cells.
+- Main Gallery packet: pass; 90 review groups, 529 representative cells, 85
+  overlay-linked groups, 87 source/successor or no-successor transitions.
+- Paired differential overlays: pass; 78 rendered transitions, 78 PNGs, 78
+  trace JSON files, 484 reviewed source/successor decision cells.
+- Feature-inclusion gate: pass; 87 transitions, 78 overlay-ready transitions,
+  147 candidate cells split into 73 supported, 46 review-required, and 28
+  current-bundle-blocked cells. The 46 review-required cells are now further
+  resolved into 9 agent-resolved expected-diff cells, 13 manual-resolved
+  expected-diff cells, and 24 agent-held cells.
+- Expected-diff contracts: 95 cells across 20 transitions are eligible for the
+  validation copy: 73 primary supported cells, 9 second-pass agent-resolved
+  cells, and 13 manual-resolved cells.
+- Agent-held queue: 24 cells across 6 transitions are held out of the current
+  bundle because source/no-support evidence is stronger than successor support.
+- User-review queue: 0 cells. The four former user-review transitions are
+  manual-resolved as successor feature-inclusion supported:
+  `FAM011440 -> FAM015713`, `FAM011837 -> FAM016144`,
+  `FAM018342 -> FAM026285`, and `FAM020176 -> FAM030972`. For
+  `FAM020176 -> FAM030972`, only `FAM030972` feature inclusion is supported;
+  `FAM020176` source evidence remains `unjudgeable_bad_trace` and must not be
+  used for source deletion or migration.
+- Blocked queue: 28 cells across 17 transitions are excluded from the current
+  activation bundle by current paired overlay evidence.
+- Activated-copy candidate: pass; 95 changed blank matrix cells across 20
+  transitions under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/activation_copy_candidate/`.
+  This is a validation copy only, not the default matrix.
+- Activated-copy acceptance: pass; 95 contract cells, 95 value-delta rows, 95
+  exact matrix changes, 0 forbidden overlaps, 0 unexpected changes, 0 missing
+  changes, and `production_ready=FALSE`.
+- Activation adopt gate: `adopt_ready`; label
+  `production_candidate_activation_adopt_gate`; 95 contract cells, 95
+  validation-copy changes, 20 transitions, 0 forbidden overlaps, 0 unexpected
+  changes, 0 missing changes, `product_writer_changed=FALSE`,
+  `default_quant_matrix_changed=FALSE`, `workbook_gui_changed=FALSE`, and
+  `production_ready=FALSE`.
+- Existing context and omitted behavior are preserved: 337 existing-successor
+  context cells and 27 omitted no-target cells are not activation writes.
 
 ## Boundaries
 
 - Do not maintain two Discovery systems.
 - Do not make CID-NL/MS2 evidence direct ProductWriter authority.
 - Do not treat candidates as matrix rows.
-- Do not use `301.165 -> 185.116` as authority for `300.1605 -> 184.113`.
-- Do not delete/demote `301.165 -> 185.116` when it has its own tag evidence.
-- Do not install the CID-NL successor authority candidate as active default
-  output without a separate adoption gate.
-
-## Latest Local Checks
-
-- `python -m pytest tests/test_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_cell_local_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_successor_authority_contract.py -q`
-  passed: `32 passed`.
-- `uv run ruff check scripts/check_cid_nl_default_activation_bridge_gate.py scripts/check_cid_nl_default_activation_authority_reconstruction_gate.py scripts/check_cid_nl_default_activation_cell_local_identity_gate.py scripts/check_cid_nl_default_activation_remaining_identity_gate.py scripts/build_cid_nl_default_activation_successor_authority_contract.py tests/test_cid_nl_default_activation_bridge_gate.py tests/test_cid_nl_default_activation_authority_reconstruction_gate.py tests/test_cid_nl_default_activation_cell_local_identity_gate.py tests/test_cid_nl_default_activation_remaining_identity_gate.py tests/test_cid_nl_default_activation_successor_authority_contract.py`
-  passed.
-- `python -m scripts.check_production_acceptance_manifest --manifest output/validation/cid_nl_default_activation_successor_authority_contract_v1/successor_authority_manifest.tsv`
-  passed.
-- `python scripts/build_cid_nl_default_activation_successor_authority_contract.py --require-pass`
-  exited `0` and wrote the passing authority packet.
-- `uv run python scripts/check_validation_artifact_retention.py`
-  passed: `181 retained files, 139 externalized, 0 shrink_later`.
-- `uv run pytest tests/test_validation_artifact_retention.py -q`
-  passed: `10 passed`.
-
-Residual from the previous full test run: full pytest still had an unrelated
-stale lockbox shadow automation artifact failure after 2080 passed. This slice
-did not modify that lockbox area.
-
-## Next Product Step
-
-Run the human review / adoption gate for the successor authority candidate.
-That is the first gate where active default ProductWriter output or active
-default matrix files may change.
+- Do not change default matrix/ProductWriter/workbook/GUI/Backfill authority
+  without an explicit expected-diff gate.
+- Do not delete or demote `301.165 -> 185.116` while it has its own tag
+  evidence.
+- A source peak does not invalidate successor feature inclusion; it only opens
+  a replacement/merge/dedupe/co-existing-feature question.
 
 ## Status Index Anchors
 
-- Broad Backfill auto-write remains parked
-- Goal 0/1 hardening added
-- machine-adjudicated without granting new writer authority
-- Goal 2 added Review Packet / Approval Workflow v1
-- lockbox_shadow_automation_experiment_v1
-- Goal 4 added Missing-Overlay Evidence Recovery v1
-- keep only as explanation/triage
-- Targeted MS1 shape identity limited rescue remains production-ready
-- GUI and broader targets remain blocked
-- `sample_metadata_v1` remains production-ready for no-output ordering
-- roles/batch/matrix/exclusion must not alter quant output
-- ReviewAction selected-candidate switch and manual-boundary area recompute remain parked
-- manual-boundary area recompute remain parked
-- classification and planning only
+Current lane anchors retained for `productization_status_index_v1`:
+
+- `backfill_current_write_ready_scope`
+- `broad_backfill_autowrite`
+- `productization_authority_firewall_v1`
+- `mechanical_adjudication_contract_v1`
+- `review_packet_workflow_v1`
+- `peak_choice_truth_lockbox_v1`
+- `missing_overlay_evidence_recovery_v1`
+- `quality_explanation_sidecar_v1`
+- `targeted_ms1_shape_identity_limited_rescue_v1`
+- `targeted_ms1_shape_identity_broader_targets`
+- `sample_metadata_order_projection_v1`
+- `sample_metadata_role_value_behavior`
+- `review_action_candidate_sidecar_v1`
+- `review_action_selected_candidate_switch`
+- `review_action_manual_boundary_area_writer`
+- `calibration_normalization_activation`
+- `gui_replay_parity`
+
+## Next Step
+
+The adopt/hold decision is closed for the narrowed validation bundle:
+`adopt_ready`, not default-active. The next step, if continuing toward product
+readiness, is an explicit public-surface default activation change. That change
+must intentionally update ProductWriter/default matrix behavior and prove the
+same 95-cell expected diff, provenance, preserved 337 existing-successor
+context cells, preserved 27 omitted no-target cells, and no unrelated output
+drift.

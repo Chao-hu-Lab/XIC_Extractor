@@ -4336,3 +4336,427 @@ the later low-height writer entry above as the current tier source.
   successor authority candidate should become the active default activation.
   That later gate is the first point where default ProductWriter output or
   active default matrix files may change.
+
+### 2026-06-20 - CID-NL default activation gallery review v1
+
+- Lane: CID-NL default activation successor authority human review / adoption
+  surface.
+- Previous tier: active default bundle unchanged plus a `production_candidate`
+  successor authority packet.
+- New tier: unchanged. This gate creates a `diagnostic_only` human review
+  surface; it does not change maturity tier, active lane, ProductWriter
+  authority, Backfill writer authority, workbook/GUI behavior, selected
+  peak/area, counted detection, or the active default QuantMatrix bundle.
+- Product surface changed: additive diagnostic adapter/report only:
+  `tools/diagnostics/cid_nl_default_activation_gallery_review.py`. It maps the
+  successor authority decisions into the existing Backfill reconciliation
+  Gallery row model and writes an overlay review queue for the existing
+  `family_ms1_overlay_batch.py` producer. It intentionally does not create a
+  second CID-NL-specific standalone HTML review system and does not accept
+  RAW/DLL paths directly.
+- Evidence: versioned report
+  `docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`
+  plus ignored generated review outputs under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/`. The gallery
+  packet records `overall_status=pass`, 90 review groups, 529 representative
+  cells, 85 overlay queue rows, 85 overlay-linked groups, 5 cellless overlay
+  skips, 147 `write_authorized` successor cells, 337
+  `no_write_detected_baseline_preserved` cells, and 27 `no_write_omitted`
+  cells. The RAW-backed overlay batch succeeded for all 85 queued rows with 85
+  RAW opens, 5872 XIC requests, 647 RAW chromatogram calls, and 633815 trace
+  points. The generated summary records `product_writer_changed=false`,
+  `default_quant_matrix_changed=false`, and
+  `candidate_rows_are_matrix_rows=false`.
+- Validation: focused gallery adapter tests passed; focused ruff passed; the
+  real adapter command without overlay summary builds the queue but does not
+  satisfy `--require-pass`; the command with a provenance-matched overlay
+  summary and `--require-pass` passed. The RAW-backed overlay batch completed
+  successfully; existing `gallery_browser_smoke.py` passed desktop, mobile,
+  and 200 percent zoom checks against the generated gallery HTML.
+- Remaining blocker: human adopt / hold / reject is still pending. Only an
+  explicit adopt gate may proceed to a public-surface activation change, and
+  that later gate must still prove exactly 147 writes, 337 preserved no-writes,
+  27 omitted no-writes, and no matrix/provenance drift outside the approved
+  expected diff.
+
+### 2026-06-20 - CID-NL gallery review semantics correction v1
+
+- Lane: CID-NL default activation successor authority human review / adoption
+  surface.
+- Previous tier: unchanged active default bundle plus the diagnostic Gallery
+  review packet above.
+- New tier: unchanged. This is a review-surface semantics correction only; it
+  does not change maturity tier, active lane, ProductWriter authority, Backfill
+  writer authority, workbook/GUI behavior, selected peak/area, counted
+  detection, or the active default QuantMatrix bundle.
+- Product surface changed: diagnostic HTML/review wording only in the existing
+  Gallery owner. CID-NL successor review groups now render `Write / Preserve /
+  Omit` impact labels instead of reusing the generic Backfill `NL /
+  Candidate-only / Review` language. Overlay links are labeled as MS1 trace
+  context, and the page states that orange detected/rescued overlay traces are
+  MS1 trace status only, not NL-tag coverage and not ProductWriter authority.
+- Evidence: regenerated Gallery packet under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/` still
+  records 90 review groups and 85 overlay-linked groups. Text checks confirm
+  the previous misleading strings `NL=detected required-tag anchors`,
+  `No detected NL anchor on this hypothesis`, and
+  `detected-anchor hypothesis evidence` are absent from the generated HTML.
+- Validation: `python -m pytest tests/test_cid_nl_default_activation_gallery_review.py tests/test_backfill_evidence_reconciliation_gallery.py -q`
+  passed with 51 tests; focused ruff passed; real Gallery regeneration with
+  overlay summary passed; `gallery_browser_smoke.py` passed desktop, mobile,
+  and 200 percent zoom checks; validation artifact retention passed.
+- Remaining blocker: unchanged. Human adopt / hold / reject is still pending
+  before any default ProductWriter activation can be considered.
+
+### 2026-06-20 - CID-NL gallery Discovery-vs-Backfill review split v1
+
+- Lane: CID-NL default activation successor authority human review / adoption
+  surface.
+- Previous tier: unchanged active default bundle plus the diagnostic Gallery
+  review packet and semantics correction above.
+- New tier: unchanged. This is a diagnostic review schema/HTML clarity change;
+  it does not change maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area, counted
+  detection, or the active default QuantMatrix bundle.
+- Product surface changed: diagnostic HTML only. The shared
+  `backfill_evidence_reconciliation_representative_cells.tsv` remains on the
+  existing Backfill Gallery v0 schema; CID-NL old-to-successor identity is
+  rendered from internal representative-cell context in HTML and from the
+  CID-specific differential TSV below. CID-NL detail rows split the human
+  review into `Discovery identity question` and
+  `Backfill activation question`, and show explicit `old -> successor`
+  identity mappings. Target guardrail rows are labeled as Discovery target
+  context, not Backfill write candidates.
+- Evidence: regenerated Gallery packet under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/` still
+  records 90 review groups and 85 overlay-linked groups. Text checks confirm
+  the new split labels and old-to-successor HTML mappings are present, while
+  the shared representative-cells TSV keeps its v0 columns and old misleading
+  NL-anchor wording remains absent.
+- Validation: red-capable focused test first failed on the missing Discovery /
+  Backfill split, then passed after the renderer/schema change. The focused
+  Gallery pytest pair passed with 51 tests; focused ruff passed; real Gallery
+  regeneration passed; Codex in-app browser verified an opened detail row
+  exposes the split review questions and old-to-successor mapping;
+  `gallery_browser_smoke.py` passed desktop, mobile, and 200 percent zoom
+  checks.
+- Remaining blocker: unchanged. Human adopt / hold / reject is still pending
+  before any default ProductWriter activation can be considered.
+
+### 2026-06-20 - CID-NL Evidence Review Gallery differential index v1
+
+- Lane: CID-NL default activation successor authority differential human
+  review.
+- Previous tier: unchanged active default bundle plus the diagnostic Gallery
+  review packet and Discovery-vs-Backfill split above.
+- New tier: unchanged. This is an additive diagnostic review index and Gallery
+  title/hero semantics correction only; it does not change maturity tier,
+  active lane, ProductWriter authority, Backfill writer authority,
+  workbook/GUI behavior, selected peak/area, counted detection, or the active
+  default QuantMatrix bundle.
+- Product surface changed: diagnostic HTML wording, provenance-checked overlay
+  linking behavior, and additive ignored output TSV
+  `cid_nl_discovery_identity_differential_review.tsv` from
+  `tools/diagnostics/cid_nl_default_activation_gallery_review.py`. The Gallery
+  now presents this mode as `CID-NL Discovery Identity Review` under the reused
+  Evidence Review Gallery shell, not as a Backfill-domain report. The
+  differential TSV joins old `source_peak_hypothesis_id` to
+  `successor_peak_hypothesis_id`, source/successor m/z, RT, product m/z, tag,
+  identity state, accepted-cell count, decision counts, transition type, and
+  paired-overlay readiness. The shared Backfill representative-cells TSV schema
+  remains v0; CID-NL identity machine rows live in the CID-specific
+  differential TSV.
+- Evidence: regenerated packet under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/` records 90
+  review groups, 85 overlay-linked groups, and 87 old-to-successor/no-successor
+  differential transitions. Of those transitions, 78 are
+  `ready_for_paired_overlay` and 9 are `no_successor_target`. Example checked:
+  `FAM000380 -> FAM000736` exposes the source audit row
+  (`Mz=243.099`, `RT=23.6623`, `product=127.052`, `tag=DNA_dR`,
+  `accepted_cell_count=0`) beside the successor production row
+  (`Mz=246.136`, `RT=12.2645`, `product=130.089`, `tag=DNA_dR`,
+  `accepted_cell_count=54`).
+- Validation: focused CID-NL Gallery tests pass and assert the Evidence Review
+  title, Discovery-vs-Backfill split, old-to-successor mappings, differential
+  TSV rows, source/successor coordinate and tag state, and no misleading
+  NL-anchor wording. They also assert stale overlay summaries are rejected and
+  `--require-pass` fails until overlay-queued rows are linked to matching
+  overlay-summary provenance. Focused ruff passed. The real Gallery adapter
+  command with overlay summary passed and wrote the new differential TSV.
+- Remaining blocker: paired differential overlay review is now the next human
+  review step before adopt / hold / reject. Only a later explicit adopt gate
+  may proceed to public-surface activation, and it must still prove exactly 147
+  writes, 337 preserved detected-baseline no-writes, 27 omitted no-writes, and
+  no matrix/provenance drift outside the approved expected diff.
+
+### 2026-06-20 - CID-NL paired differential overlay review v1
+
+- Lane: CID-NL default activation successor authority differential human
+  review.
+- Previous tier: unchanged active default bundle plus the diagnostic
+  differential index above.
+- New tier: unchanged. This is a `diagnostic_only` human-review evidence pass;
+  it does not change maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, or the active default QuantMatrix bundle. No control-plane
+  tier promotion is made by this pass.
+- Product surface changed: additive diagnostic tool/report only:
+  `tools/diagnostics/cid_nl_differential_overlay_review.py` plus ignored
+  outputs under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/differential_overlays/`.
+  It consumes the differential TSV and successor decisions, extracts source and
+  successor XIC traces batched by RAW sample, renders paired PNG overlays and
+  trace JSON, and reuses the existing Evidence Review Gallery shell. The PNGs
+  now use the existing Gaussian15 visual convention and label the review as a
+  source/successor `PeakHypothesis` differential overlay rather than family
+  context. It does not create a second Discovery system, does not write default
+  matrix files, and does not treat CID-NL/MS2 evidence or candidate rows as
+  ProductWriter authority.
+- Evidence: paired review output records `overall_status=pass`,
+  `validation_label=diagnostic_only`, 78 rendered transitions, 0 failed
+  transitions, 484 reviewed source/successor decision cells, 147
+  `write_authorized` cells, and 337 detected-baseline preserved cells. The run
+  opened 85 RAW samples and issued 968 XIC requests (`source` plus `successor`
+  per reviewed cell). It wrote 78 PNG overlays, 78 trace JSON files,
+  `cid_nl_differential_overlay_review_summary.tsv/json`, and
+  `cid_nl_differential_overlay_gallery.html`. The trace JSON keeps raw trace
+  arrays and records Gaussian15 max intensities for review.
+- Validation: focused differential overlay pytest passed 3 tests and asserts
+  ready-row filtering, priority ordering, source/successor request batching by
+  sample, diagnostic-only payload flags, reused Gallery output, HTML
+  source-to-successor identity, and shared representative TSV schema
+  preservation. Focused ruff passed. The real `--require-pass` command
+  completed with heartbeat at every 10 RAW samples and every 10 rendered
+  overlays. Codex in-app Browser smoke, via a temporary localhost server after
+  `file://` was blocked by browser policy, verified the generated HTML title,
+  232 PNG lightbox links, collapsed-row `source->successor` identity,
+  detail-row `source -> successor` identity, no stale "No mapping supplied"
+  warning, and visible ProductWriter/default-matrix boundary text. A PNG pixel
+  check confirmed the first overlay is nonblank at 2025 x 1140.
+- Remaining blocker: human adopt / hold / reject is still pending. These 78
+  paired overlays are the review material for the user decision; they do not by
+  themselves promote the 147 successor writes or activate a new default
+  ProductWriter bundle. Only a later explicit adopt gate may proceed to
+  public-surface activation, and it must still prove exactly 147 writes, 337
+  preserved no-writes, 27 omitted no-writes, and no matrix/provenance drift
+  outside the approved expected diff.
+
+### 2026-06-20 - overlay interpretation guide and differential wording v1
+
+- Lane: shared human review surface for Backfill overlays and CID-NL Discovery
+  differential overlays.
+- Previous tier: unchanged active default bundle plus the diagnostic Gallery /
+  differential overlay surfaces above.
+- New tier: unchanged. This is a readability and review-surface correction
+  only; it does not change maturity tier, active lane, ProductWriter authority,
+  Backfill writer authority, workbook/GUI behavior, selected peak/area,
+  counted detection, default matrix values, or Backfill authority. No
+  control-plane tier promotion is made by this pass.
+- Product surface changed: additive human-review HTML only. The maintained
+  visual reader guide is now
+  `docs/superpowers/validation/evidence_overlay_interpretation_guide.html`
+  with retention category `human_guide_html`. Generated Gallery outputs copy
+  that guide beside the rendered HTML and link it from the summary callout, so
+  local artifact review works in the Codex in-app Browser without checking in
+  generated gallery bundles. The guide itself now uses a generic imagegen
+  concept illustration when opened from ignored output, plus clean
+  deterministic SVG/HTML fallback diagrams and on-figure annotation pins. It no
+  longer depends on a specific sample, family id, m/z, RT, or real-output PNG
+  example. The differential PNG wording now explains that the lower-left panel
+  compares same-sample source/successor identity support; different source and
+  successor m/z values are expected when two row identities are being compared.
+- Evidence: focused tests passed for the CID-NL differential overlay review,
+  CID-NL default activation Gallery review, generic Backfill reconciliation
+  Gallery, and validation artifact retention checker (`68 passed`). The real
+  Gallery packet and paired differential overlays were regenerated
+  successfully. Codex in-app Browser smoke over temporary localhost verified
+  both generated Gallery outputs link the local HTML guide, the guide loads,
+  PNG lightbox links remain present, and the ProductWriter/default-matrix
+  boundary text remains visible. A visual PNG inspection confirmed the
+  identity-support labels are visible after the layout padding fix.
+- Remaining blocker: the guide makes the review surface readable, but it is not
+  an adopt decision. CID-NL successor authority still needs an explicit human /
+  model adopt-hold-reject decision and a separate expected-diff public-surface
+  gate before any 147-cell successor write set can become active product
+  behavior.
+
+### 2026-06-21 - CID-NL feature-inclusion / identity-authority reframe v1
+
+- Lane: CID-NL Discovery review-surface semantics and diagnostic contract.
+- Previous tier: unchanged active default bundle plus the diagnostic
+  successor-authority Gallery / differential overlay surfaces above.
+- New tier: unchanged. This pass changes diagnostic/review wording and additive
+  review TSV/JSON fields only. It does not change maturity tier, active lane,
+  ProductWriter authority, Backfill writer authority, workbook/GUI behavior,
+  selected peak/area, counted detection, default matrix values, or Backfill
+  authority. No control-plane tier promotion is made by this pass.
+- Product surface changed: diagnostic review schema and plain-language
+  contract. `cid_nl_discovery_identity_differential_review.tsv` and
+  `cid_nl_differential_overlay_review_summary.tsv/json` now expose
+  `feature_inclusion_gate`, `identity_authority_gate`, and
+  `source_successor_relationship`; the differential overlay summary also emits
+  visual successor-MS1 and source/successor relationship states. Gallery labels
+  changed from old `Write / Preserve` adoption wording to
+  `Candidate / Existing` feature-review wording for CID-NL rows.
+- Decision correction: source/successor overlays no longer answer "does
+  successor beat source?" for every case. They first expose whether the
+  successor is an MS1-backed untargeted feature candidate, then separately
+  support replacement, merge, dedupe, migration, or co-existing-feature review.
+  A source peak does not invalidate successor feature inclusion.
+- Evidence: background research note
+  `docs/deepresearch/Untargeted LC-MS Feature Discovery Background.md` records
+  the external-method basis for feature-first untargeted LC-MS analysis.
+  Focused tests cover the updated Gallery wording, differential TSV gates,
+  diagnostic-only payload flags, and visual relationship classification.
+- Remaining blocker: feature inclusion is still not ProductWriter authority.
+  Any future activation must build a narrowed expected-diff contract for rows
+  that actually replace, merge, dedupe, or migrate existing product values.
+
+### 2026-06-21 - CID-NL feature-inclusion gate v1
+
+- Lane: CID-NL Discovery feature-inclusion product-gate diagnostic.
+- Previous tier: unchanged active default bundle plus the diagnostic reframe
+  above.
+- New tier: unchanged. This pass adds a no-RAW diagnostic gate surface and does
+  not change maturity tier, active lane, ProductWriter authority, Backfill
+  writer authority, workbook/GUI behavior, selected peak/area, counted
+  detection, default matrix values, or Backfill authority. No control-plane
+  tier promotion is made by this pass.
+- Product surface changed: additive diagnostic tool/output schema only:
+  `tools/diagnostics/cid_nl_feature_inclusion_gate.py` reads existing
+  differential review, paired-overlay summary, AI identity-triage TSVs, and an
+  optional versioned manual review TSV. It writes ignored outputs under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/feature_inclusion_gate/`.
+  The output surface is
+  `cid_nl_feature_inclusion_gate_summary.tsv/json`,
+  `cid_nl_feature_inclusion_gate_transitions.tsv`,
+  `cid_nl_identity_expected_diff_queue.tsv`,
+  `cid_nl_supported_candidate_expected_diff_contract.tsv`,
+  `cid_nl_feature_inclusion_review_queue.tsv`, and
+  `cid_nl_feature_inclusion_blocked_queue.tsv`, plus
+  `cid_nl_manual_resolved_expected_diff_queue.tsv`,
+  `cid_nl_manual_resolved_expected_diff_contract.tsv`,
+  `cid_nl_manual_resolved_hold_queue.tsv`, and
+  `cid_nl_user_review_queue.tsv`.
+- Evidence: the gate completed with `overall_status=pass`,
+  `validation_label=diagnostic_only`, 87 transitions, 78 overlay-ready
+  transitions, 78 AI-adjudicated transitions, 147 candidate cells, 73 supported
+  candidate cells, 46 review-required candidate cells, 28 current-bundle-blocked
+  candidate cells, 337 existing-successor context cells, and 27 omitted
+  no-target cells. The 73 supported cells span 14 expected-diff candidate
+  transitions and have 73 cell-level expected-diff contract rows; the 46 review
+  cells span 12 review transitions; the 28 blocked cells span 17 transitions
+  excluded from the current activation bundle. Manual review subsequently
+  resolves the 13 formerly user-review cells across 4 transitions into
+  expected-diff design, leaving 0 user-review cells.
+- Validation: focused pytest for the new gate passed and asserts diagnostic
+  authority flags, expected-diff queue selection, review queue selection,
+  blocked-queue exclusion, and guardrail behavior. Focused ruff passed. The
+  real `--require-pass` command wrote the gate packet from existing artifacts
+  without opening RAW or mutating product outputs.
+- Remaining blocker: only the 95 expected-diff cells may be tested in an
+  activated-copy candidate: 73 primary supported cells, 9 agent-resolved cells,
+  and 13 manual-resolved cells. The 24 agent-held cells and 28 blocked cells
+  stay out of the current activation bundle. Any future adoption still requires
+  a separate public-surface activation check proving matrix/provenance changes
+  and preserved existing/omitted behavior.
+
+### 2026-06-21 - CID-NL activated-copy candidate v1
+
+- Lane: CID-NL Discovery copy-only activation validation.
+- Previous tier: unchanged active default bundle plus the diagnostic
+  feature-inclusion gate above.
+- New tier: unchanged. This pass writes an ignored validation-copy matrix and
+  value-delta checker only. It does not change maturity tier, active lane,
+  ProductWriter authority, Backfill writer authority, workbook/GUI behavior,
+  selected peak/area, counted detection, default matrix values, or Backfill
+  authority. No control-plane tier promotion is made by this pass.
+- Product surface changed: additive diagnostic tool/output schema only:
+  `tools/diagnostics/cid_nl_activation_copy_candidate.py` reads the 73-cell
+  primary expected-diff contract, the 9-cell agent-resolved expected-diff
+  contract, and the 13-cell manual-resolved expected-diff contract. It fails
+  closed if user-review/agent-hold/manual-hold/blocked transitions are
+  included, copies the current public `alignment_matrix.tsv`, and writes
+  validation outputs under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/activation_copy_candidate/`.
+  The output surface is `alignment_matrix_activated_copy.tsv`,
+  `alignment_matrix_identity_activated_copy.tsv`,
+  `cid_nl_activation_copy_value_delta.tsv`, and
+  `cid_nl_activation_copy_candidate_summary.tsv/json`.
+  `tools/diagnostics/cid_nl_activation_copy_acceptance.py` then writes
+  `cid_nl_activation_copy_acceptance_summary.tsv/json` and
+  `cid_nl_activation_copy_matrix_diff.tsv` under the activation-copy
+  `acceptance/` subdirectory.
+- Evidence: the activated-copy command completed with
+  `activation_copy_status=pass`,
+  `validation_label=diagnostic_only_activated_copy_candidate`, 95 contract
+  cells, 95 changed blank matrix cells, and 20 candidate transitions. The
+  summary reports `product_writer_changed=FALSE`,
+  `default_quant_matrix_changed=FALSE`, `workbook_gui_changed=FALSE`, and
+  `candidate_rows_are_matrix_rows=FALSE`.
+- Review split: the former 46 review cells are now split into 9
+  agent-resolved expected-diff cells, 24 agent-held cells, and 13
+  manual-resolved expected-diff cells. The user-review queue is now 0 after
+  human/domain review accepted successor feature inclusion for
+  `FAM011440 -> FAM015713`, `FAM011837 -> FAM016144`,
+  `FAM018342 -> FAM026285`, and `FAM020176 -> FAM030972`. The
+  `FAM020176` source trace remains explicitly `unjudgeable_bad_trace`; that
+  verdict supports only `FAM030972` feature inclusion, not source deletion or
+  migration.
+- Validation: focused pytest for feature-inclusion and activated-copy gates
+  passed, focused ruff passed, and the real `--require-pass` activated-copy and
+  acceptance commands wrote the 95-cell value delta and exact matrix-diff
+  acceptance without opening RAW or mutating product outputs. Acceptance
+  reports `acceptance_status=pass`, 95 contract cells, 95 value-delta rows, 95
+  matrix changed cells, 20 candidate transitions, 0 forbidden overlaps, 0
+  unexpected matrix changes, 0 missing matrix changes, and
+  `production_ready=FALSE`.
+- Remaining blocker: this is still not the default activation bundle. Before
+  adoption, an explicit adopt gate must preserve the 337 existing context cells
+  and 27 omitted no-target cells, prove provenance/default-matrix behavior, and
+  make a deliberate public-surface promotion decision.
+
+### 2026-06-21 - CID-NL activation adopt gate v1
+
+- Lane: CID-NL Discovery adopt/hold decision for the narrowed activated-copy
+  validation bundle.
+- Previous tier: unchanged active default bundle plus the 95-cell
+  diagnostic activated-copy candidate and acceptance gate above.
+- New tier: unchanged for the active product. The 95-cell CID-NL bundle is now
+  `production_candidate_activation_adopt_gate`, meaning it is adopt-ready as
+  input to a later explicit public activation change. This pass does not change
+  the active default QuantMatrix tier, ProductWriter authority, Backfill writer
+  authority, workbook/GUI behavior, selected peak/area, counted detection,
+  default matrix values, or current 511-cell Backfill authority.
+- Product surface changed: additive diagnostic/adoption tool and output schema
+  only. `tools/diagnostics/cid_nl_activation_adopt_gate.py` reads the 73-cell
+  primary expected-diff contract, 9-cell agent-resolved contract, 13-cell
+  manual-resolved contract, feature-inclusion summary, activated-copy summary,
+  activated-copy acceptance summary, value-delta TSV, and forbidden
+  user-review/hold/blocked queues. It writes ignored outputs under
+  `output/validation/cid_nl_default_activation_gallery_review_v1/activation_adopt_gate/`:
+  `cid_nl_activation_adopt_gate_summary.tsv/json` and the compact
+  `cid_nl_activation_adopt_manifest.tsv` grouped at transition level. The full
+  95-cell diff stays in ignored generated outputs, not version control.
+- Evidence: the adopt gate completed with `adopt_gate_status=adopt_ready`,
+  `validation_label=production_candidate_activation_adopt_gate`,
+  `activation_bundle_adopt_ready=TRUE`, 95 contract cells, 95 changed
+  validation-copy matrix cells, 20 candidate transitions, 73 primary
+  expected-diff cells, 9 agent-resolved expected-diff cells, 13
+  manual-resolved expected-diff cells, 24 agent-held cells, 0 manual-held
+  cells, 0 user-review cells, 28 blocked cells, 337 existing-successor context
+  cells, 27 omitted no-target cells, 0 forbidden overlaps, 0 unexpected matrix
+  changes, and 0 missing matrix changes. The gate reports
+  `product_writer_changed=FALSE`, `default_quant_matrix_changed=FALSE`,
+  `workbook_gui_changed=FALSE`, `candidate_rows_are_matrix_rows=FALSE`, and
+  `production_ready=FALSE`.
+- Validation: focused ruff, pytest, and mypy passed for the new adopt gate, and
+  the real `uv run python -m tools.diagnostics.cid_nl_activation_adopt_gate
+  --require-pass` command produced the adopt-ready summary and 20-transition
+  manifest from existing artifacts without opening RAW or mutating product
+  outputs.
+- Remaining blocker: default activation has not happened. The next gate, if
+  chosen, is an explicit public-surface activation change that intentionally
+  updates the default matrix/ProductWriter contract and proves the same 95-cell
+  expected diff, provenance, preserved 337 existing-successor context cells,
+  preserved 27 omitted no-target cells, and no unrelated output drift.
