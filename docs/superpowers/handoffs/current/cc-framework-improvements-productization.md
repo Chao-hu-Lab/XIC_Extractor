@@ -142,7 +142,9 @@ Current artifact-retention prerequisite evidence:
   passed after regenerating the shadow-only manifest from updated upstream
   artifact hashes.
 - `scripts/check_validation_artifact_retention.py` passed with 108 retained
-  validation files and no tracked rendered-artifact dependency.
+  validation files and no tracked rendered-artifact dependency. The checker now
+  hard-fails tracked rendered HTML/PNG even if marked `shrink_later`, and
+  validates retained file size/line metadata against the clean checkout.
 
 Hook smoke, sandbox doctor, diff check, PR gate, and secret/local-path scan
 remain required before closeout.

@@ -140,6 +140,81 @@ def test_checker_warns_for_large_shrink_later_and_strict_fails(tmp_path: Path) -
     )
 
 
+def test_checker_rejects_rendered_shrink_later_without_strict(
+    tmp_path: Path,
+) -> None:
+    root, inventory, policy = _fixture_root(tmp_path)
+    path = "docs/superpowers/validation/rendered/index.html"
+    _write_text(root / path, "<html></html>")
+    _write_inventory(
+        inventory,
+        [
+            _row(
+                path,
+                category="rendered_html",
+                decision="shrink_later",
+                generated_by="scripts/build_gallery.py",
+                required_by="manual review only",
+                replacement="local_validation_artifacts/rendered/index.html",
+            ),
+        ],
+    )
+
+    result = _check(root, inventory, policy, candidate_paths=[path])
+
+    assert any(
+        "rendered validation artifact must be externalized" in problem
+        for problem in result.problems
+    )
+
+
+def test_checker_rejects_stale_retained_file_metadata(tmp_path: Path) -> None:
+    root, inventory, policy = _fixture_root(tmp_path)
+    path = "docs/superpowers/validation/contract.tsv"
+    _write_text(root / path, "id\tvalue\nA\t1\n")
+    _write_inventory(
+        inventory,
+        [
+            _row(
+                path,
+                category="tabular_contract",
+                decision="keep_contract",
+                size_bytes="1",
+                line_count="99",
+            ),
+        ],
+    )
+
+    result = _check(root, inventory, policy, candidate_paths=[path])
+
+    assert any("size_bytes is stale" in problem for problem in result.problems)
+    assert any("line_count is stale" in problem for problem in result.problems)
+
+
+def test_checker_uses_normalized_text_size_for_retained_metadata(
+    tmp_path: Path,
+) -> None:
+    root, inventory, policy = _fixture_root(tmp_path)
+    path = "docs/superpowers/validation/contract.tsv"
+    _write_bytes(root / path, b"id\tvalue\r\nA\t1\r\n")
+    _write_inventory(
+        inventory,
+        [
+            _row(
+                path,
+                category="tabular_contract",
+                decision="keep_contract",
+                size_bytes=str(len("id\tvalue\nA\t1\n".encode("utf-8"))),
+                line_count="2",
+            ),
+        ],
+    )
+
+    result = _check(root, inventory, policy, candidate_paths=[path])
+
+    assert result.problems == ()
+
+
 def test_checker_rejects_stale_rendered_reference_without_mapping(
     tmp_path: Path,
 ) -> None:
@@ -278,14 +353,16 @@ def _row(
     *,
     category: str,
     decision: str,
+    size_bytes: str = "",
+    line_count: str = "",
     generated_by: str = "",
     required_by: str = "",
     replacement: str = "",
 ) -> dict[str, str]:
     return {
         "path": path,
-        "size_bytes": "",
-        "line_count": "",
+        "size_bytes": size_bytes,
+        "line_count": line_count,
         "category": category,
         "retention_decision": decision,
         "keep_reason": "test reason",
@@ -297,9 +374,26 @@ def _row(
 
 def _write_inventory(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    root = path.parent.parents[2]
     with path.open("w", encoding="utf-8", newline="") as handle:
         handle.write("\t".join(REQUIRED_INVENTORY_COLUMNS) + "\n")
         for row in rows:
+            file_path = root / row["path"]
+            if file_path.exists():
+                row = dict(row)
+                if not row.get("size_bytes", ""):
+                    try:
+                        text = file_path.read_text(encoding="utf-8")
+                        row["size_bytes"] = str(len(text.encode("utf-8")))
+                    except UnicodeDecodeError:
+                        row["size_bytes"] = str(file_path.stat().st_size)
+                if not row.get("line_count", ""):
+                    try:
+                        row["line_count"] = str(
+                            len(file_path.read_text(encoding="utf-8").splitlines()),
+                        )
+                    except UnicodeDecodeError:
+                        pass
             handle.write(
                 "\t".join(row.get(column, "") for column in REQUIRED_INVENTORY_COLUMNS)
                 + "\n",

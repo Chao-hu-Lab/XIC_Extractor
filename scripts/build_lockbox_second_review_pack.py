@@ -240,7 +240,14 @@ def check_lockbox_second_review_pack(
         write_outputs=False,
         require_rendered_local=require_rendered_local,
     )
-    problems.extend(result.get("problems", []))
+    result_problems = list(result.get("problems", []))
+    if (
+        require_rendered_local
+        and (problems or result_problems)
+        and not second_review_index_path.exists()
+    ):
+        result_problems.append("lockbox second-review HTML index missing")
+    problems.extend(result_problems)
     if problems:
         return problems
 

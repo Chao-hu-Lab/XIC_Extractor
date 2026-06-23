@@ -280,6 +280,38 @@ def test_second_review_checker_default_allows_missing_rendered_index(
     )
 
 
+def test_second_review_checker_reports_missing_index_with_upstream_render_gap(
+    tmp_path: Path,
+) -> None:
+    queue, template, summary, index = _build_custom_pack(tmp_path)
+    index.unlink()
+    static_index = tmp_path / "static_bundle_index.tsv"
+    header, rows = _read_tsv_with_header(STATIC_BUNDLE_INDEX)
+    case_id = _read_tsv(queue)[0]["lockbox_case_id"]
+    static_row = next(row for row in rows if row["lockbox_case_id"] == case_id)
+    static_row["case_html_path"] = (
+        "local_validation_artifacts/externalized_superpowers_validation/"
+        "missing/case.html"
+    )
+    static_row["review_plot_png_path"] = (
+        "local_validation_artifacts/externalized_superpowers_validation/"
+        "missing/plot.png"
+    )
+    _write_tsv(static_index, header, rows)
+
+    problems = check_lockbox_second_review_pack(
+        static_bundle_index_path=static_index,
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+        require_rendered_local=True,
+    )
+
+    assert any(f"{case_id}: case_html_path missing on disk" in p for p in problems)
+    assert any("lockbox second-review HTML index missing" in p for p in problems)
+
+
 def test_second_review_checker_rejects_stale_summary(tmp_path: Path) -> None:
     queue, template, summary, index = _build_custom_pack(tmp_path)
     payload = json.loads(summary.read_text(encoding="utf-8"))

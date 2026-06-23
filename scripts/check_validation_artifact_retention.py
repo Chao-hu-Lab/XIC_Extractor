@@ -219,14 +219,13 @@ def _check_inventory_rows(
             else:
                 warnings.append(message)
 
-        suffix = Path(path).suffix.lower()
-        if _is_rendered_artifact(path, category) and decision not in (
-            DROP_DECISIONS | {"shrink_later"}
-        ):
-            problems.append(f"{path}: rendered artifact must be externalized or shrunk")
-        if suffix in RENDERED_SUFFIXES and is_present and decision in DROP_DECISIONS:
-            problems.append(f"{path}: generated rendered artifact still in git surface")
+        if _is_rendered_artifact(path, category) and is_present:
+            problems.append(
+                f"{path}: rendered validation artifact must be externalized; "
+                f"tracked rendered artifacts cannot use {decision}",
+            )
         if is_present:
+            _check_present_file_metadata(path, row, repo_root, problems)
             _check_large_file_row(
                 path,
                 row,
@@ -236,6 +235,68 @@ def _check_inventory_rows(
             )
         elif was_deleted and decision not in DROP_DECISIONS:
             problems.append(f"{path}: deleted from worktree without drop decision")
+
+
+def _check_present_file_metadata(
+    path: str,
+    row: Mapping[str, str],
+    repo_root: Path,
+    problems: list[str],
+) -> None:
+    file_path = repo_root / path
+    try:
+        size = file_path.stat().st_size
+    except OSError as exc:
+        problems.append(f"{path}: could not stat retained file: {exc}")
+        return
+    normalized_text: str | None = None
+    if Path(path).suffix.lower() in TEXT_SUFFIXES:
+        try:
+            normalized_text = file_path.read_text(encoding="utf-8")
+            size = len(normalized_text.encode("utf-8"))
+        except UnicodeDecodeError:
+            normalized_text = None
+        except OSError as exc:
+            problems.append(f"{path}: could not read retained text file: {exc}")
+            return
+    _check_numeric_metadata(
+        path,
+        row,
+        field="size_bytes",
+        expected=size,
+        problems=problems,
+    )
+    if normalized_text is None:
+        return
+    line_count = len(normalized_text.splitlines())
+    _check_numeric_metadata(
+        path,
+        row,
+        field="line_count",
+        expected=line_count,
+        problems=problems,
+    )
+
+
+def _check_numeric_metadata(
+    path: str,
+    row: Mapping[str, str],
+    *,
+    field: str,
+    expected: int,
+    problems: list[str],
+) -> None:
+    value = row.get(field, "")
+    if not value:
+        problems.append(f"{path}: {field} is required for retained file")
+        return
+    try:
+        actual = int(value)
+    except ValueError:
+        problems.append(f"{path}: {field} must be an integer")
+        return
+    if actual != expected:
+        problems.append(f"{path}: {field} is stale ({actual} != {expected})")
 
 
 def _check_large_file_row(
