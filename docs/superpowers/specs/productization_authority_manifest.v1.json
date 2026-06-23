@@ -42,11 +42,11 @@
       "authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
       "authority_source": "cid_nl_activation_adopt_gate_expected_diff",
       "artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_summary.json",
-      "artifact_sha256": "72E3CA0E4EA5DF9F6AE0AED3A6A38748BCF796BBF9D6889671728133BE0DF242",
+      "artifact_sha256": "36555FC6E2E82703B7D876117F9008DC5F52892DBDACBE6224D3D25199B605B7",
       "acceptance_artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv",
-      "acceptance_artifact_sha256": "FC0F36187EB2041020FC62BDFA9F5276AB72BEA5274D5B139676B9678DD06978",
+      "acceptance_artifact_sha256": "A948873B0FC35CF1A74487D935CB3EA6D3ABDB582A505F6E26774ABD7F147DED",
       "compact_manifest": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv",
-      "compact_manifest_sha256": "73A2F4F9EF13BE669CFDC393F77230F9204B983D71846D0996DAD4C1124566D2"
+      "compact_manifest_sha256": "AFEEE1B12DE2B16BAC4D0288CBBD5971BD21177B01B04EA4400C192692DFCB5C"
     }
   },
   "parked_lanes": {

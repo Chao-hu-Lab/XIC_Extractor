@@ -17,6 +17,15 @@ def test_current_cid_nl_85raw_universe_closure_is_stable() -> None:
     assert check_cid_nl_85raw_universe_closure() == []
 
 
+def test_retained_85raw_closure_artifacts_use_lf_line_endings() -> None:
+    for name in (
+        "cid_nl_85raw_universe_closure_checks.tsv",
+        "cid_nl_85raw_universe_closure_manifest.tsv",
+    ):
+        content = (DEFAULT_DOCS_DIR / name).read_bytes()
+        assert b"\r\n" not in content
+
+
 def test_missing_required_closure_check_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, manifest_tsv = _copy_contract(tmp_path)
     rows = [

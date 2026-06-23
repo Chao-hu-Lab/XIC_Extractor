@@ -2,8 +2,9 @@
 
 Updated: 2026-06-24
 Branch: `codex/pr04-cid-nl-rebuild-20260624`
-Status: PR #88, #93, and #94 are merged on `master`; PR #89 is being rebuilt
-from clean `origin/master` as the CID-NL discovery activation slice.
+Status: PR #88, #93, and #94 are merged on `master`; old PR #89 was closed as
+superseded; replacement PR #95 is the clean CID-NL discovery activation slice
+rebuilt from `origin/master`.
 
 This is a compact current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` and the
@@ -15,7 +16,7 @@ Rebuild and retarget #89-#92 one at a time so each PR can be reviewed and
 tested from a clean base without depending on ignored `output/` or
 `local_validation_artifacts/`.
 
-Current #89 scope is CID-NL discovery activation only:
+Current #95 scope is CID-NL discovery activation only:
 
 - The immediate product direction is Discovery first.
 - accepted_discovery_cell_count=95.
@@ -25,13 +26,13 @@ Current #89 scope is CID-NL discovery activation only:
 - exclude old QuantMatrix commits already represented by #88;
 - exclude artifact-retention cleanup already represented by #94;
 - exclude `.codex/skills` packaging, broad lockbox drift, and `output/`
-  deletions from #89.
+  deletions from #95.
 
 ## Product State
 
 - `product_ready_default_matrix_activated` remains the current default
   QuantMatrix state for the bounded 511-cell Backfill authority from #88.
-- CID-NL default product activation v1 is the #89 candidate authority slice for
+- CID-NL default product activation v1 is the #95 candidate authority slice for
   the explicit 95-cell CID-NL activation contract.
 - Broad Backfill auto-write remains parked.
 - CID-NL discovery row-identity evidence is being promoted through explicit
@@ -44,7 +45,7 @@ Current #89 scope is CID-NL discovery activation only:
 
 - No selected peak, selected area, counted-detection, workbook schema, GUI,
   broad Backfill, or unrelated default extraction behavior changes are allowed
-  in #89.
+  in #95.
 - Default CI must stay hermetic and must not require ignored local artifacts.
 - Do not reopen broad Backfill while the active goal is Discovery productization.
 - PR #90, #91, and #92 wait until their predecessor is merged or cleanly
@@ -52,7 +53,7 @@ Current #89 scope is CID-NL discovery activation only:
 
 ## Required Gates
 
-Before #89 is ready:
+Before #95 is ready:
 
 - CID-NL/discovery focused tests and productization checkers must pass locally.
 - The repo PR gate must pass locally unless a clear external blocker is recorded.
@@ -81,7 +82,8 @@ These phrases are retained for `scripts/check_productization_state.py`:
 
 ## Next Actions
 
-1. Finish the #89 responsibility-level port from old branch history.
-2. Run focused CID-NL gates, then full local PR gate.
-3. Update #89 body/base/head with a reviewable scope and request review/CI.
-4. Normal-merge #89 only after CI and review pass, then repeat for #90-#92.
+1. Finish #95 CI/review remediation without changing tier or authority scope.
+2. Rerun focused CID-NL gates, then full local PR gate.
+3. Update #95 body with final verification and mark ready only after CI/review
+   are clear.
+4. Normal-merge #95 only after CI and review pass, then repeat for #90-#92.

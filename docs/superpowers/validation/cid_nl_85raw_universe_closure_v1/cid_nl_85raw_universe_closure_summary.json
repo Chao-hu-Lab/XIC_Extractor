@@ -4,14 +4,14 @@
     "checks_tsv": {
       "path": "docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/cid_nl_85raw_universe_closure_checks.tsv",
       "retention_decision": "keep_summary",
-      "sha256": "93B9D72C4D4152EF6674BAEE9AF5513EAF0C02C9395070BF70AAE7F57C449B57",
-      "size_bytes": 1680
+      "sha256": "2B6009E2B88BEC37C95FE7A54676EE118CC650D56562F2FEC8C0ACE5ED329C41",
+      "size_bytes": 1661
     },
     "manifest_tsv": {
       "path": "docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/cid_nl_85raw_universe_closure_manifest.tsv",
       "retention_decision": "keep_contract",
-      "sha256": "014C4367EA6D93CD18B6279435467EC85A2E366010233011300E8A3A6D61B5D5",
-      "size_bytes": 1773
+      "sha256": "2ADCFE19A128677E319E2BE167C7E10E5C181E26AF5811D34F918DF35F82A320",
+      "size_bytes": 1766
     },
     "summary_json": {
       "path": "docs/superpowers/validation/cid_nl_85raw_universe_closure_v1/cid_nl_85raw_universe_closure_summary.json",
@@ -50,7 +50,7 @@
     },
     "full_scope_summary_json": {
       "path": "docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/cid_nl_discovery_full_scope_classification_summary.json",
-      "sha256": "24D69200BE0E05263D329421183EA17A10AF7E19402C4EB2604242DA902516C7",
+      "sha256": "F74C711B81492D22FFD265A1D959F78CD47ECE00B03A06FC693E4289B059AF74",
       "size_bytes": 3137
     },
     "input_matrix_identity_tsv": {

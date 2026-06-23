@@ -57,6 +57,15 @@ def test_manifest_freezes_current_backfill_authority() -> None:
     assert cid_nl["existing_successor_context_rows"] == 337
     assert cid_nl["omitted_no_target_rows"] == 27
     assert cid_nl["authority_scope"] == CID_NL_APPROVED_SCOPE
+    assert artifact_sha256(ROOT / cid_nl["artifact"]) == cid_nl["artifact_sha256"]
+    assert (
+        artifact_sha256(ROOT / cid_nl["acceptance_artifact"])
+        == cid_nl["acceptance_artifact_sha256"]
+    )
+    assert (
+        artifact_sha256(ROOT / cid_nl["compact_manifest"])
+        == cid_nl["compact_manifest_sha256"]
+    )
 
     broad_backfill = manifest["parked_lanes"][PARKED_SCOPE]
     assert broad_backfill["status"] == "parked"

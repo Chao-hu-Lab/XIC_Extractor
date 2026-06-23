@@ -265,8 +265,20 @@ def build_cid_nl_discovery_full_scope_classification(
         docs_dir / "cid_nl_discovery_full_scope_classification_manifest.tsv"
     )
     summary_json = docs_dir / "cid_nl_discovery_full_scope_classification_summary.json"
-    write_tsv(checks_tsv, checks, CHECK_COLUMNS, extrasaction="raise")
-    write_tsv(manifest_tsv, manifest_rows, MANIFEST_COLUMNS, extrasaction="raise")
+    write_tsv(
+        checks_tsv,
+        checks,
+        CHECK_COLUMNS,
+        extrasaction="raise",
+        lineterminator="\n",
+    )
+    write_tsv(
+        manifest_tsv,
+        manifest_rows,
+        MANIFEST_COLUMNS,
+        extrasaction="raise",
+        lineterminator="\n",
+    )
 
     payload = _summary_payload(
         gate_summary=gate_summary,

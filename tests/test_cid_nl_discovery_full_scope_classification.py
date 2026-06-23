@@ -17,6 +17,15 @@ def test_current_cid_nl_discovery_full_scope_classification_is_stable() -> None:
     assert check_cid_nl_discovery_full_scope_classification() == []
 
 
+def test_retained_full_scope_artifacts_use_lf_line_endings() -> None:
+    for name in (
+        "cid_nl_discovery_full_scope_classification_checks.tsv",
+        "cid_nl_discovery_full_scope_classification_manifest.tsv",
+    ):
+        content = (DEFAULT_DOCS_DIR / name).read_bytes()
+        assert b"\r\n" not in content
+
+
 def test_missing_required_check_id_fails_closed(tmp_path: Path) -> None:
     summary_json, checks_tsv, manifest_tsv = _copy_contract(tmp_path)
     rows = [

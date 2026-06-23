@@ -5,12 +5,12 @@
     "checks_tsv": {
       "path": "docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/cid_nl_discovery_full_scope_classification_checks.tsv",
       "retention_decision": "keep_summary",
-      "sha256": "F54C5DD5E64B5D8FD2260654A679F7F661DA507AD13C3B609C847FA1A79129BD"
+      "sha256": "CDED4186555BCBDB09FCBB700F07B4D741689D15C902064816CF7772A3BB0767"
     },
     "manifest_tsv": {
       "path": "docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/cid_nl_discovery_full_scope_classification_manifest.tsv",
       "retention_decision": "keep_contract",
-      "sha256": "D91C85583646C7E1B678464420DA02140EFDF0C518A2A89C5C42A2AC920F0D6A"
+      "sha256": "FC131FB7AC6BEA7E59564361428DDAE9C228C0BF1B0A4B89A8EF0E80752C8689"
     },
     "summary_json": {
       "path": "docs/superpowers/validation/cid_nl_discovery_full_scope_classification_v1/cid_nl_discovery_full_scope_classification_summary.json",

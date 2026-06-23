@@ -61,6 +61,7 @@ def check_productization_authority(
     _check_schema_and_index(schema, header, rows, problems)
     _check_index_authority(manifest, rows, problems)
     _check_source_hashes(manifest, rows, repo_root, problems)
+    _check_cid_nl_source_hashes(manifest, repo_root, problems)
     return problems
 
 
@@ -249,6 +250,36 @@ def _check_source_hashes(
         path = repo_root / relative
         if path.exists() and artifact_sha256(path) != source_hashes.get(source_id):
             problems.append(f"{source_id} artifact hash does not match index")
+
+
+def _check_cid_nl_source_hashes(
+    manifest: Mapping[str, Any],
+    repo_root: Path,
+    problems: list[str],
+) -> None:
+    cid_nl = _mapping_path(manifest, "current_authority", "cid_nl_default_activation")
+    if cid_nl is None:
+        return
+    artifact_fields = {
+        "artifact": "artifact_sha256",
+        "acceptance_artifact": "acceptance_artifact_sha256",
+        "compact_manifest": "compact_manifest_sha256",
+    }
+    for path_key, sha_key in artifact_fields.items():
+        relative = cid_nl.get(path_key)
+        expected_hash = cid_nl.get(sha_key)
+        if not isinstance(relative, str) or not relative:
+            problems.append(f"manifest CID-NL {path_key} must be a non-empty path")
+            continue
+        if not isinstance(expected_hash, str) or not expected_hash:
+            problems.append(f"manifest CID-NL {sha_key} must be a non-empty hash")
+            continue
+        path = repo_root / relative
+        if not path.is_file():
+            problems.append(f"CID-NL {path_key} artifact is missing: {relative}")
+            continue
+        if artifact_sha256(path) != expected_hash:
+            problems.append(f"CID-NL {path_key} hash does not match manifest")
 
 
 def _mapping_path(

@@ -27,3 +27,15 @@ Feature-inclusion boundary: source/successor m/z or RT similarity is an identity
 - Checks TSV: `docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv`
 
 Full matrix and provenance TSV outputs are intentionally externalized under `output/validation/cid_nl_default_product_activation_v1/` to keep review diffs small.
+
+## Clean-Checkout Gate
+
+Default build mode is a local replay path. It expects the externalized
+successor-authority, value-delta, and 85RAW-derived alignment inputs under
+ignored `output/` paths.
+
+Clean-checkout CI and PR readiness must use the retained compact artifact gate:
+
+```powershell
+python scripts/build_cid_nl_default_product_activation.py --check-only
+```

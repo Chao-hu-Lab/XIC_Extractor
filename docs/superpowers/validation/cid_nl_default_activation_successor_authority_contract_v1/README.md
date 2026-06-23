@@ -41,9 +41,17 @@ Generated location:
 
 ## Command
 
+This command is a local replay/rebuild path. It reads ignored `output/`
+alignment and validation inputs and rewrites generated artifacts under
+`output/validation/`.
+
 ```powershell
 python scripts/build_cid_nl_default_activation_successor_authority_contract.py --require-pass
 ```
+
+Clean-checkout CI must not depend on those ignored outputs. The PR gate uses the
+retained compact summaries and downstream `--check-only` / release-slice
+checkers instead.
 
 ## Result
 
