@@ -41,6 +41,24 @@ If the user asks to "set a goal and handle it", start with `tighten` for one
 pass, then `execute`. Do not skip the quality gate just because the user is
 eager to proceed.
 
+## Default-First Goal Drafting
+
+When creating a goal, output the best copy-ready goal first. Do not lead with a
+blank template or a long questionnaire.
+
+- If uncertainty is low-risk, choose conservative defaults and state the
+  assumption.
+- Ask only when the answer changes cost, risk, ownership, public contracts, or
+  product direction.
+- If the domain or artifact is unfamiliar, make the goal discovery-first:
+  inspect repo docs, existing scripts, sample data, official references, or
+  user-provided material before implementation.
+- If choices are needed, use short numbered options with a recommended default.
+  Avoid open-ended interviews unless a multiple-choice version would hide an
+  important decision.
+- Keep `/goal` as the executable command prefix. For Chinese users, the goal
+  body can be Chinese; do not change the command to `/目標` or `/目标`.
+
 ## Minimal Goal Shape
 
 If the global skill cannot be loaded, create or tighten goals with this compact
@@ -55,7 +73,10 @@ Out of scope:
 Current surfaces/artifacts:
 Plan:
 Verification:
+Boundaries:
+Iteration policy:
 Done when:
+Pause if:
 Stop rules:
 Handoff:
 ```
@@ -82,6 +103,11 @@ when any answer is weak:
 - **Verification fit**: Does verification match the phase type: focused tests,
   artifact parity, 8RAW, 85RAW, targeted benchmark, manual EIC/MS2 review, or
   CI? Do not overclaim a weaker tier.
+- **Boundaries**: Does the goal name allowed write surfaces and forbidden paths
+  separately from behavioral constraints?
+- **Iteration policy**: Does it require one focused change at a time, rerunning
+  relevant checks after meaningful edits, and a new source of evidence after
+  repeated failures?
 - **Public contract risk**: Does it touch CLI/config, TSV/CSV/workbook schema,
   matrix identity, activation decisions, selected peak/area, or downstream
   handoff fields? If yes, require a contract update and focused output test.
@@ -91,6 +117,9 @@ when any answer is weak:
 - **Stop rules**: Are there concrete conditions that require user decision,
   a different evidence source, or stopping the current loop instead of blind
   continuation?
+- **Pause conditions**: Are external permissions, credentials, production data,
+  destructive operations, unclear ownership, or product-direction decisions
+  separated from normal completion?
 - **Handoff**: Will a later agent know what changed, what was verified, what
   remains risky, and where the artifacts are?
 
@@ -106,6 +135,9 @@ While executing:
 - Use tools aggressively but with a decision map. Prefer existing diagnostics,
   specs, and validation outputs before rerunning expensive RAW jobs when those
   artifacts answer the same question; otherwise use the stronger tool or run.
+- After the same failure shape repeats twice, stop retrying the same approach:
+  inspect logs/artifacts, reduce to a smaller repro, consult docs, or report the
+  blocker.
 - If the work uncovers a larger backlog, record it as follow-up instead of
   silently expanding the goal.
 - If a reviewer finding, CI failure, or new data invalidates the goal contract,
@@ -208,5 +240,6 @@ Stop instead of guessing when:
 - a long RAW run lacks heartbeat/timing sidecars or starts repeating a known
   failed launch pattern;
 - the goal's gate cannot change the next action;
+- the same failure shape repeats twice without new evidence;
 - a reviewer finding contradicts the user's product direction and needs a
   decision.
