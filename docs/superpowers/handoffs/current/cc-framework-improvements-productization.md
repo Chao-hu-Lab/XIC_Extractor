@@ -68,10 +68,10 @@ connected.
   short, and pruned around the 200-line target.
 - `.codex/skills/xic-goal-execution/SKILL.md`: added XIC-specific handoff
   snapshot discipline for `$goal-execution` usage.
-- `C:\Users\user\.codex\skills\goal-execution\SKILL.md`: global goal execution
+- `$CODEX_HOME/skills/goal-execution/SKILL.md`: global goal execution
   now requires current-state handoff snapshots, archive summaries, optional
   notes, status labels, and pruning.
-- `C:\Users\user\.codex\skills\handoff\SKILL.md`: direct `$handoff` usage now
+- `$CODEX_HOME/skills/handoff/SKILL.md`: direct `$handoff` usage now
   follows the same three-layer model.
 - `.codex/hooks/*` and `.codex/hooks/fixtures/assert_hook_outputs.py`: hooks
   remind about stale/oversized handoff only; they do not author handoff content.
