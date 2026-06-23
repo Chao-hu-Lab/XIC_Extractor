@@ -1,9 +1,11 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import json
 import re
 import sys
 
+from xic_hook_policy import CONTROL_PLANE_PATH, HANDOFF_PATH
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
@@ -40,6 +42,29 @@ GOAL_PATTERNS = [
     r"設定.*goal",
     r"用.*goal",
     r"目標",
+]
+
+PRODUCTIZATION_PATTERNS = [
+    r"producti[sz]e|producti[sz]ation",
+    r"production[_\s-]?(surface|ready|candidate)",
+    r"shadow_ready|diagnostic_only|maturity\s+tier",
+    r"\bpromotion\b|\bpromote\b",
+    r"method_manifest|review_roundtrip|sample_metadata_contract|alignment_output_contract",
+    r"control\s+plane",
+    r"產品化|推到產品|正式推|正式產品|正式功能|正式輸出|正式矩陣",
+    r"成熟度|控制板|控制台",
+]
+
+HANDOFF_PATTERNS = [
+    r"\bhandoff\b",
+    r"worktree[-_\s]?report",
+    r"context\s+(window|compaction)",
+    r"\bcompaction\b",
+    r"compact\s+context",
+    r"long\s+pause",
+    r"next\s+(agent|session)",
+    r"收尾|交接|交接文檔|交接文件|下一個\s*(agent|session|會話)",
+    r"壓縮|上下文|長會話|長暫停",
 ]
 
 
@@ -84,6 +109,22 @@ def main() -> int:
         contexts.append(
             "XIC goal context detected: use xic-goal-execution for phase-sized or drifting work. "
             "Keep one objective and name context, constraints, verification, done condition, stop rules, and handoff."
+        )
+
+    if any(re.search(pattern, prompt, re.IGNORECASE) for pattern in PRODUCTIZATION_PATTERNS):
+        contexts.append(
+            "XIC productization context detected: before claiming a feature is productized, read "
+            f"{CONTROL_PLANE_PATH}. "
+            "Name the current/proposed maturity tier and, if the tier or active lane changes, update the board "
+            "or explicitly state why no control-plane update is needed."
+        )
+
+    if any(re.search(pattern, prompt, re.IGNORECASE) for pattern in HANDOFF_PATTERNS):
+        contexts.append(
+            "XIC handoff/closeout context detected: refresh "
+            f"{HANDOFF_PATH} when branch status, validation evidence, productization tier, or next action changed. "
+            f"If productization tier or active lane changed, sync {CONTROL_PLANE_PATH} too. "
+            "The handoff summarizes current continuation state; it must not override the control plane or named specs."
         )
 
     if not contexts:

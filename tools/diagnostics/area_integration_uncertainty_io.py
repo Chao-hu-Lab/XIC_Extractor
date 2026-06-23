@@ -151,9 +151,6 @@ def _read_alignment_integration_audits(
 
 
 def _alignment_baseline_area(row: dict[str, str]) -> tuple[float | None, str]:
-    rollback_area = _optional_float(row.get("area_baseline_corrected_linear_edge"))
-    if rollback_area is not None:
-        return rollback_area, "linear_edge_compatible"
     return _optional_float(row["area_baseline_corrected"]), "reported_baseline"
 
 

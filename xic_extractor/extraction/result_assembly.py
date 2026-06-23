@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING, Any
 
 from xic_extractor.config import Target
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
+from xic_extractor.extraction.targeted_projection_reasons import (
+    OWN_MAX_SAME_PEAK_SUPPORT_REASON,
+)
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.model_selection import PeakModelSelectionResult
@@ -366,6 +369,12 @@ def _approved_expected_diff_support_reasons(
         and "paired_area_ratio" in evidence_sources
     ):
         reasons.append("paired_area_ratio_support")
+    if (
+        result.role.upper() == "ANALYTE"
+        and target.istd_pair
+        and "own_max_same_peak" in evidence_sources
+    ):
+        reasons.append(OWN_MAX_SAME_PEAK_SUPPORT_REASON)
     return tuple(reasons)
 
 
@@ -646,6 +655,7 @@ def _paired_analyte_has_nl_dropout_supported_peak(
             support_reasons,
         )
         and "paired_area_ratio_support" in support
+        and OWN_MAX_SAME_PEAK_SUPPORT_REASON in support
         and bool(
             support
             & {

@@ -1,9 +1,11 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import json
 import re
 import sys
 
+from xic_hook_policy import PRODUCT_SURFACE_PATHS, mentions_any_path
 
 DESTRUCTIVE_COMMANDS = [
     (
@@ -29,6 +31,12 @@ EXEC_CONFIG_PATHS = [
     ".codex/agents/",
     "docs/agent/",
 ]
+
+WRITE_COMMAND = re.compile(
+    r"\b(apply_patch|Set-Content|Add-Content|Out-File|New-Item|Move-Item|Remove-Item|Copy-Item|"
+    r"python\s+-c|python\s+-m|uv\s+run\s+python|ruff\s+check\s+--fix)\b",
+    re.IGNORECASE,
+)
 
 
 def emit(payload: dict[str, object]) -> None:
@@ -67,6 +75,28 @@ def get_command(event: dict[str, object]) -> str:
     return ""
 
 
+def text_from_value(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return "\n".join(text_from_value(item) for item in value.values())
+    if isinstance(value, list):
+        return "\n".join(text_from_value(item) for item in value)
+    return ""
+
+
+def tool_payload_text(event: dict[str, object]) -> str:
+    return text_from_value(event.get("tool_input"))
+
+
+def is_write_like(event: dict[str, object], command: str, payload: str) -> bool:
+    tool_name = str(event.get("tool_name", "")).lower()
+    if any(name in tool_name for name in ("apply_patch", "edit", "write")):
+        return True
+    combined = f"{command}\n{payload}"
+    return bool(WRITE_COMMAND.search(combined))
+
+
 def main() -> int:
     try:
         event = json.load(sys.stdin)
@@ -74,7 +104,8 @@ def main() -> int:
         return 0
 
     command = get_command(event)
-    if not command:
+    payload = tool_payload_text(event)
+    if not command and not payload:
         return 0
 
     for pattern, reason in DESTRUCTIVE_COMMANDS:
@@ -92,6 +123,15 @@ def main() -> int:
     if any(path.replace("\\", "/") in normalized for path in EXEC_CONFIG_PATHS):
         context(
             "Execution-affecting XIC agent config may be edited. After the change, run hook/script smoke checks, git diff --check, and a secret/local-path scan before closeout."
+        )
+
+    combined_text = f"{command}\n{payload}"
+    if is_write_like(event, command, payload) and mentions_any_path(combined_text, PRODUCT_SURFACE_PATHS):
+        context(
+            "Product/public surface may be edited. If this changes a maturity tier, output schema, "
+            "review/replay behavior, selected area/counting, or matrix authority, update "
+            "docs/superpowers/plans/2026-06-15-productization-control-plane.md. "
+            "If it does not, say explicitly that no control-plane tier update is needed."
         )
 
     return 0

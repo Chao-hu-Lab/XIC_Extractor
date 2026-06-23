@@ -10,6 +10,9 @@ from xic_extractor.extraction.handoff_spine_runtime import (
     selected_peak_hypothesis,
 )
 from xic_extractor.extraction.result_assembly import build_extraction_result
+from xic_extractor.extraction.targeted_projection_reasons import (
+    OWN_MAX_SAME_PEAK_SUPPORT_REASON,
+)
 from xic_extractor.extractor import ExtractionResult
 from xic_extractor.neutral_loss import CandidateMS2Evidence, NLResult
 from xic_extractor.peak_detection.evidence_facts import (
@@ -688,11 +691,37 @@ def test_paired_analyte_anchor_selected_nl_fail_requires_area_ratio_support(
     assert "paired_istd_anchor_support" in projection.support_reasons
 
 
-def test_paired_analyte_anchor_and_area_ratio_downgrades_nl_fail_to_review(
+def test_paired_analyte_anchor_and_area_ratio_without_own_max_keeps_nl_fail_not_counted(
 ) -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
         support_reasons=("ms1_coherent", "paired_area_ratio_support"),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.5,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+    assert "paired_analyte_nl_review" in projection.review_reasons
+    assert "paired_istd_anchor_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON not in projection.support_reasons
+
+
+def test_paired_analyte_anchor_area_ratio_and_own_max_downgrades_nl_fail_to_review(
+) -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=(
+            "ms1_coherent",
+            "paired_area_ratio_support",
+            OWN_MAX_SAME_PEAK_SUPPORT_REASON,
+        ),
         conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
         nl_status="NL_FAIL",
         paired_istd_anchor_rt=8.5,
@@ -707,6 +736,7 @@ def test_paired_analyte_anchor_and_area_ratio_downgrades_nl_fail_to_review(
     assert "paired_analyte_nl_review" in projection.review_reasons
     assert "paired_istd_anchor_support" in projection.support_reasons
     assert "paired_area_ratio_support" in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON in projection.support_reasons
 
 
 def test_paired_analyte_nl_fail_requires_anchor_inside_selected_interval() -> None:
@@ -726,7 +756,7 @@ def test_paired_analyte_nl_fail_requires_anchor_inside_selected_interval() -> No
     assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
 
 
-def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
+def test_paired_analyte_role_support_without_own_max_keeps_nl_fail_not_counted(
 ) -> None:
     result = _result_with_targeted_projection_semantics(
         target=_target(is_istd=False),
@@ -742,6 +772,34 @@ def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
 
     projection = result.targeted_product_projection
     assert projection is not None
+    assert projection.product_state == "ambiguous"
+    assert projection.counted_detection is False
+    assert "candidate_aligned_ms2_nl_conflict" in projection.conflict_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
+    assert "paired_analyte_nl_review" in projection.review_reasons
+    assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
+    assert "paired_istd_anchor_support" not in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON not in projection.support_reasons
+
+
+def test_paired_analyte_role_support_with_own_max_downgrades_nl_fail(
+) -> None:
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=(
+            "ms1_coherent",
+            "role_aware_rt_support",
+            "paired_area_ratio_support",
+            OWN_MAX_SAME_PEAK_SUPPORT_REASON,
+        ),
+        conflict_reasons=("candidate_aligned_ms2_nl_conflict",),
+        nl_status="NL_FAIL",
+        paired_istd_anchor_rt=8.9,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
     assert projection.product_state == "detected_flagged"
     assert projection.counted_detection is True
     assert "candidate_aligned_ms2_nl_conflict" not in projection.conflict_reasons
@@ -749,6 +807,7 @@ def test_paired_analyte_role_support_downgrades_nl_fail_without_anchor_interval(
     assert "paired_analyte_nl_review" in projection.review_reasons
     assert "role_aware_rt_support" in projection.support_reasons
     assert "paired_area_ratio_support" in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON in projection.support_reasons
     assert "paired_istd_anchor_support" not in projection.support_reasons
 
 
@@ -794,6 +853,7 @@ def test_approved_expected_diff_pair_evidence_downgrades_analyte_nl_fail(
             "chrom_peak_segment_context",
             "role_aware_rt",
             "paired_area_ratio",
+            "own_max_same_peak",
         ),
         compatibility_oracle="legacy_peak_scoring_current_oracle",
         policy_source="selected_hypothesis_model_selection_v1",
@@ -815,7 +875,54 @@ def test_approved_expected_diff_pair_evidence_downgrades_analyte_nl_fail(
     assert projection.counted_detection is True
     assert "role_aware_rt_support" in projection.support_reasons
     assert "paired_area_ratio_support" in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON in projection.support_reasons
     assert "analyte_nl_fail_requires_policy" not in projection.not_counted_reasons
+
+
+def test_expected_diff_pair_evidence_without_own_max_keeps_nl_fail_not_counted(
+) -> None:
+    model_selection = PeakModelSelectionResult(
+        selected_candidate_id="SampleA|Analyte|successor-right",
+        legacy_selected_candidate_id="SampleA|Analyte|legacy-middle",
+        stable_row_id=(
+            "model_selection|legacy=SampleA|Analyte|legacy-middle"
+            "|successor=SampleA|Analyte|successor-right"
+        ),
+        trace_group_id="SampleA|Analyte|targeted",
+        decision_class="not_counted",
+        selection_status="expected_diff",
+        selection_reasons=("ms1_coherent",),
+        legacy_reasons=("legacy_rt_anchor",),
+        diff_reasons=(),
+        public_projection={"confidence": "VERY_LOW"},
+        evidence_sources=(
+            "ms1_trace",
+            "chrom_peak_segment_context",
+            "role_aware_rt",
+            "paired_area_ratio",
+        ),
+        compatibility_oracle="legacy_peak_scoring_current_oracle",
+        policy_source="selected_hypothesis_model_selection_v1",
+        product_switch_allowed=True,
+        evidence_comparison_policy="limited_evidence_shadow",
+    )
+    result = _result_with_targeted_projection_semantics(
+        target=_target(is_istd=False),
+        support_reasons=("ms1_coherent",),
+        conflict_reasons=(),
+        nl_status="NL_FAIL",
+        confidence="VERY_LOW",
+        model_selection_result=model_selection,
+    )
+
+    projection = result.targeted_product_projection
+    assert projection is not None
+    assert projection.product_state == "not_counted"
+    assert projection.counted_detection is False
+    assert "role_aware_rt_support" in projection.support_reasons
+    assert "paired_area_ratio_support" in projection.support_reasons
+    assert OWN_MAX_SAME_PEAK_SUPPORT_REASON not in projection.support_reasons
+    assert "analyte_nl_fail_requires_policy" in projection.not_counted_reasons
 
 
 def test_paired_analyte_nl_fail_with_quality_flags_stays_not_counted() -> None:

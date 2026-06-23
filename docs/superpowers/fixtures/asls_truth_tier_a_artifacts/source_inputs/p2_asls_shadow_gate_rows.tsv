@@ -1,7 +1,0 @@
-target_label	selected_feature_id	sample_count	linear_area_rsd_pct	asls_area_rsd_pct	area_rsd_delta_pct	median_abs_relative_diff_pct	diff_gt_5pct_count	asls_reduced_area_count	asls_exceeds_raw_area_count	status	failure_reasons
-d3-5-hmdC	FAM000153	8	11.2581	15.1169	3.85879	9.4024	6	2	0	FAIL	area_rsd_regression
-d3-5-medC	FAM000031	8	12.4246	8.38456	-4.04001	18.3366	8	0	0	PASS	
-d4-N6-2HE-dA	FAM000807	8	20.9301	21.5008	0.57078	7.78029	8	0	0	FAIL	area_rsd_regression
-15N5-8-oxodG	FAM000538	8	26.3116	21.4884	-4.82317	9.95018	8	0	0	PASS	
-d3-N6-medA	FAM000242	8	19.3121	19.5509	0.238792	21.0723	8	0	0	PASS	
-d3-dG-C8-MeIQx	FAM001878	8	34.1104	34.8789	0.768493	19.5615	8	0	0	FAIL	area_rsd_regression

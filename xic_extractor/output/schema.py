@@ -8,6 +8,11 @@ class OutputColumn:
     description: str = ""
 
 
+TARGETED_OUTPUT_SCHEMA_VERSION = "targeted_output_v1"
+TARGETED_LONG_CSV_SCHEMA_VERSION = "targeted_long_csv_v1"
+TARGETED_DIAGNOSTIC_CSV_SCHEMA_VERSION = "targeted_diagnostics_csv_v1"
+TARGETED_SCORE_BREAKDOWN_CSV_SCHEMA_VERSION = "targeted_score_breakdown_csv_v1"
+
 MS1_SUFFIXES: tuple[str, ...] = (
     "RT",
     "Int",

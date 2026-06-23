@@ -90,6 +90,42 @@ def test_compare_workbooks_ignores_runtime_and_output_path_metadata(
     assert result.differences == []
 
 
+def test_compare_workbooks_ignores_manifest_location_and_hash_metadata(
+    tmp_path: Path,
+) -> None:
+    left = tmp_path / "left.xlsx"
+    right = tmp_path / "right.xlsx"
+    _write_workbook(
+        left,
+        method_manifest_path="C:\\old\\method_manifest.json",
+        method_manifest_sha256="a" * 64,
+    )
+    _write_workbook(
+        right,
+        method_manifest_path="D:\\new\\method_manifest.json",
+        method_manifest_sha256="b" * 64,
+    )
+
+    result = compare_workbooks(left, right)
+
+    assert result.matched
+    assert result.differences == []
+
+
+def test_compare_workbooks_compares_manifest_schema_metadata(
+    tmp_path: Path,
+) -> None:
+    left = tmp_path / "left.xlsx"
+    right = tmp_path / "right.xlsx"
+    _write_workbook(left, method_manifest_schema="method_manifest_v1")
+    _write_workbook(right, method_manifest_schema="method_manifest_v2")
+
+    result = compare_workbooks(left, right)
+
+    assert not result.matched
+    assert any("method_manifest_v1" in diff for diff in result.differences)
+
+
 def test_compare_workbooks_ignores_sheet_order(tmp_path: Path) -> None:
     left = tmp_path / "left.xlsx"
     right = tmp_path / "right.xlsx"
@@ -145,6 +181,9 @@ def _write_workbook(
     generated_at: str = "2026-05-03T00:00:00Z",
     elapsed_seconds: str = "1.0",
     output_path: str = "C:\\output\\xic_results.xlsx",
+    method_manifest_schema: str = "method_manifest_v1",
+    method_manifest_path: str = "C:\\output\\method_manifest.json",
+    method_manifest_sha256: str = "a" * 64,
     include_score_breakdown: bool = False,
     score: float = 0.9,
     overview_review_items: int = 1,
@@ -183,6 +222,9 @@ def _write_workbook(
             ws.append(["generated_at", generated_at])
             ws.append(["elapsed_seconds", elapsed_seconds])
             ws.append(["output_path", output_path])
+            ws.append(["method_manifest_schema", method_manifest_schema])
+            ws.append(["method_manifest_path", method_manifest_path])
+            ws.append(["method_manifest_sha256", method_manifest_sha256])
             ws.append(["resolver_mode", "legacy_savgol"])
     if include_score_breakdown:
         ws = wb.create_sheet("Score Breakdown")

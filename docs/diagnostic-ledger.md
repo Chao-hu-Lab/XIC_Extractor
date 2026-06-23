@@ -1,7 +1,7 @@
 # Diagnostic Ledger And Rerun Policy
 
 **Status:** maintained repo-local diagnostic memory
-**Last updated:** 2026-06-05
+**Last updated:** 2026-06-16
 
 This ledger records diagnostic conclusions that should survive branch and
 worktree changes. Use it before rerunning expensive RAW validation or treating a
@@ -38,6 +38,82 @@ known, where the evidence lives, and when a rerun is justified.
 | RAW-capable Python | `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` |
 
 ## Known Diagnostic Conclusions
+
+### 2026-06-16 5-hmdC Own-Max Support Explicit Opt-In Smoke
+
+Verdict: `production_candidate` for the explicit opt-in
+`targeted_ms1_shape_identity_support_tsv` ingestion path. This is not full
+product `production_ready`: the support TSV is still a reviewed diagnostic
+artifact, GUI is not connected, and the default extraction path remains off.
+
+Update on the same date: the original five-row TSV was a handpicked review
+surface, not a product limitation. A generic RAW-backed support producer now
+finds all eligible baseline rows that are analyte `NL_FAIL` / `NO_MS2`, blocked
+only by `analyte_nl_fail_requires_policy`, already supported by paired RT/area
+ratio, and then passes Gaussian-smoothed own-max same-peak identity.
+
+Generic producer smoke:
+`output/ms1_shape_identity_generic_support_85raw_20260616/`
+
+Current 8RAW smoke:
+`output/ms1_shape_identity_optin_8raw_20260616/`
+
+Current 85RAW smoke:
+`output/ms1_shape_identity_optin_85raw_20260616/`
+
+Key facts:
+
+- Baseline and opt-in runs both used
+  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` for 8RAW and
+  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` for 85RAW; all runs used
+  CSV-only output.
+- Opt-in runs used
+  `output/ms1_rescue_5hmdc_own_max_similarity_20260616/targeted_ms1_shape_identity_v0.tsv`.
+- 8RAW `expected_diff_summary.tsv` found exactly one changed row:
+  `TumorBC2263_DNA / 5-hmdC`.
+- That row changed from `Product State=not_counted`,
+  `Counted Detection=FALSE`, `RT=ND`, `Area=ND` to
+  `Product State=detected_flagged`, `Counted Detection=TRUE`, `RT=9.1705`,
+  `Area=145695.76`.
+- 85RAW `expected_diff_summary.tsv` found exactly five changed rows, exactly
+  matching the reviewed support TSV keys:
+  `BenignfatBC1028_DNA / 5-hmdC`,
+  `BenignfatBC1108_DNA / 5-hmdC`,
+  `NormalBC2302_DNA / 5-hmdC`,
+  `TumorBC2263_DNA / 5-hmdC`, and
+  `TumorBC2294_DNA / 5-hmdC`.
+- All five changed from `not_counted / FALSE` to `detected_flagged / TRUE`.
+  Unexpected changed rows = `0`; support rows not changed = `0`.
+- The 85RAW wide matrix changed `30` value cells, only those five samples'
+  `5-hmdC_RT`, `5-hmdC_Int`, `5-hmdC_Area`, `5-hmdC_PeakStart`,
+  `5-hmdC_PeakEnd`, and `5-hmdC_PeakWidth`.
+- In both 8RAW and 85RAW, support reasons gained
+  `own_max_same_peak_support` and `analyte_nl_fail_requires_policy` was
+  removed.
+- The generic producer read the existing 85RAW baseline long CSV and emitted
+  `11` diagnostic support rows: `10` for `5-hmdC` and `1` for `5-medC`.
+  All `11` were `own_max_same_peak_supported`.
+- A new 85RAW opt-in run using that generic TSV changed exactly `11` rows:
+  `BenignfatBC0980_DNA / 5-hmdC`,
+  `BenignfatBC1028_DNA / 5-hmdC`,
+  `BenignfatBC1108_DNA / 5-hmdC`,
+  `NormalBC2259_DNA / 5-hmdC`,
+  `NormalBC2264_DNA / 5-medC`,
+  `NormalBC2270_DNA / 5-hmdC`,
+  `NormalBC2272_DNA / 5-hmdC`,
+  `NormalBC2294_DNA / 5-hmdC`,
+  `NormalBC2302_DNA / 5-hmdC`,
+  `TumorBC2263_DNA / 5-hmdC`, and
+  `TumorBC2294_DNA / 5-hmdC`.
+- All `11` changed from `not_counted / FALSE` to
+  `detected_flagged / TRUE`. The wide matrix changed `66` value cells
+  (`11` rows x `RT/Int/Area/PeakStart/PeakEnd/PeakWidth`). Baseline and
+  generic opt-in `xic_diagnostics.csv` SHA256 values were identical.
+
+Do not rerun 85RAW for this path unless current code changes product
+projection, support TSV parsing, selected-candidate semantics, matrix writing,
+or the cited artifacts become stale. If only the human review wording changes,
+reuse the 85RAW artifact above.
 
 ### 2026-06-05 Gaussian15 MS1 Morphology Primary Area Owner
 

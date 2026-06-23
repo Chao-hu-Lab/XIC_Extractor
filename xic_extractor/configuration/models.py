@@ -36,6 +36,7 @@ class ExtractionConfig:
     rt_prior_library_path: Path | None = None
     target_pair_rt_calibration_path: Path | None = None
     model_selection_expected_diff_approval_registry: Path | None = None
+    targeted_ms1_shape_identity_support_tsv: Path | None = None
     emit_score_breakdown: bool = False
     emit_review_report: bool = False
     emit_peak_candidates: bool = False

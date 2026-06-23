@@ -4,15 +4,24 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from xic_extractor.config import ExtractionConfig, Target
+from xic_extractor.config import ConfigError, ExtractionConfig, Target
 from xic_extractor.extraction.output_dispatch import write_outputs
 from xic_extractor.extraction.paired_area_ratio_projection import (
     apply_paired_area_ratio_projection,
+)
+from xic_extractor.extraction.targeted_ms1_shape_identity_projection import (
+    apply_targeted_ms1_shape_identity_projection,
+    load_targeted_ms1_shape_identity_supports,
 )
 from xic_extractor.injection_rolling import read_injection_order
 from xic_extractor.peak_detection.model_selection import ExpectedDiffApprovalRecords
 from xic_extractor.raw_reader import RawReaderError, preflight_raw_reader
 from xic_extractor.rt_prior_library import LibraryEntry, load_library
+from xic_extractor.sample_metadata import (
+    is_sample_metadata_source,
+    load_sample_metadata,
+    sample_metadata_to_injection_order,
+)
 from xic_extractor.target_pair_rt_calibration import (
     load_target_pair_rt_calibration,
     rt_prior_library_from_target_pair_calibration,
@@ -30,8 +39,14 @@ def resolve_injection_order(
     if injection_order is not None:
         return injection_order
     if config.injection_order_source is not None:
-        return read_injection_order(config.injection_order_source)
+        return _read_injection_order_source(config.injection_order_source)
     return fallback_injection_order_from_mtime(raw_paths)
+
+
+def _read_injection_order_source(path: Path) -> dict[str, int]:
+    if is_sample_metadata_source(path):
+        return sample_metadata_to_injection_order(load_sample_metadata(path))
+    return read_injection_order(path)
 
 
 def resolve_rt_prior_library(
@@ -113,5 +128,19 @@ def run_pipeline(
         )
 
     output = apply_paired_area_ratio_projection(output, targets=targets)
+    if config.targeted_ms1_shape_identity_support_tsv is not None:
+        try:
+            targeted_ms1_shape_identity_supports = (
+                load_targeted_ms1_shape_identity_supports(
+                    config.targeted_ms1_shape_identity_support_tsv
+                )
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise ConfigError(str(exc)) from exc
+        output = apply_targeted_ms1_shape_identity_projection(
+            output,
+            targets=targets,
+            supports=targeted_ms1_shape_identity_supports,
+        )
     write_outputs(config, targets, output)
     return output

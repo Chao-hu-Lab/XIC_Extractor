@@ -14,6 +14,15 @@ high-cost mistakes early without turning every task into ceremony.
 - `.codex/rules/*.rules`: command-prefix policy for destructive or high-impact
   operations.
 - `.codex/hooks.json` and `.codex/hooks/*.py`: low-noise lifecycle checks.
+- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`:
+  current canonical productization tier board and maintenance checklist.
+  Behavior specs for individual lanes still live in named `docs/superpowers/specs/`
+  or implementation plans.
+- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`:
+  current
+  plain-language continuation summary for this productization branch. It
+  summarizes recent work and next action; it does not override the control
+  plane, named specs, validation notes, or git state.
 - `.codex/agents/*.toml`: opt-in reviewer/worker profiles, routed by
   `docs/agent-subagent-routing.md`.
 - Automations: only for recurring workspace jobs or heartbeat follow-ups that
@@ -25,16 +34,33 @@ The hook set is intentionally small:
 
 - `UserPromptSubmit`: scans the prompt for XIC high-risk keywords and injects
   workflow context for architecture preflight, PR review, or RAW validation. It
-  also blocks prompt text that looks like a pasted secret.
+  also blocks prompt text that looks like a pasted secret. Productization
+  prompts inject the control-plane requirement so maturity tier claims point to
+  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
+  Handoff/closeout/compaction prompts inject the
+  `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` refresh
+  requirement.
 - `PreToolUse`: blocks clear destructive git commands and background RAW
   launches through `Start-Process`; adds context when edits touch
-  execution-affecting config or root agent contracts.
+  execution-affecting config, root agent contracts, or product/public surfaces
+  that may need a control-plane update.
 - `PostToolUse`: catches pytest runs that collected zero tests, and points the
-  agent to fix the node id instead of treating the run as validation.
+  agent to fix the node id instead of treating the run as validation. It also
+  reminds write-like product/public surface changes to update the
+  productization control plane or explicitly state that no maturity tier changed.
+  If product/control-plane state may have changed without the handoff being part
+  of the update, it reminds closeout to refresh the handoff or state why it is
+  still current.
 
 Hooks are guardrails, not full enforcement. Keep them deterministic, fast, and
 rarely chatty. If a hook fires too often without changing behavior, remove or
 narrow it.
+
+Global skills such as `handoff` and `worktree-report` are convenience
+entrypoints, not pinned XIC authority. If a global skill differs from this
+version-controlled repo contract, follow this repo's `AGENTS.md`, this operating
+document, the control plane, and the hook fixtures. Update the global skill
+later only as an environment-maintenance follow-up.
 
 ## Current Repo-Local Rules
 
@@ -87,8 +113,12 @@ Before closeout:
 ```powershell
 git diff --check
 Get-Content .codex\hooks\fixtures\prompt_architecture.json -Raw | python .codex\hooks\xic_prompt_router.py
+Get-Content .codex\hooks\fixtures\prompt_productization.json -Raw | python .codex\hooks\xic_prompt_router.py
 Get-Content .codex\hooks\fixtures\pretool_git_reset.json -Raw | python .codex\hooks\xic_pre_tool_guard.py
+Get-Content .codex\hooks\fixtures\pretool_product_surface_edit.json -Raw | python .codex\hooks\xic_pre_tool_guard.py
 Get-Content .codex\hooks\fixtures\posttool_zero_tests.json -Raw | python .codex\hooks\xic_post_tool_guard.py
+Get-Content .codex\hooks\fixtures\posttool_product_surface_edit.json -Raw | python .codex\hooks\xic_post_tool_guard.py
+python .codex\hooks\fixtures\assert_hook_outputs.py
 ```
 
 Also scan the diff for secrets, private local paths, absolute machine-specific
