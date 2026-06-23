@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = (
@@ -230,7 +231,7 @@ def _check_source_hashes(
         if not isinstance(relative, str):
             continue
         path = repo_root / relative
-        if path.exists() and _sha256(path) != source_hashes.get(source_id):
+        if path.exists() and artifact_sha256(path) != source_hashes.get(source_id):
             problems.append(f"{source_id} artifact hash does not match index")
 
 
@@ -289,14 +290,6 @@ def _parse_semicolon_pairs(value: str) -> dict[str, str]:
         if separator:
             parsed[key] = item
     return parsed
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:

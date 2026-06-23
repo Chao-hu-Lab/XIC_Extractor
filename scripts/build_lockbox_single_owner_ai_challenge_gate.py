@@ -29,6 +29,7 @@ from scripts.check_lockbox_ai_challenge_results import (
 from scripts.check_lockbox_ai_challenge_results import (
     SUMMARY_SCHEMA_VERSION as AI_RESULT_SCHEMA_VERSION,
 )
+from scripts.check_productization_state import artifact_sha256
 from scripts.import_lockbox_labels import (
     SUMMARY_JSON as TRUTH_SUMMARY,
 )
@@ -36,7 +37,6 @@ from scripts.import_lockbox_labels import (
     TRUTH_SUMMARY_SCHEMA_VERSION,
     check_lockbox_truth_summary,
 )
-from xic_extractor.tabular_io import file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 GATE_SUMMARY = (
@@ -264,7 +264,7 @@ def _check_owner_boundary(
         path = _repo_path(str(value))
         if not path.exists():
             problems.append(f"owner-boundary source_artifacts.{key} missing")
-        elif file_sha256(path) != expected:
+        elif artifact_sha256(path) != expected:
             problems.append(
                 f"owner-boundary source_artifacts.{key} hash mismatch",
             )
@@ -339,19 +339,21 @@ def _summary_json(
         },
         "source_artifacts": {
             "truth_summary": _repo_relative(truth_summary_path),
-            "truth_summary_sha256": file_sha256(truth_summary_path),
+            "truth_summary_sha256": artifact_sha256(truth_summary_path),
             "ai_challenge_result_summary": _repo_relative(
                 ai_challenge_result_summary_path,
             ),
-            "ai_challenge_result_summary_sha256": file_sha256(
+            "ai_challenge_result_summary_sha256": artifact_sha256(
                 ai_challenge_result_summary_path,
             ),
             "second_review_summary": _repo_relative(second_review_summary_path),
-            "second_review_summary_sha256": file_sha256(second_review_summary_path),
+            "second_review_summary_sha256": artifact_sha256(
+                second_review_summary_path,
+            ),
             "owner_boundary_confirmation": _repo_relative(
                 owner_boundary_confirmation_path,
             ),
-            "owner_boundary_confirmation_sha256": file_sha256(
+            "owner_boundary_confirmation_sha256": artifact_sha256(
                 owner_boundary_confirmation_path,
             ),
         },

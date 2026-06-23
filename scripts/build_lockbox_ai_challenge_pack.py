@@ -28,9 +28,9 @@ from scripts.build_lockbox_next_action_plan import (
     NEXT_ACTION_SUMMARY,
     check_lockbox_next_action_plan,
 )
+from scripts.check_productization_state import artifact_sha256
 from scripts.import_lockbox_labels import LABEL_LOG, STATIC_BUNDLE_INDEX
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_required,
     read_tsv_with_header,
     render_delimited_rows,
@@ -401,7 +401,7 @@ def _read_owner_boundary(path: Path, problems: list[str]) -> dict[str, Any]:
             if key.endswith("_sha256"):
                 continue
             expected = artifacts.get(f"{key}_sha256", "")
-            if expected and file_sha256(_repo_path(str(value))) != expected:
+            if expected and artifact_sha256(_repo_path(str(value))) != expected:
                 problems.append(f"owner boundary source_artifacts.{key} hash mismatch")
     return dict(payload)
 
@@ -669,7 +669,7 @@ def _summary_json(
         },
         "owner_boundary_confirmation": {
             "path": _repo_relative(owner_boundary_confirmation_path),
-            "sha256": file_sha256(owner_boundary_confirmation_path),
+            "sha256": artifact_sha256(owner_boundary_confirmation_path),
             "owner_assessed_plotted_gaussian15_cases": owner_boundary.get(
                 "scope",
                 {},
@@ -680,15 +680,15 @@ def _summary_json(
         },
         "source_artifacts": {
             "next_action_plan": _repo_relative(next_action_plan_path),
-            "next_action_plan_sha256": file_sha256(next_action_plan_path),
+            "next_action_plan_sha256": artifact_sha256(next_action_plan_path),
             "next_action_summary": _repo_relative(next_action_summary_path),
-            "next_action_summary_sha256": file_sha256(next_action_summary_path),
+            "next_action_summary_sha256": artifact_sha256(next_action_summary_path),
             "static_review_bundle_index": _repo_relative(static_bundle_index_path),
-            "static_review_bundle_index_sha256": file_sha256(
+            "static_review_bundle_index_sha256": artifact_sha256(
                 static_bundle_index_path,
             ),
             "label_log": _repo_relative(label_log_path),
-            "label_log_sha256": file_sha256(label_log_path),
+            "label_log_sha256": artifact_sha256(label_log_path),
             "ai_challenge_queue": _repo_relative(ai_challenge_queue_path),
             "ai_challenge_queue_sha256": _rows_sha256(queue_rows, QUEUE_HEADER),
             "ai_challenge_template": _repo_relative(ai_challenge_template_path),
@@ -910,10 +910,10 @@ def _source_hashes(
     owner_boundary_confirmation_path: Path,
 ) -> str:
     parts = [
-        f"lockbox_next_action_plan={file_sha256(next_action_plan_path)}",
-        f"static_review_bundle_index={file_sha256(static_bundle_index_path)}",
-        f"lockbox_reviewer_label_log={file_sha256(label_log_path)}",
-        f"owner_boundary_confirmation={file_sha256(owner_boundary_confirmation_path)}",
+        f"lockbox_next_action_plan={artifact_sha256(next_action_plan_path)}",
+        f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
+        f"lockbox_reviewer_label_log={artifact_sha256(label_log_path)}",
+        f"owner_boundary_confirmation={artifact_sha256(owner_boundary_confirmation_path)}",
         f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
     ]
     if static_row.get("review_plot_png_path"):
@@ -939,7 +939,7 @@ def _text_sha256(value: str) -> str:
 
 def _hash_optional(path_value: str) -> str:
     path = _repo_path(path_value)
-    return file_sha256(path) if path.exists() else ""
+    return artifact_sha256(path) if path.exists() else ""
 
 
 def _html_link(path_value: str, label: str, *, index_path: Path) -> str:

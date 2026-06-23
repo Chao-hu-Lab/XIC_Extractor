@@ -34,8 +34,8 @@ from scripts.build_lockbox_single_owner_ai_challenge_gate import (
 from scripts.build_lockbox_single_owner_ai_challenge_gate import (
     GATE_SUMMARY as SINGLE_OWNER_GATE,
 )
+from scripts.check_productization_state import artifact_sha256
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_with_header,
     render_delimited_rows,
     write_tsv,
@@ -404,8 +404,8 @@ def _shadow_case_row(
             f"{_repo_relative(single_owner_gate_path)}"
         ),
         "source_hashes": (
-            f"next_action_plan={file_sha256(next_action_plan_path)};"
-            f"single_owner_gate={file_sha256(single_owner_gate_path)};"
+            f"next_action_plan={artifact_sha256(next_action_plan_path)};"
+            f"single_owner_gate={artifact_sha256(single_owner_gate_path)};"
             f"row_source_hashes={row.get('source_hashes', '')}"
         ),
     }
@@ -622,11 +622,11 @@ def _summary_json(
         },
         "source_artifacts": {
             "next_action_plan": _repo_relative(next_action_plan_path),
-            "next_action_plan_sha256": file_sha256(next_action_plan_path),
+            "next_action_plan_sha256": artifact_sha256(next_action_plan_path),
             "next_action_summary": _repo_relative(next_action_summary_path),
-            "next_action_summary_sha256": file_sha256(next_action_summary_path),
+            "next_action_summary_sha256": artifact_sha256(next_action_summary_path),
             "single_owner_gate": _repo_relative(single_owner_gate_path),
-            "single_owner_gate_sha256": file_sha256(single_owner_gate_path),
+            "single_owner_gate_sha256": artifact_sha256(single_owner_gate_path),
             "source_case_manifest": _repo_relative(shadow_cases_path),
             "shadow_case_manifest_sha256": _rows_sha256(rows),
         },

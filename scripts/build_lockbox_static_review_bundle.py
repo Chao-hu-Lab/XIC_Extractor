@@ -20,6 +20,7 @@ from typing import Any
 
 import numpy as np
 
+from scripts.check_productization_state import artifact_sha256
 from xic_extractor.peak_detection.chrom_peak_segments import (
     ChromPeakSegment,
     ChromPeakSegmentPolicy,
@@ -33,7 +34,6 @@ from xic_extractor.peak_detection.ms1_morphology import (
     gaussian15_morphology_trace,
 )
 from xic_extractor.tabular_io import (
-    file_sha256,
     optional_float,
     read_tsv_required,
     read_tsv_with_header,
@@ -211,7 +211,7 @@ def _bundle_index_row(
             _relative_to(plot_result.path, ROOT) if plot_result.path else ""
         ),
         "plot_status": plot_result.status,
-        "plot_sha256": file_sha256(plot_result.path) if plot_result.path else "",
+        "plot_sha256": artifact_sha256(plot_result.path) if plot_result.path else "",
         "plotted_trace_sample_stem": plot_result.sample_stem,
         "gaussian_smoothing_method": MS1_MORPHOLOGY_TRACE_METHOD,
         "gaussian_window_points": str(DEFAULT_GAUSSIAN15_WINDOW_POINTS),
@@ -231,8 +231,8 @@ def _bundle_index_row(
         "sample_id": packet.get("sample_id", ""),
         "analyte": packet.get("analyte", ""),
         "label_template_path": _relative_to(label_template_path, ROOT),
-        "label_template_sha256": file_sha256(label_template_path),
-        "source_packet_index_sha256": file_sha256(packet_index_path),
+        "label_template_sha256": artifact_sha256(label_template_path),
+        "source_packet_index_sha256": artifact_sha256(packet_index_path),
         "source_artifact_hashes": packet.get("source_artifact_hashes", ""),
         "may_touch_matrix": NO_AUTHORITY,
         "may_grant_product_authority": NO_AUTHORITY,
@@ -853,7 +853,7 @@ def _check_bundle_row(
         else:
             if not plot_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
                 problems.append(f"bundle row {row_number}: plot is not a PNG")
-            if file_sha256(plot_path) != row.get("plot_sha256", ""):
+            if artifact_sha256(plot_path) != row.get("plot_sha256", ""):
                 problems.append(f"bundle row {row_number}: plot_sha256 mismatch")
     elif plot_path_value:
         problems.append(f"bundle row {row_number}: non-plotted row must not have plot")
@@ -918,7 +918,7 @@ def _has_gaussian_review_boundary(row: Mapping[str, str]) -> bool:
 
 def _checked_file_sha256(path: Path, label: str, problems: list[str]) -> str:
     try:
-        return file_sha256(path)
+        return artifact_sha256(path)
     except OSError as exc:
         problems.append(f"could not hash {label} {path}: {exc}")
         return ""

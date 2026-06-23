@@ -17,6 +17,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from scripts.check_productization_state import artifact_sha256
+
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_PATH = ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
 DEFAULT_OUTPUT_DIR = ROOT / "docs/superpowers/validation"
@@ -139,7 +141,7 @@ def _build_row(
             sample_present,
         )
     )
-    source_hashes = "mechanical_adjudication_index=" + _sha256(INDEX_PATH, hash_cache)
+    source_hashes = "mechanical_adjudication_index=" + artifact_sha256(INDEX_PATH)
     if trace_hash:
         source_hashes += ";recovered_family_trace_data=" + trace_hash
     if overlay_hash:
@@ -292,9 +294,9 @@ def _summary(
             else "partial_recovery"
         ),
         "report_path": _relative(report_path),
-        "report_sha256": _sha256(report_path, {}),
+        "report_sha256": artifact_sha256(report_path),
         "source_index": _relative(INDEX_PATH),
-        "source_index_sha256": _sha256(INDEX_PATH, {}),
+        "source_index_sha256": artifact_sha256(INDEX_PATH),
         "candidate_rows": len(report_rows),
         "candidate_families": len({row["family_id"] for row in report_rows}),
         "recovery_status_counts": dict(status_counts),

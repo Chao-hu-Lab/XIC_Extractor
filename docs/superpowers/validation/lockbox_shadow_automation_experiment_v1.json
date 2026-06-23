@@ -101,12 +101,12 @@
   },
   "source_artifacts": {
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
-    "next_action_plan_sha256": "E980E8CE301F58E5D21B19CBB0D2CECCDDD1E0B5526D695D455C61F67B67C0F8",
+    "next_action_plan_sha256": "B894B23A115EDF7CE082C885C2D5E3F725FEF0D0E21490786E4A023F7FB7F9A0",
     "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
-    "next_action_summary_sha256": "B78E3635CE75E9C6E50744DFE58D721E32071CCB091E56390D290DF6A3D36E73",
-    "shadow_case_manifest_sha256": "C5F1D542A91EC6F9827C86DA68C0B923091AB1D23A3B76273E6AC1C0205D2C08",
+    "next_action_summary_sha256": "A55A0CFA11C560A150959D861E5815D9D4833CE3F094EEA3B2228AAA0C11D23E",
+    "shadow_case_manifest_sha256": "1C1C56AEB0F752FA1153B50C044FE0C0AD81E7AE195A2C5371249007C3315567",
     "single_owner_gate": "docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json",
-    "single_owner_gate_sha256": "BA0369A6D4CE1564E48D80BF62755E563194892898D78F68DAE515647B20A6D1",
+    "single_owner_gate_sha256": "248C00C81DE4CF9A2EC8FAD31CADB34DC8AF2AE649438FD848CA7F53DFEF0158",
     "source_case_manifest": "docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv"
   },
   "upstream_decisions": {

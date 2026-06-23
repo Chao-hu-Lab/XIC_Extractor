@@ -9,6 +9,7 @@ from scripts.build_lockbox_second_review_pack import (
     SECOND_REVIEW_QUEUE,
     SECOND_REVIEW_SUMMARY,
     SECOND_REVIEW_TEMPLATE,
+    _source_hashes,
     build_lockbox_second_review_pack,
     check_lockbox_second_review_pack,
 )
@@ -138,6 +139,45 @@ def test_second_review_builder_can_write_to_custom_paths(tmp_path: Path) -> None
         "product_authority_rows"
     ] == 0
     assert index.exists()
+
+
+def test_second_review_source_hashes_canonicalize_validation_text_line_endings(
+    tmp_path: Path,
+) -> None:
+    validation_dir = tmp_path / "docs/superpowers/validation"
+    validation_dir.mkdir(parents=True)
+    next_action_plan = validation_dir / "next_action.tsv"
+    static_bundle_index = validation_dir / "static_index.tsv"
+    label_log = validation_dir / "labels.tsv"
+    case_html = validation_dir / "case.html"
+    plot_png = validation_dir / "plot.png"
+    for path in (next_action_plan, static_bundle_index, label_log, case_html):
+        path.write_bytes(b"header\nvalue\n")
+    plot_png.write_bytes(b"png bytes")
+    static_row = {
+        "case_html_path": str(case_html),
+        "review_plot_png_path": str(plot_png),
+        "source_artifact_hashes": "nested_source=ABC",
+    }
+
+    lf_hashes = _source_hashes(
+        static_row,
+        next_action_plan_path=next_action_plan,
+        static_bundle_index_path=static_bundle_index,
+        label_log_path=label_log,
+    )
+    for path in (next_action_plan, static_bundle_index, label_log, case_html):
+        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+
+    assert (
+        _source_hashes(
+            static_row,
+            next_action_plan_path=next_action_plan,
+            static_bundle_index_path=static_bundle_index,
+            label_log_path=label_log,
+        )
+        == lf_hashes
+    )
 
 
 def test_second_review_checker_rejects_prefilled_second_label(tmp_path: Path) -> None:

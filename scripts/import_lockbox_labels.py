@@ -20,12 +20,12 @@ from scripts.build_lockbox_label_collection_pack import (
     LABEL_SCHEMA_VERSION,
     LABEL_TEMPLATE_HEADER,
 )
+from scripts.check_productization_state import artifact_sha256
 from scripts.lockbox_reviewer_identity import (
     allowed_human_truth_reviewer_ids_from_schema,
     truth_label_reviewer_id_blocker,
 )
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_required,
     read_tsv_with_header,
     write_tsv,
@@ -454,9 +454,9 @@ def _summary_json(
         "decision_reasons": reasons,
         "source_artifacts": {
             "label_log": _repo_relative(label_log_path),
-            "label_log_sha256": file_sha256(label_log_path),
+            "label_log_sha256": artifact_sha256(label_log_path),
             "static_review_bundle_index": _repo_relative(static_bundle_index_path),
-            "static_review_bundle_index_sha256": file_sha256(
+            "static_review_bundle_index_sha256": artifact_sha256(
                 static_bundle_index_path,
             ),
             "confusion_table": _repo_relative(confusion_table_path),
@@ -690,7 +690,7 @@ def _label_source_artifact_hashes(
     static_bundle_index_path: Path,
 ) -> str:
     parts = [
-        f"static_review_bundle_index={file_sha256(static_bundle_index_path)}",
+        f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
         f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
         "plot="
         + (static_row.get("plot_sha256", "") or static_row.get("plot_status", "")),
@@ -705,7 +705,7 @@ def _hash_optional(path_value: str) -> str:
     path = Path(path_value)
     if not path.is_absolute():
         path = ROOT / path
-    return file_sha256(path) if path.exists() else ""
+    return artifact_sha256(path) if path.exists() else ""
 
 
 def _repo_relative(path: Path) -> str:

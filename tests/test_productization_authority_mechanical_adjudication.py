@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = (
@@ -172,7 +173,7 @@ def test_index_source_hashes_match_manifest_and_available_artifacts() -> None:
     }
     for source_id, path in local_artifacts.items():
         if path.exists():
-            assert _sha256(path) == source_hashes[source_id]
+            assert artifact_sha256(path) == source_hashes[source_id]
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -193,9 +194,3 @@ def _parse_semicolon_pairs(value: str) -> dict[str, str]:
     return parsed
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()

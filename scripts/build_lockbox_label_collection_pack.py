@@ -13,7 +13,8 @@ import argparse
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from xic_extractor.tabular_io import file_sha256, read_tsv_required, write_tsv
+from scripts.check_productization_state import artifact_sha256
+from xic_extractor.tabular_io import read_tsv_required, write_tsv
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCKBOX_MANIFEST = (
@@ -254,13 +255,15 @@ def _source_artifact_hashes(
     recovery_row: Mapping[str, str] | None,
 ) -> str:
     parts = [
-        f"lockbox_sampling_manifest={file_sha256(manifest_path)}",
+        f"lockbox_sampling_manifest={artifact_sha256(manifest_path)}",
         row.get("source_hashes", ""),
     ]
     if row.get("review_packet_id"):
-        parts.append(f"review_queue={file_sha256(review_queue_path)}")
+        parts.append(f"review_queue={artifact_sha256(review_queue_path)}")
     if recovery_row:
-        parts.append(f"trace_overlay_recovery_report={file_sha256(trace_recovery_path)}")
+        parts.append(
+            f"trace_overlay_recovery_report={artifact_sha256(trace_recovery_path)}",
+        )
     for key in ("trace", "overlay", "hypothesis"):
         value = evidence.get(f"{key}_sha256", "")
         if value:
@@ -475,7 +478,7 @@ def _existing_file(path_value: str) -> bool:
 def _hash_if_exists(path_value: str) -> str:
     if not _existing_file(path_value):
         return ""
-    return file_sha256(Path(path_value))
+    return artifact_sha256(Path(path_value))
 
 
 def _repo_relative(path: Path) -> str:

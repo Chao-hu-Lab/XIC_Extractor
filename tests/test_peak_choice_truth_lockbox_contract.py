@@ -3,9 +3,16 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import pytest
+
 from scripts.build_peak_choice_truth_lockbox import (
+    FAILED_ORACLE_PATHS,
+    INDEX_PATH,
     LABEL_LOG_HEADER,
     MANIFEST_HEADER,
+    MANUAL_NEGATIVE_PATH,
+    REVIEW_QUEUE_PATH,
+    SOURCE_AUDIT_PATH,
     build_lockbox,
 )
 
@@ -34,6 +41,13 @@ def test_truth_label_schema_matches_lockbox_headers() -> None:
 def test_lockbox_generator_is_deterministic_and_closed(
     tmp_path: Path,
 ) -> None:
+    missing_sources = _missing_generator_sources()
+    if missing_sources:
+        pytest.skip(
+            "lockbox generator requires external source artifacts: "
+            + ", ".join(path.as_posix() for path in missing_sources),
+        )
+
     result = build_lockbox(tmp_path)
     rows = _read_tsv(result["manifest_path"])
     log_rows = _read_tsv(result["label_log_path"])
@@ -155,3 +169,17 @@ def test_reviewer_label_log_and_summary_are_templates_not_labels() -> None:
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def _missing_generator_sources() -> list[Path]:
+    return [
+        path
+        for path in (
+            INDEX_PATH,
+            REVIEW_QUEUE_PATH,
+            SOURCE_AUDIT_PATH,
+            MANUAL_NEGATIVE_PATH,
+            *FAILED_ORACLE_PATHS,
+        )
+        if not path.exists()
+    ]

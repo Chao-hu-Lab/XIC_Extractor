@@ -24,8 +24,8 @@ from scripts.build_lockbox_ai_challenge_pack import (
     TEMPLATE_HEADER,
     check_lockbox_ai_challenge_pack,
 )
+from scripts.check_productization_state import artifact_sha256
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_required,
     read_tsv_with_header,
 )
@@ -318,17 +318,17 @@ def _summary_json(
         },
         "source_artifacts": {
             "ai_challenge_queue": _repo_relative(ai_challenge_queue_path),
-            "ai_challenge_queue_sha256": file_sha256(ai_challenge_queue_path),
+            "ai_challenge_queue_sha256": artifact_sha256(ai_challenge_queue_path),
             "ai_challenge_packet_summary": _repo_relative(
                 ai_challenge_packet_summary_path,
             ),
-            "ai_challenge_packet_summary_sha256": file_sha256(
+            "ai_challenge_packet_summary_sha256": artifact_sha256(
                 ai_challenge_packet_summary_path,
             ),
             "ai_challenge_result_log": _repo_relative(
                 ai_challenge_result_log_path,
             ),
-            "ai_challenge_result_log_sha256": file_sha256(
+            "ai_challenge_result_log_sha256": artifact_sha256(
                 ai_challenge_result_log_path,
             )
             if ai_challenge_result_log_path.exists()

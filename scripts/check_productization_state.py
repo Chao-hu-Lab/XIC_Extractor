@@ -45,6 +45,16 @@ WRITE_FORBIDDEN_STATUSES = {
     "out_of_scope",
 }
 NON_AUTHORITY_LANE_GROUPS = {"review", "truth", "evidence"}
+CANONICAL_TEXT_HASH_EXTENSIONS = {
+    ".csv",
+    ".html",
+    ".json",
+    ".md",
+    ".tsv",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
 
 
 def check_productization_state(
@@ -221,7 +231,7 @@ def _check_artifacts(
             continue
         if not expected_hash:
             problems.append(f"row {index}: artifact_sha256 is required")
-        elif _sha256(path) != expected_hash:
+        elif artifact_sha256(path) != expected_hash:
             problems.append(f"row {index}: artifact_sha256 mismatch for {artifact}")
 
 
@@ -291,6 +301,21 @@ def _read_text(path: Path, problems: list[str]) -> str:
     except OSError as exc:
         problems.append(f"failed to read {path}: {exc}")
         return ""
+
+
+def artifact_sha256(path: Path) -> str:
+    """Hash productization artifacts independently of checkout line endings."""
+
+    normalized_path = f"/{path.as_posix()}"
+    if path.suffix.lower() in CANONICAL_TEXT_HASH_EXTENSIONS and (
+        "/docs/superpowers/validation/" in normalized_path
+        or "/output/productization_realdata_seed_guard_85raw_20260617/"
+        "generated_policy_quality_explained_no_raw_productization/"
+        in normalized_path
+    ):
+        data = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        return hashlib.sha256(data).hexdigest().upper()
+    return _sha256(path)
 
 
 def _sha256(path: Path) -> str:

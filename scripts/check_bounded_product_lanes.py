@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import json
 import sys
 from collections import Counter
@@ -17,7 +16,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.check_productization_state import check_productization_state
+from scripts.check_productization_state import (
+    artifact_sha256,
+    check_productization_state,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = (
@@ -240,7 +242,7 @@ def _check_sources(
         if not supplied_status_path.exists():
             problems.append(f"row {index}: source_status_index missing")
             continue
-        if _sha256(supplied_status_path) != expected_hash:
+        if artifact_sha256(supplied_status_path) != expected_hash:
             problems.append(f"row {index}: source_status_index_sha256 mismatch")
 
 
@@ -399,14 +401,6 @@ def _read_tsv(
     except OSError as exc:
         problems.append(f"could not read {path}: {exc}")
         return [], []
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest().upper()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from scripts.check_productization_state import artifact_sha256
 from scripts.import_lockbox_labels import (
     LABEL_LOG,
     STATIC_BUNDLE_INDEX,
@@ -24,7 +25,6 @@ from scripts.import_lockbox_labels import (
     check_lockbox_truth_summary,
 )
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_required,
     read_tsv_with_header,
     render_delimited_rows,
@@ -543,11 +543,13 @@ def _summary_json(
         ],
         "source_artifacts": {
             "static_review_bundle_index": _repo_relative(static_bundle_index_path),
-            "static_review_bundle_index_sha256": file_sha256(static_bundle_index_path),
+            "static_review_bundle_index_sha256": artifact_sha256(
+                static_bundle_index_path,
+            ),
             "label_log": _repo_relative(label_log_path),
-            "label_log_sha256": file_sha256(label_log_path),
+            "label_log_sha256": artifact_sha256(label_log_path),
             "truth_summary": _repo_relative(truth_summary_path),
-            "truth_summary_sha256": file_sha256(truth_summary_path),
+            "truth_summary_sha256": artifact_sha256(truth_summary_path),
             "next_action_plan": _repo_relative(next_action_plan_path),
             "next_action_plan_sha256": _rows_sha256(action_rows),
         },

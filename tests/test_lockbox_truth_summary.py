@@ -8,6 +8,7 @@ from scripts.import_lockbox_labels import (
     LABEL_LOG,
     STATIC_BUNDLE_INDEX,
     SUMMARY_JSON,
+    _label_source_artifact_hashes,
     build_lockbox_truth_summary,
     build_user_batch_label_log,
     check_lockbox_truth_summary,
@@ -221,6 +222,30 @@ def test_truth_import_rejects_malformed_reviewer_slots(tmp_path: Path) -> None:
 
 def test_current_truth_summary_outputs_validate() -> None:
     assert check_lockbox_truth_summary() == []
+
+
+def test_truth_label_source_hashes_canonicalize_validation_text_line_endings(
+    tmp_path: Path,
+) -> None:
+    validation_dir = tmp_path / "docs/superpowers/validation"
+    validation_dir.mkdir(parents=True)
+    static_bundle_index = validation_dir / "static_index.tsv"
+    case_html = validation_dir / "case.html"
+    static_bundle_index.write_bytes(b"case_id\tvalue\ncase-1\tok\n")
+    case_html.write_bytes(b"<html>\n<body>case</body>\n</html>\n")
+    static_row = {
+        "case_html_path": str(case_html),
+        "plot_sha256": "PLOT_HASH",
+        "source_artifact_hashes": "nested_source=ABC",
+    }
+
+    lf_hashes = _label_source_artifact_hashes(static_row, static_bundle_index)
+    static_bundle_index.write_bytes(
+        static_bundle_index.read_bytes().replace(b"\n", b"\r\n"),
+    )
+    case_html.write_bytes(case_html.read_bytes().replace(b"\n", b"\r\n"))
+
+    assert _label_source_artifact_hashes(static_row, static_bundle_index) == lf_hashes
 
 
 def test_import_rejects_stale_static_hash_binding(tmp_path: Path) -> None:

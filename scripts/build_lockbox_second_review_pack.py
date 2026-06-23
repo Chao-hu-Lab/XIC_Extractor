@@ -39,9 +39,9 @@ from scripts.check_lockbox_ai_challenge_results import (
 from scripts.check_lockbox_ai_challenge_results import (
     SUMMARY_SCHEMA_VERSION as AI_CHALLENGE_RESULT_SUMMARY_SCHEMA_VERSION,
 )
+from scripts.check_productization_state import artifact_sha256
 from scripts.import_lockbox_labels import LABEL_LOG, STATIC_BUNDLE_INDEX
 from xic_extractor.tabular_io import (
-    file_sha256,
     read_tsv_required,
     read_tsv_with_header,
     render_delimited_rows,
@@ -667,21 +667,21 @@ def _summary_json(
         ],
         "source_artifacts": {
             "next_action_plan": _repo_relative(next_action_plan_path),
-            "next_action_plan_sha256": file_sha256(next_action_plan_path),
+            "next_action_plan_sha256": artifact_sha256(next_action_plan_path),
             "next_action_summary": _repo_relative(next_action_summary_path),
-            "next_action_summary_sha256": file_sha256(next_action_summary_path),
+            "next_action_summary_sha256": artifact_sha256(next_action_summary_path),
             "ai_challenge_result_summary": _repo_relative(
                 ai_challenge_result_summary_path,
             ),
-            "ai_challenge_result_summary_sha256": file_sha256(
+            "ai_challenge_result_summary_sha256": artifact_sha256(
                 ai_challenge_result_summary_path,
             ),
             "static_review_bundle_index": _repo_relative(static_bundle_index_path),
-            "static_review_bundle_index_sha256": file_sha256(
+            "static_review_bundle_index_sha256": artifact_sha256(
                 static_bundle_index_path,
             ),
             "label_log": _repo_relative(label_log_path),
-            "label_log_sha256": file_sha256(label_log_path),
+            "label_log_sha256": artifact_sha256(label_log_path),
             "second_review_queue": _repo_relative(second_review_queue_path),
             "second_review_queue_sha256": _rows_sha256(queue_rows, QUEUE_HEADER),
             "second_review_template": _repo_relative(second_review_template_path),
@@ -903,9 +903,9 @@ def _source_hashes(
     label_log_path: Path,
 ) -> str:
     parts = [
-        f"lockbox_next_action_plan={file_sha256(next_action_plan_path)}",
-        f"static_review_bundle_index={file_sha256(static_bundle_index_path)}",
-        f"lockbox_reviewer_label_log={file_sha256(label_log_path)}",
+        f"lockbox_next_action_plan={artifact_sha256(next_action_plan_path)}",
+        f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
+        f"lockbox_reviewer_label_log={artifact_sha256(label_log_path)}",
         f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
         f"plot={_hash_optional(static_row.get('review_plot_png_path', ''))}",
         static_row.get("source_artifact_hashes", ""),
@@ -930,7 +930,7 @@ def _text_sha256(value: str) -> str:
 
 def _hash_optional(path_value: str) -> str:
     path = _repo_path(path_value)
-    return file_sha256(path) if path.exists() else ""
+    return artifact_sha256(path) if path.exists() else ""
 
 
 def _repo_path(path_value: str) -> Path:

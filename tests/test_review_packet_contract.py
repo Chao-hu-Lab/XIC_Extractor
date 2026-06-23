@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
+from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "docs/superpowers/specs/review_packet_schema.v1.json"
@@ -81,7 +82,7 @@ def test_review_queue_source_hash_links_to_adjudication_index() -> None:
     source_hashes = _parse_semicolon_pairs(source_hash_sets.pop())
     assert (
         source_hashes["mechanical_adjudication_index"]
-        == _sha256(ADJUDICATION_INDEX_PATH)
+        == artifact_sha256(ADJUDICATION_INDEX_PATH)
     )
 
 
@@ -101,11 +102,3 @@ def _parse_semicolon_pairs(value: str) -> dict[str, str]:
         key, _, item = part.partition("=")
         parsed[key] = item
     return parsed
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()

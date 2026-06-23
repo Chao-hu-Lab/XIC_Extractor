@@ -14,7 +14,7 @@
     "family_trace_overlay_recovered": 1087
   },
   "report_path": "docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv",
-  "report_sha256": "6271A73ECA48A686B83A5AE88AA5EDF87DA861108211AA76A927E77DF8678615",
+  "report_sha256": "18267597CDC4922E3874CF01AE1CF56B26F1B76473EB01E099D2C633190224CF",
   "schema_version": "missing_overlay_resolution_summary_v1",
   "source_index": "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv",
   "source_index_sha256": "B3F1ECE9FEC7EB65BCD76C6D09FB2F9A277FF3D8C2759E0149BC322FB73AEAA7",

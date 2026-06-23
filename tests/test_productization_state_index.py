@@ -8,6 +8,7 @@ from scripts.check_productization_state import (
     DEFAULT_HANDOFF,
     DEFAULT_SCHEMA,
     DEFAULT_STATUS_INDEX,
+    artifact_sha256,
     check_productization_state,
 )
 
@@ -170,6 +171,17 @@ def test_checker_rejects_artifact_hash_drift(tmp_path: Path) -> None:
     problems = _check_with_index(mutated)
 
     assert any("artifact_sha256 mismatch" in problem for problem in problems)
+
+
+def test_text_artifact_hash_canonicalizes_checkout_line_endings(tmp_path: Path) -> None:
+    artifact = tmp_path / "docs/superpowers/validation/artifact.tsv"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"column\nvalue\n")
+    expected_hash = artifact_sha256(artifact)
+
+    artifact.write_bytes(b"column\r\nvalue\r\n")
+
+    assert artifact_sha256(artifact) == expected_hash
 
 
 def _check_with_index(path: Path) -> list[str]:

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from xic_extractor.tabular_io import file_sha256
+from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIRMATION = (
@@ -47,4 +47,4 @@ def test_owner_boundary_confirmation_hashes_match_sources() -> None:
     for key, path_value in artifacts.items():
         if not key.endswith("_sha256"):
             expected_hash = artifacts[f"{key}_sha256"]
-            assert file_sha256(ROOT / path_value) == expected_hash
+            assert artifact_sha256(ROOT / path_value) == expected_hash

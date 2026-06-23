@@ -16,6 +16,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from scripts.check_productization_state import artifact_sha256
+
 ROOT = Path(__file__).resolve().parents[1]
 
 INDEX_PATH = ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
@@ -126,8 +128,8 @@ def build_lockbox(output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, Any]:
         (row["family_id"], row["sample_id"]): row for row in index_rows
     }
     source_hashes = {
-        "mechanical_adjudication_index": _sha256(INDEX_PATH),
-        "review_queue": _sha256(REVIEW_QUEUE_PATH),
+        "mechanical_adjudication_index": artifact_sha256(INDEX_PATH),
+        "review_queue": artifact_sha256(REVIEW_QUEUE_PATH),
         "source_audit": _sha256(SOURCE_AUDIT_PATH),
         "manual_negative_fixture": _sha256(MANUAL_NEGATIVE_PATH),
     }
@@ -580,9 +582,9 @@ def _build_summary(
         "schema_version": "peak_choice_truth_lockbox_agreement_summary_v1",
         "status": "no_labels_collected",
         "lockbox_manifest": _relative(manifest_path),
-        "lockbox_manifest_sha256": _sha256(manifest_path),
+        "lockbox_manifest_sha256": artifact_sha256(manifest_path),
         "reviewer_label_log": _relative(label_log_path),
-        "reviewer_label_log_sha256": _sha256(label_log_path),
+        "reviewer_label_log_sha256": artifact_sha256(label_log_path),
         "case_count": len(rows),
         "labels_collected": 0,
         "required_reviewer_count_per_case": 2,

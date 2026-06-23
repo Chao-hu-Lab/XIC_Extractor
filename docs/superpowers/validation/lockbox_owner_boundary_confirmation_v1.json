@@ -47,12 +47,12 @@
   },
   "source_artifacts": {
     "static_review_bundle_index": "docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv",
-    "static_review_bundle_index_sha256": "D8E94BCFF9E7120C4BB71933B17ABBA3831ED7564AE29941F81EA689529159A3",
+    "static_review_bundle_index_sha256": "471C0078B58264986AAB53DD70F57FF0375F4B0B7951F5BF90683A9DBA0E93B6",
     "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
-    "label_log_sha256": "0BBF3531279888EDB4A2A80FA679FD2A82DFDEE3DF42E6841B7B784ABF57E97D",
+    "label_log_sha256": "D4F309ADC0840410E9119E3FD95D4D527CBF0C89A77E22A65FFE63E80D7BD4C4",
     "truth_summary": "docs/superpowers/validation/lockbox_truth_summary_v1.json",
-    "truth_summary_sha256": "6DB5CF6FA97A12D002393C9ABE4CF5892A3A2F9F3752C574FD24D233F4320D4D",
+    "truth_summary_sha256": "E7D6C5699CD72F0B5F20FCC2880D6F669FE0246D8AFCECE28F17863A840DECBE",
     "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
-    "next_action_summary_sha256": "B78E3635CE75E9C6E50744DFE58D721E32071CCB091E56390D290DF6A3D36E73"
+    "next_action_summary_sha256": "A55A0CFA11C560A150959D861E5815D9D4833CE3F094EEA3B2228AAA0C11D23E"
   }
 }
