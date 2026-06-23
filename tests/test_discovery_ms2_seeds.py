@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -155,6 +156,100 @@ def test_product_search_ppm_cannot_reject_observed_loss_within_tolerance() -> No
     assert len(seeds) == 1
     assert seeds[0].product_mz == pytest.approx(product_mz)
     assert seeds[0].observed_loss_error_ppm == pytest.approx(10.0)
+
+
+def test_isolation_offset_product_infers_monoisotopic_precursor_seed() -> None:
+    scan_precursor_mz = 300.202820
+    product_mz = 184.11322021484375
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=scan_precursor_mz,
+                masses=[product_mz],
+                intensities=[39671.9],
+                scan_number=19867,
+                rt=23.8043,
+            )
+        ]
+    )
+
+    seeds = collect_strict_nl_seeds(
+        raw,
+        raw_file=RAW_FILE,
+        settings=_settings(),
+    )
+
+    assert len(seeds) == 1
+    seed = seeds[0]
+    assert seed.scan_number == 19867
+    assert seed.rt == pytest.approx(23.8043)
+    assert seed.precursor_mz == pytest.approx(product_mz + NEUTRAL_LOSS_DA)
+    assert seed.product_mz == pytest.approx(product_mz)
+    assert seed.observed_neutral_loss_da == pytest.approx(NEUTRAL_LOSS_DA)
+    assert seed.observed_loss_error_ppm == 0.0
+    evidence = json.loads(seed.tag_evidence_json)
+    assert evidence["DNA_dR"]["precursor_mz_basis"] == "product_plus_neutral_loss"
+    assert evidence["DNA_dR"]["scan_precursor_mz"] == pytest.approx(
+        scan_precursor_mz
+    )
+
+
+def test_same_ms2_scan_can_emit_direct_and_inferred_precursor_seeds() -> None:
+    scan_precursor_mz = 301.165192
+    monoisotopic_product_mz = 184.11322021484375
+    isotope_product_mz = 185.1158905029297
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=scan_precursor_mz,
+                masses=[monoisotopic_product_mz, isotope_product_mz],
+                intensities=[146673.0, 197119.9],
+                scan_number=19261,
+                rt=23.1409,
+            )
+        ]
+    )
+
+    seeds = collect_strict_nl_seeds(
+        raw,
+        raw_file=RAW_FILE,
+        settings=_settings(),
+    )
+
+    seeds_by_product = {round(seed.product_mz, 6): seed for seed in seeds}
+    assert set(seeds_by_product) == {
+        round(monoisotopic_product_mz, 6),
+        round(isotope_product_mz, 6),
+    }
+    inferred = seeds_by_product[round(monoisotopic_product_mz, 6)]
+    direct = seeds_by_product[round(isotope_product_mz, 6)]
+    assert inferred.precursor_mz == pytest.approx(
+        monoisotopic_product_mz + NEUTRAL_LOSS_DA
+    )
+    assert direct.precursor_mz == pytest.approx(scan_precursor_mz)
+
+
+def test_inferred_precursor_seed_respects_ms2_precursor_window() -> None:
+    product_mz = 184.11322021484375
+    raw = _FakeRaw(
+        [
+            _scan_event(
+                precursor_mz=305.0,
+                masses=[product_mz],
+                intensities=[39671.9],
+                scan_number=19867,
+                rt=23.8043,
+            )
+        ]
+    )
+
+    seeds = collect_strict_nl_seeds(
+        raw,
+        raw_file=RAW_FILE,
+        settings=_settings(ms2_precursor_tol_da=1.6),
+    )
+
+    assert seeds == ()
 
 
 def test_observed_loss_error_equal_to_tolerance_is_accepted() -> None:

@@ -50,6 +50,8 @@ def test_run_discovery_cli_passes_single_raw_settings(
             "116.0474",
             "--neutral-loss-tag",
             "DNA_dR",
+            "--ms2-precursor-tol-da",
+            "0.75",
             "--resolver-mode",
             "local_minimum",
         ]
@@ -61,6 +63,7 @@ def test_run_discovery_cli_passes_single_raw_settings(
     settings = captured["settings"]
     assert settings.neutral_loss_profile.tag == "DNA_dR"
     assert settings.neutral_loss_profile.neutral_loss_da == 116.0474
+    assert settings.ms2_precursor_tol_da == pytest.approx(0.75)
     assert settings.resolver_mode == "local_minimum"
     peak_config = captured["peak_config"]
     assert peak_config.data_dir == raw_path.parent.resolve()
@@ -68,6 +71,7 @@ def test_run_discovery_cli_passes_single_raw_settings(
     assert peak_config.output_csv == output_dir.resolve() / "xic_results.csv"
     assert peak_config.diagnostics_csv == output_dir.resolve() / "xic_diagnostics.csv"
     assert peak_config.resolver_mode == "local_minimum"
+    assert peak_config.ms2_precursor_tol_da == pytest.approx(0.75)
     assert peak_config.nl_min_intensity_ratio == settings.nl_min_intensity_ratio
     stdout = capsys.readouterr().out
     assert "Discovery candidates CSV: " in stdout

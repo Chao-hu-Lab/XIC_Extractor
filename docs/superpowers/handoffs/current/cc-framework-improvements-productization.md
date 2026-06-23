@@ -1,86 +1,70 @@
 # XIC productization handoff
 
 Updated: 2026-06-24
-Branch: `codex/pr03-quant-matrix-foundation`
-Status: PR #88 rebuilt on `master`; local gates passed, GitHub CI/review pending.
+Branch: `codex/pr04-cid-nl-rebuild-20260624`
+Status: PR #88, #93, and #94 are merged on `master`; old PR #89 was closed as
+superseded; replacement PR #95 is the clean CID-NL discovery activation slice
+rebuilt from `origin/master`.
 
 This is a compact current-state snapshot. Tier authority lives in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md` and the
 machine-readable validation indexes. Handoff text is routing context only.
 
 ## Current Objective
 
-Phase 1 is closed: `lockbox_shadow_automation_experiment_v1` is a
-shadow-only contract adapter/checker, not a scorer run and not product writer
-authority.
-
-Phase 2/3 QuantMatrix foundation is reintroduced on clean PR #88:
-
-- `ProductionAcceptanceManifest v1` defines the accepted Backfill row authority
-  artifact and fail-closed checker.
-- `QuantMatrixVersion v1` is the manifest-driven activation surface for
-  additive quant matrix outputs, gated by expected-diff checks.
-- QuantMatrix review, promotion, downstream-impact, real-bundle, packet,
-  dry-run, and closeout checks are product-evidence surfaces, not ProductWriter
-  authority by themselves.
-- `product_ready_default_matrix_activated` is the current 511-cell default
-  QuantMatrix activation state and must remain tied to expected-diff and the
-  authority manifest.
-
-This rebuild must not create broad production rows, change selected
-peak/area/counting, change review/replay behavior, or broaden Backfill
-authority. Default CI must not depend on ignored `output/` or
+Rebuild and retarget #89-#92 one at a time so each PR can be reviewed and
+tested from a clean base without depending on ignored `output/` or
 `local_validation_artifacts/`.
 
-## Active References
+Current #95 scope is CID-NL discovery activation only:
 
-- Productization control plane:
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-- Active roadmap:
-  `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`
-- Cleanup map:
-  `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md`
-- PR stack incident note:
-  `docs/superpowers/notes/2026-06-24-pr88-stack-artifact-boundary-retrospective.md`
+- The immediate product direction is Discovery first.
+- accepted_discovery_cell_count=95.
+- keep Discovery precursor inference, candidate row identity, and alignment
+  replay fail-closed behavior;
+- keep CID-NL feature-inclusion/default-activation/release/85RAW closure gates;
+- exclude old QuantMatrix commits already represented by #88;
+- exclude artifact-retention cleanup already represented by #94;
+- exclude `.codex/skills` packaging, broad lockbox drift, and `output/`
+  deletions from #95.
 
-## Product Direction
+## Product State
 
-- Backfill values are accepted quantification values, not detections and not
-  truth claims.
-- Default `quant_matrix` includes detected plus accepted Backfill values only
-  for the current 511-cell expected-diff-passing scope.
-- Detection claims remain based on `detected_count` only.
-- `quant_available_count` is detected plus accepted Backfill.
-- Production write authority must come from `ProductionAcceptanceManifest`
-  keyed by `peak_hypothesis_id + sample_stem`.
-- Shadow/report/gallery/candidate artifacts remain non-authority.
-
-## Current Lane State
-
-- Current Backfill product authority remains exactly 511 cells.
+- `product_ready_default_matrix_activated` remains the current default
+  QuantMatrix state for the bounded 511-cell Backfill authority from #88.
+- CID-NL default product activation v1 is the #95 candidate authority slice for
+  the explicit 95-cell CID-NL activation contract.
 - Broad Backfill auto-write remains parked.
-- `4613` remains the candidate/audit universe, not a writable pool.
-- `3015` trace-matched unresolved rows remain review/adjudication targets, not
-  writer rows.
-- `1087` missing-overlay rows remain evidence gaps, not negative truth.
-- Lockbox/owner-clean evidence remains non-authoritative challenge evidence.
-- Manual wrong-peak/no-peak controls remain negative controls.
-- `peak_choice_truth_lockbox_v1` remains `production_candidate`.
-- Mechanical adjudication, Review Packet / Approval Workflow v1,
-  Missing-Overlay Evidence Recovery v1, and lockbox assets remain
-  non-authority review/evidence infrastructure.
-- Targeted MS1 shape identity limited rescue remains production-ready only for
-  the explicit 5-hmdC + 5-medC headless workflow; GUI and broader targets remain
-  blocked.
-- `sample_metadata_v1` remains production-ready for no-output ordering.
-- Roles/batch/matrix/exclusion must not alter quant output.
-- ReviewAction selected-candidate switch and manual-boundary area recompute
-  remain parked.
-- Calibration/normalization activation remains classification and planning only.
+- CID-NL discovery row-identity evidence is being promoted through explicit
+  gates; Discovery/MS2 evidence must not directly become ProductWriter authority
+  outside the activation contract.
+- Shadow/report/gallery/candidate artifacts remain non-authority unless a
+  product activation checker binds them into the current authority manifest.
+
+## Boundaries
+
+- No selected peak, selected area, counted-detection, workbook schema, GUI,
+  broad Backfill, or unrelated default extraction behavior changes are allowed
+  in #95.
+- Default CI must stay hermetic and must not require ignored local artifacts.
+- Do not reopen broad Backfill while the active goal is Discovery productization.
+- PR #90, #91, and #92 wait until their predecessor is merged or cleanly
+  retargeted to the updated `master`.
+
+## Required Gates
+
+Before #95 is ready:
+
+- CID-NL/discovery focused tests and productization checkers must pass locally.
+- The repo PR gate must pass locally unless a clear external blocker is recorded.
+- GitHub CI must be green and review must be clear before normal merge.
+- Any CI red must be diagnosed from logs before code changes.
+- CID-NL Discovery full-scope classification v1.
+- CID-NL 85RAW Universe Closure v1.
 
 ## Status Index Anchors
 
-These phrases are retained for `check_productization_state.py` anchors:
+These phrases are retained for `scripts/check_productization_state.py`:
 
 - Goal 0/1 hardening added.
 - machine-adjudicated without granting new writer authority.
@@ -96,49 +80,10 @@ These phrases are retained for `check_productization_state.py` anchors:
 - manual-boundary area recompute remain parked.
 - classification and planning only.
 
-## PR Stack Interlock
-
-Do not continue patching PR88 red checks one by one. Recovery order:
-
-1. Base on the already-merged artifact-retention boundary prerequisite.
-2. Rebuild PR #88 as QuantMatrix foundation only.
-3. Move discovery row identity hardening to the CID-NL discovery PR.
-4. Retarget PR #89-#92 one at a time after each predecessor is clean.
-5. Use a final rollup PR only for unavoidable broad productization ledger and
-   handoff updates.
-
-## Rejected Paths
-
-- Do not run or revive a scorer as productization authority.
-- Do not create a second independent lockbox case manifest.
-- Do not treat owner-clean challenge rows, AI challenge evidence, manual
-  negative controls, missing-overlay rows, or summary scores as truth
-  completion.
-- Do not let shadow artifacts feed ProductWriter, matrix/workbook output,
-  selected peak/area, counted detection, GUI, default extraction, reviewer slot
-  2, or broad Backfill authority.
-- Do not treat low detected support or high Backfill dependency as a standalone
-  matrix-value blocker; they are prevalence/claim uncertainty flags.
-- Do not expand default quant matrix output beyond the current 511-cell scope
-  without a new authority manifest and expected-diff gate.
-
-## Validation Snapshot
-
-- PR #94 artifact-retention prerequisite passed local PR gate and GitHub CI
-  before normal merge.
-- PR #88 clean rebuild passed focused QuantMatrix checks, retention and
-  productization checkers, bounded-lane checker, and the repo PR gate locally.
-- Validation status for local rebuild is `production_ready` only for the bounded
-  511-cell QuantMatrix default-output contract; GitHub CI/review must still pass
-  before normal merge.
-
-## Control Plane Note
-
-The default QuantMatrix activation status-index change is paired with the
-control-plane updates in this rebuild. No extra control-plane update is needed
-for the handoff conflict resolution itself.
-
 ## Next Actions
 
-Mark PR #88 ready, wait for GitHub CI/review, normal-merge only after green,
-then handle #89-#92 sequentially with the same artifact-boundary discipline.
+1. Finish #95 CI/review remediation without changing tier or authority scope.
+2. Rerun focused CID-NL gates, then full local PR gate.
+3. Update #95 body with final verification and mark ready only after CI/review
+   are clear.
+4. Normal-merge #95 only after CI and review pass, then repeat for #90-#92.

@@ -50,6 +50,9 @@ RENDERED_REFERENCE_RE = re.compile(
     r"docs[/\\]superpowers[/\\]validation[/\\][^\s\t;,)]+?\.(?:html|png)",
     re.IGNORECASE,
 )
+MAINTAINED_RENDERED_DOCS = {
+    "docs/superpowers/validation/evidence_overlay_interpretation_guide.html",
+}
 
 
 @dataclass(frozen=True)
@@ -219,7 +222,11 @@ def _check_inventory_rows(
             else:
                 warnings.append(message)
 
-        if _is_rendered_artifact(path, category) and is_present:
+        if (
+            _is_rendered_artifact(path, category)
+            and is_present
+            and path not in MAINTAINED_RENDERED_DOCS
+        ):
             problems.append(
                 f"{path}: rendered validation artifact must be externalized; "
                 f"tracked rendered artifacts cannot use {decision}",

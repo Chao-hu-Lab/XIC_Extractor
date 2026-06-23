@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import shutil
 from pathlib import Path
 
@@ -38,6 +39,33 @@ def test_productization_authority_checker_rejects_forbidden_scope(
 
     assert any("unregistered authority scope" in problem for problem in problems)
     assert any("forbidden authority scopes present" in problem for problem in problems)
+
+
+def test_productization_authority_checker_rejects_stale_cid_nl_hash(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / DEFAULT_MANIFEST.name
+    schema = tmp_path / DEFAULT_SCHEMA.name
+    index = tmp_path / DEFAULT_INDEX.name
+    shutil.copyfile(DEFAULT_MANIFEST, manifest)
+    shutil.copyfile(DEFAULT_SCHEMA, schema)
+    shutil.copyfile(DEFAULT_INDEX, index)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["current_authority"]["cid_nl_default_activation"][
+        "artifact_sha256"
+    ] = "STALE"
+    manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    problems = check_productization_authority(
+        manifest_path=manifest,
+        schema_path=schema,
+        index_path=index,
+    )
+
+    assert any(
+        "CID-NL artifact hash does not match manifest" in problem
+        for problem in problems
+    )
 
 
 def _mutate_first_non_write_row_to_forbidden_scope(index: Path) -> None:

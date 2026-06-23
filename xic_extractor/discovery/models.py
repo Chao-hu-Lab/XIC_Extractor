@@ -8,6 +8,31 @@ from xic_extractor.discovery.evidence_config import (
 )
 
 ReviewPriority = Literal["HIGH", "MEDIUM", "LOW"]
+PrecursorMzBasis = Literal["scan_precursor", "product_plus_neutral_loss"]
+GroupPrecursorMzBasis = Literal["scan_precursor", "product_plus_neutral_loss", "mixed"]
+NeutralLossErrorBasis = Literal[
+    "measured_scan_precursor_product",
+    "configured_loss_inferred_precursor",
+    "mixed",
+]
+DiscoveryCandidateState = Literal[
+    "ms1_feature_nl_supported",
+    "ms1_feature_nl_rescued",
+    "review_only_orphan_nl",
+    "review_only_ambiguous_coisolation",
+    "rejected_noise_or_outside_rt",
+]
+DISCOVERY_CANDIDATE_STATE_VALUES: tuple[DiscoveryCandidateState, ...] = (
+    "ms1_feature_nl_supported",
+    "ms1_feature_nl_rescued",
+    "review_only_orphan_nl",
+    "review_only_ambiguous_coisolation",
+    "rejected_noise_or_outside_rt",
+)
+MS1_FEATURE_BACKED_STATES: tuple[DiscoveryCandidateState, ...] = (
+    "ms1_feature_nl_supported",
+    "ms1_feature_nl_rescued",
+)
 
 DISCOVERY_CANDIDATE_REVIEW_COLUMNS = (
     "review_priority",
@@ -49,6 +74,11 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "neutral_loss_tag",
     "configured_neutral_loss_da",
     "neutral_loss_mass_error_ppm",
+    "neutral_loss_error_basis",
+    "precursor_mz_basis",
+    "scan_precursor_mz",
+    "scan_precursor_delta_da",
+    "max_scan_precursor_abs_delta_da",
     "rt_seed_min",
     "rt_seed_max",
     "ms1_search_rt_min",
@@ -68,8 +98,15 @@ DISCOVERY_PROVENANCE_COLUMNS = (
     "tag_evidence_json",
 )
 
+DISCOVERY_SUCCESSOR_COLUMNS = (
+    "discovery_candidate_state",
+    "ms1_feature_row_id",
+)
+
 DISCOVERY_CANDIDATE_COLUMNS = (
-    DISCOVERY_CANDIDATE_REVIEW_COLUMNS + DISCOVERY_PROVENANCE_COLUMNS
+    DISCOVERY_CANDIDATE_REVIEW_COLUMNS
+    + DISCOVERY_SUCCESSOR_COLUMNS
+    + DISCOVERY_PROVENANCE_COLUMNS
 )
 
 DISCOVERY_BRIEF_COLUMNS = (
@@ -109,6 +146,7 @@ class DiscoverySettings:
     precursor_mz_tolerance_ppm: float = 20.0
     product_mz_tolerance_ppm: float = 20.0
     product_search_ppm: float = 50.0
+    ms2_precursor_tol_da: float = 1.6
     nl_min_intensity_ratio: float = 0.01
     seed_rt_gap_min: float = 0.20
     ms1_search_padding_min: float = 0.20
@@ -148,6 +186,8 @@ class DiscoverySeed:
     observed_loss_error_ppm: float
     matched_tag_names: tuple[str, ...] = ()
     tag_evidence_json: str = "{}"
+    scan_precursor_mz: float | None = None
+    precursor_mz_basis: PrecursorMzBasis = "scan_precursor"
 
 
 @dataclass(frozen=True)
@@ -165,6 +205,13 @@ class DiscoverySeedGroup:
     rt_seed_max: float
     matched_tag_names: tuple[str, ...] = ()
     tag_evidence_json: str = "{}"
+    precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor"
+    neutral_loss_error_basis: NeutralLossErrorBasis = (
+        "measured_scan_precursor_product"
+    )
+    scan_precursor_mz: float | None = None
+    scan_precursor_delta_da: float | None = None
+    max_scan_precursor_abs_delta_da: float | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +251,13 @@ class DiscoveryCandidate:
     ms1_height: float | None
     ms1_trace_quality: str
     ms1_scan_support_score: float | None = None
+    neutral_loss_error_basis: NeutralLossErrorBasis = (
+        "measured_scan_precursor_product"
+    )
+    precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor"
+    scan_precursor_mz: float | None = None
+    scan_precursor_delta_da: float | None = None
+    max_scan_precursor_abs_delta_da: float | None = None
     feature_family_id: str = ""
     feature_family_size: int = 1
     feature_superfamily_id: str = ""
@@ -222,6 +276,8 @@ class DiscoveryCandidate:
         "incomplete",
     ] = "not_required"
     tag_evidence_json: str = "{}"
+    discovery_candidate_state: DiscoveryCandidateState = "review_only_orphan_nl"
+    ms1_feature_row_id: str = ""
 
     @classmethod
     def from_values(
@@ -247,6 +303,13 @@ class DiscoveryCandidate:
         ms1_height: float | None,
         ms1_trace_quality: str,
         ms1_scan_support_score: float | None = None,
+        neutral_loss_error_basis: NeutralLossErrorBasis = (
+            "measured_scan_precursor_product"
+        ),
+        precursor_mz_basis: GroupPrecursorMzBasis = "scan_precursor",
+        scan_precursor_mz: float | None = None,
+        scan_precursor_delta_da: float | None = None,
+        max_scan_precursor_abs_delta_da: float | None = None,
         seed_event_count: int,
         ms1_peak_found: bool,
         ms1_apex_rt: float | None,
@@ -255,6 +318,10 @@ class DiscoveryCandidate:
         review_priority: ReviewPriority,
         reason: str,
     ) -> "DiscoveryCandidate":
+        discovery_candidate_state = assign_discovery_candidate_state(
+            ms1_peak_found=ms1_peak_found,
+            precursor_mz_basis=precursor_mz_basis,
+        )
         return cls(
             review_priority=review_priority,
             evidence_score=0,
@@ -263,7 +330,12 @@ class DiscoveryCandidate:
             ms1_support="missing",
             rt_alignment="missing",
             family_context="singleton",
-            candidate_id=f"{sample_stem}#{best_seed.scan_number}",
+            candidate_id=_candidate_id(
+                sample_stem=sample_stem,
+                best_seed=best_seed,
+                precursor_mz=precursor_mz,
+                product_mz=product_mz,
+            ),
             precursor_mz=precursor_mz,
             product_mz=product_mz,
             observed_neutral_loss_da=observed_neutral_loss_da,
@@ -291,6 +363,11 @@ class DiscoveryCandidate:
             ms1_height=ms1_height,
             ms1_trace_quality=ms1_trace_quality,
             ms1_scan_support_score=ms1_scan_support_score,
+            neutral_loss_error_basis=neutral_loss_error_basis,
+            precursor_mz_basis=precursor_mz_basis,
+            scan_precursor_mz=scan_precursor_mz,
+            scan_precursor_delta_da=scan_precursor_delta_da,
+            max_scan_precursor_abs_delta_da=max_scan_precursor_abs_delta_da,
             selected_tag_count=1,
             matched_tag_count=1,
             matched_tag_names=(neutral_loss_tag,),
@@ -298,6 +375,17 @@ class DiscoveryCandidate:
             tag_combine_mode="single",
             tag_intersection_status="not_required",
             tag_evidence_json=best_seed.tag_evidence_json,
+            discovery_candidate_state=discovery_candidate_state,
+            ms1_feature_row_id=build_ms1_feature_row_id(
+                sample_stem=sample_stem,
+                neutral_loss_tag=neutral_loss_tag,
+                precursor_mz=precursor_mz,
+                best_seed_rt=best_seed.rt,
+                ms1_peak_found=ms1_peak_found,
+                ms1_apex_rt=ms1_apex_rt,
+                ms1_peak_rt_start=ms1_peak_rt_start,
+                ms1_peak_rt_end=ms1_peak_rt_end,
+            ),
         )
 
 
@@ -311,3 +399,76 @@ class DiscoveryRunOutputs:
 class DiscoveryBatchOutputs:
     batch_index_csv: Path
     per_sample: tuple[DiscoveryRunOutputs, ...]
+
+
+def _candidate_id(
+    *,
+    sample_stem: str,
+    best_seed: DiscoverySeed,
+    precursor_mz: float,
+    product_mz: float,
+) -> str:
+    return (
+        f"{sample_stem}#{best_seed.scan_number}"
+        f"@mz{_format_id_mz(precursor_mz)}_p{_format_id_mz(product_mz)}"
+    )
+
+
+def assign_discovery_candidate_state(
+    *,
+    ms1_peak_found: bool,
+    precursor_mz_basis: GroupPrecursorMzBasis,
+) -> DiscoveryCandidateState:
+    if not ms1_peak_found:
+        return "review_only_orphan_nl"
+    if precursor_mz_basis in {"product_plus_neutral_loss", "mixed"}:
+        return "ms1_feature_nl_rescued"
+    return "ms1_feature_nl_supported"
+
+
+def build_ms1_feature_row_id(
+    *,
+    sample_stem: str,
+    neutral_loss_tag: str,
+    precursor_mz: float,
+    best_seed_rt: float,
+    ms1_peak_found: bool,
+    ms1_apex_rt: float | None,
+    ms1_peak_rt_start: float | None,
+    ms1_peak_rt_end: float | None,
+) -> str:
+    if not ms1_peak_found:
+        return ""
+    return "|".join(
+        (
+            sample_stem,
+            neutral_loss_tag,
+            _format_id_mz(precursor_mz),
+            _format_id_mz(
+                _ms1_feature_rt_identity(
+                    best_seed_rt=best_seed_rt,
+                    ms1_apex_rt=ms1_apex_rt,
+                    ms1_peak_rt_start=ms1_peak_rt_start,
+                    ms1_peak_rt_end=ms1_peak_rt_end,
+                )
+            ),
+        )
+    )
+
+
+def _ms1_feature_rt_identity(
+    *,
+    best_seed_rt: float,
+    ms1_apex_rt: float | None,
+    ms1_peak_rt_start: float | None,
+    ms1_peak_rt_end: float | None,
+) -> float:
+    if ms1_apex_rt is not None:
+        return ms1_apex_rt
+    if ms1_peak_rt_start is not None and ms1_peak_rt_end is not None:
+        return (ms1_peak_rt_start + ms1_peak_rt_end) / 2.0
+    return best_seed_rt
+
+
+def _format_id_mz(value: float) -> str:
+    return f"{value:.6f}".rstrip("0").rstrip(".")

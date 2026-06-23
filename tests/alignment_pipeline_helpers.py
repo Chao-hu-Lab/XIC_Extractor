@@ -155,6 +155,10 @@ def write_csv(
         writer.writerows(rows)
 
 
+def candidate_id(sample_stem: str) -> str:
+    return f"{sample_stem}#1@mz500_p384"
+
+
 def candidate_row(sample_stem: str) -> dict[str, str]:
     return {
         "review_priority": "HIGH",
@@ -164,7 +168,9 @@ def candidate_row(sample_stem: str) -> dict[str, str]:
         "ms1_support": "clean",
         "rt_alignment": "aligned",
         "family_context": "singleton",
-        "candidate_id": f"{sample_stem}#1",
+        "discovery_candidate_state": "ms1_feature_nl_supported",
+        "ms1_feature_row_id": f"{sample_stem}|DNA_dR|500|8.5",
+        "candidate_id": candidate_id(sample_stem),
         "feature_family_id": f"{sample_stem}@F0001",
         "feature_family_size": "1",
         "feature_superfamily_id": f"{sample_stem}@SF0001",
@@ -189,6 +195,11 @@ def candidate_row(sample_stem: str) -> dict[str, str]:
         "neutral_loss_tag": "DNA_dR",
         "configured_neutral_loss_da": "116.0",
         "neutral_loss_mass_error_ppm": "1.0",
+        "neutral_loss_error_basis": "measured_scan_precursor_product",
+        "precursor_mz_basis": "scan_precursor",
+        "scan_precursor_mz": "500.0",
+        "scan_precursor_delta_da": "0.0",
+        "max_scan_precursor_abs_delta_da": "0.0",
         "rt_seed_min": "8.4",
         "rt_seed_max": "8.6",
         "ms1_search_rt_min": "8.2",
@@ -239,7 +250,7 @@ def matrix(sample_order: tuple[str, ...]) -> AlignmentMatrix:
                 rt_delta_sec=0.0,
                 trace_quality="clean",
                 scan_support_score=0.8,
-                source_candidate_id=f"{sample_stem}#1",
+                source_candidate_id=candidate_id(sample_stem),
                 source_raw_file=Path(f"{sample_stem}.raw"),
                 reason="detected",
             )

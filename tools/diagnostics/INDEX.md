@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-17
-**Total entry-points:** 90
-**Total files (incl. helpers):** 169 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-21
+**Total entry-points:** 96
+**Total files (incl. helpers):** 175 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -23,10 +23,10 @@ top-level `tools/diagnostics/*.py` files for total files.
 
 ## Table of Contents
 
-1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 3 tools
+1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 6 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 38 tools
+4. [Backfill Reviews](#backfill-reviews) — 40 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
@@ -74,6 +74,117 @@ only as decision history.
 **Purpose**: Summarize P7 evidence cost savings.
 **Topic group**: `p7_evidence_cost_summary.py`
 **Originating spec/plan**: `plans/2026-05-25-evidence-chain-cost-control-implementation-plan.md`, `plans/2026-05-26-p7-stabilization-implementation-plan.md`
+
+---
+
+### `cid_nl_feature_inclusion_gate.py`
+
+**Purpose**: Build the diagnostic CID-NL feature-inclusion / identity-authority
+gate from existing differential review, paired overlay summary, AI
+identity-triage artifacts, and optional versioned manual review verdicts.
+**Topic group**: CID-NL default activation Gallery and differential overlay
+review; consumes
+`cid_nl_discovery_identity_differential_review.tsv`,
+`cid_nl_differential_overlay_review_summary.tsv`, and
+`cid_nl_differential_ai_adjudication.tsv`; optional
+`cid_nl_manual_feature_inclusion_review.tsv`.
+**Originating spec/goal/plan**:
+`docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`;
+`docs/deepresearch/Untargeted LC-MS Feature Discovery Background.md`.
+**Status note**: Diagnostic-only gate adapter. It does not read RAW, render
+PNGs, create a second Discovery system, mutate ProductWriter/default
+matrix/workbook/GUI outputs, or treat candidates as matrix rows. It writes
+`cid_nl_feature_inclusion_gate_summary.tsv/json`,
+`cid_nl_feature_inclusion_gate_transitions.tsv`,
+`cid_nl_identity_expected_diff_queue.tsv`,
+`cid_nl_supported_candidate_expected_diff_contract.tsv`,
+`cid_nl_feature_inclusion_review_queue.tsv`, and
+`cid_nl_manual_resolved_expected_diff_contract.tsv`,
+`cid_nl_manual_resolved_hold_queue.tsv`,
+`cid_nl_user_review_queue.tsv`, and
+`cid_nl_feature_inclusion_blocked_queue.tsv` under ignored
+`output/validation/cid_nl_default_activation_gallery_review_v1/feature_inclusion_gate/`.
+The gate separates supported feature-inclusion candidates from review-required
+and current-bundle-blocked candidates. Supported candidates only advance to
+expected-diff design; identity authority and ProductWriter activation remain a
+separate public-surface contract.
+
+---
+
+### `cid_nl_activation_copy_candidate.py`
+
+**Purpose**: Build a CID-NL activated-copy matrix candidate and value-delta
+checker from approved expected-diff design rows.
+**Topic group**: CID-NL feature-inclusion gate and expected-diff contract.
+Consumes `cid_nl_supported_candidate_expected_diff_contract.tsv` plus
+`cid_nl_agent_resolved_expected_diff_contract.tsv` and
+`cid_nl_manual_resolved_expected_diff_contract.tsv` by default, and fails
+closed if any contract transition overlaps the user-review, agent-hold,
+manual-hold, or blocked queues.
+**Originating spec/goal/plan**:
+`docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`;
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
+**Status note**: Diagnostic-only activated-copy surface. It reads the current
+public `alignment_matrix.tsv` and `alignment_matrix_identity.tsv`, writes
+`alignment_matrix_activated_copy.tsv`,
+`alignment_matrix_identity_activated_copy.tsv`,
+`cid_nl_activation_copy_value_delta.tsv`, and
+`cid_nl_activation_copy_candidate_summary.tsv/json` under ignored
+`output/validation/cid_nl_default_activation_gallery_review_v1/activation_copy_candidate/`.
+It refuses to overwrite existing matrix values, requires every written cell to
+come from the expected-diff contract, and reports explicit false flags for
+ProductWriter, default matrix, workbook/GUI, and candidate-row authority. This
+is not a default activation path.
+
+---
+
+### `cid_nl_activation_copy_acceptance.py`
+
+**Purpose**: Accept or reject the CID-NL activated-copy matrix candidate
+against its expected-diff contract, forbidden transition queues, and exact
+matrix diff.
+**Topic group**: CID-NL activated-copy validation. Consumes the expected-diff
+contracts, user-review/agent-hold/manual-hold/blocked queues, input public
+matrix, activated copy matrix, matrix identity sidecar, and activated-copy
+value delta.
+**Originating spec/goal/plan**:
+`docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`;
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
+**Status note**: Diagnostic-only acceptance gate. It writes
+`cid_nl_activation_copy_acceptance_summary.tsv/json` and
+`cid_nl_activation_copy_matrix_diff.tsv` under ignored
+`output/validation/cid_nl_default_activation_gallery_review_v1/activation_copy_candidate/acceptance/`.
+It passes only when value-delta keys match the contract, no forbidden
+review/hold/blocked transitions overlap the contract, and the input/output
+matrix diff is exactly the contracted cell set. It reports
+`production_ready=FALSE`; an explicit adopt gate is still required before any
+default matrix or ProductWriter change.
+
+---
+
+### `cid_nl_activation_adopt_gate.py`
+
+**Purpose**: Close the CID-NL activated-copy adopt/hold decision from accepted
+copy evidence, without mutating ProductWriter or the default matrix.
+**Topic group**: CID-NL activated-copy validation adoption. Consumes the
+expected-diff contracts, forbidden user-review/hold/blocked queues,
+feature-inclusion summary, activated-copy summary, activated-copy acceptance
+summary, and value-delta TSV.
+**Originating spec/goal/plan**:
+`docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`;
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
+**Status note**: Production-candidate adopt gate for the narrowed 95-cell
+validation-copy bundle. It writes
+`cid_nl_activation_adopt_gate_summary.tsv/json` and the compact 20-transition
+`cid_nl_activation_adopt_manifest.tsv` under ignored
+`output/validation/cid_nl_default_activation_gallery_review_v1/activation_adopt_gate/`.
+It returns `adopt_ready` only when the feature gate, copy gate, and acceptance
+gate all pass; user review is zero; no forbidden transitions overlap; the
+value-delta keys exactly match the expected-diff contract; ProductWriter,
+default matrix, workbook/GUI, and candidate-row authority flags remain false;
+and acceptance still reports `production_ready=FALSE`. `adopt_ready` means the
+95-cell bundle can feed a later explicit public activation change; it is not
+itself default output or ProductWriter authority.
 
 ---
 
@@ -923,8 +1034,26 @@ until an explicit product-transfer decision and consolidation policy exist.
 **Purpose**: Build a `diagnostic_only` / `shadow_review` backfill family/seed-group reconciliation index and HTML gallery from existing alignment, seed-audit, seed-aware, overlay, and candidate-gate artifacts.
 **Topic group**: `backfill_evidence_reconciliation_gallery.py` + `xic_extractor/diagnostics/backfill_reconciliation_gallery.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Writes `backfill_evidence_reconciliation_groups.tsv`, `backfill_evidence_reconciliation_representative_cells.tsv`, `backfill_evidence_reconciliation_summary.json`, and `backfill_evidence_reconciliation_gallery.html`. The gallery is a hypothesis-first sticky table: thin family header rows provide MS1 pattern/drift/multimodal context only, while hypothesis rows are directly visible decision-review rows with representative cells collapsed in row details. Seed requests are provenance, not the primary visual decision unit. When alignment review marks a row as `primary_family_consolidated`, close seed requests are rendered as one MS1 product hypothesis with seed aliases in the evidence drawer instead of separate main-table decisions. Build-time preparation pre-indexes seed-group cells and exact vs legacy overlay rows once per run, and HTML subset/lookup preparation is isolated in `_GalleryRenderContext` before rendering. The default Focus is `Product rows`; `Projection accepts` isolates projected new writes from optional shadow production projection input; `family_consolidation_loser`, `duplicate_only`, and duplicate-loser audit rows are routed to `Duplicate / audit debug` instead of competing with product candidates in the first view. Family headers summarize detected required-tag anchors and their nearest seed group (`anchors D=... · seed N D=...`). Hypothesis rows show `impact`: without projection input, `NL` is the family detected anchor count, `Fill` is hypothesis rescued/backfilled cells, and `Dup` / `Review` appear only when duplicate-assigned or provisional context is non-zero; this is alignment cell provenance, not target benchmark coverage. With optional `shadow_production_projection_cells.tsv`, the impact column switches to current production-decision writes / review target / projected accept / projected block counts, the detail drawer shows a cell-level current-decision vs projected-decision table, and consolidated drawers include a `Projection accept cells` mini-index with sample, exact seed request, reason/warning, MS1 product rule / optional context chain, and overlay link. Overlay links distinguish `family context` from `hypothesis PNG`; if multiple seed aliases share one family-level PNG, the gallery labels it as shared context instead of presenting fake per-seed PNGs. For very large reports, the HTML DOM caps low-information `evidence_inconclusive` rows while preserving all action/overlay rows and writes a visible scope notice; the groups/representatives TSV plus summary JSON remain exhaustive. Optional `backfill_shadow_policy_cells.tsv` input is rendered as HTML-only MS1+RT shadow provenance (`fill_now` / `would_fill_under_ms1_rt_policy` / `blocked` / policy gap counts) without changing the reconciliation group TSV schema. Optional `targeted_istd_benchmark_summary.tsv` input is rendered as validation-only target match context in HTML and summary counts; it does not become product identity authority and does not change the group TSV schema. The TSV remains a deterministic family/seed-group machine index. `review_required_*` overlay verdicts are displayed as human visual judgment needs, not hard evidence blockers. It consumes existing artifacts only, does not accept RAW/DLL paths, does not generate overlays, does not invent `backfill_score`, and does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions. Product promotion remains outside this renderer and requires a separate reviewed allowlist contract plus 8RAW/85RAW validation.
+**Status note**: Writes `backfill_evidence_reconciliation_groups.tsv`, `backfill_evidence_reconciliation_representative_cells.tsv`, `backfill_evidence_reconciliation_summary.json`, and `backfill_evidence_reconciliation_gallery.html`. The gallery is a hypothesis-first sticky table: thin family header rows provide MS1 pattern/drift/multimodal context only, while hypothesis rows are directly visible decision-review rows with representative cells collapsed in row details. Seed requests are provenance, not the primary visual decision unit. When alignment review marks a row as `primary_family_consolidated`, close seed requests are rendered as one MS1 product hypothesis with seed aliases in the evidence drawer instead of separate main-table decisions. Build-time preparation pre-indexes seed-group cells and exact vs legacy overlay rows once per run, and HTML subset/lookup preparation is isolated in `_GalleryRenderContext` before rendering. The default Focus is `Product rows`; `Projection accepts` isolates projected new writes from optional shadow production projection input; `family_consolidation_loser`, `duplicate_only`, and duplicate-loser audit rows are routed to `Duplicate / audit debug` instead of competing with product candidates in the first view. Family headers summarize detected required-tag anchors and their nearest seed group (`anchors D=... · seed N D=...`). Hypothesis rows show `impact`: without projection input, `NL` is the family detected anchor count, `Fill` is hypothesis rescued/backfilled cells, and `Dup` / `Review` appear only when duplicate-assigned or provisional context is non-zero; this is alignment cell provenance, not target benchmark coverage. With optional `shadow_production_projection_cells.tsv`, the impact column switches to current production-decision writes / review target / projected accept / projected block counts, the detail drawer shows a cell-level current-decision vs projected-decision table, and consolidated drawers include a `Projection accept cells` mini-index with sample, exact seed request, reason/warning, MS1 product rule / optional context chain, and overlay link. Overlay links distinguish `family context` from `hypothesis PNG`; if multiple seed aliases share one family-level PNG, the gallery labels it as shared context instead of presenting fake per-seed PNGs. Each generated gallery also copies and links the maintained visual reader guide `docs/superpowers/validation/evidence_overlay_interpretation_guide.html`, so Backfill and Discovery overlay semantics are visible in the served artifact directory without creating a separate generated HTML system. For very large reports, the HTML DOM caps low-information `evidence_inconclusive` rows while preserving all action/overlay rows and writes a visible scope notice; the groups/representatives TSV plus summary JSON remain exhaustive. Optional `backfill_shadow_policy_cells.tsv` input is rendered as HTML-only MS1+RT shadow provenance (`fill_now` / `would_fill_under_ms1_rt_policy` / `blocked` / policy gap counts) without changing the reconciliation group TSV schema. Optional `targeted_istd_benchmark_summary.tsv` input is rendered as validation-only target match context in HTML and summary counts; it does not become product identity authority and does not change the group TSV schema. The TSV remains a deterministic family/seed-group machine index. `review_required_*` overlay verdicts are displayed as human visual judgment needs, not hard evidence blockers. It consumes existing artifacts only, does not accept RAW/DLL paths, does not generate overlays, does not invent `backfill_score`, and does not mutate `alignment_review.tsv`, `alignment_cells.tsv`, `alignment_matrix.tsv`, workbook schemas, or product decisions. Product promotion remains outside this renderer and requires a separate reviewed allowlist contract plus 8RAW/85RAW validation.
 **Activation sync note**: Optional `--activation-application-summary-tsv` and `--activation-value-delta-tsv` let the gallery display an already-applied activated matrix view. Current `accepted_rescue` projection cells and row-level activation delta `written` cells can update only the gallery's product-state display/provenance; the renderer still does not write or recompute matrix values.
+
+---
+
+### `cid_nl_default_activation_gallery_review.py`
+
+**Purpose**: Build a Gallery-compatible CID-NL feature-inclusion / identity-authority review packet from the existing successor decision packet and optional family MS1 overlay batch summary.
+**Topic group**: `cid_nl_default_activation_gallery_review.py` plus the existing `backfill_evidence_reconciliation_gallery.py` renderer and `family_ms1_overlay_batch.py` overlay producer.
+**Originating spec/goal/plan**: `docs/superpowers/validation/cid_nl_default_activation_successor_authority_contract_v1/README.md`; `docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`.
+**Status note**: Consumes the ignored successor decision packet under `output/validation/cid_nl_default_activation_successor_authority_contract_v1/`, the versioned preflight summary, and existing CID-NL alignment cell evidence. It writes the standard reconciliation gallery outputs under `output/validation/cid_nl_default_activation_gallery_review_v1/`, plus `cid_nl_default_activation_overlay_review_queue.tsv` for the existing RAW-backed overlay batch producer and `cid_nl_discovery_identity_differential_review.tsv` as a no-RAW source/successor transition index. With `--overlay-batch-summary-tsv`, it links successful overlay PNG/trace rows back into the existing gallery lightbox instead of creating a CID-NL-specific standalone HTML viewer, but only when the overlay summary row matches the current review queue by family id, seed group, m/z, RT window, family-center RT, and output prefix. Without linked overlay provenance, the packet can still build the no-RAW queue but reports `overall_status=needs_overlay_batch`, so `--require-pass` fails. The adapter records successor decision counts, overlay-linked groups, cellless overlay skips, differential transition counts, explicit false flags for `product_writer_changed`, `default_quant_matrix_changed`, and `candidate_rows_are_matrix_rows`, plus additive gate fields: `feature_inclusion_gate`, `identity_authority_gate`, and `source_successor_relationship`. Its payload and gallery summary link the maintained HTML reader guide `docs/superpowers/validation/evidence_overlay_interpretation_guide.html`; the guide is copied beside generated HTML outputs for localhost/in-app Browser review. It presents CID-NL as an Evidence Review Gallery mode: the interaction shell is reused, but Backfill domain semantics and the shared representative-cells TSV schema are not changed. It does not accept RAW/DLL paths directly, does not generate PNGs itself, does not mutate ProductWriter/default matrix/workbook/GUI outputs, and does not make CID-NL/MS2 evidence direct writer authority. Product adoption remains a separate expected-diff/public-surface gate.
+
+---
+
+### `cid_nl_differential_overlay_review.py`
+
+**Purpose**: Generate paired source vs successor RAW-backed MS1 overlay review artifacts for CID-NL feature-inclusion and identity-relationship review.
+**Topic group**: `cid_nl_default_activation_gallery_review.py` plus the existing `backfill_evidence_reconciliation_gallery.py` renderer and RAW `open_raw(...).extract_xic_many(...)` batch extraction path.
+**Originating spec/goal/plan**: `docs/superpowers/validation/cid_nl_default_activation_gallery_review_v1/README.md`.
+**Status note**: Consumes `cid_nl_discovery_identity_differential_review.tsv` and `successor_authority_decisions.tsv`, filters the 78 `ready_for_paired_overlay` source/successor transitions, and extracts source plus successor XIC traces batched by RAW sample. It writes a paired review queue, 78 Gaussian15-smoothed PNG overlays, 78 raw-trace JSON files with Gaussian15 max-intensity fields, `cid_nl_differential_overlay_review_summary.tsv/json`, and a reused Evidence Review Gallery HTML under ignored `output/validation/cid_nl_default_activation_gallery_review_v1/differential_overlays/`. The collapsed Gallery row includes the source-to-successor transition, lightbox links are labeled as `HYPOTHESIS DIFFERENTIAL OVERLAY`, and detail cards expose explicit `source -> successor` PeakHypothesis identity. Plot wording frames the lower-left panel as same-sample feature/identity relationship context: successor MS1 support can justify feature inclusion, while replacement/merge/dedupe is a separate identity-authority gate. A source peak does not invalidate successor feature inclusion, and source/successor m/z values may differ. The generated output also links a local copy of `evidence_overlay_interpretation_guide.html`. This tool is `diagnostic_only`: it does not mutate ProductWriter/default matrix/workbook/GUI outputs, does not create a second Discovery system, does not treat candidates as matrix rows, and does not make CID-NL/MS2 evidence direct writer authority. Product adoption remains a separate expected-diff/public-surface gate.
 
 ---
 
@@ -933,7 +1062,7 @@ until an explicit product-transfer decision and consolidation policy exist.
 **Purpose**: Run a deterministic headless Chromium smoke test against an already-rendered gallery HTML, independent of Codex MCP tabs or the Chrome extension.
 **Topic group**: `gallery_browser_smoke.py`
 **Originating spec/goal/plan**: `specs/2026-06-07-backfill-evidence-reconciliation-gallery-design.md`; `goals/2026-06-07-backfill-evidence-reconciliation-productization-goal.md`; `plans/2026-06-07-backfill-evidence-reconciliation-productization-plan.md`
-**Status note**: Opens a local HTML file through Playwright/Chromium and checks desktop, mobile, and 200 percent zoom viewports; sticky review table chrome; Focus/search behavior including `Projection accepts`; detail drawer open/close; PNG anchor fallback plus lightbox focus/Esc close; and coarse table-cell overlap. It writes screenshots plus `gallery_browser_smoke_summary.json` under the requested output directory. It does not parse TSVs, generate reports, mutate artifacts, depend on MCP/Chrome-extension state, or modify product behavior. Playwright is a repo dev dependency; use `uv sync --extra dev --group dev` before running it. The runner auto-falls back from bundled Chromium to system Chrome or Edge when a browser install/update is unavailable.
+**Status note**: Opens a local HTML file through Playwright/Chromium and checks desktop, mobile, and 200 percent zoom viewports; sticky review table chrome; Focus/search behavior including `Projection accepts`; detail drawer open/close; PNG anchor fallback plus lightbox focus/Esc close; and coarse table-cell overlap. It writes screenshots plus `gallery_browser_smoke_summary.json` under the requested output directory. It does not parse TSVs, generate reports, mutate artifacts, depend on MCP/Chrome-extension state, or modify product behavior. Playwright is a repo dev dependency; use `uv sync --extra dev --group dev` before running it. The runner defaults to bundled Playwright Chromium only and fails fast when that browser is missing; pass `--browser-channel auto`, `chrome`, or `msedge` only when system-browser fallback is explicitly intended.
 
 ---
 

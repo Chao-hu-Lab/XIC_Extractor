@@ -31,6 +31,8 @@ DEFAULT_INDEX = (
 )
 
 APPROVED_SCOPE = "backfill_policy_write_ready_rows"
+CID_NL_APPROVED_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
+APPROVED_SCOPES = {APPROVED_SCOPE, CID_NL_APPROVED_SCOPE}
 PARKED_BROAD_BACKFILL = "broad_backfill"
 NEGATIVE_SCOPE_IDS = {
     "all_stability",
@@ -59,6 +61,7 @@ def check_productization_authority(
     _check_schema_and_index(schema, header, rows, problems)
     _check_index_authority(manifest, rows, problems)
     _check_source_hashes(manifest, rows, repo_root, problems)
+    _check_cid_nl_source_hashes(manifest, repo_root, problems)
     return problems
 
 
@@ -69,10 +72,10 @@ def _check_manifest(manifest: Mapping[str, Any], problems: list[str]) -> None:
         return
     if policy.get("unregistered_scope_policy") != "fail_closed":
         problems.append("unregistered_scope_policy must be fail_closed")
-    if policy.get("product_writer_allowed_scopes") != [APPROVED_SCOPE]:
+    if set(policy.get("product_writer_allowed_scopes", [])) != APPROVED_SCOPES:
         problems.append(
-            "product_writer_allowed_scopes must contain only "
-            f"{APPROVED_SCOPE!r}"
+            "product_writer_allowed_scopes must match registered scopes: "
+            f"{sorted(APPROVED_SCOPES)!r}",
         )
 
     backfill = _mapping_path(manifest, "current_authority", "backfill")
@@ -89,6 +92,20 @@ def _check_manifest(manifest: Mapping[str, Any], problems: list[str]) -> None:
         for key, value in expected.items():
             if backfill.get(key) != value:
                 problems.append(f"manifest backfill {key} must be {value!r}")
+
+    cid_nl = _mapping_path(manifest, "current_authority", "cid_nl_default_activation")
+    if cid_nl is None:
+        problems.append("manifest missing current_authority.cid_nl_default_activation")
+    else:
+        expected_cid_nl = {
+            "current_product_authority_rows": 95,
+            "existing_successor_context_rows": 337,
+            "omitted_no_target_rows": 27,
+            "authority_scope": CID_NL_APPROVED_SCOPE,
+        }
+        for key, value in expected_cid_nl.items():
+            if cid_nl.get(key) != value:
+                problems.append(f"manifest CID-NL {key} must be {value!r}")
 
     parked = _mapping_path(manifest, "parked_lanes", PARKED_BROAD_BACKFILL)
     if parked is None:
@@ -233,6 +250,36 @@ def _check_source_hashes(
         path = repo_root / relative
         if path.exists() and artifact_sha256(path) != source_hashes.get(source_id):
             problems.append(f"{source_id} artifact hash does not match index")
+
+
+def _check_cid_nl_source_hashes(
+    manifest: Mapping[str, Any],
+    repo_root: Path,
+    problems: list[str],
+) -> None:
+    cid_nl = _mapping_path(manifest, "current_authority", "cid_nl_default_activation")
+    if cid_nl is None:
+        return
+    artifact_fields = {
+        "artifact": "artifact_sha256",
+        "acceptance_artifact": "acceptance_artifact_sha256",
+        "compact_manifest": "compact_manifest_sha256",
+    }
+    for path_key, sha_key in artifact_fields.items():
+        relative = cid_nl.get(path_key)
+        expected_hash = cid_nl.get(sha_key)
+        if not isinstance(relative, str) or not relative:
+            problems.append(f"manifest CID-NL {path_key} must be a non-empty path")
+            continue
+        if not isinstance(expected_hash, str) or not expected_hash:
+            problems.append(f"manifest CID-NL {sha_key} must be a non-empty hash")
+            continue
+        path = repo_root / relative
+        if not path.is_file():
+            problems.append(f"CID-NL {path_key} artifact is missing: {relative}")
+            continue
+        if artifact_sha256(path) != expected_hash:
+            problems.append(f"CID-NL {path_key} hash does not match manifest")
 
 
 def _mapping_path(

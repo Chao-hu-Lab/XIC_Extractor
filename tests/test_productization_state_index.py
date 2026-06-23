@@ -26,28 +26,49 @@ def test_status_schema_matches_index_header() -> None:
     assert len(rows) == len(schema["required_lane_ids"])
 
 
-def test_only_current_backfill_scope_has_writer_authority() -> None:
+def test_registered_default_scopes_have_writer_authority() -> None:
     _, rows = _read_tsv(DEFAULT_STATUS_INDEX)
     authority_rows = [row for row in rows if row["write_authority"] == "TRUE"]
 
-    assert [row["lane_id"] for row in authority_rows] == [
-        "backfill_current_write_ready_scope"
-    ]
-    authority = authority_rows[0]
-    assert authority["current_artifact"] == (
+    assert {row["lane_id"] for row in authority_rows} == {
+        "backfill_current_write_ready_scope",
+        "cid_nl_default_product_activation_v1",
+    }
+    authority_by_lane = {row["lane_id"]: row for row in authority_rows}
+
+    backfill = authority_by_lane["backfill_current_write_ready_scope"]
+    assert backfill["current_artifact"] == (
         "docs/superpowers/validation/quant_matrix_default_product_activation_v1/"
         "quant_matrix_default_product_activation_summary.json"
     )
-    assert authority["product_authority_scope"] == "backfill_policy_write_ready_rows"
-    assert authority["row_count"] == "511"
-    assert authority["may_touch_matrix"] == "TRUE"
-    assert authority["may_change_quant_output"] == "TRUE"
-    assert authority["may_change_workbook"] == "FALSE"
-    assert authority["may_change_selected_peak"] == "FALSE"
-    assert authority["may_change_selected_area"] == "FALSE"
-    assert authority["may_change_counted_detection"] == "FALSE"
-    assert authority["product_effect"] == "default_quant_matrix_product_output"
-    assert authority["public_surface"] == "quant_matrix_default_product_activation_v1"
+    assert backfill["product_authority_scope"] == "backfill_policy_write_ready_rows"
+    assert backfill["row_count"] == "511"
+    assert backfill["may_touch_matrix"] == "TRUE"
+    assert backfill["may_change_quant_output"] == "TRUE"
+    assert backfill["may_change_workbook"] == "FALSE"
+    assert backfill["may_change_selected_peak"] == "FALSE"
+    assert backfill["may_change_selected_area"] == "FALSE"
+    assert backfill["may_change_counted_detection"] == "FALSE"
+    assert backfill["product_effect"] == "default_quant_matrix_product_output"
+    assert backfill["public_surface"] == "quant_matrix_default_product_activation_v1"
+
+    cid_nl = authority_by_lane["cid_nl_default_product_activation_v1"]
+    assert cid_nl["current_artifact"] == (
+        "docs/superpowers/validation/cid_nl_default_product_activation_v1/"
+        "cid_nl_default_product_activation_summary.json"
+    )
+    assert cid_nl["product_authority_scope"] == (
+        "cid_nl_adopt_ready_feature_inclusion_95_cells"
+    )
+    assert cid_nl["row_count"] == "95"
+    assert cid_nl["may_touch_matrix"] == "TRUE"
+    assert cid_nl["may_change_quant_output"] == "TRUE"
+    assert cid_nl["may_change_workbook"] == "FALSE"
+    assert cid_nl["may_change_selected_peak"] == "FALSE"
+    assert cid_nl["may_change_selected_area"] == "FALSE"
+    assert cid_nl["may_change_counted_detection"] == "FALSE"
+    assert cid_nl["product_effect"] == "cid_nl_default_quant_matrix_product_output"
+    assert cid_nl["public_surface"] == "cid_nl_default_product_activation_v1"
 
 
 def test_peak_choice_lockbox_status_points_to_shadow_automation_design() -> None:
@@ -486,6 +507,23 @@ def test_text_artifact_hash_canonicalizes_checkout_line_endings(tmp_path: Path) 
     artifact.write_bytes(b"column\r\nvalue\r\n")
 
     assert artifact_sha256(artifact) == expected_hash
+
+
+def test_productization_doc_hash_canonicalizes_checkout_line_endings(
+    tmp_path: Path,
+) -> None:
+    for relative in (
+        "docs/superpowers/specs/artifact.json",
+        "docs/superpowers/notes/artifact.md",
+    ):
+        artifact = tmp_path / relative
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(b"line one\nline two\n")
+        expected_hash = artifact_sha256(artifact)
+
+        artifact.write_bytes(b"line one\r\nline two\r\n")
+
+        assert artifact_sha256(artifact) == expected_hash
 
 
 def _check_with_index(path: Path) -> list[str]:
