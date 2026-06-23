@@ -331,7 +331,7 @@ def artifact_sha256(path: Path) -> str:
 
     normalized_path = f"/{path.as_posix()}"
     if path.suffix.lower() in CANONICAL_TEXT_HASH_EXTENSIONS and (
-        "/docs/superpowers/validation/" in normalized_path
+        "/docs/superpowers/" in normalized_path
         or "/output/productization_realdata_seed_guard_85raw_20260617/"
         "generated_policy_quality_explained_no_raw_productization/"
         in normalized_path

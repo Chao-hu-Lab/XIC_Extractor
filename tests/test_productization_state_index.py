@@ -509,6 +509,23 @@ def test_text_artifact_hash_canonicalizes_checkout_line_endings(tmp_path: Path) 
     assert artifact_sha256(artifact) == expected_hash
 
 
+def test_productization_doc_hash_canonicalizes_checkout_line_endings(
+    tmp_path: Path,
+) -> None:
+    for relative in (
+        "docs/superpowers/specs/artifact.json",
+        "docs/superpowers/notes/artifact.md",
+    ):
+        artifact = tmp_path / relative
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_bytes(b"line one\nline two\n")
+        expected_hash = artifact_sha256(artifact)
+
+        artifact.write_bytes(b"line one\r\nline two\r\n")
+
+        assert artifact_sha256(artifact) == expected_hash
+
+
 def _check_with_index(path: Path) -> list[str]:
     return check_productization_state(
         schema_path=DEFAULT_SCHEMA,
