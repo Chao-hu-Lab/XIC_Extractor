@@ -1,145 +1,200 @@
 # XIC productization handoff
 
-Updated: 2026-06-17
+Updated: 2026-06-19
 Branch: `cc/framework-improvements`
-HEAD when pruned: `34cdf61d`
-Purpose: short current-state snapshot for the next agent/session. This file is
-not the product tier authority; use the control plane first.
+Recent committed checkpoints: `239d5e52` blueprint; `7c229332` Phase 1 adapter.
+Current checkpoint: Phase 1 closed; Phase 2 not started.
+
+This is the short current-state snapshot. Tier authority lives in
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
+machine-readable validation indexes.
 
 ## Current Objective
 
-Converge non-GUI productization lanes to `production_candidate`,
-`production_ready`, `parked`, `diagnostic_only`, or `blocked` with clear
-evidence. GUI wiring/replay remains out of scope until the main GUI branch is
-connected.
+Phase 1 is implemented: the lockbox shadow automation artifact is now a
+shadow-only contract adapter/checker, not a scorer run and not product writer
+authority.
+
+Next executable productization phase is Phase 2:
+`ProductionAcceptanceManifest v1`. Phase 2 must define the only future
+Backfill `write_authority=true` decision artifact, still without writing the
+default matrix until Phase 3 expected-diff activation exists.
+
+## Active Blueprint
+
+- Active roadmap:
+  `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`.
+- Cleanup map:
+  `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md`.
+- Superseded/adapt source:
+  `docs/superpowers/plans/2026-06-18-backfill-evidence-lifecycle-blueprint.md`.
+
+## Current Product Direction
+
+- Backfill values are accepted quantification values.
+- Backfill values are not detections.
+- Backfill values are not truth claims.
+- The future default `quant_matrix` should include detected plus accepted
+  Backfill values.
+- Detection claims remain based on `detected_count` only.
+- `quant_available_count` is detected plus accepted Backfill.
+- Production write authority must come from `ProductionAcceptanceManifest`
+  keyed by `peak_hypothesis_id + sample_stem`.
+- Shadow/report/gallery/candidate artifacts remain non-authority.
 
 ## Current State
 
-- [scope warning] The goal/rule/handoff-prune dirty diff belongs to a side
-  session. Preserve it, do not revert it, and do not mix it into a Backfill
-  productization commit unless that side session explicitly owns the commit.
-- [active] Backfill generated policy writer is `production_ready` only for
-  current approved evidence classes plus row-specific observed-oracle rows:
-  latest no-RAW replay classified 4613 rows as 511 `write_ready`, 0
-  `detected_flagged`, and 4102 `blocked`; writer expected-diff passed 511/511.
-- [active] Latest Backfill change adds
-  `standard_peak_backfill_policy_quality_explanations.tsv`, an
-  explanation-only sidecar for all 4613 generated policy rows. It does not
-  change policy row content, writer authority, selected peaks, areas, counted
-  detections, workbook output, or matrix values. It explains why blocked rows
-  stayed blocked: 1087 are missing overlay path, and most of the rest combine
-  shape/height/width/scan/apex-delta blockers or still need a new approved
-  evidence class/passing oracle.
-- [active] Broad Backfill 4613-row write is still `production_candidate`, not
-  ready. The 4102 blocked rows need trace overlay/reintegration evidence or a
-  new approved evidence class with oracle + expected-diff.
-- [active] Backfill ready writer surfaces currently include five scoped slices
-  totaling 439 cells before observed-oracle promotion: 72 high-signal clean,
-  42 low-scan clean, 57 low-height clean, 69 low-height-low-scan clean, and
-  220 low-height reintegration-stable. The 72 formerly `detected_flagged` rows
-  then passed row-specific full-trace oracle and bring the current writer total
-  to 511.
-- [blocked] All-stability 299-row candidate pool cannot be promoted directly:
-  formal family oracle was 19/20 with `FAM000949/NormalBC2261_DNA` area error
-  `0.19621`, above the accepted 10% ceiling.
-- [active] Shape-clean + reintegration-stable is useful candidate evidence, not
-  writer authority: family oracle passed 20/20, but writer probe found 0 new
-  writes / 104 unchanged pre-existing values.
-- [blocked] Apex-delta, width-only, and shape-margin probes remain
-  `production_candidate` only because heldout oracle checks failed.
-- [active] Targeted MS1 shape identity limited rescue is `production_ready` for
-  headless `5-hmdC + 5-medC` limited default that writes only
-  `detected_flagged`. GUI and broader target rescue are blocked.
-- [active] `sample_metadata_v1` is `production_ready` for no-output order
-  projection only: extraction injection order, instrument-QC sidecar, alignment
-  sample-column ordering, and RT-normalization anchor lookup can share the
-  resolver. Roles/batch/matrix/exclusion must not change quant output without a
-  separate expected-diff gate.
-- [parked] ReviewAction audited apply copy exists and candidate sidecar verifier
-  is `production_candidate`; selected-candidate switch and manual-boundary area
-  recompute remain parked because they would change selected peak/area/counting.
-- [active] Handoff mechanism has been pruned as a demo case. Old phase history
-  is summarized in `docs/superpowers/handoffs/archive/2026-06-17_cc-framework-improvements_productization_handoff-prune_34cdf61d.md`.
-  Second-pass read-only subagent review accepted the rule/hook/handoff changes.
+- Current Backfill product authority remains exactly 511 cells.
+- Broad Backfill auto-write remains parked.
+- The parked item is broad uncontracted writer behavior, not the product goal
+  of accepted Backfill entering a future default quant matrix.
+- `4613` remains the candidate/audit universe, not a writable pool.
+- `3015` trace-matched unresolved rows remain review/adjudication targets, not
+  writer rows.
+- `1087` missing-overlay rows remain evidence gaps, not negative truth.
+- Lockbox/owner-clean evidence remains non-authoritative challenge evidence.
+- Manual wrong-peak/no-peak controls remain negative controls.
+- No scorer was run. No RAW/85RAW was run.
+- No ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  GUI, default extraction, authority manifest, or broad Backfill behavior
+  changed in Phase 1.
 
-## Files Changed
+## Phase 1 Result
 
-- `AGENTS.md`: added a short root rule that active handoffs must stay current,
-  short, and pruned around the 200-line target.
-- `.codex/skills/xic-goal-execution/SKILL.md`: added XIC-specific handoff
-  snapshot discipline for `$goal-execution` usage.
-- `$CODEX_HOME/skills/goal-execution/SKILL.md`: global goal execution
-  now requires current-state handoff snapshots, archive summaries, optional
-  notes, status labels, and pruning.
-- `$CODEX_HOME/skills/handoff/SKILL.md`: direct `$handoff` usage now
-  follows the same three-layer model.
-- `.codex/hooks/*` and `.codex/hooks/fixtures/assert_hook_outputs.py`: hooks
-  remind about stale/oversized handoff only; they do not author handoff content.
-- `docs/agent/codex-operating-system.md` and
-  `docs/agent/communication-review.md`: synced the handoff contract.
-- `tests/test_standard_peak_backfill_productization.py`,
-  `xic_extractor/diagnostics/standard_peak_backfill_productization.py`,
-  `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`, and
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`:
-  Backfill quality-explanation sidecar contract/test/code/control-plane entry.
+Updated artifact:
+`docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`.
 
-## Active Decisions
+Updated source manifest:
+`docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv`.
 
-- Control plane owns maturity tier and active lane decisions:
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
-- Active handoff is a current-state snapshot, not a chronological log. Archive
-  stores completed phase summaries; notes are optional for long scratch logs.
-- Hooks only remind or block deterministic failure modes. The executing agent
-  owns handoff rewrite/prune judgment after reading diff and validation state.
-- Backfill product authority must flow through generated policy, oracle evidence,
-  and expected-diff; no manual TSV allowlist.
-- No default extraction behavior, workbook schema, selected peak/area, counted
-  detection, or primary matrix semantics may change without explicit
-  expected-diff/product contract.
+The single 72-case manifest now carries:
+
+- `shadow_decision={accept,flag,reject,not_scored}`;
+- truth/status enum with owner-clean as `not_truth_claimed` and
+  `non_authoritative_challenge`;
+- manual negative controls as `reject` hard stops;
+- row-level doublet status, reference side, allowed flag, and source;
+- source paths/hashes and manifest sha in the JSON summary;
+- `shadow_only=true`, `write_authority=false`, and
+  `matrix_write_allowed=false`;
+- `may_satisfy_reviewer_slot2=false`;
+- `single_owner_evidence_is_truth_completion=false`.
+
+`lockbox_shadow_automation_experiment_v1` remains a shadow-only public surface.
+It does not feed ProductWriter, matrix/workbook output, selected peak/area,
+counted detection, GUI, default extraction, reviewer slot 2, or broad Backfill
+authority.
+
+## Current Lane State
+
+- `peak_choice_truth_lockbox_v1` remains `production_candidate`.
+- `mechanical_adjudication_index_v1`, Review Packet / Approval Workflow v1,
+  Missing-Overlay Evidence Recovery v1, and lockbox assets remain
+  non-authority review/evidence infrastructure.
+- Targeted MS1 shape identity limited rescue remains production-ready only for
+  the explicit 5-hmdC + 5-medC headless workflow; GUI and broader targets remain
+  blocked.
+- `sample_metadata_v1` remains production-ready for no-output ordering.
+- roles/batch/matrix/exclusion must not alter quant output.
+- ReviewAction selected-candidate switch and manual-boundary area recompute
+  remain parked.
+- calibration/normalization activation remains classification and planning only.
+
+Status-index anchors retained for `check_productization_state.py`:
+
+- Goal 0/1 hardening added.
+- machine-adjudicated without granting new writer authority.
+- Goal 2 added Review Packet / Approval Workflow v1.
+- lockbox_shadow_automation_experiment_v1.
+- Goal 4 added Missing-Overlay Evidence Recovery v1.
+- keep only as explanation/triage.
+- Targeted MS1 shape identity limited rescue remains production-ready.
+- GUI and broader targets remain blocked.
+- `sample_metadata_v1` remains production-ready for no-output ordering.
+- roles/batch/matrix/exclusion must not alter quant output.
+- ReviewAction selected-candidate switch and manual-boundary area recompute remain parked.
+- manual-boundary area recompute remain parked.
+- classification and planning only.
 
 ## Rejected Paths
 
-- [superseded] Append-only handoff updates. Rewrite/prune this file instead.
-- [blocked] Directly promote broad 4613-row Backfill writes from scoped slices.
-- [blocked] Promote all-stability 299-row pool after the 19/20 oracle result.
-- [blocked] Add a shape-clean writer flag while it has 0 new matrix writes.
-- [parked] ReviewAction selected-candidate/manual-boundary product writeback.
-- [blocked] Let sample roles/QC/blank/batch/matrix/exclusion alter quant output
-  without a new expected-diff gate.
+- Do not run or revive a scorer as productization authority.
+- Do not create a second independent lockbox case manifest.
+- Do not treat owner-clean challenge rows, AI challenge evidence, manual
+  negative controls, missing-overlay rows, or any future summary score as truth
+  completion.
+- Do not let any shadow artifact feed ProductWriter, matrix/workbook output,
+  selected peak/area, counted detection, GUI, default extraction, reviewer slot
+  2, or broad Backfill authority.
+- Do not treat low detected support or high Backfill dependency as a standalone
+  matrix-value blocker; they are prevalence/claim uncertainty flags.
+- Do not write accepted Backfill into the default matrix before Phase 2
+  production acceptance manifest and Phase 3 expected-diff activation exist.
 
-## Tests / Validation
+## Files Changed In Phase 1
 
-- Handoff mechanism checks after rule changes: `python .codex\hooks\fixtures\assert_hook_outputs.py` passed; `git diff --check` passed with only LF/CRLF warnings; `python -m py_compile .codex\hooks\*.py .codex\hooks\fixtures\assert_hook_outputs.py` passed.
-- Subagent review result: first reviewer found hook-noise and wording/placement
-  gaps; fixes were applied. Second reviewer found no remaining P2/P3 issues and
-  confirmed active handoff is 127 lines, archive is phase-summary only, and hook
-  fixture/diff-check pass.
-- Latest recorded productization full gates from the prior long handoff included
-  ruff/mypy/diagnostics-index pass and full pytest passes, but the current
-  worktree has dirty productization files. Rerun relevant gates before PR or
-  production-readiness claims.
-- Backfill quality sidecar checkpoint: focused Backfill tests, focused ruff,
-  focused mypy, and the no-RAW 85RAW replay under
-  `generated_policy_quality_explained_no_raw_productization/` passed. No RAW or
-  85RAW rerun was needed because existing artifacts answered the decision.
-- RAW policy: do not rerun 85RAW unless a new production-readiness decision
-  needs it and existing artifacts cannot answer the question.
+- `scripts/build_lockbox_shadow_automation_experiment_design.py`
+  - upgraded the existing builder/checker to a Phase 1 shadow contract adapter.
+- `docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv`
+  - same 72-case source manifest, enriched with shadow/truth/doublet/authority
+    contract fields.
+- `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`
+  - updated decision, source/hash/manifest-sha, enum, and authority contract.
+- `tests/test_lockbox_shadow_automation_experiment_design.py`
+  - added focused checker tests for hard stops and authority invariants.
+- `docs/superpowers/validation/productization_status_index_v1.tsv` and
+  `tests/test_productization_state_index.py`
+  - synchronized artifact hash, non-authority status-index wording, and
+    control-plane freshness assertion.
+- `docs/superpowers/validation/lockbox_label_readme_v1.md`
+  - updated the plain-language lockbox shadow contract description.
+- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+  - refreshed lockbox wording to Phase 1 contract-adapter status and Phase 2
+    `ProductionAcceptanceManifest v1` next checkpoint without changing tier or
+    authority.
+- `docs/superpowers/notes/2026-06-19-backfill-quant-matrix-cleanup-map.md` and
+  `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md`
+  - marked Phase 1 adapter work as complete/current and removed stale
+    future-Phase-1 wording.
+- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
+  - pruned to this current-state snapshot.
 
-## Remaining Work
+Phase 0 blueprint and Phase 1 adapter changes are committed. User-provided
+deepresearch inputs and separate cleanup inventory notes remain untracked and
+unmodified.
 
-- [active] Keep this handoff under 200 lines during future checkpoints. Remove
-  `[done]` and `[superseded]` items on the next prune unless they prevent a
-  repeated mistake.
-- [active] Subagent-review the Backfill quality sidecar slice, fix valid
-  findings, then commit only the Backfill/spec/control-plane scope. Keep the
-  side-session goal/rule dirty diff unstaged.
-- [blocked] Broad Backfill promotion needs broader oracle/product-writer evidence
-  for missing/blocked cells, not another narrow dataset-specific slice.
-- [blocked] GUI replay/parity waits for GUI branch reconnection.
+## Validation Status
+
+Latest completed checks:
+
+- `uv run python scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
+  - pass.
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
+  - 14 passed.
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -k "manual_negative_accept or blocked_doublet or owner_clean_truth_completion or missing_source_hashes or actual_case_manifest_path" -v --tb=short`
+  - 5 passed, 9 deselected.
+- `uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  - 11 passed.
+- `uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py -v --tb=short`
+  - 25 passed.
+- `uv run python scripts/check_productization_state.py`
+  - pass after productization status index hash update.
+- `uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py`
+  - pass.
+- `git diff --check`;
+  - pass; only Git CRLF warnings.
+- secret/local-path scan on changed docs/scripts/tests;
+  - no matches.
+
+## Control Plane Note
+
+No control-plane tier or authority update is needed for Phase 1 because
+maturity tier, active lane, matrix authority, selected area/counting behavior,
+review/replay behavior, ProductWriter authority, and broad uncontracted
+Backfill state did not change. The control-plane prose was refreshed only to
+remove stale scorer wording and point the next checkpoint to Phase 2.
 
 ## Next Actions
 
-1. Run Backfill subagent review on the quality-explanation sidecar only.
-2. Fix valid review findings and rerun focused Backfill tests/ruff/mypy.
-3. Commit only the Backfill productization slice; do not stage the side-session
-   goal/rule/hook/handoff-prune files.
+Next goal: Phase 2, `ProductionAcceptanceManifest v1`; do not start default
+quant matrix activation until Phase 3.

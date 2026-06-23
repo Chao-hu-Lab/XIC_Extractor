@@ -1,5 +1,11 @@
 # Backfill Evidence Reconciliation Gallery Design
 
+> Superseded for active Backfill roadmap execution as of 2026-06-18.
+> Keep this design as diagnostic/gallery provenance. Its gallery-specific
+> contract remains useful background only when explicitly named, but current
+> Backfill product direction and authority gates live in the control plane and
+> `docs/superpowers/plans/2026-06-18-backfill-evidence-lifecycle-blueprint.md`.
+
 ## Status
 
 Design draft for review. No implementation is included in this document.

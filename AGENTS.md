@@ -6,7 +6,12 @@ influence every turn; nested docs carry the longer contracts.
 
 Canonical references:
 
+These are routing targets, not a per-turn preflight checklist. Read only the
+file(s) directly relevant to the current task unless a hard default below names
+a required preflight.
+
 - Directory layout and scratch hygiene: [`docs/project-layout.md`](docs/project-layout.md)
+- Stable domain glossary and product lane vocabulary: [`CONTEXT.md`](CONTEXT.md)
 - Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
   [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md)
 - Known diagnostic conclusions: [`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md)
@@ -32,6 +37,23 @@ Canonical references:
   [`docs/architecture-contract.md`](docs/architecture-contract.md)
 - Repo-local XIC overlay skills: [`.codex/skills`](.codex/skills), only when
   they add an execution checklist beyond the routing docs.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for this repository. See
+`docs/engineering-skills/issue-tracker.md`.
+
+### Triage labels
+
+The repo uses the default five-label triage vocabulary. See
+`docs/engineering-skills/triage-labels.md`.
+
+### Domain docs
+
+The repo uses a single-context domain layout with explicit shared, targeted,
+and untargeted product lanes. See `docs/engineering-skills/domain.md`.
 
 ## Hard Defaults
 

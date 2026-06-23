@@ -1,5 +1,13 @@
 # Backfill Evidence Reconciliation Productization Goal
 
+> Superseded for active Backfill roadmap execution as of 2026-06-18.
+> Keep this file as historical diagnostic/gallery provenance because
+> `tools/diagnostics/INDEX.md` cites it as an originating goal. Do not execute
+> it as the current Backfill productization goal. Use
+> `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md` and
+> `docs/superpowers/plans/2026-06-18-backfill-evidence-lifecycle-blueprint.md`
+> for current evidence-chain phase work.
+
 ```text
 /goal
 GOAL:

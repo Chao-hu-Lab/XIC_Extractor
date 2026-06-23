@@ -1,0 +1,47 @@
+{
+  "authority_rules": {
+    "ai_challenge_grants_truth_label": false,
+    "broad_backfill_unparked": false,
+    "may_change_counted_detection": false,
+    "may_change_default_extraction": false,
+    "may_change_gui": false,
+    "may_change_selected_area": false,
+    "may_feed_product_writer": false,
+    "may_grant_product_authority": false,
+    "may_satisfy_reviewer_slot2": false,
+    "may_switch_selected_peak": false,
+    "may_touch_matrix": false,
+    "may_touch_workbook": false
+  },
+  "case_counts": {
+    "flagged_cases": 0,
+    "product_authority_rows": 0,
+    "route_or_evidence_integrity_cases": 19,
+    "total_cases": 72,
+    "visual_challenge_cases": 53
+  },
+  "challenge_reason_counts": {
+    "no_obvious_visual_contradiction": 52,
+    "owner_rule_detected_left_peak_resolved": 1,
+    "route_integrity_confirmed": 19
+  },
+  "challenge_result_counts": {
+    "no_issue": 72
+  },
+  "decision": "ai_challenge_no_owner_recheck_required",
+  "decision_reasons": [
+    "AI/subagent challenge output is non-authoritative QA only",
+    "challenge findings can only route cases back to owner re-review",
+    "challenge output cannot satisfy reviewer slot 2 or grant writer authority"
+  ],
+  "flagged_cases": [],
+  "schema_version": "lockbox_ai_challenge_result_summary_v1",
+  "source_artifacts": {
+    "ai_challenge_packet_summary": "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json",
+    "ai_challenge_packet_summary_sha256": "526FD527F883468D3AF93E044CDAA7F919F829DFB4B2224CFFCC79FF0B0CA7FC",
+    "ai_challenge_queue": "docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv",
+    "ai_challenge_queue_sha256": "1DB27560D0EE4B5C5E474DE4AFAA7C99E20233185AC4343867D52DDF37624527",
+    "ai_challenge_result_log": "docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv",
+    "ai_challenge_result_log_sha256": "83EA87BCBA19D0D29F83368E525C89B28017B460065FB92AD1B2E0AB6E73B131"
+  }
+}

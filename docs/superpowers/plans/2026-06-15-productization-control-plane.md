@@ -91,25 +91,22 @@ similarity 降成 `0.93 <= shape < 0.95`，其他條件仍要乾淨；85RAW no-R
 heldout trace oracle 有 18 candidates / 8 families，selected 8 cases 只有
 6/8 pass，summary 最大 area relative error `0.198393`，所以也不得新增
 shape-margin writer。
-Broad 4613-row consolidated activation 仍只有 `production_candidate`，因為
-1087 個缺 overlay/trace evidence，其餘 trace-matched writes 還沒有全部落進
-已命名、已 oracle-backed 的 ready envelope。若要把 broad scope 也推 ready，
-下一個 checkpoint 必須補 broader masked/product-writer oracle，不能把 narrow
-ready 外推到 4613-row，也不能把 low-height diagnostic expected-diff 當成
-writer approval。
-Any future Backfill scoped writer must explicitly name the broader evidence
-class it validates and the broad 4613-row decision it advances. If the scope is
-only another nested dataset-specific slice, it may be recorded as
-`production_candidate` evidence but must not be promoted to `production_ready`.
+Broad 4613-row auto-write is now `parked` by
+`backfill_broad_autowrite_feasibility_gate_v1`: 4613 is the candidate/audit
+universe, not a writer pool. The durable next product asset is authority,
+mechanical adjudication, structured review, truth acquisition, or trace-evidence
+recovery. Do not open another broad Backfill scoped writer or diagnostic unless
+a new independent truth source is named and a later goal explicitly adds
+masked/product-writer oracle plus expected-diff.
 新的 boundary-stability / reintegration-agreement diagnostic 已補上第一個
 broader evidence class：`standard_peak_reintegration_stability_audit.py` 對同一
 stored trace 做 full-trace 與 expected-window-bounded 兩種再積分，兩者都必須
 在 `0.1 min / 10% area` 內吻合才算 eligible。既有 85RAW no-RAW consolidated
 scope 實跑得到 299 eligible written rows、3227 ineligible、1087 missing
 evidence，其中 271 eligible rows 不在四個既有 ready scoped writer envelope
-內。這把 broad scope 的 evidence 往前推到更強的 `production_candidate`，但仍
-不是 writer approval：它是 stored-trace self-consistency，還缺 masked/product-
-writer oracle 與 expected-diff。
+內。This remains historical candidate evidence only. It does not reopen broad
+Backfill auto-write after the 2026-06-18 park decision and must not be used as a
+new writer predicate.
 後續 low-height reintegration-stable promotion 把這個 candidate pool 的一個
 可驗證子集合推到 ready：直接把 299 個 stability eligible rows 全部寫入仍被
 formal all-stability family oracle 擋住。該 oracle
@@ -133,11 +130,14 @@ explicit
 duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 全為 0。
 這個 fifth ready slice 新增 199 個不在前四個 writer scope 的 ready cells，
 目前五個 ready scope 的 cell-level union 是 439 cells。
-This is a release-safety boundary, not a product north-star limit: the product
-direction is to backfill automatically whenever evidence is sufficient, using
-the 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row
-low-height-low-scan, and 220-row low-height reintegration-stable slices as
-demonstrators before broadening evidence.
+This is a release-safety boundary and a historical evidence trail, not a
+license to keep broadening Backfill writer scope. The product direction is now
+mechanical adjudication plus structured approval coverage, with automatic matrix
+writes allowed only for explicitly authorized, expected-diff-passing scopes. The
+72-row high-signal, 42-row low-scan, 57-row low-height, 69-row
+low-height-low-scan, and 220-row low-height reintegration-stable slices remain
+demonstrators for approved evidence classes, not templates for mining broader
+writer predicates.
 Shape-clean reintegration-stable is now a cleaner candidate evidence class, but
 not a writer promotion. Formal target
 `standard_shape_clean_reintegration_stable_candidate_family_trace` requires
@@ -165,8 +165,10 @@ optionally joins reintegration-stability evidence, writes
 `standard_peak_backfill_policy.tsv`, and classifies every supplied candidate as
 `write_ready`, `detected_flagged`, or `blocked`. The writer only replays
 generated `write_ready` rows through the existing matrix-only activation and
-expected-diff gate. This removes the manual-TSV/white-list failure mode and is
-the preferred path for broadening. The first generated-policy replay over the
+expected-diff gate. This removes the manual-TSV/white-list failure mode for
+already-approved evidence classes; it is not a broadening mechanism and must not
+grant authority to new predicates without a later authority manifest update,
+independent truth basis, and expected-diff contract. The first generated-policy replay over the
 existing 4613-row consolidated source audit passed with 439 generated
 `write_ready` rows, 72 `detected_flagged`, and 4102 `blocked`; the product
 writer wrote exactly the 439 then-approved evidence rows and
@@ -217,10 +219,104 @@ The Backfill Production Gate research input under `docs/deepresearch/` reviewed
 on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
 demonstrator / rollout guardrail, not a product hard gate. Low-height
 `19/20 pass + 1 boundary fail` should be treated as boundary/reintegration risk
-evidence. The next broadening checkpoint should pivot to boundary-stability /
-reintegration agreement, local S/N or local selectivity, and cohort-anchored
-expected-window consistency with predeclared strata/lockbox evidence before any
-new writer approval.
+evidence. This research input is now background for future truth/review design,
+not a prompt to create another broad writer slice.
+The 2026-06-18 strategy reset under
+`docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`,
+`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`,
+and
+`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`
+supersedes any next step that would choose another writer slice directly from
+`quality_blockers`. The Backfill north star is mechanical adjudication of all
+4613 candidates, not claiming all 4613 as writable. Current writer authority
+stays at 511 approved cells. The 3015 dirty-but-trace-matched rows are now a
+truth/review/adjudication target, not an auto-write pool, and the 1087
+`missing_overlay_path` rows stay blocked until trace evidence exists. The
+read-only
+`backfill_broad_autowrite_feasibility_gate_v1` packet now closes this branch as
+`park_broad_backfill`: existing artifacts do not support a short defensible
+broad auto-write gate, and ISTD evidence cannot prove analyte peak-choice or
+area truth. No broader ProductWriter authority should be implemented, and no
+new broad Backfill sidecars/diagnostics should be added unless a genuinely new
+independent truth source is named. The current next asset is
+`productization_authority_manifest_v1` plus
+`mechanical_adjudication_schema_v1` / `mechanical_adjudication_index_v1`: a
+fail-closed authority and classification layer that makes all 4613 rows
+machine-adjudicated without granting new writer authority.
+The next checkpoint adds Review Packet / Approval Workflow v1 as a structured
+human-review asset, not ProductWriter authority: the 3015 trace-matched
+unresolved rows become review packets, the 1087 missing-overlay rows remain
+evidence-recovery work, and reviewer approval can only write a decision log.
+Peak-Choice Truth Set / Lockbox v1 then adds the first independent truth-label
+acquisition contract: 72 deterministic cases across approved controls,
+unresolved review rows, missing-overlay evidence gaps, failed-oracle negatives,
+and manual wrong-peak/no-peak fixtures. It is `production_candidate` as a
+non-mutating truth/review asset only; no labels have been collected, agreement
+metrics are null, and lockbox membership cannot grant ProductWriter authority.
+Lockbox Label Collection Pack v1 now materializes that lockbox as a
+human-labelable package: 72 Markdown review packets, a 144-row empty label
+template with two reviewer slots per case, a strict label schema, a validator,
+and a plain-language labeling README. This still does not create truth labels
+or write authority. Blank template rows are not labels; future reviewer labels
+remain evidence inputs until a later import/summary gate and separate
+expected-diff authority update say otherwise.
+Lockbox Static Review UX v1 now adds a human-readable HTML bundle on top of the
+same label package: 72 case pages, 53 Gaussian15-smoothed review plots with
+Gaussian-derived review boundaries, 18 explicit missing-evidence pages, and 1
+trace-present boundary-unavailable page. Gaussian15 is a review/morphology view
+only; it is not a ProductWriter input, matrix area, selected peak switch,
+counted-detection decision, or automatic truth label. The teal shaded review
+window is Gaussian-derived; older candidate/raw boundaries are reference lines
+only.
+Lockbox Next-Action Plan v1 now splits the first one-reviewer import into
+actionable, non-authoritative buckets: 53 plotted Gaussian15 cases are ready for
+second independent review; 6 manual wrong-peak/no-peak cases are existing
+negative controls, not missing-evidence unknowns; 12 failed round-trip oracle
+negative cases stay parked because the oracle is not independent peak-choice or
+area truth; and 1 Gaussian boundary-unavailable case needs signal/evidence
+recovery or remains not assessable. This split narrows the next human step
+without granting ProductWriter, matrix, workbook, selected-peak, selected-area,
+counted-detection, GUI, or broad Backfill authority.
+Lockbox Shadow Scoring Contract Adapter v1 turns that split plus the
+single-owner/AI-challenge closure into a 72-case shadow-only contract manifest:
+53 owner-clean Gaussian15 cases are non-authoritative accept challenges, 6
+manual wrong-peak/no-peak controls are reject hard stops, and 13 excluded rows
+remain `not_scored`. The adapter records shadow/truth/doublet/source-hash and
+manifest-sha contract fields plus the Gaussian15 boundary policy explicitly:
+Gaussian-smoothed boundaries are the review basis; raw-trace doublets are
+acceptable only when the Backfill/detect reference is on the left peak, and
+unclear or right-peak reference cases stay flagged. This is still
+`production_candidate` evidence/control infrastructure only. Next checkpoint is
+Phase 2 `ProductionAcceptanceManifest v1`, not a scorer run. It writes no
+ProductWriter input, matrix, workbook, selected peak/area, counted detection,
+reviewer slot2, GUI, default extraction, or broad Backfill authority.
+Missing-Overlay Evidence Recovery v1 now links the 1087
+`missing_overlay_path` rows back to existing family-level trace/overlay
+artifacts and sample-level trace fields across 114 families. This moves the
+evidence explanation from "artifact link missing" to "trace recovered but still
+needs review/truth/reintegration decision"; it does not grant write authority.
+Goal 5 machine status lane ids are tracked in
+`docs/superpowers/validation/productization_status_index_v1.tsv`:
+`backfill_current_write_ready_scope`, `broad_backfill_autowrite`,
+`productization_authority_firewall_v1`, `mechanical_adjudication_contract_v1`,
+`review_packet_workflow_v1`, `peak_choice_truth_lockbox_v1`,
+`missing_overlay_evidence_recovery_v1`, `quality_explanation_sidecar_v1`,
+`targeted_ms1_shape_identity_limited_rescue_v1`,
+`targeted_ms1_shape_identity_broader_targets`,
+`sample_metadata_order_projection_v1`, `sample_metadata_role_value_behavior`,
+`review_action_candidate_sidecar_v1`, `review_action_selected_candidate_switch`,
+`review_action_manual_boundary_area_writer`,
+`calibration_normalization_activation`, and `gui_replay_parity`.
+Goal 6 bounded non-broad acceptance is tracked in
+`docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv` and
+checked by `scripts/check_bounded_product_lanes.py`. It does not add product
+authority; it only locks the current non-broad lane boundaries: Targeted MS1
+limited rescue may stay within `limited_5hmdc_5medc_v1` / `5-hmdC + 5-medC` /
+`detected_flagged`, SampleMetadata may stay no-output/order-projection only,
+and ReviewAction candidate sidecar may verify identity only. Broader Targeted
+MS1 targets, role-driven value behavior, selected-candidate switch, and
+manual-boundary area writer remain blocked or parked until a separate product
+contract plus expected-diff gate exists.
 Targeted MS1 shape identity limited rescue 也已收斂成窄範圍
 `production_ready`：headless explicit support-TSV workflow、headless
 auto-limited CLI、以及 canonical no-flag normal CLI default 都可用，但都只限
@@ -239,7 +335,7 @@ value-changing behavior，不可直接改 quant、counted detection、normalized
 
 | Slot | Lane | Owner | Allowed work | Stop rule |
 |---|---|---|---|---|
-| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; apex-delta, width-only, and shape-margin probes are candidate only; reintegration-stability audit still leaves the full 299-row pool as `production_candidate` / writer-blocked because only the low-height subset plus the 72 observed-oracle rows have oracle + writer expected-diff approval and the formal all-stability family oracle failed 19/20 due one area error; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts, use the generated policy engine as the future broadening control point, and add broader evidence classes only with observed/masked/product-writer oracle evidence plus expected-diff | stop if the next step would silently broaden matrix writes without expected-diff/oracle evidence, if generated policy rows become a manual allowlist, if apex-delta/width-only/shape-margin or all-stability rows are promoted without resolving heldout oracle failures, if shape-clean stability is promoted without a missing-cell/nonzero-delta product scope, or if a RAW rerun would not change the broad-scope decision |
+| Primary | `backfill_standard_seed_guard_scope_v1` | none; 72-row high-signal, 42-row low-scan, 57-row low-height, 69-row low-height-low-scan, and 220-row low-height reintegration-stable narrow writer ready slices done; generated policy replay is now ready for current approved evidence classes plus 72 row-specific observed-oracle rows, with 511/511 expected-diff pass and 0 remaining `detected_flagged`; broad Backfill auto-write is parked by `backfill_broad_autowrite_feasibility_gate_v1`; apex-delta, width-only, and shape-margin probes are candidate only; all-stability remains blocked by 19/20 formal oracle; shape-clean reintegration-stable is `production_candidate` evidence only because its oracle passed but the writer probe found 0 new writes / 104 unchanged pre-existing values | maintain existing explicit scoped writer contracts and current 511-cell authority only; route blocked rows through authority/adjudication, structured review, truth, or evidence-recovery assets; no more broad Backfill sidecars/diagnostics unless a new independent truth source is named | stop if the next step would silently broaden matrix writes, derive predicates from `quality_blockers`, use round-trip reintegration as peak-choice truth, revive all-stability/apex-delta/width-only/shape-margin under a new name, include `missing_overlay_path` rows without trace evidence, or create another broad diagnostic backlog |
 | Supporting | `sample_metadata_cross_module_parity_v1` | none; no-output order projection is `production_ready`; role/value behavior remains `blocked` | release smoke/docs only; no further role/value behavior without expected-diff | stop if sample role changes extraction output, counted detection, normalized value, or matrix value |
 | Parked | `review_action_reintegration_v1` | parked for this release claim; candidate-sidecar verifier is now `production_candidate` | selected-candidate writer and manual boundary area recompute remain blocked until expected-diff/product apply contracts exist; long-term product direction is low-manual-intervention automation with audit/review sampling | stop if a manual action changes selected peak/area/counting without expected-diff |
 | Diagnostic-only | none | none | no new diagnostic sidecars in this window | stop any diagnostic request unless it directly closes Backfill scope acceptance |
@@ -299,8 +395,14 @@ scope.
 | Alignment workbook Matrix/Review/Audit | `production_surface` | `alignment_results.xlsx`, `xlsx_writer.py`, `alignment-results-v3` | output-level wording now matches runtime; keep release tests guarding sheet/schema shape | alignment release gate | unassigned |
 | Alignment output-level contract | `production_surface` | `output_levels.py`, `--output-level`, output contract spec | `alignment_matrix.tsv` is machine/validation, not production default；`alignment_matrix_identity.tsv` is production-level identity handoff | keep production/machine/debug tests in release gate | none; contract slice done |
 | `ProductionDecisionSet` | `production_surface` for alignment matrix decisions | `alignment/production_decisions.py` | release gate 尚未集中檢查 all writers use it | matrix writer gate | unassigned |
-| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes plus 72 row-specific observed-oracle rows, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, shape-clean reintegration-stable 104-row evidence class, and broad 4613-row standard-path seed guard | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, paired `--policy-observed-oracle-tsv` / `--policy-observed-oracle-summary-json`, `standard_peak_backfill_productization.py`, `standard_peak_policy_observed_oracle.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；latest real generated policy replay under `generated_policy_policy_observed_oracle_no_raw_productization/` classified all 4613 consolidated source-audit rows as 511 `write_ready`, 0 `detected_flagged`, and 4102 `blocked`, wrote exactly 511 matrix cells, passed writer expected-diff 511/511 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers, and records 72 accepted `policy_observed_full_trace_reintegration` rows from the SHA-bound `policy_observed_oracle_detected_flagged_full_trace/` packet; policy next-evidence counts are 511 already approved, 1087 needing trace overlay or reintegration evidence, and 3015 needing a new approved evidence class or passing oracle；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells before the policy-observed oracle adds 72 additional writer-approved rows；all-stability direct promotion remains blocked by formal target `standard_reintegration_stable_candidate_family_trace`: `heldout_trace_reintegration_oracle_all_stability_family/summary.json` records 299 audit-intersection rows / 77 families, 1694 available detected trace candidates, selected 20 family cases, and failed 19/20 because `FAM000949/NormalBC2261_DNA` has area relative error `0.19621` above the accepted 10% ceiling；shape-clean reintegration-stable oracle `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/summary.json` records 104 audit-intersection rows / 33 families, 334 available detected trace candidates / 31 families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`, but a temporary writer probe found `matrix_cells_written=0` and `unchanged_delta_row_count=104`, so no public writer flag was retained；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the broadening control point and current production-ready writer surface for approved evidence classes plus accepted observed-oracle rows; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability/shape-clean-stability are only candidate or explanatory probes, and none of these are the product ceiling; next broadening step needs another named evidence class through the generated policy engine with observed/masked/product-writer oracle and expected-diff approval | none for generated policy replay over current approved evidence classes plus the 72 observed-oracle rows and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; shape-clean stability needs a missing-cell product scope or policy-explanation-only contract before writer work; broad 4613 still needs additional evidence class/oracle coverage through generated policy |
+| Backfill product-authority sidecars | `production_ready` for generated policy replay of current approved evidence classes plus 72 row-specific observed-oracle rows, explicit 72-row high-signal-clean scoped writer, explicit 42-row low-scan-clean scoped writer, explicit 57-row low-height-clean scoped writer, explicit 69-row low-height-low-scan-clean scoped writer, and explicit 220-row low-height reintegration-stable scoped writer; `production_candidate` for apex-delta diagnostic probe, width-only diagnostic probe, shape-margin diagnostic probe, all-stability 299-row pool, and shape-clean reintegration-stable 104-row evidence class; `parked` for broad 4613-row auto-write | `standard_peak_backfill_policy.tsv`, `--backfill-policy-source-audit-tsv`, paired `--policy-observed-oracle-tsv` / `--policy-observed-oracle-summary-json`, `standard_peak_backfill_productization.py`, `standard_peak_policy_observed_oracle.py`, `standard_peak_activation_scope_audit.py`, `standard_peak_heldout_trace_oracle.py`, `standard_peak_reintegration_stability_audit.py`, `seed_guard_decisions.tsv`, no-RAW 85RAW artifact bridge, heldout trace oracle, activation scope audit, reintegration-stability audit, and scoped writer outputs under `output/productization_realdata_seed_guard_85raw_20260617/` | standard-path activation 先經 N-band seed guard 且 join `activation_value_delta.tsv`；generated policy path classifies every supplied source-audit row as `write_ready` / `detected_flagged` / `blocked` and replays only generated `write_ready` rows with `expected_scope=backfill_policy_write_ready_rows`; hand-authored policy TSV is not a public product input；latest real generated policy replay under `generated_policy_policy_observed_oracle_no_raw_productization/` classified all 4613 consolidated source-audit rows as 511 `write_ready`, 0 `detected_flagged`, and 4102 `blocked`, wrote exactly 511 matrix cells, passed writer expected-diff 511/511 with zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers, and records 72 accepted `policy_observed_full_trace_reintegration` rows from the SHA-bound `policy_observed_oracle_detected_flagged_full_trace/` packet; policy next-evidence counts are 511 already approved, 1087 needing trace overlay or reintegration evidence, and 3015 needing a new approved evidence class or passing oracle；既有 85RAW chunk `r1_120` no-RAW bridge passed with 2540 candidates, 1160 eligible writes, 1380 low-seed no-writes；既有 85RAW consolidated no-RAW bridge passed with 7307 candidates, 4613 eligible writes, 2694 low-seed no-writes；high-signal heldout trace oracle 有 20 個 originally detected、sample-local cases，20/20 pass、最大 boundary error 0.0820502 min、最大 area relative error 0.0762325；low-scan heldout trace oracle `heldout_trace_reintegration_oracle_low_scan_clean_probe/` 有 56 eligible candidates / 11 selected family cases，11/11 pass、最大 boundary error 4.86717e-05 min、最大 area relative error 0.038786；combined activation scope audit 證明目前 4613 writes 中 72 個 high-signal clean eligible、42 個 low-scan clean eligible、57 個 low-height clean eligible、69 個 low-height-low-scan clean eligible、1087 個 missing overlay path，broad scope 仍 not_ready；high-signal `narrow_product_writer_expected_diff_acceptance.json` 72/72 pass 且 `readiness_tier=production_ready`；low-scan `narrow_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 42/42 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height bounded oracle `heldout_trace_reintegration_oracle_low_height_bounded_probe_pad050/summary.json` 是 `status=pass`、20/20 pass、max boundary error `0.0857986 min`、max area relative error `0.0564106`，且 `narrow_low_height_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 57/57 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height-low-scan bounded oracle `heldout_trace_reintegration_oracle_low_height_low_scan_clean_probe/summary.json` 是 `status=pass`、210 eligible rows / 51 families、selected 20/20 pass、max boundary error `4.80376e-05 min`、max area relative error `0.00881912`，且 `narrow_low_height_low_scan_clean_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` 69/69 pass、duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank 都是 0，`expected_scope=low_height_low_scan_clean_eligible_activation_rows`、`product_surface_changed=TRUE`、`readiness_tier=production_ready`；low-height reintegration-stable family oracle `heldout_trace_reintegration_oracle_low_height_reintegration_stable_family/summary.json` is `status=pass`; it records 220 audit-intersection rows / 66 families, `candidate_family_scope_match_level=family_id`, `candidate_family_scope_oracle_basis=detected_trace_rows_from_candidate_families`, 1520 available detected trace candidates from those families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`; the matching writer `narrow_low_height_reintegration_stable_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json` passes 220/220 with `expected_scope=low_height_reintegration_stable_eligible_activation_rows`, `product_surface_changed=TRUE`, `readiness_tier=production_ready`, and zero duplicate/missing/unexpected/non-eligible/non-written/unchanged/blank blockers；this fifth writer adds 199 cells outside the previous four ready scopes, making the five-scope cell-level union 439 cells before the policy-observed oracle adds 72 additional writer-approved rows；all-stability direct promotion remains blocked by formal target `standard_reintegration_stable_candidate_family_trace`: `heldout_trace_reintegration_oracle_all_stability_family/summary.json` records 299 audit-intersection rows / 77 families, 1694 available detected trace candidates, selected 20 family cases, and failed 19/20 because `FAM000949/NormalBC2261_DNA` has area relative error `0.19621` above the accepted 10% ceiling；shape-clean reintegration-stable oracle `heldout_trace_reintegration_oracle_shape_clean_reintegration_stable_family/summary.json` records 104 audit-intersection rows / 33 families, 334 available detected trace candidates / 31 families, selected 20/20 pass, max boundary error `0.0830019 min`, and max area relative error `0.0725986`, but a temporary writer probe found `matrix_cells_written=0` and `unchanged_delta_row_count=104`, so no public writer flag was retained；apex-delta probe `heldout_trace_reintegration_oracle_apex_delta_clean_probe/summary.json` 是 `status=fail`、17/20 pass、max boundary error `2.19621 min`、max area relative error `0.424518`，所以沒有 writer approval；width-only probe `heldout_trace_reintegration_oracle_width_clean_probe/summary.json` 是 `status=fail`、1/3 pass、max boundary error `1.86561 min`、max area relative error `0.599229`，所以沒有 writer approval；shape-margin probe `heldout_trace_reintegration_oracle_shape_margin_clean_probe/summary.json` 是 `status=fail`、6/8 pass、max boundary error `0.0625542 min`、summary max area relative error `0.198393`，所以沒有 writer approval；observed provenance contract 禁止 oracle/manual/review row 自抄；非標準 peak 仍不可自動 promotion | release docs must say generated policy is the current production-ready writer surface for approved evidence classes plus accepted observed-oracle rows; 72-row, 42-row, 57-row, 69-row, and 220-row scoped writers are historical safe demonstrators; apex-delta/width-only/shape-margin/all-stability/shape-clean-stability are only candidate or explanatory probes; broad 4613 auto-write is parked | none for generated policy replay over current approved evidence classes plus the 72 observed-oracle rows and the five scoped writers; apex-delta/width-only/shape-margin/all-stability need narrower rules or passing oracles before writer work; shape-clean stability needs a missing-cell product scope or policy-explanation-only contract before writer work; broad 4613 can reopen only with a new independent truth source plus observed/masked/product-writer oracle and expected-diff approval |
 | Provisional production-candidate gate | `diagnostic_only` with no-promotion guard | production-candidate sidecar, `tests/test_provisional_backfill_candidate_gate_cli.py` | legacy artifact name is still potentially confusing, but summary/test contract says `readiness_label=diagnostic_only`, `production_ready=false`, `matrix_contract_changed=false`, and the CLI does not mutate `alignment_matrix.tsv` | rename only if future public UX needs it; do not promote from this sidecar alone | none; diagnostic guard done |
+
+Backfill row update, 2026-06-18: the long table row above is historical for the
+approved 511-cell writer surface and prior probes. The broad 4613-row
+auto-write branch is now superseded by
+`backfill_broad_autowrite_feasibility_gate_v1` and is `parked`; do not follow
+the older "next broadening step" wording without a new independent truth source.
 
 Backfill row update, 2026-06-17: the low-height evidence is no longer only the
 old full-trace 19/20 failure. The diagnostic heldout oracle now has an
@@ -1142,13 +1244,12 @@ at that older checkpoint, not the latest release claim.
   42 activation-delta rows, and `narrow_product_writer_expected_diff_acceptance.json`
   reports `acceptance_status=pass`, `readiness_tier=production_ready`,
   `expected_scope=low_scan_clean_eligible_activation_rows`, and zero blockers.
-- Remaining blocker: none for the explicit 42-row low-scan release slice. Broad
-  4613-row activation still needs additional named evidence classes and
-  expected-diff approval before broad `production_ready`.
-- Next checkpoint: later low-height, apex-delta, and width-only probes all
-  failed closed, so do not add writers for those classes. The next broadening
-  step needs a narrower explainable rule or failure-family split before another
-  scoped writer can be justified.
+- Remaining blocker: none for the explicit 42-row low-scan release slice. The
+  old broad-scope expansion language is historical and superseded by the later
+  `park_broad_backfill` decision.
+- Next checkpoint: superseded. Later low-height, apex-delta, and width-only
+  probes all failed closed, and broad auto-write is now parked; do not use this
+  entry to justify another scoped writer.
 
 ### 2026-06-17 - standard_peak_low_scan_review_fix_v1
 
@@ -1188,13 +1289,14 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; the next proposed single-blocker class was
-  height-only or apex-delta-only.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; the next proposed single-blocker class
+  was height-only or apex-delta-only.
 - New tier at this checkpoint: low-height clean was `production_candidate` only.
   The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_low_height_clean_trace`, where all clean
@@ -1245,12 +1347,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; apex-delta-only was the next small single-blocker
-  class after low-height failed its oracle.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; apex-delta-only was the next small
+  single-blocker class after low-height failed its oracle.
 - New tier: apex-delta clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_apex_delta_clean_trace`, where supported trace
@@ -1283,12 +1386,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; width-only was the smallest remaining single-blocker
-  class after low-height and apex-delta failed their oracles.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; width-only was the smallest remaining
+  single-blocker class after low-height and apex-delta failed their oracles.
 - New tier: width-only clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_width_clean_trace`, where supported trace
@@ -1332,13 +1436,14 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation remained
-  `production_candidate`; high-signal and low-scan scoped writers were already
-  `production_ready`; low-height, apex-delta, and width-only probes were
-  candidate-only after failing heldout oracles.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; high-signal and low-scan scoped writers
+  were already `production_ready`; low-height, apex-delta, and width-only probes
+  were candidate-only after failing heldout oracles.
 - New tier: shape-margin clean is `production_candidate` only. The explicit
-  72-row high-signal-clean and 42-row low-scan-clean scoped writers remain
-  `production_ready`; broad 4613-row activation remains `production_candidate`.
+  72-row high-signal-clean and 42-row low-scan-clean scoped writers remained
+  `production_ready`; the broad-scope statement is superseded by the later
+  `park_broad_backfill` decision.
 - Evidence:
   `tools/diagnostics/standard_peak_heldout_trace_oracle.py` now accepts
   `--target-shape-class standard_shape_margin_clean_trace`, where supported
@@ -1498,9 +1603,9 @@ at that older checkpoint, not the latest release claim.
 - Remaining blocker: none for headless no-flag limited default after final
   review/gate. GUI rescue and any target beyond `5-hmdC + 5-medC` still need
   separate expected-diff evidence and UX/product contract.
-- Next checkpoint: commit this slice, then broaden Targeted MS1 only with
-  separate evidence for more targets or continue Backfill broadening by named
-  evidence class.
+- Next checkpoint: historical. Targeted MS1 may broaden only with separate
+  evidence for more targets. The Backfill broadening clause is superseded by
+  `park_broad_backfill` and must not be used as a current next step.
 
 ### 2026-06-17 - backfill_production_gate_research_input_v1
 
@@ -1523,20 +1628,19 @@ at that older checkpoint, not the latest release claim.
   schema, CLI flag, workbook, RAW artifact, or expected-diff output changed.
 - Validation: docs-only targeted grep and `git diff --check` for this refresh.
 - Remaining blocker: no new low-height or moderate-height writer may be added
-  just because expected-diff is clean. The next writer claim needs a named
-  evidence class with heldout oracle and full expected-diff approval.
-- Next checkpoint: design the next Backfill broadening packet around
-  boundary-stability / reintegration agreement, local S/N or local selectivity,
-  and cohort-anchored expected-window consistency. Predeclare strata and a
-  lockbox before using the evidence to promote broad 4613-row writes.
+  just because expected-diff is clean. This entry is now background for future
+  truth/review/evidence design, not a writer prompt.
+- Next checkpoint: superseded by the later park decision. Future work should
+  predeclare truth/review/evidence assets before any new writer authority is
+  considered.
 
 ### 2026-06-17 - product_direction_low_manual_intervention_v1
 
-- Previous tier: unchanged. Backfill narrow 72-row writer is
-  `production_ready`; broad 4613-row standard-path activation remains
-  `production_candidate`; headless Targeted MS1 auto-limited CLI is
-  `production_ready`; ReviewAction selected-candidate/manual-boundary apply
-  remains parked for this release claim.
+- Previous tier at the time: unchanged. Backfill narrow 72-row writer was
+  `production_ready`; broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; headless Targeted MS1 auto-limited CLI
+  was `production_ready`; ReviewAction selected-candidate/manual-boundary apply
+  remained parked for this release claim.
 - New tier: unchanged; this entry records product direction, not a new behavior
   promotion.
 - Evidence: user decision on 2026-06-17: Backfill north star is to fill whenever
@@ -1685,13 +1789,13 @@ at that older checkpoint, not the latest release claim.
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: broad 4613-row standard-path activation was
-  `production_candidate`; direct writer work was still tempting because four
-  narrow scoped writers had reached `production_ready`.
-- New tier: unchanged for broad scope: `production_candidate`, with direct
-  promotion from the existing high-signal/low-scan/low-height/apex/width/shape
-  predicates blocked. This is not a kill of the Backfill north star; it means
-  the next promotion packet must introduce a stronger named evidence class.
+- Previous tier at the time: broad 4613-row standard-path activation was still
+  unresolved under the pre-park framing; direct writer work was tempting because
+  four narrow scoped writers had reached `production_ready`.
+- New tier at the time: direct promotion from the existing
+  high-signal/low-scan/low-height/apex/width/shape predicates was blocked. The
+  stronger-evidence-class framing is superseded by the later
+  `park_broad_backfill` decision and the authority/adjudication contract.
 - Evidence: read-only Backfill subagent review confirmed the current safe
   demonstrators are 72 high-signal, 42 low-scan, 57 low-height, and 69
   low-height-low-scan rows. The broad bridge remains 4613 selected writes out
@@ -1706,13 +1810,12 @@ at that older checkpoint, not the latest release claim.
 - Validation: read-only subagent audits `Galileo` and `Feynman`; artifact
   spot-checks of the committed no-RAW 85RAW summaries; no RAW rerun because
   the existing failed probes already answer the direct-writer decision.
-- Remaining blocker: broad activation needs a new named evidence class such as
-  boundary-stability / reintegration agreement, local S/N / selectivity, or
-  cohort-anchored expected-window consistency, followed by a masked/product-
-  writer oracle and expected-diff approval.
-- Next checkpoint: design and test that next evidence class. Do not rerun
-  85RAW or add another writer until the new gate can change the broad-scope
-  decision.
+- Remaining blocker: superseded for broad auto-write. These ideas can only be
+  background for future truth/review/evidence assets unless a later goal names a
+  new independent truth source.
+- Next checkpoint: historical. Do not design another broad writer evidence
+  class from this entry; use the authority/adjudication index to decide whether
+  a row needs review, truth labels, or recovered trace evidence.
 
 ### 2026-06-17 - standard_peak_reintegration_stability_audit_v1
 
@@ -1932,14 +2035,14 @@ at that older checkpoint, not the latest release claim.
   policy hashes before promotion. The refreshed no-RAW oracle command exited
   `0` in about 2.08 s and the refreshed no-RAW replay command exited `0` in
   about 3.08 s.
-- Remaining blocker: the remaining 4102 blocked rows still need trace overlay /
-  reintegration evidence or another approved evidence class and oracle before
-  they can write. Broad 4613-row Backfill is still `production_candidate`, not
-  full `production_ready`.
-- Next checkpoint: keep broadening through generated policy evidence classes.
-  Do not create a manual allowlist or another nested writer flag; the next class
-  must bring its own observed/masked/product-writer oracle and expected-diff
-  packet.
+- Remaining blocker at the time: the remaining 4102 blocked rows still needed
+  trace overlay / reintegration evidence or another approved evidence class and
+  oracle before they could write. The old broad-scope
+  `production_candidate` framing is superseded by the 2026-06-18
+  `park_broad_backfill` decision.
+- Next checkpoint: superseded. Do not use this entry to continue broad
+  Backfill broadening; route unresolved rows through authority/adjudication,
+  structured review, truth acquisition, or trace-evidence recovery.
 
 ### 2026-06-17 - standard_peak_shape_clean_policy_explanation_v1
 
@@ -1983,18 +2086,17 @@ at that older checkpoint, not the latest release claim.
   missing-cell scope or masked/product-writer oracle proves nonzero product
   delta. It must not become a public writer flag or a ready evidence class from
   this change alone.
-- Next checkpoint: future broadening should keep using generated policy
-  evidence classes rather than new nested writer flags, and should only promote
-  shape-clean from explanation evidence when a missing-cell scope or
-  masked/product-writer oracle produces nonzero expected-diff approval.
+- Next checkpoint: superseded for broad Backfill. Future work should use
+  authority/adjudication, structured review, truth acquisition, or trace
+  evidence recovery rather than new nested writer flags.
 
 ### 2026-06-17 - standard_peak_shape_clean_reintegration_stable_oracle_v1
 
 - Lane: Backfill product-authority sidecars /
   `backfill_standard_seed_guard_scope_v1`.
-- Previous tier: shape-clean stability was not a named Backfill evidence class;
-  all-stability 299 and broad 4613 remained `production_candidate` /
-  writer-blocked.
+- Previous tier at the time: shape-clean stability was not a named Backfill
+  evidence class; all-stability 299 and broad 4613 were still unresolved /
+  writer-blocked under the pre-park framing.
 - New tier: `production_candidate` evidence class only. No public writer flag,
   no matrix write, no workbook/schema/GUI/default extraction behavior change.
 - Evidence: `standard_peak_heldout_trace_oracle.py` now supports
@@ -2027,9 +2129,9 @@ at that older checkpoint, not the latest release claim.
   prove a missing-cell writer effect. To promote it, route it through generated
   policy as explanation-only evidence or build a missing-cell candidate scope
   with nonzero expected-diff and the same oracle/expected-diff acceptance.
-- Next checkpoint: do not add a shape-clean public writer flag. If continuing
-  Backfill broadening, use this oracle as candidate evidence in the generated
-  policy engine or test a missing-cell scope that can write new matrix cells.
+- Next checkpoint: do not add a shape-clean public writer flag. The broadening
+  clause is superseded; shape-clean evidence can remain explanatory candidate
+  context only unless a future authority/truth/expected-diff goal reopens it.
 
 ### 2026-06-17 - standard_peak_generated_backfill_policy_path_v1
 
@@ -2084,9 +2186,951 @@ at that older checkpoint, not the latest release claim.
   evidence classes. It does not make apex-delta, width-only, shape-margin,
   all-stability, or broad 4613 rows production-ready without their own oracle
   and expected-diff approval.
-- Next checkpoint: add the next evidence class to the generated policy engine
-  only after a focused oracle/expected-diff gate proves it; do not add another
-  manual/nested scoped writer path.
+- Next checkpoint: superseded for broad Backfill. Future evidence classes may be
+  considered only under a new independent truth-source / expected-diff goal;
+  this entry must not be used as permission to mine another writer slice.
+
+### 2026-06-18 - bounded_non_broad_lane_acceptance_v1
+
+- Lane: Targeted non-broad production lanes / bounded continuation guard.
+- Previous tier: Targeted MS1 limited rescue and SampleMetadata no-output
+  projection were individually `production_ready`; ReviewAction candidate
+  sidecar was `production_candidate`; broader target rescue, role-driven value
+  behavior, selected-candidate switch, and manual-boundary area writer were
+  blocked or parked, but there was no compact guard tying these non-broad lanes
+  to the machine status index.
+- New tier: `production_candidate` bounded-lane guard. This does not change
+  product behavior or writer authority.
+- Evidence: `docs/superpowers/specs/bounded_non_broad_product_lanes.v1.json`
+  defines the acceptance schema.
+  `docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv`
+  records seven non-broad lane outcomes and binds to
+  `docs/superpowers/validation/productization_status_index_v1.tsv`
+  (`sha256=16C5CF817D216C82C891EFE7FBC319D89F477353BF50E7EBE004EF6411625A95`).
+  `scripts/check_bounded_product_lanes.py` validates that broad Backfill is
+  absent, readiness matches the status index, no row grants new product
+  authority or ProductWriter input, GUI/target expansion are disabled, blocked
+  or parked rows have no effect/scope, Targeted MS1 is limited to
+  `limited_5hmdc_5medc_v1;5-hmdC;5-medC` with `detected_flagged_only`, and
+  SampleMetadata / ReviewAction effects stay no-output or identity-only.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  returned `Bounded non-broad product lanes are consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_bounded_product_lanes_contract.py -v --tb=short`
+  passed `12`; focused ruff passed for `scripts/check_bounded_product_lanes.py`
+  and `tests/test_bounded_product_lanes_contract.py`. Subagent review found
+  status-index/source-hash self-attestation, status-index extra/risk-row, and
+  schema+TSV+status coordinated-promotion gaps. They were fixed by chaining
+  `check_productization_state.py`, binding hash checks to the supplied status
+  index, hardcoding the bounded readiness sets in the checker, documenting
+  `current_bounded_surface` as non-authority, and adding focused negative
+  tests for each failure mode. Post-fix subagent review re-ran the original
+  mutation probes and found no P0/P1/P2/P3 findings. Full local gate passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3825 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `git diff --check` passed with LF/CRLF warnings only.
+- Remaining blocker: this guard does not collect new Targeted MS1 evidence,
+  alter SampleMetadata role behavior, or implement ReviewAction selected
+  candidate / manual-boundary writeback.
+- Next checkpoint: commit this Goal 6 slice. Future non-broad lane changes must
+  update this guard or explicitly supersede it.
+
+### 2026-06-18 - lockbox_label_collection_pack_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: `production_candidate` truth-lockbox protocol and 72-case
+  sampling manifest existed, but the lockbox was not yet packaged for
+  structured human labeling.
+- New tier: unchanged for product authority. The label-collection pack is a
+  `production_candidate` truth/approval substrate: it can collect independent
+  labels later, but it does not grant ProductWriter authority.
+- Evidence: `docs/superpowers/specs/lockbox_label_schema_v1.json` defines
+  legal labels for peak choice, area, boundary, reviewer confidence, reason
+  code, notes, source hashes, and no-authority flags.
+  `scripts/build_lockbox_label_collection_pack.py` generates 72 Markdown
+  packets under
+  `docs/superpowers/validation/lockbox_review_packets_v1/`, the paired
+  `packet_index.tsv`, and
+  `docs/superpowers/validation/lockbox_label_template_v1.tsv` with 144 blank
+  reviewer rows. Each packet records row identity, candidate peak/area summary,
+  trace/overlay/hypothesis paths and hashes when available, recovered-evidence
+  context or an explicit missing-evidence reason, current machine decision, and
+  the exact review question. `scripts/check_lockbox_label_schema.py` validates
+  schema, packets, hashes, template structure, enum values, duplicate completed
+  reviewer IDs, label identity fields, source-hash binding, canonical packet
+  paths, and no-authority flags. Its default mode is hermetic for clean
+  checkouts and does not require ignored local `output/` artifacts;
+  `--verify-evidence-files` performs the stronger local file-existence/hash
+  check on machines that have the referenced evidence files. `--require-complete`
+  is reserved for the later completed-label import gate.
+- Product surface changed: docs/spec/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`
+  built 72 packets and 144 template rows;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  returned `Lockbox label collection pack is structurally valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`
+  also passed on the current machine;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_label_collection_pack.py -v --tb=short`
+  passed `15`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py tests/test_lockbox_label_collection_pack.py`
+  passed. Subagent review found no authority-boundary findings, then identified
+  data-contract gaps for non-hermetic evidence validation, completed-label
+  evidence/hash binding, free-form reason codes, noncanonical packet paths, and
+  label identity drift. All were fixed with focused regression tests; final
+  post-fix review found no P0/P1/P2/P3 findings. Final full local gate is still
+  passed before committing this checkpoint:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_label_collection_pack.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py --verify-evidence-files`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py scripts/check_bounded_product_lanes.py scripts/build_lockbox_label_collection_pack.py scripts/check_lockbox_label_schema.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3840 passed, 1 skipped`); `git diff --check` passed with LF/CRLF warnings
+  only.
+- Remaining blocker: no human labels have been collected. The next gate must
+  import completed labels and summarize independent peak-choice / area truth;
+  it must not treat round-trip oracle, ISTD, empty template rows, or lockbox
+  membership as ground truth.
+- Historical next checkpoint at the time: commit Goal 7, then proceed to a label
+  import / truth summary gate only after completed labels exist. Goal 7 was
+  later committed as `dcd8878a`; the active follow-up is the Goal 9 static
+  review UX checkpoint below.
+
+### 2026-06-18 - lockbox_static_review_ux_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: `production_candidate` label-collection pack existed with 72
+  Markdown packets and a 144-row empty label template, but human review still
+  required opening TSV/Markdown plus external trace/overlay artifacts by hand.
+- New tier: unchanged for product authority. The static review UX is a
+  `production_candidate` review substrate only; it does not collect labels and
+  does not grant ProductWriter authority.
+- Evidence: `scripts/build_lockbox_static_review_bundle.py` reads the existing
+  `lockbox_review_packets_v1/packet_index.tsv`, selects the matching sample
+  trace from each trace JSON, applies the existing
+  `gaussian15_morphology_trace` (`gaussian_15`, 15 points), derives the
+  primary review boundary from the existing chromatographic peak-segment
+  baseline-return logic, and writes
+  `docs/superpowers/validation/lockbox_static_review_v1/`. The generated bundle
+  contains `index.html`, `bundle_index.tsv`, 72 case HTML pages, and 53 PNG
+  review plots with Gaussian-derived boundaries. The 18 rows without trace
+  evidence are rendered as explicit missing-evidence pages, and one trace file
+  with no positive signal is rendered as
+  `gaussian_review_boundary_unavailable`, instead of synthetic plots.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py`
+  built 72 cases and 53 Gaussian15 plots;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`
+  returned `Lockbox static review bundle is valid and non-authoritative.`
+  after checking the current packet-index hash, label-template hash, source
+  artifact hashes, and visible row identity fields;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_static_review_bundle.py -v --tb=short`
+  passed `11`, including stale packet-index, label-template, source-hash,
+  browser-case Gaussian-boundary, and synthetic zero-signal regression tests;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_static_review_bundle.py tests/test_lockbox_static_review_bundle.py`
+  passed. Subagent review found one stale-bundle checker gap and one stale
+  historical-checkpoint wording gap; both were fixed. Follow-up subagent review
+  found no P1/P2/P3 findings for the Gaussian-boundary display fix. Final local
+  gate passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_static_review_bundle.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_static_review_bundle.py --check-only`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3851 passed, 1 skipped`); `git diff --check` passed with LF/CRLF
+  warnings only.
+- Remaining blocker: no human labels have been collected. The UX reduces manual
+  review friction but does not replace independent reviewer labels or the later
+  label import / truth summary gate.
+- Next checkpoint: use the HTML bundle for a small first labeling batch before
+  starting label import.
+
+### 2026-06-18 - lockbox_truth_summary_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: `production_candidate` label-collection and static-review
+  substrate existed, but no reviewer labels had been imported into a truth
+  summary.
+- New tier: unchanged for product authority. The truth-summary gate is a
+  `production_candidate` review-only evidence packet. It does not grant
+  ProductWriter authority and does not reopen broad Backfill.
+- Evidence: `scripts/import_lockbox_labels.py` imports the user's first
+  2026-06-18 visual pass over
+  `docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv`.
+  It writes
+  `docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv`,
+  `docs/superpowers/validation/lockbox_truth_summary_v1.json`,
+  `docs/superpowers/validation/lockbox_truth_confusion_table_v1.tsv`, and
+  `docs/superpowers/validation/lockbox_failure_modes_v1.tsv`. The import binds
+  each label to the static bundle hash, case HTML hash, plot hash or plot
+  status, source artifact hashes, row identity, legal label enums, and
+  no-authority flags. Current summary: 72 one-reviewer labels imported; 53
+  assessable Gaussian15 static review plots are labeled `correct` /
+  `acceptable` / `acceptable`; 19 cases are `insufficient_evidence` /
+  `not_assessable`; decision is `truth_supports_review_only`.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --generate-user-batch-log`
+  built the label log and truth-summary artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  returned `Lockbox truth summary gate is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_truth_summary.py -v --tb=short`
+  passed `8`, including stale static-hash, authority-flag,
+  duplicate-reviewer, and two-reviewer clean-label future-path regression
+  tests;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  passed with `peak_choice_truth_lockbox_v1` bound to
+  `lockbox_truth_summary_v1.json`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/import_lockbox_labels.py tests/test_lockbox_truth_summary.py`
+  passed. Subagent review found one P2 status-index binding gap and one P3
+  future two-reviewer import-path gap; both were fixed by updating the status
+  index/checker coverage and allowing multiple reviewer rows per case while
+  rejecting duplicate reviewer IDs.
+- Remaining blocker: this is one reviewer pass, not the completed two-reviewer
+  lockbox. The 19 not-assessable cases still need recovered visual evidence or
+  explicit park/insufficient-evidence handling. This gate cannot support an
+  automation or writer experiment until independent truth coverage and
+  expected-diff authority exist.
+- Next checkpoint: superseded by `lockbox_next_action_plan_v1`, which splits the
+  coarse 19 not-assessable cases into manual-negative controls,
+  round-trip-oracle parked negatives, and one boundary-unavailable evidence gap.
+
+### 2026-06-18 - lockbox_next_action_plan_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` review-only truth-summary
+  gate. The imported batch had 53 assessable labels and 19 coarse
+  not-assessable labels.
+- New tier: unchanged for product authority. The next-action packet is a
+  `production_candidate` review-routing packet only; it does not grant
+  ProductWriter authority and does not reopen broad Backfill.
+- Evidence: `scripts/build_lockbox_next_action_plan.py` reads the static review
+  bundle, imported reviewer label log, and truth-summary gate, then writes
+  `docs/superpowers/validation/lockbox_next_action_plan_v1.tsv` and
+  `docs/superpowers/validation/lockbox_next_action_summary_v1.json`. Current
+  split: 53 `ready_for_second_independent_review`, 6
+  `use_existing_manual_negative_control`, 12
+  `park_roundtrip_oracle_negative_as_nontruth`, and 1
+  `recover_or_mark_gaussian_boundary_unavailable`. Every row has
+  `may_feed_product_writer=FALSE`, `may_touch_matrix=FALSE`, and
+  `may_grant_product_authority=FALSE`.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, broad Backfill, or GUI
+  behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py`
+  built the next-action artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py --check-only`
+  returned `Lockbox next-action plan is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_next_action_plan.py -v --tb=short`
+  passed `13`, including manual-negative separation, round-trip-oracle parking,
+  second-review routing, boundary-unavailable routing, stale-plan, stale-summary,
+  summary-authority, extra-summary-authority-key, parked-flag, and
+  row-authority regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_next_action_plan.py tests/test_lockbox_next_action_plan.py`
+  passed. Subagent review found two P2 fail-closed gaps and three P3
+  data-flow/test gaps; all were fixed. Final post-fix subagent review found no
+  P0/P1/P2/P3 findings. Full local gate after fixes passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_next_action_plan.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3873 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_next_action_plan.py --check-only`.
+- Remaining blocker: the 53 plotted clean cases still need a second independent
+  reviewer before any automation experiment. The 12 round-trip oracle negatives
+  remain parked as non-truth; the 6 manual negatives are controls only; the 1
+  boundary-unavailable case needs signal/evidence recovery or remains
+  not-assessable.
+- Next checkpoint: superseded by `lockbox_second_review_pack_v1`, which creates
+  the blank reviewer-slot-2 collection surface for the 53 plotted clean cases.
+  Do not mine another broad Backfill heuristic.
+
+### 2026-06-18 - lockbox_second_review_pack_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` next-action routing packet.
+  The current gate had 53 plotted Gaussian15 cases ready for a second
+  independent reviewer, plus 19 cases excluded from that route.
+- New tier: unchanged `production_candidate`. This is a second-review
+  collection packet only; it does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, default extraction, GUI, or broad
+  Backfill authority.
+- Evidence: `scripts/build_lockbox_second_review_pack.py` reads
+  `lockbox_next_action_plan_v1.tsv`, the static Gaussian15 review bundle, and
+  the first reviewer label log. It writes
+  `docs/superpowers/validation/lockbox_second_review_queue_v1.tsv`,
+  `docs/superpowers/validation/lockbox_second_review_template_v1.tsv`,
+  `docs/superpowers/validation/lockbox_second_review_summary_v1.json`, and
+  `docs/superpowers/validation/lockbox_second_review_v1/index.html`.
+  Current split: 53 reviewer-slot-2 rows are blank and linked to existing
+  Gaussian15 overlay pages; 19 non-ready cases are excluded from this collection
+  pack. Every queue/template row keeps no-authority flags false.
+- Product surface changed: docs/validation/helper script/test only. It adds a
+  review-collection TSV/HTML surface, not a writer surface. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, broad Backfill, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py`
+  built the second-review artifacts;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`
+  returned `Lockbox second-review pack is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_second_review_pack.py -v --tb=short`
+  passed `11`, including exact 53-case routing, blank slot-2 template,
+  Gaussian15 contract, HTML link smoke, actual PNG hash anchoring,
+  no-authority flags, stale-summary, stale-template, and queue-authority
+  regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_second_review_pack.py tests/test_lockbox_second_review_pack.py`
+  passed. Subagent review found one P2 stale plot-hash anchoring gap and one P3
+  broken HTML template link; both were fixed before commit. Post-fix subagent
+  re-review found no P0/P1/P2/P3 findings. Final full local gate after those
+  fixes passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_lockbox_second_review_pack.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3884 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`.
+- Remaining blocker: a second independent human reviewer is not currently
+  available because the user is the sole domain owner. Subagents may perform
+  adversarial QA and visual contradiction checks, but they must not be recorded
+  as `reviewer_slot=2` human truth labels. These labels still cannot become
+  write authority without a later expected-diff product goal.
+- Next checkpoint: finish subagent QA and route any flagged cases back to the
+  owner. If no second human reviewer exists, create a separate
+  non-authoritative AI-challenge record or an explicitly approved downgraded
+  single-owner + AI-challenge evidence contract before rerunning the truth
+  summary gate. Do not route the 19 excluded cases into broad Backfill
+  heuristics.
+
+### 2026-06-18 - lockbox_reviewer_identity_guard_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` second-review collection
+  packet. Docs said subagents could only do QA/challenge review, but the
+  completed-label checker and truth-summary import gate still only required
+  distinct reviewer IDs.
+- New tier: unchanged `production_candidate`. This is a fail-closed review
+  identity guard and owner-boundary record; it does not grant ProductWriter,
+  matrix, workbook, selected peak/area, counted-detection, default extraction,
+  GUI, or broad Backfill authority.
+- Evidence: `scripts/lockbox_reviewer_identity.py` enforces the explicit human
+  truth reviewer registry in `lockbox_label_schema_v1.json`; unregistered
+  reviewer IDs, including agent/subagent/model-looking IDs, cannot satisfy
+  human truth labels. The guard is enforced by
+  `scripts/check_lockbox_label_schema.py --require-complete` and
+  `scripts/import_lockbox_labels.py --check-only`. The truth-summary import gate
+  also now rejects malformed reviewer-slot logs and requires valid slot 1/2
+  semantics before the automation-experiment decision can be reached. The label
+  schema records that AI challenge review must be stored outside human truth
+  slots. The owner boundary confirmation is recorded in
+  `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`,
+  with hashes for the static bundle, label log, truth summary, and next-action
+  summary; it explicitly forbids ProductWriter,
+  matrix, workbook, selected peak/area, counted-detection, default extraction,
+  GUI, and broad Backfill authority.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_owner_boundary_confirmation.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py -v --tb=short`
+  passed `30`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_label_schema.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/import_lockbox_labels.py --check-only`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/check_lockbox_label_schema.py scripts/import_lockbox_labels.py scripts/lockbox_reviewer_identity.py tests/test_lockbox_label_collection_pack.py tests/test_lockbox_truth_summary.py tests/test_lockbox_owner_boundary_confirmation.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  passed.
+- Remaining blocker: no second independent human reviewer exists. Subagents may
+  flag contradictions and implementation issues, but cannot satisfy
+  `reviewer_slot=2`.
+- Next checkpoint: superseded by `lockbox_ai_challenge_packet_v1`, which creates
+  the separate non-authoritative AI/subagent QA surface without filling
+  reviewer slot 2.
+
+### 2026-06-18 - lockbox_ai_challenge_packet_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` reviewer-identity guard. The
+  owner/domain review was recorded, and AI/subagent review was explicitly kept
+  out of human truth slots, but there was no separate artifact for low-manual
+  challenge review.
+- New tier: unchanged `production_candidate`. This is a non-authoritative
+  challenge QA packet; it does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, default extraction, GUI, truth-label,
+  reviewer-slot-2, or broad Backfill authority.
+- Evidence: `scripts/build_lockbox_ai_challenge_pack.py` reads
+  `lockbox_next_action_plan_v1.tsv`, the static Gaussian15 review bundle, the
+  owner label log, and
+  `docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json`.
+  It writes `docs/superpowers/validation/lockbox_ai_challenge_queue_v1.tsv`,
+  `docs/superpowers/validation/lockbox_ai_challenge_template_v1.tsv`,
+  `docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json`, and
+  `docs/superpowers/validation/lockbox_ai_challenge_v1/index.html`. Current
+  split: all 72 lockbox cases are present; 53 are visual contradiction checks
+  against owner-confirmed Gaussian15 plots, and 19 are route/evidence integrity
+  checks only. Only the 53 visual rows allow
+  `visual_contradiction_suspected`; the 19 route/evidence rows do not. The
+  template is blank and every no-authority flag is false.
+- Product surface changed: docs/validation/helper script/test only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, GUI, broad Backfill, or
+  truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py`
+  built the packet;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py --check-only`
+  returned `Lockbox AI challenge packet is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_ai_challenge_pack.py -v --tb=short`
+  passed `12`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_ai_challenge_pack.py tests/test_lockbox_ai_challenge_pack.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_ai_challenge_pack.py -v --tb=short`
+  passed `20`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_ai_challenge_pack.py tests/test_lockbox_ai_challenge_pack.py tests/test_productization_state_index.py`
+  passed.
+- Subagent review: read-only reviewer found the route/evidence output-scope
+  leak and stale HTML/summary coverage gap. Both were fixed before commit.
+- Remaining blocker: AI challenge results are not yet filled or reviewed, and
+  even filled AI findings can only flag owner re-review. They cannot satisfy
+  human truth completion.
+- Next checkpoint: commit this non-authoritative challenge packet, then run or
+  fill challenge results and route only flagged cases back to the owner.
+
+### 2026-06-18 - lockbox_ai_challenge_result_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` challenge packet ready for 72
+  cases, but challenge results were not yet filled.
+- New tier: unchanged `production_candidate`. This is a non-authoritative
+  challenge result log and summary; it does not satisfy reviewer slot 2 and
+  does not grant ProductWriter, matrix, workbook, selected peak/area,
+  counted-detection, default extraction, GUI, truth-label, or broad Backfill
+  authority.
+- Evidence: `docs/superpowers/validation/lockbox_ai_challenge_result_log_v1.tsv`
+  records 72 challenge rows from three read-only subagent chunks plus one main
+  agent chunk. `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`
+  reports `decision=ai_challenge_owner_recheck_required`: 71 rows are
+  `no_issue`; 1 row,
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, is
+  `visual_contradiction_suspected` and must be routed only to owner re-review.
+- Product surface changed: docs/validation/helper script/test/output artifact
+  only. No ProductWriter, matrix, workbook, selected peak/area, counted
+  detection, workbook schema, CLI/config, extraction default, GUI, broad
+  Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py`
+  built the result summary with 72 cases and 1 flagged case;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  focused pytest and ruff for the result checker were added and run.
+- Remaining blocker: the single flagged case needs owner re-review before it can
+  be treated as resolved. Even owner resolution still cannot become writer
+  authority without a later authority manifest and expected-diff product goal.
+- Next checkpoint: build a tiny owner re-review packet for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`, or wait for owner review if the current
+  HTML/plot is enough.
+
+### 2026-06-18 - lockbox_ai_challenge_owner_rule_resolution_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` with one
+  `ai_challenge_owner_recheck_required` flag for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021`.
+- New tier: unchanged `production_candidate`; the AI challenge result now has
+  no open owner re-review flag. This closure does not satisfy reviewer slot 2
+  and does not grant ProductWriter, matrix, workbook, selected peak/area,
+  counted-detection, default extraction, GUI, truth-label, or broad Backfill
+  authority.
+- Evidence: the owner clarified the double-peak rule for raw traces: if the
+  Backfill/detect reference apex is on the left peak, keep the current clean
+  decision; if it is indistinguishable or on the right peak, keep the case
+  flagged. Existing recovered trace evidence for
+  `LOCKBOXV1_60CEB35837FAF38CC4DE9021` records
+  `cell_apex_rt=15.1553` and `trace_apex_rt=15.1553` on the left peak, while
+  the competing right peak is around `15.4366`. The result row now records
+  `challenge_result=no_issue` and
+  `challenge_reason_code=owner_rule_detected_left_peak_resolved`.
+  `docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json`
+  reports `decision=ai_challenge_no_owner_recheck_required`: 72 `no_issue`,
+  0 flagged.
+- Product surface changed: validation artifact/schema enum, focused tests, and
+  docs/status indexes only. No ProductWriter, matrix, workbook, selected
+  peak/area, counted detection, workbook schema, CLI/config, extraction
+  default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py`
+  rebuilt the result summary with 72 cases and 0 flagged cases;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  returned `Productization state index is consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_bounded_product_lanes.py`
+  returned `Bounded non-broad product lanes are consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_ai_challenge_results.py tests/test_productization_state_index.py -v --tb=short`
+  passed `16`; focused ruff passed for the changed checker/tests.
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`
+  returned `INDEX.md in sync: 90 entry points, 169 total files.`;
+  `git diff --check` returned only LF/CRLF warnings.
+  Read-only subagent review passed with no blocking findings and confirmed the
+  trace artifact, hashes, status index, and no-authority boundary.
+- Remaining blocker: none for the AI challenge flag. Future automation still
+  needs an explicit authority manifest update and expected-diff product goal
+  before any label, challenge output, or review evidence can write product
+  values.
+- Next checkpoint: continue from the truth/review substrate. Do not convert this
+  closure into writer authority; use it only to unblock later truth-summary or
+  review-workflow experiments.
+
+### 2026-06-18 - lockbox_second_review_ai_challenge_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` AI challenge result with
+  `decision=ai_challenge_no_owner_recheck_required`, 72 `no_issue`, and
+  0 flagged cases. The second-review collection pack existed, but it was not
+  mechanically gated on the closed AI challenge result.
+- New tier: unchanged `production_candidate`. The current active artifact is
+  now `docs/superpowers/validation/lockbox_second_review_summary_v1.json`
+  (`decision=second_review_collection_ready_for_53_cases`). It remains a
+  truth/review collection surface only; it grants no ProductWriter, matrix,
+  workbook, selected peak/area, counted-detection, GUI, default extraction, or
+  broad Backfill authority.
+- Evidence: `scripts/build_lockbox_second_review_pack.py` now requires the AI
+  challenge result summary to be current and to report
+  `ai_challenge_no_owner_recheck_required` with zero flagged cases before the
+  second-review pack can validate. The summary records the upstream AI
+  challenge decision and hash. `lockbox_owner_boundary_confirmation_v1.json`
+  was corrected to avoid a cyclic source-artifact chain: owner boundary now
+  records only upstream human-review evidence and no longer hashes downstream
+  second-review summaries. AI challenge queue/template/result metadata were
+  regenerated only to point at that non-cyclic owner-boundary artifact; the
+  challenge results stayed 72 `no_issue`.
+- Product surface changed: validation artifact schemas/content, helper script,
+  focused tests, status index, and docs only. No ProductWriter, matrix,
+  workbook, selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_ai_challenge_pack.py --check-only`
+  returned `Lockbox AI challenge packet is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_lockbox_ai_challenge_results.py --check-only`
+  returned `Lockbox AI challenge results are valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_second_review_pack.py --check-only`
+  returned `Lockbox second-review pack is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_second_review_pack.py tests/test_lockbox_ai_challenge_results.py tests/test_lockbox_ai_challenge_pack.py tests/test_lockbox_owner_boundary_confirmation.py -v --tb=short`
+  passed `32`.
+- Remaining blocker: this still does not create second human labels. The next
+  product step is to collect/import the second independent review labels, or
+  explicitly define a future single-owner plus AI-challenge evidence contract.
+  Either path still needs a separate expected-diff and authority goal before
+  writer authority can expand.
+- Next checkpoint: run productization state/lane/diagnostics checks, subagent
+  review, then commit the scoped gate. Do not use this gate to unpark broad
+  Backfill or promote labels/challenge output into writer authority.
+
+### 2026-06-18 - lockbox_single_owner_ai_challenge_gate_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` second-review collection
+  gate. The second-review pack was valid only after AI challenge closure, but
+  the lane still required either second-human labels or a separate contract for
+  the single-owner + AI-challenge evidence path.
+- New tier: unchanged `production_candidate`. Current active artifact is
+  `docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json`
+  with
+  `decision=single_owner_ai_challenge_supports_shadow_automation_experiment`.
+  This allows only a later shadow automation experiment design. It is not
+  two-human truth completion and does not grant ProductWriter, matrix, workbook,
+  selected peak/area, counted-detection, GUI, default extraction, or broad
+  Backfill authority.
+- Evidence: `scripts/build_lockbox_single_owner_ai_challenge_gate.py` checks
+  the current truth summary (`truth_supports_review_only`), AI challenge result
+  summary (`ai_challenge_no_owner_recheck_required`, zero flagged), second
+  review summary (`second_review_collection_ready_for_53_cases`), and
+  non-cyclic owner-boundary confirmation. Output records 53 owner-clean
+  Gaussian15 cases, 19 excluded/not-assessable cases, and 0 product-authority
+  rows.
+- Product surface changed: validation decision JSON, helper script, focused
+  tests, status index, and docs only. No ProductWriter, matrix, workbook,
+  selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py`
+  built the gate;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_single_owner_ai_challenge_gate.py --check-only`
+  returned `Lockbox single-owner AI challenge gate is valid and non-authoritative.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_single_owner_ai_challenge_gate.py -v --tb=short`
+  passed `8`, including stale truth summary, stale second-review summary,
+  AI-flag, owner-boundary-cycle, owner-boundary-hash, and authority-drift
+  regressions;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_single_owner_ai_challenge_gate.py tests/test_lockbox_single_owner_ai_challenge_gate.py`
+  passed.
+- Remaining blocker: this gate supports only shadow experiment design. Any
+  ProductWriter authority expansion still needs a separate masked/product-writer
+  oracle, expected-diff, and explicit authority-manifest update.
+- Next checkpoint: design the shadow automation experiment around the 53
+  owner-clean + AI-no-flag cases while keeping 19 excluded cases out of writer
+  scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
+  authority.
+
+### 2026-06-19 - lockbox_shadow_automation_experiment_v1
+
+- Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
+- Previous tier: unchanged `production_candidate` single-owner + AI-challenge
+  gate. That packet allowed only a later shadow automation experiment design.
+- New tier: unchanged `production_candidate`. Current active artifact is
+  `docs/superpowers/validation/lockbox_shadow_automation_experiment_v1.json`
+  with `decision=shadow_scoring_contract_adapter_v1_ready` and
+  `allowed_next_step=define_production_acceptance_manifest_v1`.
+- Evidence: `scripts/build_lockbox_shadow_automation_experiment_design.py`
+  consumes `lockbox_next_action_plan_v1.tsv`,
+  `lockbox_next_action_summary_v1.json`, and
+  `lockbox_single_owner_ai_challenge_gate_v1.json`, then writes a 72-row shadow
+  contract manifest. It routes 53 owner-clean Gaussian15 cases as
+  non-authoritative accept challenges, 6 existing manual wrong-peak/no-peak
+  controls as reject hard stops, and 13 excluded rows as `not_scored`. It
+  records the Gaussian15 boundary policy, shadow/truth/doublet enums, row-level
+  doublet fields, source paths/hashes, manifest sha, `shadow_only=true`,
+  `write_authority=false`, `matrix_write_allowed=false`,
+  `may_satisfy_reviewer_slot2=false`, and
+  `single_owner_evidence_is_truth_completion=false`.
+- Product surface changed: validation decision JSON, case-manifest TSV, helper
+  script, focused tests, status index, label README, control plane, and handoff
+  only. No ProductWriter, matrix, workbook, selected peak/area, counted
+  detection, workbook schema, CLI/config, extraction default, GUI, broad
+  Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_shadow_automation_experiment_design.py`
+  built the design packet;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
+  returned `Lockbox shadow automation experiment design is valid.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
+  passed `14`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check scripts/build_lockbox_shadow_automation_experiment_design.py tests/test_lockbox_shadow_automation_experiment_design.py tests/test_productization_state_index.py`
+  passed;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  returned `Productization state index is consistent and fail-closed.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
+  passed `25`.
+- Remaining blocker: this adapter cannot grant writer authority. Any
+  ProductWriter authority expansion still needs Phase 2
+  `ProductionAcceptanceManifest v1`, expected-diff, and focused output tests.
+- Next checkpoint: define `ProductionAcceptanceManifest v1` in a separate goal.
+  Do not promote shadow results to writer authority.
+
+### 2026-06-18 - productization_status_index_v1
+
+- Lane: Productization control-plane cleanup / machine-checkable lane status.
+- Previous tier: the handoff and control plane contained current lane status in
+  prose, but there was no compact machine-readable index that could reject
+  authority drift.
+- New tier: `production_candidate` control-plane guard. This does not change
+  product behavior or writer authority.
+- Evidence: `docs/superpowers/specs/productization_control_plane_schema.v1.json`
+  defines the status-index schema and allowed readiness states.
+  `docs/superpowers/validation/productization_status_index_v1.tsv` records each
+  current lane exactly once, including parked broad Backfill, the 511-cell
+  current writer scope, review/truth/recovery assets, targeted MS1 limited
+  rescue, sample metadata no-output projection, ReviewAction parked writebacks,
+  calibration freeze, and GUI out-of-scope state.
+  `scripts/check_productization_state.py` validates lane uniqueness, required
+  lanes, artifact hashes, doc anchors, authority-manifest alignment, and that
+  parked/blocked/diagnostic/frozen/out-of-scope/review/truth/evidence lanes
+  cannot write.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`
+  returned `Productization state index is consistent and fail-closed.` Focused
+  tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  (`9 passed`). Focused ruff passed for `scripts/check_productization_state.py`
+  and `tests/test_productization_state_index.py`. Subagent review findings were
+  fixed by adding workbook/selected-peak/selected-area flags, rejecting
+  non-writer authority scopes and product-output changes, and requiring
+  handoff/control-plane anchors. Full local gate also passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests scripts/build_trace_overlay_recovery_report.py scripts/build_peak_choice_truth_lockbox.py scripts/check_productization_authority.py scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_state.py`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  (`3813 passed, 1 skipped`);
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py`;
+  `git diff --check` passed with LF/CRLF warnings only.
+- Remaining blocker: this is a guardrail, not product behavior. It does not
+  collect lockbox labels, recover new RAW evidence, or promote any parked lane.
+- Next checkpoint: Goal 6 bounded non-broad lane hardening. Keep the status
+  index in future productization gates.
+
+### 2026-06-18 - missing_overlay_evidence_recovery_v1
+
+- Lane: Missing-overlay evidence recovery / low-manual review infrastructure.
+- Previous tier: 1087 rows were `evidence_required` because the source audit had
+  `missing_overlay_path` and no trace/overlay links.
+- New tier: `production_candidate` evidence-recovery asset. The rows remain
+  `evidence_required`; no writer authority changes.
+- Evidence: `scripts/build_trace_overlay_recovery_report.py` links all 1087
+  missing-overlay rows from `mechanical_adjudication_index_v1.tsv` to existing
+  family-level trace JSON, overlay PNG, hypothesis PNG, and sample-level trace
+  fields across 114 families. The generated
+  `docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv` records
+  `recovery_status=family_trace_overlay_recovered`, `sample_trace_present=TRUE`,
+  and `post_recovery_evidence_grade=C_trace_recovered` for all 1087 rows.
+  `docs/superpowers/validation/missing_overlay_resolution_summary_v1.json`
+  records `status=all_existing_family_trace_overlays_recovered`.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_trace_overlay_recovery_report.py`
+  generated the recovery report. Focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_trace_overlay_recovery_contract.py -v --tb=short`
+  (`5 passed`). Focused ruff passed for
+  `scripts/build_trace_overlay_recovery_report.py` and
+  `tests/test_trace_overlay_recovery_contract.py`. JSON parse passed for the
+  recovery schema and summary.
+- Remaining blocker: recovered trace/overlay evidence is not peak-choice truth
+  and not area approval. These rows need structured review, truth labels, or a
+  later reintegration/expected-diff authority goal before any product write can
+  be considered.
+- Next checkpoint: Goal 5 productization control-plane cleanup. Do not use this
+  recovery report as ProductWriter input.
+
+### 2026-06-18 - peak_choice_truth_lockbox_v1
+
+- Lane: Peak-choice truth acquisition / low-manual review infrastructure.
+- Previous tier: Review Packet / Approval Workflow v1 made the 3015
+  trace-matched unresolved rows reviewable, but there was no independent
+  truth-label protocol or family-split lockbox.
+- New tier: `production_candidate` for a non-mutating truth acquisition
+  contract. This does not change writer authority.
+- Evidence: `docs/superpowers/specs/peak_choice_truth_protocol.v1.md` defines
+  the truth-lockbox protocol. `docs/superpowers/specs/truth_label_schema.v1.json`
+  defines the sampling manifest and label-log schema. The generated
+  `docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv` contains 72
+  deterministic cases: 18 approved write-ready controls, 24 unresolved
+  review-ready rows split across high-signal dirty / low-height / apex-delta /
+  shape-width-scan contexts, 12 missing-overlay evidence-gap rows, 12 failed
+  heldout-oracle negative cases, and 6 manual wrong-peak/no-peak fixtures.
+  `docs/superpowers/validation/reviewer_label_log_v1.tsv` is intentionally
+  header-only, and
+  `docs/superpowers/validation/inter_reviewer_agreement_summary_v1.json`
+  records `status=no_labels_collected`. Missing-overlay evidence-gap rows are
+  not forced into fake area labels: they have `area_label_required=FALSE`, and
+  all rows allow `not_assessed` / `unavailable`.
+- Product surface changed: docs/spec/validation/test/helper script only. No
+  ProductWriter, matrix, workbook, selected peak/area, counted detection,
+  workbook schema, CLI/config, extraction default, or GUI behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/build_peak_choice_truth_lockbox.py`
+  generated the 72-case lockbox. Focused tests passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_peak_choice_truth_lockbox_contract.py -v --tb=short`
+  (`6 passed`). Focused ruff passed for
+  `scripts/build_peak_choice_truth_lockbox.py` and
+  `tests/test_peak_choice_truth_lockbox_contract.py`. JSON parse passed for the
+  truth schema and agreement summary. Subagent review found one P2 issue where
+  missing-overlay rows could be forced into area labels; the generated manifest
+  and tests now require honest `not_assessed` / `unavailable` handling.
+- Remaining blocker: no reviewer labels or agreement metrics exist yet; lockbox
+  membership and future labels cannot grant ProductWriter authority without a
+  later authority manifest plus expected-diff goal.
+- Next checkpoint: Goal 4 missing-overlay evidence recovery. Do not make the
+  1087 missing-overlay rows writable simply because they are sampled here.
+
+### 2026-06-18 - productization_review_packet_v1
+
+- Lane: Backfill product-authority control plane /
+  low-manual review workflow.
+- Previous tier: Goal 0/1 authority/adjudication contract existed as a
+  `production_candidate` control asset, but unresolved rows had no structured
+  human approval packet.
+- New tier: `production_candidate` for Review Packet / Approval Workflow v1 as
+  a non-mutating review contract. This does not change writer authority.
+- Evidence: `docs/superpowers/specs/review_packet_schema.v1.json` defines
+  packet/log schemas and forbids free-form value entry, matrix touch, and
+  product authority from review approval.
+  `docs/superpowers/validation/review_queue_v1.tsv` contains 3015
+  trace-matched unresolved rows as `review_ready`; each row has candidate value,
+  area/height/RT fields, trace JSON path, overlay PNG path, one review question,
+  and allowed actions
+  `approve_candidate;reject_candidate;escalate_unresolved`.
+  `docs/superpowers/validation/review_decision_log_v1.tsv` is a structured
+  header-only decision log template. The 1087 missing-overlay rows are not in
+  this review queue and remain Goal 4 evidence-recovery work.
+- Product surface changed: docs/spec/validation/test only. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, or GUI behavior changed.
+- Validation: focused checkpoint shard passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_review_packet_contract.py tests/test_check_productization_authority.py tests/test_productization_authority_mechanical_adjudication.py -v --tb=short`
+  (`12 passed`); focused ruff passed for the checker/tests; authority checker
+  passed; review packet schema JSON parse passed. Full local gate passed:
+  `ruff check xic_extractor tests`, `mypy xic_extractor`,
+  `pytest -v --tb=short -x` (`3792 passed, 1 skipped`), and
+  `scripts/check_diagnostics_index.py`.
+- Remaining blocker: this checkpoint does not implement truth labels, review UI,
+  ProductWriter integration, or trace overlay recovery.
+- Next checkpoint: after review/commit, proceed to Peak-Choice Truth Set /
+  Lockbox v1. Do not treat review approval as ProductWriter authority.
+
+### 2026-06-18 - productization_authority_checker_v1
+
+- Lane: Productization authority firewall / Goal 0-1 hardening.
+- Previous tier: `productization_authority_manifest_v1` and
+  `mechanical_adjudication_index_v1` were `production_candidate` control
+  assets validated by focused pytest only.
+- New tier: unchanged, but the authority firewall now has a reusable checker
+  entry point.
+- Evidence: `scripts/check_productization_authority.py` validates the manifest,
+  mechanical adjudication schema, and 4613-row index. It checks fail-closed
+  unregistered scope behavior, the 511/4102 authority split, 3015/1087 evidence
+  classes, parked broad Backfill, negative-evidence scopes, explanation-only
+  sources, and source hashes. `tests/test_check_productization_authority.py`
+  adds a forbidden-scope regression test by mutating a non-write row to
+  `all_stability`.
+- Product surface changed: checker/test only. It does not modify or call
+  ProductWriter.
+- Validation: focused checker tests passed and
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_productization_authority.py`
+  returned `Productization authority contract is fail-closed.` Full local gate
+  passed with the review-packet checkpoint.
+- Remaining blocker: none for the current non-mutating checker contract; it must
+  be kept in future productization authority gates.
+- Next checkpoint: keep this checker in the PR/local gate set for future
+  productization authority changes.
+
+### 2026-06-18 - productization_authority_mechanical_adjudication_v1
+
+- Lane: Backfill product-authority control plane /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad Backfill auto-write was `parked`; generated policy replay
+  remained `production_ready` only for 511 current `write_ready` cells.
+- New tier: unchanged for writer authority. The authority/adjudication control
+  asset is `production_candidate`: it classifies the current 4613-row
+  candidate/audit universe without adding ProductWriter authority.
+- Evidence:
+  `docs/superpowers/specs/productization_authority_manifest.v1.json` freezes
+  current product authority at `backfill_policy_write_ready_rows` / 511 cells
+  and marks broad Backfill, quality explanations, quality blockers, and known
+  negative-evidence scopes as non-authority. `docs/superpowers/specs/mechanical_adjudication_schema.v1.json`
+  defines fail-closed row decisions. `docs/superpowers/validation/mechanical_adjudication_index_v1.tsv`
+  classifies all 4613 rows as 511 `write_ready`, 3015 requiring independent
+  peak-choice/area truth, and 1087 requiring trace/overlay or reintegration
+  evidence.
+- Product surface changed: docs/spec/validation/test only. No ProductWriter,
+  matrix, workbook, selected peak/area, counted detection, workbook schema,
+  CLI/config, extraction default, or GUI behavior changed.
+- Validation: focused contract shard passed:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_authority_mechanical_adjudication.py -v --tb=short`
+  (`5 passed`), focused ruff passed for the new test file, full ruff passed,
+  mypy passed, diagnostics index passed, `git diff --check` passed with only
+  LF/CRLF warnings, and full pytest passed (`3785 passed, 1 skipped`).
+  Subagent review found stale broad-Backfill wording; current-summary and
+  historical-log entries were fixed so broad auto-write is `parked` and future
+  work routes through authority/adjudication, structured review, truth, or trace
+  evidence.
+- Remaining blocker: none for the authority/adjudication contract itself. This
+  contract does not implement review packets, truth lockbox labels, or trace
+  overlay recovery.
+- Next checkpoint: run review/validation, then build structured review packets
+  or peak-choice truth/lockbox assets. Do not convert the 3015 or 1087 classes
+  into writer pools without a later authority manifest update plus expected-diff
+  gate.
+
+### 2026-06-18 - backfill_broad_autowrite_feasibility_gate_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: broad Backfill was on implementation hold pending one read-only
+  feasibility gate; current writer authority remained 511 `write_ready` cells.
+- New tier: `parked` for broad Backfill auto-write. Current 511-cell
+  `production_ready` writer authority is unchanged.
+- Evidence:
+  `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
+  revalidated artifact hashes and counts, assessed ISTD reference semantics,
+  compared the 3015 unresolved trace-matched rows against the 511 approved rows,
+  and output exactly `park_broad_backfill`.
+- Product surface changed: docs/control-plane only. No ProductWriter, matrix,
+  workbook, selected area, counted detection, workbook schema, CLI/config, or
+  TSV schema behavior changed.
+- Validation: no-RAW artifact inspection only; no 85RAW rerun because existing
+  artifacts were sufficient to decide the gate. `git diff --check` passed with
+  only LF/CRLF warnings.
+- Remaining blocker: broad Backfill can reopen only with a new independent
+  truth source for peak-choice / family identity. `quality_blockers`,
+  round-trip reintegration, all-stability, apex-delta, width-only, and
+  shape-margin cannot be repackaged as a new broad writer path.
+- Next checkpoint: stop broad Backfill diagnostics. Continue only existing
+  511-cell release hardening or non-broad lanes unless the user approves a new
+  independent truth-source proposal.
+
+### 2026-06-18 - backfill_autowrite_ground_truth_strategy_reset_v1
+
+- Lane: Backfill product-authority sidecars /
+  `backfill_standard_seed_guard_scope_v1`.
+- Previous tier: generated policy replay was `production_ready` for 511 current
+  approved-evidence / observed-oracle rows; broad 4613-row Backfill remained
+  `production_candidate`, with handoff wording still nudging the next step
+  toward choosing another evidence class from blocker-token distribution.
+- New tier: unchanged for writer authority. Broad Backfill expansion is on
+  implementation hold until a read-only ground-truth packet is reviewed. This is
+  a strategy reset, not a product behavior change.
+- Evidence: reviewed the 2026-06-18 ChatGPT reset note and Backfill auto-write
+  ground-truth strategy note, then recorded the blocking critique in
+  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`.
+  Revalidated key no-RAW facts: Backfill promotes only MS1 morphology
+  `primary_matrix_area`; existing replay artifacts still report 4613 policy
+  rows, 511 `write_ready`, 0 `detected_flagged`, 4102 `blocked`, and 511/511
+  writer expected-diff pass; targeted ISTD benchmark maps six active ISTDs to
+  selected family IDs with 85/85 untargeted positives; a small matrix check over
+  those six families found no `>3x median` high outliers and low-side outliers
+  in every family.
+- Validation: docs/no-RAW artifact inspection only; no RAW or 85RAW rerun.
+  `git diff --check` passed with only LF/CRLF warnings.
+- Remaining blocker: superseded by
+  `backfill_broad_autowrite_feasibility_gate_v1`, which outputs
+  `park_broad_backfill`.
+- Next checkpoint: do not derive a writer predicate directly from
+  `quality_blockers`; do not train/approve rows from the current round-trip
+  reintegration oracle alone; do not include `missing_overlay_path` rows without
+  regenerated trace evidence; if the gate cannot stay simple, park broad
+  Backfill instead of adding more diagnostics.
 
 ### 2026-06-17 - sample_metadata_no_output_parity_tier_closeout_v1
 
@@ -2125,9 +3169,11 @@ at that older checkpoint, not the latest release claim.
 - Previous tier: generated policy replay was `production_ready` for the 511
   current approved-evidence / observed-oracle rows, but the 4102 blocked rows
   were still hard to explain beyond coarse `next_evidence` buckets.
-- New tier: unchanged for writer authority. Generated policy replay remains
-  `production_ready` only for 511 `write_ready` rows; broad 4613-row Backfill
-  remains `production_candidate`. The new sidecar is explanation-only.
+- New tier at the time: unchanged for writer authority. Generated policy replay
+  remained `production_ready` only for 511 `write_ready` rows; broad 4613-row
+  Backfill was still described as `production_candidate`. This broad-scope tier
+  statement is superseded by the 2026-06-18 `park_broad_backfill` decision; the
+  sidecar itself remains explanation-only.
 - Evidence: `standard_peak_backfill_productization.py` now writes
   `standard_peak_backfill_policy_quality_explanations.tsv` beside
   `standard_peak_backfill_policy.tsv` and records its path/SHA/row count in
@@ -2151,11 +3197,12 @@ at that older checkpoint, not the latest release claim.
   passed `31`; focused ruff and mypy passed for the productization module/test;
   the no-RAW real-data replay command exited `0`.
 - Remaining blocker: this sidecar explains blocked rows; it does not make them
-  writable. The next Backfill broadening step still needs a named evidence
-  class with observed/masked/product-writer oracle evidence and expected-diff.
-- Next checkpoint: review the sidecar contract, then use its blocker
-  distribution to choose the next simple evidence class; do not promote rows
-  from `quality_blockers` directly.
+  writable. The old broadening checkpoint is superseded; do not use blocker
+  distribution to choose another writer slice.
+- Next checkpoint: superseded by
+  `backfill_broad_autowrite_feasibility_gate_v1` and
+  `productization_authority_mechanical_adjudication_v1`. Future work should
+  build review/truth/evidence assets, not a new broad Backfill writer.
 
 ### 2026-06-17 - handoff_state_refresh_after_shape_margin_commit_v1
 
@@ -2183,11 +3230,12 @@ the later low-height writer entry above as the current tier source.
 - Validation: targeted stale-wording grep over the handoff after edit; docs-only
   diff, so no RAW rerun and no matrix/product output validation needed.
 - Remaining blocker: none for this handoff drift. Product blockers remain the
-  same: broad Backfill needs broader oracle/expected-diff approval,
-  ReviewAction mutation needs stable IDs/sidecar/expected-diff approval, and
-  GUI/broader Targeted MS1 rescue remain out of this ready claim.
-- Next checkpoint: if this docs-only refresh is committed, use it as the current
-  handoff baseline before any PR closeout or next Backfill broadening slice.
+  same except broad Backfill is now parked by the later 2026-06-18 feasibility
+  gate; ReviewAction mutation needs stable IDs/sidecar/expected-diff approval,
+  and GUI/broader Targeted MS1 rescue remain out of this ready claim.
+- Next checkpoint: historical. Use the later authority/adjudication handoff as
+  the current baseline; do not treat this entry as a prompt for a Backfill
+  broadening slice.
 
 ### 2026-06-17 - provisional_production_candidate_gate_guard_audit_v1
 

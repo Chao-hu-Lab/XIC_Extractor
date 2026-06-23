@@ -1,0 +1,58 @@
+{
+  "ai_challenge_flagged_cases": 0,
+  "authority_rules": {
+    "broad_backfill_unparked": false,
+    "labels_prefilled": false,
+    "may_feed_product_writer": false,
+    "may_grant_product_authority": false,
+    "may_touch_matrix": false,
+    "round_trip_oracle_used_as_truth": false
+  },
+  "case_counts": {
+    "excluded_not_ready_for_second_review": 19,
+    "product_authority_rows": 0,
+    "second_review_queue_cases": 53,
+    "second_review_template_rows": 53,
+    "total_next_action_cases": 72
+  },
+  "decision": "second_review_collection_ready_for_53_cases",
+  "decision_reasons": [
+    "53 plotted Gaussian15 cases were copied into a reviewer-slot-2 collection queue",
+    "all label fields are blank; Codex did not invent second-review labels",
+    "19 non-ready cases remain excluded from this collection pack",
+    "this packet grants no ProductWriter, matrix, workbook, selected-peak, selected-area, counted-detection, or broad Backfill authority"
+  ],
+  "review_contract": {
+    "boundary_basis": "existing_gaussian15_static_review_boundary",
+    "expected_label_state": "blank_until_human_review",
+    "output_effect": "truth_collection_only",
+    "reviewer_scope": "second_independent_review_only",
+    "reviewer_slot": "2"
+  },
+  "schema_version": "lockbox_second_review_summary_v1",
+  "source_artifacts": {
+    "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
+    "ai_challenge_result_summary_sha256": "EFB277A6BB978AC0977814D727C406C89CBC18CBE7841894F5D9370C0A51CBA2",
+    "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
+    "label_log_sha256": "D4F309ADC0840410E9119E3FD95D4D527CBF0C89A77E22A65FFE63E80D7BD4C4",
+    "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
+    "next_action_plan_sha256": "B894B23A115EDF7CE082C885C2D5E3F725FEF0D0E21490786E4A023F7FB7F9A0",
+    "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
+    "next_action_summary_sha256": "A55A0CFA11C560A150959D861E5815D9D4833CE3F094EEA3B2228AAA0C11D23E",
+    "second_review_index": "docs/superpowers/validation/lockbox_second_review_v1/index.html",
+    "second_review_index_sha256": "DD1AA114D555ED128FA03FCE8B320C256E64C36322157F4DA9CF35C7A71C826B",
+    "second_review_queue": "docs/superpowers/validation/lockbox_second_review_queue_v1.tsv",
+    "second_review_queue_sha256": "21C183CE7EAAE55412E5F4D84E867567EEC17268410C5BC7F41CD4DFD46B6CAA",
+    "second_review_template": "docs/superpowers/validation/lockbox_second_review_template_v1.tsv",
+    "second_review_template_sha256": "2FBFE9D0BDFAF1049884D6430690A4000EF5D5AAF51C437BCA2BD632AA397EF0",
+    "static_review_bundle_index": "docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv",
+    "static_review_bundle_index_sha256": "471C0078B58264986AAB53DD70F57FF0375F4B0B7951F5BF90683A9DBA0E93B6"
+  },
+  "source_next_action_counts": {
+    "park_roundtrip_oracle_negative_as_nontruth": 12,
+    "ready_for_second_independent_review": 53,
+    "recover_or_mark_gaussian_boundary_unavailable": 1,
+    "use_existing_manual_negative_control": 6
+  },
+  "upstream_ai_challenge_decision": "ai_challenge_no_owner_recheck_required"
+}
