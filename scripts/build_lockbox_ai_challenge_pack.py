@@ -51,9 +51,12 @@ AI_CHALLENGE_TEMPLATE = (
 AI_CHALLENGE_SUMMARY = (
     ROOT / "docs/superpowers/validation/lockbox_ai_challenge_summary_v1.json"
 )
-AI_CHALLENGE_INDEX = (
-    ROOT / "docs/superpowers/validation/lockbox_ai_challenge_v1/index.html"
+AI_CHALLENGE_RENDERED_OUTPUT_DIR = (
+    ROOT
+    / "local_validation_artifacts/externalized_superpowers_validation/"
+    "lockbox_ai_challenge_v1"
 )
+AI_CHALLENGE_INDEX = AI_CHALLENGE_RENDERED_OUTPUT_DIR / "index.html"
 
 SCHEMA_VERSION = "lockbox_ai_challenge_packet_v1"
 SUMMARY_SCHEMA_VERSION = "lockbox_ai_challenge_summary_v1"
@@ -231,6 +234,7 @@ def check_lockbox_ai_challenge_pack(
     ai_challenge_template_path: Path = AI_CHALLENGE_TEMPLATE,
     ai_challenge_summary_path: Path = AI_CHALLENGE_SUMMARY,
     ai_challenge_index_path: Path = AI_CHALLENGE_INDEX,
+    require_rendered_local: bool = False,
 ) -> list[str]:
     problems = check_lockbox_next_action_plan(
         static_bundle_index_path=static_bundle_index_path,
@@ -270,13 +274,14 @@ def check_lockbox_ai_challenge_pack(
         _check_template_contract,
         problems,
     )
-    if not ai_challenge_index_path.exists():
-        problems.append("AI challenge HTML index missing")
-    else:
-        actual_index = ai_challenge_index_path.read_text(encoding="utf-8")
-        if actual_index != result["index_html"]:
-            problems.append("AI challenge HTML index is stale")
-        _check_index_links(actual_index, ai_challenge_index_path, problems)
+    if require_rendered_local:
+        if not ai_challenge_index_path.exists():
+            problems.append("AI challenge HTML index missing")
+        else:
+            actual_index = ai_challenge_index_path.read_text(encoding="utf-8")
+            if actual_index != result["index_html"]:
+                problems.append("AI challenge HTML index is stale")
+            _check_index_links(actual_index, ai_challenge_index_path, problems)
     if not ai_challenge_summary_path.exists():
         problems.append("AI challenge summary JSON missing")
     else:
@@ -325,6 +330,7 @@ def _load_inputs(
             required_columns=(
                 "lockbox_case_id",
                 "case_html_path",
+                "case_html_sha256",
                 "review_plot_png_path",
                 "plot_status",
                 "plot_sha256",
@@ -914,10 +920,10 @@ def _source_hashes(
         f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
         f"lockbox_reviewer_label_log={artifact_sha256(label_log_path)}",
         f"owner_boundary_confirmation={artifact_sha256(owner_boundary_confirmation_path)}",
-        f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
+        f"case_html={static_row.get('case_html_sha256', '')}",
     ]
     if static_row.get("review_plot_png_path"):
-        parts.append(f"plot={_hash_optional(static_row['review_plot_png_path'])}")
+        parts.append(f"plot={static_row.get('plot_sha256', '')}")
     parts.append(static_row.get("source_artifact_hashes", ""))
     return ";".join(part for part in parts if part)
 
@@ -935,11 +941,6 @@ def _rows_sha256(rows: Sequence[Mapping[str, str]], header: Sequence[str]) -> st
 
 def _text_sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest().upper()
-
-
-def _hash_optional(path_value: str) -> str:
-    path = _repo_path(path_value)
-    return artifact_sha256(path) if path.exists() else ""
 
 
 def _html_link(path_value: str, label: str, *, index_path: Path) -> str:
@@ -989,9 +990,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=AI_CHALLENGE_SUMMARY,
     )
-    parser.add_argument("--ai-challenge-index", type=Path, default=AI_CHALLENGE_INDEX)
+    parser.add_argument(
+        "--rendered-output-dir",
+        type=Path,
+        default=AI_CHALLENGE_RENDERED_OUTPUT_DIR,
+    )
+    parser.add_argument("--ai-challenge-index", type=Path, default=None)
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--require-rendered-local", action="store_true")
     args = parser.parse_args(argv)
+    ai_challenge_index = args.ai_challenge_index or (
+        args.rendered_output_dir / "index.html"
+    )
 
     if args.check_only:
         problems = check_lockbox_ai_challenge_pack(
@@ -1003,7 +1013,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             ai_challenge_queue_path=args.ai_challenge_queue,
             ai_challenge_template_path=args.ai_challenge_template,
             ai_challenge_summary_path=args.ai_challenge_summary,
-            ai_challenge_index_path=args.ai_challenge_index,
+            ai_challenge_index_path=ai_challenge_index,
+            require_rendered_local=args.require_rendered_local,
         )
         if problems:
             for problem in problems:
@@ -1021,7 +1032,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ai_challenge_queue_path=args.ai_challenge_queue,
         ai_challenge_template_path=args.ai_challenge_template,
         ai_challenge_summary_path=args.ai_challenge_summary,
-        ai_challenge_index_path=args.ai_challenge_index,
+        ai_challenge_index_path=ai_challenge_index,
     )
     problems = result.get("problems", [])
     if problems:

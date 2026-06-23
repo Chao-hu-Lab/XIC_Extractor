@@ -1,7 +1,7 @@
 # XIC productization handoff
 
 Updated: 2026-06-24
-Branch: `codex/pr-stack-artifact-boundary-governance`
+Branch: `codex/pr-artifact-retention-boundary-20260624`
 
 This is the short current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
@@ -12,7 +12,7 @@ machine-readable validation indexes.
 Phase 1 is closed: the lockbox shadow automation artifact is a shadow-only
 contract adapter/checker, not a scorer run and not product writer authority.
 
-Immediate operational objective: fix the PR88-PR92 stack boundary before
+Immediate operational objective: land the artifact-retention prerequisite before
 resuming product PR merges. Default CI must not depend on ignored `output/` or
 `local_validation_artifacts/`, and global ledger updates must be owned by a
 prerequisite or final rollup PR rather than every stacked product PR.
@@ -96,7 +96,7 @@ These exact phrases are retained for `check_productization_state.py` anchors:
 
 Do not continue patching PR88 red checks one by one. Recovery order:
 
-1. Land or base on the artifact-boundary governance prerequisite.
+1. Land or base on the artifact-retention boundary prerequisite.
 2. Rebuild PR88 as QuantMatrix foundation only.
 3. Move discovery row identity hardening to its own PR or to the CID-NL
    discovery PR where the contract belongs.
@@ -127,8 +127,27 @@ Most recent Phase 1 validation, before the PR-stack incident:
 - `scripts/check_productization_state.py` passed.
 - Scoped ruff, `git diff --check`, and secret/local-path scans passed.
 
-Current governance work has separate hook smoke, sandbox doctor, diff check, and
-secret/local-path scan evidence in its PR closeout.
+Current artifact-retention prerequisite evidence:
+
+- `scripts/build_lockbox_static_review_bundle.py --check-only` passed.
+- `scripts/import_lockbox_labels.py --check-only` passed.
+- `scripts/build_lockbox_next_action_plan.py --check-only` passed.
+- `scripts/build_lockbox_ai_challenge_pack.py --check-only` passed.
+- `scripts/check_lockbox_ai_challenge_results.py` passed with 72 cases and zero
+  owner-recheck flags.
+- `scripts/build_lockbox_second_review_pack.py --check-only` passed.
+- `scripts/build_lockbox_single_owner_ai_challenge_gate.py --check-only`
+  passed.
+- `scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
+  passed after regenerating the shadow-only manifest from updated upstream
+  artifact hashes.
+- `scripts/check_validation_artifact_retention.py` passed with 108 retained
+  validation files and no tracked rendered-artifact dependency. The checker now
+  hard-fails tracked rendered HTML/PNG even if marked `shrink_later`, and
+  validates retained file size/line metadata against the clean checkout.
+
+Hook smoke, sandbox doctor, diff check, PR gate, and secret/local-path scan
+remain required before closeout.
 
 ## Control Plane Note
 
@@ -139,7 +158,7 @@ uncontracted Backfill state did not change.
 
 ## Next Actions
 
-Immediate PR-stack action: create/land the artifact-boundary prerequisite, then
+Immediate PR-stack action: create/land the artifact-retention prerequisite, then
 rebuild or retarget PR88-PR92 so each PR has one owner surface and can pass CI
 from a clean checkout of its base.
 
