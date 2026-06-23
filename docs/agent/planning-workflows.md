@@ -9,9 +9,16 @@ migration policy. Stable runners and validation command shapes remain in
 - Before phase plans or expensive validation, name the decision the run can
   close, strongest existing oracle, missing independent evidence, expected
   runtime/artifacts, and fail-fast or inconclusive path.
+- Use tools proactively. Pick the available search, CodeGraph, subagent,
+  plugin, external-docs, or real-data validation path that best closes the
+  decision; do not choose a weaker path only to save tokens or cost.
+- For long tool chains, write the decision map first: question, evidence source,
+  action if pass, action if fail. This prevents blind loops without discouraging
+  tool use.
 - Any `audit_only`, `shadow_only`, or `diagnostic_only` path needs an exit rule:
   promote, kill, externalize, or name the single missing evidence.
-- Do not expand validation when the result cannot change the next action.
+- Do not expand a specific validation run when its result cannot change the next
+  action; use a different tool or stop with the blocker instead.
 - Use a goal-shaped contract for long-running, multi-step, cross-turn, or
   repeatedly drifting work. Goal contracts must point to canonical local
   surfaces, active specs/plans, and existing diagnostics or validation outputs.
@@ -49,7 +56,7 @@ Keep `Objective` singular. If two outcomes need different verification gates,
 split them into separate goals or state which one is primary. `Done when` must
 be auditable from files, commands, PR state, or validation artifacts. `Stop
 rules` must name conditions that require user decision instead of continued
-tool use.
+blind continuation.
 
 When drafting a goal for a vague request, give the best executable version
 first rather than a blank form. Choose conservative defaults for low-risk

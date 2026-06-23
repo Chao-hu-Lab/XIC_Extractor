@@ -182,6 +182,7 @@ def main() -> int:
             "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
                 ["xic_extractor/output/schema.py"]
             ),
+            "XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "250",
         },
         check=True,
         capture_output=True,
@@ -234,6 +235,10 @@ def main() -> int:
         [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
         input=json.dumps(product_with_control_plane_and_handoff_payload),
         cwd=ROOT,
+        env={
+            **os.environ,
+            "XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "40",
+        },
         check=True,
         capture_output=True,
         text=True,
@@ -243,6 +248,15 @@ def main() -> int:
         raise AssertionError(
             "product/control-plane edit with handoff edit emitted warning"
         )
+
+    assert_contains(
+        run_hook(
+            "xic_post_tool_guard.py",
+            product_with_control_plane_and_handoff_payload,
+            env_extra={"XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "250"},
+        ),
+        "Active handoff is 250 lines",
+    )
 
     for path in (
         "scripts/run_new_cli.py",

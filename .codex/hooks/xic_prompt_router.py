@@ -121,10 +121,13 @@ def main() -> int:
 
     if any(re.search(pattern, prompt, re.IGNORECASE) for pattern in HANDOFF_PATTERNS):
         contexts.append(
-            "XIC handoff/closeout context detected: refresh "
-            f"{HANDOFF_PATH} when branch status, validation evidence, productization tier, or next action changed. "
+            "XIC handoff/closeout context detected: rewrite and prune the active handoff snapshot "
+            f"({HANDOFF_PATH} unless the goal names another file) when branch status, validation evidence, "
+            "productization tier, or next action changed. Do not append chronological notes; keep only current "
+            "objective/state, active decisions, validation, blockers, rejected paths still likely to recur, and next 1-3 actions. "
+            "If it is over about 200 lines, prune before continuing; move completed phase summaries to archive and long logs to notes. "
             f"If productization tier or active lane changed, sync {CONTROL_PLANE_PATH} too. "
-            "The handoff summarizes current continuation state; it must not override the control plane or named specs."
+            "Hooks only remind; the executing agent owns the handoff rewrite."
         )
 
     if not contexts:

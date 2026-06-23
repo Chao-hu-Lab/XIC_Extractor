@@ -4,7 +4,7 @@ Status: design input for implementation.
 
 Validation label: `design_input` / `diagnostic_only`.
 
-Updated: 2026-06-16
+Updated: 2026-06-17
 
 ## Plain-language decision
 
@@ -229,6 +229,9 @@ Do not migrate first:
       reasons without wiring it into normal extraction.
 - [x] Wire an explicit opt-in settings/CLI entry that consumes the support TSV
       during normal extraction while keeping the default path unchanged.
+- [x] Wire a headless auto-limited CLI workflow that builds the support TSV,
+      reruns final extraction, and gates the expected diff for the accepted
+      `5-hmdC + 5-medC` / `detected_flagged` scope.
 
 ## Current evidence from 5-hmdC diagnostic
 
@@ -279,15 +282,31 @@ Current state is split:
   It changed exactly 11 eligible rows from not-counted to detected-flagged:
   10 `5-hmdC` rows plus 1 `5-medC` row. This is the current evidence that the
   rule is not hard-coded to the original five manual review cases.
-- This supports `production_candidate` for the explicit opt-in workflow. It is
-  still not full product `production_ready`: GUI is not connected, the default
-  extraction path remains off, and no RAW evidence provider emits
-  `own_max_same_peak_support` during normal extraction by default.
+- The explicit limited headless support-TSV workflow, the explicit headless
+  auto-limited CLI workflow, and the canonical no-flag headless normal CLI
+  default are now `production_ready` for the named scope only:
+  `limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and `detected_flagged` output
+  only. GUI is not connected.
+
+Product decision, 2026-06-17: the limited policy may be designed for
+`5-hmdC + 5-medC` only, and automatic rescue from this path must write
+`detected_flagged` rather than clean `detected`. This is a scope and product
+label decision. The repo now has an opt-in limited activation policy guard
+(`limited_5hmdc_5medc_v1`), explicit support-TSV config/CLI wiring, replay
+override rejection, method-manifest provenance, and an expected-diff gate over
+the existing 85RAW generic-support artifact. The gate was hardened to require
+the actual `targeted_ms1_shape_identity_v0` support TSV and require the accepted
+support keys to exactly match the long-row product diff keys. A later
+`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default` workflow
+now auto-builds the support TSV and reruns final extraction under the same gate.
+The no-flag headless CLI default later adopted the same workflow when the
+effective config policy is `limited_5hmdc_5medc_v1` and no support TSV is
+configured. GUI is not connected, and broader targets remain out of scope.
 
 Do not claim:
 
 - target/untarget peak identity is unified in product code;
-- default 5-hmdC NL-fail rescue is production-ready;
+- GUI 5-hmdC NL-fail rescue is production-ready;
 - own-max similarity alone can write targeted matrix values;
 - untargeted backfill authority can be reused as targeted authority unchanged.
 
@@ -298,9 +317,13 @@ Allowed claim:
   product activation policies on top.
 - The targeted projection gate now fails closed unless explicit
   `own_max_same_peak_support` is part of the support evidence.
-- The explicit opt-in support-TSV workflow has 8RAW and 85RAW smoke evidence
-  and can be described as `production_candidate`, pending final human acceptance
-  and GUI/default-path policy.
+- The explicit opt-in support-TSV workflow, the auto-limited headless CLI
+  workflow, and the canonical no-flag headless CLI default have 8RAW and 85RAW
+  smoke or artifact-gate evidence. The first limited headless scope is
+  `production_ready` for `limited_5hmdc_5medc_v1`: `5-hmdC + 5-medC` and
+  `detected_flagged` output only. The 85RAW auto workflow changed 11 long rows
+  and 66 matrix cells, with support TSV key-set equality and unchanged
+  diagnostics CSV. GUI still needs a separate reconnect/UX contract.
 
 ## Implementation note, 2026-06-16
 
@@ -392,6 +415,44 @@ Sixth explicit-opt-in pipeline slice added:
   affected sample/target results.
 - No GUI entry, workbook schema change, selected-candidate switch, area
   recompute, RAW-backed evidence provider, or default product behavior is added.
+
+Seventh limited-policy product-candidate slice added:
+
+- `targeted_ms1_shape_identity_activation_policy` is now a canonical settings
+  key. It was introduced with default `explicit_support_tsv`; after the
+  no-flag default promotion the canonical default is
+  `limited_5hmdc_5medc_v1`.
+- `limited_5hmdc_5medc_v1` is the bounded default policy. When it is selected,
+  the support-TSV loader rejects supported rows outside `5-hmdC` / `5-medC`;
+  the headless CLI auto-builds support when no support TSV is configured.
+- `xic-extractor-cli --targeted-ms1-shape-identity-activation-policy
+  limited_5hmdc_5medc_v1` can override the setting for validation runs, and
+  replay mode rejects this override.
+- `method_manifest.json` records the activation policy so replay/provenance can
+  distinguish the default explicit-support workflow from the limited policy.
+- `tools/diagnostics/targeted_ms1_shape_identity_expected_diff_gate.py` gates
+  expected-diff artifacts for this limited policy. It verifies long rows only
+  move analyte `NL_FAIL` rows from `not_counted/FALSE` to
+  `detected_flagged/TRUE` with `own_max_same_peak_support`, and matrix diff
+  cells are limited to allowed `5-hmdC` / `5-medC` measurements.
+- Existing 85RAW generic-support artifact gate:
+  `output/ms1_shape_identity_generic_support_85raw_20260616/limited_default_expected_diff_gate_summary.tsv`
+  has `gate_status=pass`, `long_changed_rows=11`, `matrix_changed_cells=66`,
+  `target_counts=5-hmdC=10;5-medC=1`, and
+  `matrix_target_counts=5-hmdC=60;5-medC=6`.
+- 2026-06-17 support key-set hardening: the same gate now requires
+  `--support-tsv` and fails closed unless accepted support TSV sample/target
+  keys exactly match the long-row expected diff. The 85RAW generic-support
+  artifact rerun has `support_tsv_supported_rows=11` and
+  `support_tsv_target_counts=5-hmdC=10;5-medC=1`.
+- 2026-06-17 no-flag default promotion: canonical settings defaults and
+  `config/settings.example.csv` now use
+  `limited_5hmdc_5medc_v1`. The headless CLI dispatches the existing auto
+  workflow when no support TSV is configured. Reused 85RAW artifact gate:
+  `output/ms1_shape_identity_default_no_flag_existing_85raw_gate_20260617/limited_default_expected_diff_gate_summary.tsv`
+  has `gate_status=pass`, `long_changed_rows=11`, `matrix_changed_cells=66`,
+  and `support_tsv_supported_rows=11`.
+- This does not connect GUI or broaden beyond `5-hmdC` / `5-medC`.
 
 Verification:
 

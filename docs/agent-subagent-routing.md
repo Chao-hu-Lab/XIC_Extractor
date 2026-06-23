@@ -9,6 +9,9 @@ The role set was informed by public Codex subagent catalogs, including
 `https://github.com/VoltAgent/awesome-codex-subagents`, but collapsed for this
 repo. The goal is not to preserve every concern as a separate identity. The
 goal is to keep a small set of reviewer families with explicit triggers.
+This is not a cost-saving or token-minimizing policy. For this repo, use tools,
+plugins, and subagents generously when they make the work less blind, more
+parallel, or better evidenced.
 
 The routing also absorbs the parts of Google's engineering practices that fit
 this repo: favor changes that improve code health without chasing perfection,
@@ -51,10 +54,14 @@ when their trigger threshold applies before recreating process instructions:
 - `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
   output levels, heartbeat, timing, and benchmark acceptance are XIC-specific.
 
-Every skill, role, or workflow route needs a visible adoption reason. If it does
-not offer a clearer decision, lower repeat-failure risk, better recovery, or
-repo-specific capability that an existing owner lacks, improve the existing
-owner instead of adding a parallel entry.
+Every skill, role, plugin, or workflow route needs a visible adoption reason.
+This is a decision-map rule, not a scarcity rule. Use available official
+capabilities such as Superpowers workflows, multi-agent reviewers, CodeGraph,
+GitHub/gh, official docs/search, and focused real-data validation when they can
+answer a concrete question faster or with stronger evidence than local manual
+work. If a new route does not offer a clearer decision, lower repeat-failure
+risk, better recovery, or repo-specific capability that an existing owner lacks,
+improve the existing owner instead of adding a parallel entry.
 
 This repo owns only XIC-specific overlays and routing docs. Global skills are
 environment-level workflow dependencies outside this repo diff. If a named
@@ -71,9 +78,12 @@ specific lesson into the local skill or explicitly switch the route.
 ## Dispatch Rules
 
 - Default is main agent only.
-- Normal maximum dispatch is two reviewers.
-- Use three reviewers only when surfaces are genuinely independent and the
-  findings can change the next action.
+- Normal review is one or two reviewers, but broad rule audits, workflow
+  rewrites, productization gates, or user-requested debate may use three or more
+  reviewers when each reviewer has a distinct decision to challenge.
+- Do not downgrade reviewer count, model strength, or useful tooling only to
+  save tokens or cost. Downgrade only when the task is clearly mechanical or a
+  runtime/tool limit forces it, and report the reason.
 - When the user explicitly says to use subagents to review a spec, plan, goal,
   or workflow rule, use the critical artifact review flow below. Do not satisfy
   that request with one generic reviewer unless a thread limit blocks the
@@ -98,6 +108,21 @@ specific lesson into the local skill or explicitly switch the route.
   agents before downgrading a required multi-angle review. If the review still
   cannot fit, run reviewers sequentially rather than silently collapsing to one
   angle.
+
+## Tool And Plugin Posture
+
+- Tools are first-class engineering leverage. Use `rg`/targeted reads for text,
+  CodeGraph for structural ownership/impact questions, GitHub/gh for PR and CI
+  state, Superpowers/global skills for reusable workflows, and subagents for
+  independent review or implementation slices.
+- Before a long tool chain or expensive run, write the one-line decision map:
+  `question -> tool/evidence -> action if pass -> action if fail`.
+- If the question is exploratory, use parallel subagents or bounded outside
+  research instead of serially guessing.
+- If a tool result cannot change the next action, skip that specific run; do
+  not use this as a reason to avoid other useful tools.
+- For user-facing updates, translate internal artifact names into plain
+  language before relying on them as evidence.
 
 ## Reviewer Output Contract
 
@@ -135,7 +160,7 @@ Reviewer families:
 | Role | Use when | Includes |
 | --- | --- | --- |
 | `strategy-challenger` | High-risk plan/spec, phase design, handoff productization, legacy-path concern | Assumption mapping, product direction, decision ownership, critical challenge |
-| `implementation-contract-reviewer` | Code/public contract change, CLI/config/schema/parser/test behavior, diagnostic entrypoint changes | Code path mapping, contract review, test strategy, diagnostics reuse |
+| `implementation-contract-reviewer` | Code/public contract change, CLI/config/schema/parser/test behavior, diagnostic entrypoint changes | Code path mapping, contract review, test strategy, diagnostics reuse; add the PR-review lenses below when their triggers fire |
 | `validation-evidence-reviewer` | RAW/science/benchmark decision, 8RAW/85RAW preflight or acceptance, timing/performance evidence | Validation ops, gate acceptance, LC-MS/MS evidence, performance profiling |
 | `docs-handoff-reviewer` | Docs/source-of-truth change, output handoff, report/review surface, agent routing/TOML changes | Docs drift, output contract, human review UX, agent workflow regression |
 | `ops-triager` | CI red, Windows/PowerShell/runbook failure, local runner or path problem | CI triage, Windows ops, command reproduction |
@@ -164,6 +189,17 @@ Execution roles:
   add an expensive gate gets `strategy-challenger`.
 - Any public CLI/config/schema/workbook/TSV/downstream handoff change gets
   `implementation-contract-reviewer`.
+- Any diff that adds or changes broad exception handling, fallback/default
+  behavior, fail-open/fail-closed gates, missing-artifact behavior, or
+  user-facing error messages adds the `silent-failure` lens to
+  `implementation-contract-reviewer`.
+- Any diff that adds or materially changes dataclasses, protocols, schema
+  models, domain DTOs, public contract rows, or invariant-bearing state adds
+  the `type-invariant` lens to `implementation-contract-reviewer`.
+- Any PR/update that changes behavior, parser/writer gates, diagnostics,
+  public output contracts, matrix-writing authority, or validation acceptance
+  adds the `test-coverage-quality` lens to `implementation-contract-reviewer`
+  or a verification-only `tester`.
 - Use `implementation-worker` only when the task can be split like a small
   self-contained CL: one reason to change, explicit write scope, related tests,
   and no shared write surface with the main agent or another worker.
@@ -194,6 +230,33 @@ Execution roles:
 `validation-evidence-reviewer` prompts must name a mode. Allowed modes are
 `preflight`, `acceptance`, `science`, and `performance`; use at most two modes in
 one review.
+
+## PR Review Lenses From Claude Plugins
+
+The Claude official `pr-review-toolkit` plugin is useful as a prompt library,
+not as a primary Codex runtime surface. Its agents are Claude-agent/command
+files, not Codex skills in this environment. Do not add parallel XIC role
+families for them. Instead, paste the relevant lens into the existing
+`implementation-contract-reviewer` or `tester` prompt when the trigger fires.
+
+- `silent-failure`: inspect all `try/except`, broad catches, warning-only
+  failures, fallback/default branches, missing-artifact handling, optional
+  suppression, retry exhaustion, and fail-open behavior. For XIC, this is
+  especially important around diagnostics, RAW/TSV loading, activation gates,
+  expected-diff checks, productization tier claims, and user-readable errors.
+- `type-invariant`: inspect new or changed dataclasses, protocols, schema
+  models, public row contracts, and stateful domain objects for invariants,
+  construction-time validation, mutation safety, and whether illegal states are
+  representable. For XIC, focus on `Trace`, `TraceGroup`, `PeakHypothesis`,
+  `EvidenceVector`, `IntegrationResult`, `AuditTrail`, ReviewAction schemas,
+  method manifests, and matrix/value-delta row contracts.
+- `test-coverage-quality`: inspect whether tests protect behavior and public
+  contracts rather than implementation details. Prioritize negative tests,
+  boundary cases, fail-closed behavior, expected-diff/output schema tests,
+  diagnostics index coverage, and real-data validation claims when relevant.
+
+Use these lenses to make Codex subagent prompts sharper. Do not enable
+Claude-only loops or memory systems just to access these ideas.
 
 ## Critical Artifact Review
 
@@ -378,7 +441,7 @@ Validation summaries must keep these separate:
 Use `outside-frame-researcher` only when one of these is true:
 
 - Existing local oracles cannot discriminate between credible design options.
-- Two local low-cost iterations failed to change the decision.
+- Two bounded local iterations failed to change the decision.
 - The method family itself is uncertain and an external guideline, paper, or
   mature implementation could change the gate design.
 
@@ -388,11 +451,14 @@ implementing.
 
 ## Anti-Patterns
 
-- Do not dispatch all agents just because a task is important.
+- Do not dispatch agents without distinct questions or non-overlapping review
+  angles. It is fine to dispatch several agents for a broad audit when each one
+  can change the decision.
 - Do not use subagents to avoid reading the repo yourself.
 - Do not let reviewer findings become new scope without checking whether they
   close the current decision.
 - Do not create a new role for a one-off concern. Add a role only after the
   concern recurs and cannot fit an existing family.
-- Do not treat orchestration as the product. The purpose of subagents is to
-  improve decisions and reduce repeated mistakes, not to add ceremony.
+- Do not treat orchestration as the product. The purpose of tools and subagents
+  is to improve decisions, expose evidence, and reduce repeated mistakes, not to
+  add ceremony or hide uncertainty.

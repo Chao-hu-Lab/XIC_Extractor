@@ -77,6 +77,9 @@ def test_build_method_manifest_labels_hashes_as_fragments(tmp_path: Path) -> Non
         "scope": "targets_csv_bytes",
         "is_full_method_hash": False,
     }
+    assert payload["method_settings"][
+        "targeted_ms1_shape_identity_activation_policy"
+    ] == "explicit_support_tsv"
     assert payload["target_summary"] == {
         "target_count": 2,
         "analyte_count": 1,

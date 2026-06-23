@@ -97,6 +97,9 @@ when any answer is weak:
   behavior change, PR/CI, or release? Mixed phase types need explicit ordering.
 - **Decision closure**: What decision can this goal close? If the proposed gate
   cannot change the next action, shrink or remove it.
+- **Tool leverage**: Which available tools, subagents, plugins, diagnostics, or
+  existing artifacts can close the decision fastest and with the strongest
+  evidence? Do not choose a weaker route only to save tokens or cost.
 - **Verification fit**: Does verification match the phase type: focused tests,
   artifact parity, 8RAW, 85RAW, targeted benchmark, manual EIC/MS2 review, or
   CI? Do not overclaim a weaker tier.
@@ -111,8 +114,9 @@ when any answer is weak:
 - **Architecture risk**: Does it add diagnostics, RAW-backed evidence, preset
   performance work, matrix activation, HCD-PI, Delta Mass, CID-NL expansion, or
   a new evidence provider? If yes, use `xic-architecture-preflight` first.
-- **Stop rules**: Are there concrete conditions that require user decision
-  instead of more tool calls?
+- **Stop rules**: Are there concrete conditions that require user decision,
+  a different evidence source, or stopping the current loop instead of blind
+  continuation?
 - **Pause conditions**: Are external permissions, credentials, production data,
   destructive operations, unclear ownership, or product-direction decisions
   separated from normal completion?
@@ -128,9 +132,10 @@ bounded surface and verification gate.
 While executing:
 
 - Keep the active goal visible in decisions; do not drift into adjacent cleanup.
-- Prefer existing diagnostics, specs, and validation outputs before rerunning
-  expensive RAW jobs.
-- After the same failure shape repeats twice, stop retrying the same approach.
+- Use tools aggressively but with a decision map. Prefer existing diagnostics,
+  specs, and validation outputs before rerunning expensive RAW jobs when those
+  artifacts answer the same question; otherwise use the stronger tool or run.
+- After the same failure shape repeats twice, stop retrying the same approach:
   inspect logs/artifacts, reduce to a smaller repro, consult docs, or report the
   blocker.
 - If the work uncovers a larger backlog, record it as follow-up instead of
@@ -140,6 +145,45 @@ While executing:
 - Near closeout, compare the actual diff and verification against `Done when`.
   Do not mark complete because the budget is low or because partial work is
   useful.
+
+## XIC Handoff Snapshot Discipline
+
+Apply the global current-state handoff rule through this skill because XIC
+goals are usually launched via `$goal-execution`.
+
+Use the active handoff named by the goal, control plane, plan, or PR workflow,
+such as `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`;
+use `HANDOFF.md` only when the current goal establishes it as the active file.
+The active handoff is a short continuation snapshot, not the productization
+tier authority. Tier history, per-round maintenance logs, and lane evidence
+belong in the control plane, named specs, validation notes, or archive.
+Long exploration logs and scratch analysis belong in notes, not the active
+handoff.
+
+For XIC, the same three-layer rule applies even when filenames differ:
+
+- active handoff: short current-state snapshot;
+- archive: completed phase summaries only, not raw progress logs;
+- notes: optional long logs, scratch analysis, and temporary exploration.
+
+Before each meaningful checkpoint, compact-risk pause, or closeout:
+
+1. Inspect `git status`, the intended dirty scope, and latest validation
+   evidence.
+2. Rewrite the active handoff from current repo state instead of appending a
+   chronological update.
+3. Prune completed, superseded, stale, or intermediate details. Keep only active
+   constraints, decisions, blockers, validation, relevant file changes, rejected
+   paths still likely to be repeated, and next 1-3 concrete actions.
+4. Use `[active]`, `[blocked]`, `[done]`, and `[superseded]` labels where they
+   make pruning easier. Remove `[done]` and `[superseded]` items during the next
+   update unless they remain important rejected-path warnings.
+5. If the active handoff is over about 200 lines, prune it before continuing
+   unless the user explicitly asks for a longer handoff.
+
+Hooks may remind that the handoff is stale or missing from a productization
+update. They must not be treated as the author of the handoff; the executing
+agent owns the rewrite and pruning.
 
 ## Required XIC Context
 

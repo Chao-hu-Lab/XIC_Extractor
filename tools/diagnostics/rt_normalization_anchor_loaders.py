@@ -34,6 +34,11 @@ from tools.diagnostics.rt_normalization_anchor_models import (
 )
 from xic_extractor.alignment.rt_normalization import AnchorPoint
 from xic_extractor.injection_rolling import read_injection_order
+from xic_extractor.sample_metadata import (
+    is_sample_metadata_source,
+    load_sample_metadata,
+    sample_metadata_to_injection_order,
+)
 
 
 def _read_anchor_definitions(
@@ -129,6 +134,8 @@ def _read_optional_injection_order(
         return None
     if sample_info is None:
         raise ValueError(f"sample_info is required for {reference_source}")
+    if is_sample_metadata_source(sample_info):
+        return sample_metadata_to_injection_order(load_sample_metadata(sample_info))
     return read_injection_order(sample_info)
 
 

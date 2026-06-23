@@ -1,4 +1,5 @@
 import argparse
+import csv
 import multiprocessing
 import sys
 from collections.abc import Sequence
@@ -8,6 +9,12 @@ from pathlib import Path
 
 from xic_extractor import extractor
 from xic_extractor.config import ConfigError, ExtractionConfig, load_config
+from xic_extractor.diagnostics.targeted_ms1_shape_identity_auto_diff import (
+    write_targeted_ms1_shape_identity_auto_diff_artifacts,
+)
+from xic_extractor.diagnostics.targeted_ms1_shape_identity_support_producer import (
+    run_build_targeted_ms1_shape_identity_supports,
+)
 from xic_extractor.output.excel_pipeline import write_excel_from_run_output
 from xic_extractor.output.method_manifest import (
     MethodManifestContext,
@@ -19,6 +26,12 @@ from xic_extractor.peak_detection.model_selection_approval_registry import (
     load_expected_diff_approval_registry,
 )
 from xic_extractor.raw_reader import RawReaderError
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    EXPLICIT_SUPPORT_TSV_POLICY,
+    LIMITED_HMDC_MEDC_POLICY,
+    LIMITED_HMDC_MEDC_TARGETS,
+    TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -26,6 +39,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cli_argv = tuple(sys.argv[1:] if argv is None else argv)
     args = _parse_args(argv)
     try:
+        if args.replay_manifest is None:
+            _validate_targeted_ms1_shape_identity_auto_args(args)
         replay_request = None
         if args.replay_manifest is not None:
             _reject_replay_overrides(args)
@@ -54,6 +69,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 settings_overrides["targeted_ms1_shape_identity_support_tsv"] = str(
                     args.targeted_ms1_shape_identity_support_tsv.resolve()
                 )
+                if args.targeted_ms1_shape_identity_activation_policy is None:
+                    settings_overrides[
+                        "targeted_ms1_shape_identity_activation_policy"
+                    ] = EXPLICIT_SUPPORT_TSV_POLICY
+            if args.targeted_ms1_shape_identity_activation_policy is not None:
+                settings_overrides[
+                    "targeted_ms1_shape_identity_activation_policy"
+                ] = args.targeted_ms1_shape_identity_activation_policy
 
         if settings_overrides:
             config, targets = load_config(
@@ -78,6 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if skip_excel
             else config
         )
+        excel_config = config
         approval_registry_path = (
             run_config.model_selection_expected_diff_approval_registry
         )
@@ -90,30 +114,60 @@ def main(argv: Sequence[str] | None = None) -> int:
         except ValueError as exc:
             raise ConfigError(str(exc)) from exc
 
-        output = extractor.run(
-            run_config,
-            targets,
-            progress_callback=_print_progress,
-            model_selection_expected_diff_approvals=(
-                model_selection_expected_diff_approvals
-            ),
-        )
-        write_method_manifest(
-            run_config,
-            targets,
-            context=MethodManifestContext(
-                entrypoint=(
-                    "xic-extractor-cli-replay"
-                    if replay_request is not None
-                    else "xic-extractor-cli"
+        if _should_run_targeted_ms1_shape_identity_auto_limited_default(
+            args,
+            config,
+            replay_request=replay_request,
+        ):
+            try:
+                auto_result = _run_targeted_ms1_shape_identity_auto_limited_default(
+                    run_config,
+                    targets,
+                    cli_argv=cli_argv,
+                    base_dir=base_dir,
+                    config_dir=config_dir,
+                    settings_overrides=settings_overrides,
+                    output_mode=output_mode,
+                    auto_output_dir=(
+                        None
+                        if args.targeted_ms1_shape_identity_auto_output_dir is None
+                        else args.targeted_ms1_shape_identity_auto_output_dir.resolve()
+                    ),
+                    model_selection_expected_diff_approvals=(
+                        model_selection_expected_diff_approvals
+                    ),
+                )
+            except (OSError, ValueError, csv.Error) as exc:
+                raise ConfigError(
+                    "targeted MS1 shape identity auto-limited workflow failed; "
+                    f"verified final output was not published: {exc}"
+                ) from exc
+            output, excel_config = auto_result
+        else:
+            output = extractor.run(
+                run_config,
+                targets,
+                progress_callback=_print_progress,
+                model_selection_expected_diff_approvals=(
+                    model_selection_expected_diff_approvals
                 ),
-                argv=cli_argv,
-                base_dir=base_dir,
-                config_dir=config_dir,
-                settings_overrides=settings_overrides,
-                output_mode=output_mode,
-            ),
-        )
+            )
+            write_method_manifest(
+                run_config,
+                targets,
+                context=MethodManifestContext(
+                    entrypoint=(
+                        "xic-extractor-cli-replay"
+                        if replay_request is not None
+                        else "xic-extractor-cli"
+                    ),
+                    argv=cli_argv,
+                    base_dir=base_dir,
+                    config_dir=config_dir,
+                    settings_overrides=settings_overrides,
+                    output_mode=output_mode,
+                ),
+            )
     except (ConfigError, MethodManifestError, RawReaderError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -126,10 +180,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     write_excel_from_run_output(
-        config,
+        excel_config,
         targets,
         output,
-        output_path=_excel_output_path(config),
+        output_path=_excel_output_path(excel_config),
     )
     return 0
 
@@ -199,6 +253,35 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "reviewed targeted_ms1_shape_identity_v0 support TSV."
         ),
     )
+    parser.add_argument(
+        "--targeted-ms1-shape-identity-activation-policy",
+        choices=TARGETED_MS1_SHAPE_IDENTITY_ACTIVATION_POLICIES,
+        default=None,
+        help=(
+            "Override settings.csv targeted_ms1_shape_identity_activation_policy. "
+            "Use limited_5hmdc_5medc_v1 to restrict support TSV activation to "
+            "5-hmdC and 5-medC."
+        ),
+    )
+    parser.add_argument(
+        "--targeted-ms1-shape-identity-auto-limited-default",
+        action="store_true",
+        help=(
+            "Run the bounded automatic NL_FAIL/NO_MS2 rescue workflow. This "
+            "creates baseline/support/final artifacts, builds a RAW-backed "
+            "targeted_ms1_shape_identity_v0 support TSV for 5-hmdC and 5-medC, "
+            "and applies it with the limited_5hmdc_5medc_v1 policy."
+        ),
+    )
+    parser.add_argument(
+        "--targeted-ms1-shape-identity-auto-output-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Output root for --targeted-ms1-shape-identity-auto-limited-default. "
+            "Defaults to output/targeted_ms1_shape_identity_limited_auto_<timestamp>."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -220,9 +303,220 @@ def _reject_replay_overrides(args: argparse.Namespace) -> None:
         conflicts.append("--model-selection-expected-diff-approvals")
     if args.targeted_ms1_shape_identity_support_tsv is not None:
         conflicts.append("--targeted-ms1-shape-identity-support-tsv")
+    if args.targeted_ms1_shape_identity_activation_policy is not None:
+        conflicts.append("--targeted-ms1-shape-identity-activation-policy")
+    if args.targeted_ms1_shape_identity_auto_limited_default:
+        conflicts.append("--targeted-ms1-shape-identity-auto-limited-default")
+    if args.targeted_ms1_shape_identity_auto_output_dir is not None:
+        conflicts.append("--targeted-ms1-shape-identity-auto-output-dir")
     if conflicts:
         joined = ", ".join(conflicts)
         raise ConfigError(f"--replay-manifest cannot be combined with {joined}")
+
+
+def _validate_targeted_ms1_shape_identity_auto_args(
+    args: argparse.Namespace,
+) -> None:
+    if (
+        args.targeted_ms1_shape_identity_auto_output_dir is not None
+        and not args.targeted_ms1_shape_identity_auto_limited_default
+    ):
+        raise ConfigError(
+            "--targeted-ms1-shape-identity-auto-output-dir requires "
+            "--targeted-ms1-shape-identity-auto-limited-default"
+        )
+    if not args.targeted_ms1_shape_identity_auto_limited_default:
+        return
+    conflicts = []
+    if args.targeted_ms1_shape_identity_support_tsv is not None:
+        conflicts.append("--targeted-ms1-shape-identity-support-tsv")
+    if args.targeted_ms1_shape_identity_activation_policy is not None:
+        conflicts.append("--targeted-ms1-shape-identity-activation-policy")
+    if conflicts:
+        joined = ", ".join(conflicts)
+        raise ConfigError(
+            "--targeted-ms1-shape-identity-auto-limited-default cannot be "
+            f"combined with {joined}"
+        )
+
+
+def _should_run_targeted_ms1_shape_identity_auto_limited_default(
+    args: argparse.Namespace,
+    config: ExtractionConfig,
+    *,
+    replay_request,
+) -> bool:
+    if replay_request is not None:
+        return False
+    if args.targeted_ms1_shape_identity_auto_limited_default:
+        return True
+    return (
+        config.targeted_ms1_shape_identity_activation_policy
+        == LIMITED_HMDC_MEDC_POLICY
+        and config.targeted_ms1_shape_identity_support_tsv is None
+    )
+
+
+def _run_targeted_ms1_shape_identity_auto_limited_default(
+    config: ExtractionConfig,
+    targets,
+    *,
+    cli_argv: Sequence[str],
+    base_dir: Path,
+    config_dir: Path,
+    settings_overrides: dict[str, str],
+    output_mode: str,
+    auto_output_dir: Path | None,
+    model_selection_expected_diff_approvals,
+):
+    auto_root = auto_output_dir or (
+        base_dir
+        / "output"
+        / f"targeted_ms1_shape_identity_limited_auto_{_timestamp_text()}"
+    )
+    baseline_output_dir = auto_root / "baseline" / "output"
+    support_dir = auto_root / "support"
+    final_staging_output_dir = auto_root / "final_unverified" / "output"
+    final_output_dir = auto_root / "final" / "output"
+    _ensure_auto_publish_slot_available(
+        final_staging_output_dir=final_staging_output_dir,
+        final_output_dir=final_output_dir,
+    )
+    baseline_config = replace(
+        config,
+        output_csv=baseline_output_dir / "xic_results.csv",
+        diagnostics_csv=baseline_output_dir / "xic_diagnostics.csv",
+        keep_intermediate_csv=True,
+        targeted_ms1_shape_identity_support_tsv=None,
+        targeted_ms1_shape_identity_activation_policy=LIMITED_HMDC_MEDC_POLICY,
+    )
+    baseline_settings_overrides = {
+        **settings_overrides,
+        "targeted_ms1_shape_identity_activation_policy": LIMITED_HMDC_MEDC_POLICY,
+    }
+    print(f"Auto limited baseline output: {baseline_output_dir}")
+    extractor.run(
+        baseline_config,
+        targets,
+        progress_callback=_print_progress,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
+    )
+    write_method_manifest(
+        baseline_config,
+        targets,
+        context=MethodManifestContext(
+            entrypoint="xic-extractor-cli-targeted-ms1-auto-baseline",
+            argv=cli_argv,
+            base_dir=base_dir,
+            config_dir=config_dir,
+            settings_overrides=baseline_settings_overrides,
+            output_mode="csv_only",
+        ),
+    )
+    support_tsv = support_dir / "targeted_ms1_shape_identity_v0.tsv"
+    support_outputs = run_build_targeted_ms1_shape_identity_supports(
+        long_csv=baseline_config.output_csv.with_name("xic_results_long.csv"),
+        raw_dir=baseline_config.data_dir,
+        dll_dir=baseline_config.dll_dir,
+        config_dir=config_dir,
+        output_tsv=support_tsv,
+        target_names=tuple(sorted(LIMITED_HMDC_MEDC_TARGETS)),
+    )
+    print(f"Auto limited support TSV: {support_outputs.evidence_tsv}")
+    print(f"Auto limited support rows: {support_outputs.evidence_row_count}")
+    final_staging_config = replace(
+        config,
+        output_csv=final_staging_output_dir / "xic_results.csv",
+        diagnostics_csv=final_staging_output_dir / "xic_diagnostics.csv",
+        keep_intermediate_csv=True,
+        targeted_ms1_shape_identity_support_tsv=support_tsv,
+        targeted_ms1_shape_identity_activation_policy=LIMITED_HMDC_MEDC_POLICY,
+    )
+    final_settings_overrides = {
+        **settings_overrides,
+        "targeted_ms1_shape_identity_support_tsv": str(support_tsv.resolve()),
+        "targeted_ms1_shape_identity_activation_policy": LIMITED_HMDC_MEDC_POLICY,
+    }
+    print(f"Auto limited unverified final output: {final_staging_output_dir}")
+    final_output = extractor.run(
+        final_staging_config,
+        targets,
+        progress_callback=_print_progress,
+        model_selection_expected_diff_approvals=model_selection_expected_diff_approvals,
+    )
+    diff_outputs = write_targeted_ms1_shape_identity_auto_diff_artifacts(
+        baseline_output_dir=baseline_output_dir,
+        optin_output_dir=final_staging_output_dir,
+        support_tsv=support_tsv,
+        output_dir=auto_root,
+    )
+    print(f"Auto limited expected diff: {diff_outputs.expected_diff_summary_tsv}")
+    print(f"Auto limited matrix diff: {diff_outputs.matrix_diff_summary_tsv}")
+    print(
+        "Auto limited expected-diff gate: "
+        f"{diff_outputs.gate_status} ({diff_outputs.expected_diff_row_count} rows, "
+        f"{diff_outputs.matrix_diff_cell_count} matrix cells)"
+    )
+    _publish_verified_auto_output(
+        final_staging_output_dir=final_staging_output_dir,
+        final_output_dir=final_output_dir,
+    )
+    final_config = replace(
+        final_staging_config,
+        output_csv=final_output_dir / "xic_results.csv",
+        diagnostics_csv=final_output_dir / "xic_diagnostics.csv",
+    )
+    write_method_manifest(
+        final_config,
+        targets,
+        context=MethodManifestContext(
+            entrypoint="xic-extractor-cli-targeted-ms1-auto-limited-default",
+            argv=cli_argv,
+            base_dir=base_dir,
+            config_dir=config_dir,
+            settings_overrides=final_settings_overrides,
+            output_mode=output_mode,
+        ),
+    )
+    print(f"Auto limited verified final output: {final_output_dir}")
+    return final_output, final_config
+
+
+def _ensure_auto_publish_slot_available(
+    *,
+    final_staging_output_dir: Path,
+    final_output_dir: Path,
+) -> None:
+    if final_output_dir.exists():
+        raise ConfigError(
+            f"{final_output_dir}: verified auto-limited final output already "
+            "exists; choose a new --targeted-ms1-shape-identity-auto-output-dir "
+            "or remove the stale output"
+        )
+    if final_staging_output_dir.exists():
+        raise ConfigError(
+            f"{final_staging_output_dir}: unverified auto-limited final output "
+            "already exists; inspect or remove it before rerunning"
+        )
+
+
+def _publish_verified_auto_output(
+    *,
+    final_staging_output_dir: Path,
+    final_output_dir: Path,
+) -> None:
+    if not final_staging_output_dir.is_dir():
+        raise ValueError(
+            f"{final_staging_output_dir}: unverified final output directory missing"
+        )
+    if final_output_dir.exists():
+        raise ValueError(f"{final_output_dir}: verified final output already exists")
+    final_output_dir.parent.mkdir(parents=True, exist_ok=True)
+    final_staging_output_dir.replace(final_output_dir)
+    try:
+        final_staging_output_dir.parent.rmdir()
+    except OSError:
+        pass
 
 
 def _positive_int(value: str) -> int:
@@ -237,8 +531,12 @@ def _print_progress(current: int, total: int, filename: str) -> None:
 
 
 def _excel_output_path(config: ExtractionConfig) -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    timestamp = _timestamp_text()
     return config.output_csv.parent / f"xic_results_{timestamp}.xlsx"
+
+
+def _timestamp_text() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M")
 
 
 if __name__ == "__main__":

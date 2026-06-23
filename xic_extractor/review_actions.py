@@ -19,6 +19,9 @@ REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION = "review_action_expected_diff_v1"
 REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION = "review_action_apply_readiness_v1"
 REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION = "review_action_apply_changeset_v1"
 REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION = "review_action_apply_audit_v1"
+REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION = (
+    "review_action_candidate_sidecar_v1"
+)
 REVIEW_ACTION_COLUMNS: tuple[str, ...] = (
     "schema_version",
     "sample_name",
@@ -205,6 +208,31 @@ REVIEW_ACTION_APPLY_AUDIT_COLUMNS: tuple[str, ...] = (
     "reviewed_at",
     "comment",
 )
+PEAK_CANDIDATE_SIDECAR_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "sample_name",
+    "target_label",
+    "candidate_id",
+    "selected",
+)
+REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS: tuple[str, ...] = (
+    "schema_version",
+    "sample_name",
+    "target_label",
+    "action_type",
+    "candidate_id",
+    "candidate_sidecar_status",
+    "candidate_sidecar_reason",
+    "candidate_row_sha256",
+    "candidate_selected",
+    "candidate_confidence",
+    "candidate_rt_left_min",
+    "candidate_rt_apex_min",
+    "candidate_rt_right_min",
+    "candidate_area_baseline_corrected",
+    "reviewer",
+    "reviewed_at",
+    "comment",
+)
 REVIEW_ACTION_EXPECTED_DIFF_FINAL_LABELS = frozenset(
     {"expected_diff", "blocked_diff", "inconclusive"}
 )
@@ -328,6 +356,20 @@ class ReviewActionApplyReadinessPlan:
 
 
 @dataclass(frozen=True)
+class ReviewActionCandidateSidecarCheck:
+    action: ReviewAction
+    candidate_sidecar_status: str
+    candidate_sidecar_reason: str
+    candidate_row_sha256: str = ""
+    candidate_selected: str = ""
+    candidate_confidence: str = ""
+    candidate_rt_left_min: str = ""
+    candidate_rt_apex_min: str = ""
+    candidate_rt_right_min: str = ""
+    candidate_area_baseline_corrected: str = ""
+
+
+@dataclass(frozen=True)
 class ReviewActionApplyChangeset:
     readiness: ReviewActionApplyReadiness
     changeset_status: str
@@ -384,6 +426,24 @@ def load_review_action_target_states(path: Path) -> tuple[ReviewActionTargetStat
     return tuple(_target_state_from_row(row) for row in rows)
 
 
+def load_review_action_peak_candidate_rows(
+    path: Path,
+) -> tuple[Mapping[str, str], ...]:
+    if not path.is_file():
+        raise ReviewActionError(f"{path}: peak candidates TSV file not found")
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
+    try:
+        rows = read_delimited_rows(
+            path,
+            required_columns=PEAK_CANDIDATE_SIDECAR_REQUIRED_COLUMNS,
+            delimiter=delimiter,
+            encoding="utf-8-sig",
+        )
+    except ValueError as exc:
+        raise ReviewActionError(str(exc)) from exc
+    return tuple(rows)
+
+
 def plan_review_action_applications(
     actions: Sequence[ReviewAction],
     target_states: Sequence[ReviewActionTargetState],
@@ -422,6 +482,102 @@ def plan_review_action_applications(
             continue
         applications.append(_plan_single_application(action, target_state))
     return tuple(applications)
+
+
+def plan_review_action_candidate_sidecars(
+    actions: Sequence[ReviewAction],
+    peak_candidate_rows: Sequence[Mapping[str, object]],
+) -> tuple[ReviewActionCandidateSidecarCheck, ...]:
+    candidate_index = _index_peak_candidate_rows(peak_candidate_rows)
+    select_candidate_counts_by_key: dict[tuple[str, str], int] = {}
+    for action in actions:
+        if action.action_type != "select_candidate":
+            continue
+        key = _action_key(action)
+        select_candidate_counts_by_key[key] = (
+            select_candidate_counts_by_key.get(key, 0) + 1
+        )
+    checks: list[ReviewActionCandidateSidecarCheck] = []
+    for action in actions:
+        if action.action_type != "select_candidate":
+            continue
+        key = _action_key(action)
+        if select_candidate_counts_by_key[key] > 1:
+            checks.append(
+                ReviewActionCandidateSidecarCheck(
+                    action=action,
+                    candidate_sidecar_status="action_duplicate",
+                    candidate_sidecar_reason=(
+                        "multiple_select_candidate_actions_for_target"
+                    ),
+                )
+            )
+            continue
+        target_rows = candidate_index.get(key, {})
+        if not target_rows:
+            checks.append(
+                ReviewActionCandidateSidecarCheck(
+                    action=action,
+                    candidate_sidecar_status="target_candidate_rows_missing",
+                    candidate_sidecar_reason="no_candidate_rows_for_action_target",
+                )
+            )
+            continue
+        matches = target_rows.get(action.candidate_id, ())
+        if not matches:
+            checks.append(
+                ReviewActionCandidateSidecarCheck(
+                    action=action,
+                    candidate_sidecar_status="candidate_missing",
+                    candidate_sidecar_reason="candidate_id_not_found_in_sidecar",
+                )
+            )
+            continue
+        if len(matches) > 1:
+            checks.append(
+                ReviewActionCandidateSidecarCheck(
+                    action=action,
+                    candidate_sidecar_status="candidate_duplicate",
+                    candidate_sidecar_reason="candidate_id_not_unique_in_sidecar",
+                )
+            )
+            continue
+        row = matches[0]
+        selected = _clean_text(row.get("selected", "")).upper()
+        status = "candidate_verified"
+        reason = "candidate_id_matched_sidecar"
+        if selected == "TRUE":
+            status = "candidate_current_selection"
+            reason = "candidate_id_already_current_selected"
+        checks.append(
+            ReviewActionCandidateSidecarCheck(
+                action=action,
+                candidate_sidecar_status=status,
+                candidate_sidecar_reason=reason,
+                candidate_row_sha256=_row_sha256(row),
+                candidate_selected=selected,
+                candidate_confidence=_clean_text(row.get("confidence", "")),
+                candidate_rt_left_min=_clean_text(row.get("rt_left_min", "")),
+                candidate_rt_apex_min=_clean_text(row.get("rt_apex_min", "")),
+                candidate_rt_right_min=_clean_text(row.get("rt_right_min", "")),
+                candidate_area_baseline_corrected=_clean_text(
+                    row.get("area_baseline_corrected", "")
+                ),
+            )
+        )
+    return tuple(checks)
+
+
+def write_review_action_candidate_sidecar_plan(
+    path: Path,
+    checks: Sequence[ReviewActionCandidateSidecarCheck],
+) -> None:
+    write_tsv(
+        path,
+        [review_action_candidate_sidecar_to_row(check) for check in checks],
+        REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS,
+        lineterminator="\n",
+    )
 
 
 def write_review_action_application_plan(
@@ -819,6 +975,44 @@ def _index_targeted_rows(
             )
         indexed[key] = row
     return indexed
+
+
+def _index_peak_candidate_rows(
+    rows: Sequence[Mapping[str, object]],
+) -> dict[tuple[str, str], dict[str, tuple[Mapping[str, str], ...]]]:
+    by_target: dict[tuple[str, str], dict[str, list[Mapping[str, str]]]] = {}
+    for row_number, raw_row in enumerate(rows, start=2):
+        row = _string_row(raw_row)
+        sample_name = _clean_text(row.get("sample_name", ""))
+        target_label = _clean_text(row.get("target_label", ""))
+        candidate_id = _clean_text(row.get("candidate_id", ""))
+        if not sample_name or not target_label or not candidate_id:
+            raise ReviewActionError(
+                "<peak_candidates>:"
+                f"{row_number}: sample_name, target_label, and candidate_id "
+                "are required"
+            )
+        selected = _clean_text(row.get("selected", "")).upper()
+        if selected not in {"TRUE", "FALSE", ""}:
+            raise ReviewActionError(
+                f"<peak_candidates>:{row_number}: selected must be TRUE or FALSE"
+            )
+        target_bucket = by_target.setdefault((sample_name, target_label), {})
+        target_bucket.setdefault(candidate_id, []).append(row)
+    return {
+        target_key: {
+            candidate_id: tuple(candidate_rows)
+            for candidate_id, candidate_rows in candidates.items()
+        }
+        for target_key, candidates in by_target.items()
+    }
+
+
+def _row_sha256(row: Mapping[str, object]) -> str:
+    payload = "\n".join(
+        f"{key}={_clean_text(value)}" for key, value in sorted(row.items())
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _normalize_changeset_row(row: Mapping[str, object]) -> dict[str, str]:
@@ -1612,6 +1806,32 @@ def summarize_review_action_apply_readiness_plan(
     }
 
 
+def summarize_review_action_candidate_sidecars(
+    checks: Sequence[ReviewActionCandidateSidecarCheck],
+) -> dict[str, object]:
+    counts_by_status: dict[str, int] = {}
+    verified_count = 0
+    blocked_count = 0
+    noop_current_selection_count = 0
+    for check in checks:
+        status = check.candidate_sidecar_status
+        counts_by_status[status] = counts_by_status.get(status, 0) + 1
+        if status == "candidate_verified":
+            verified_count += 1
+        elif status == "candidate_current_selection":
+            noop_current_selection_count += 1
+        else:
+            blocked_count += 1
+    return {
+        "schema_version": REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION,
+        "row_count": len(checks),
+        "verified_count": verified_count,
+        "blocked_count": blocked_count,
+        "noop_current_selection_count": noop_current_selection_count,
+        "counts_by_status": dict(sorted(counts_by_status.items())),
+    }
+
+
 def summarize_review_action_apply_changeset_plan(
     plan: ReviewActionApplyChangesetPlan,
 ) -> dict[str, object]:
@@ -1705,6 +1925,33 @@ def review_action_application_to_row(
         "expected_diff_required": action.expected_diff_required,
         "expected_diff_status": application.expected_diff_status,
         "reason": application.reason,
+        "reviewer": action.reviewer,
+        "reviewed_at": action.reviewed_at,
+        "comment": action.comment,
+    }
+
+
+def review_action_candidate_sidecar_to_row(
+    check: ReviewActionCandidateSidecarCheck,
+) -> dict[str, object]:
+    action = check.action
+    return {
+        "schema_version": REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION,
+        "sample_name": action.sample_name,
+        "target_label": action.target_label,
+        "action_type": action.action_type,
+        "candidate_id": action.candidate_id,
+        "candidate_sidecar_status": check.candidate_sidecar_status,
+        "candidate_sidecar_reason": check.candidate_sidecar_reason,
+        "candidate_row_sha256": check.candidate_row_sha256,
+        "candidate_selected": check.candidate_selected,
+        "candidate_confidence": check.candidate_confidence,
+        "candidate_rt_left_min": check.candidate_rt_left_min,
+        "candidate_rt_apex_min": check.candidate_rt_apex_min,
+        "candidate_rt_right_min": check.candidate_rt_right_min,
+        "candidate_area_baseline_corrected": (
+            check.candidate_area_baseline_corrected
+        ),
         "reviewer": action.reviewer,
         "reviewed_at": action.reviewed_at,
         "comment": action.comment,

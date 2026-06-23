@@ -429,6 +429,114 @@ def test_injection_local_reference_uses_ordered_rolling_anchor_medians(
     assert s2_references == {"anchor-a": 10.0, "anchor-b": 20.0}
 
 
+@pytest.mark.parametrize(
+    ("reference_source", "reference_kwargs"),
+    [
+        ("injection-local-median", {"injection_window": 2}),
+        ("injection-loess", {"loess_frac": 1.0, "loess_min_neighbors": 3}),
+    ],
+)
+def test_injection_reference_accepts_sample_metadata_without_value_effect(
+    tmp_path: Path,
+    reference_source: str,
+    reference_kwargs: dict[str, object],
+):
+    targeted = tmp_path / "targeted.xlsx"
+    legacy_sample_info = tmp_path / "SampleInfo.xlsx"
+    sample_metadata = tmp_path / "sample_metadata.tsv"
+    alignment = tmp_path / "alignment"
+    legacy_output_dir = tmp_path / "legacy_rt_normalization"
+    metadata_output_dir = tmp_path / "metadata_rt_normalization"
+    _write_targeted_workbook(
+        targeted,
+        targets=[
+            _target("anchor-a", 10.0, 116.0474),
+            _target("anchor-b", 20.0, 116.0474),
+        ],
+        sample_anchor_rts={
+            "S1": {"anchor-a": 10.0, "anchor-b": 20.0},
+            "S2": {"anchor-a": 12.0, "anchor-b": 22.0},
+            "S3": {"anchor-a": 10.0, "anchor-b": 20.0},
+        },
+    )
+    _write_sample_info(legacy_sample_info, ("S1", "S2", "S3"))
+    _write_sample_metadata(
+        sample_metadata,
+        [
+            {
+                "sample_name": "Alpha",
+                "raw_stem": "S1",
+                "injection_order": "1",
+                "sample_role": "study_sample",
+                "batch_id": "BatchA",
+                "matrix_type": "plasma",
+                "group": "case",
+            },
+            {
+                "sample_name": "Beta",
+                "raw_stem": "S2",
+                "injection_order": "2",
+                "sample_role": "qc",
+                "batch_id": "BatchB",
+                "matrix_type": "urine",
+                "group": "qc",
+                "excluded": "TRUE",
+                "exclusion_reason": "metadata-only sentinel",
+            },
+            {
+                "sample_name": "Gamma",
+                "raw_stem": "S3",
+                "injection_order": "3",
+                "sample_role": "blank",
+                "batch_id": "BatchC",
+                "matrix_type": "water",
+                "group": "blank",
+            },
+        ],
+    )
+    _write_alignment_run(
+        alignment,
+        review_rows=[
+            {
+                "feature_family_id": "FAM_LOCAL_SPIKE",
+                "include_in_primary_matrix": "TRUE",
+                "family_center_mz": 250.0,
+                "family_center_rt": 15.0,
+            },
+        ],
+        cell_rows=[
+            _cell_row("FAM_LOCAL_SPIKE", "S1", 15.0),
+            _cell_row("FAM_LOCAL_SPIKE", "S2", 17.0),
+            _cell_row("FAM_LOCAL_SPIKE", "S3", 15.0),
+        ],
+    )
+
+    legacy_outputs, legacy_result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=legacy_output_dir,
+        reference_source=reference_source,
+        sample_info=legacy_sample_info,
+        **reference_kwargs,
+    )
+    metadata_outputs, metadata_result = rt_norm.run_rt_normalization_anchor_diagnostic(
+        targeted_workbook=targeted,
+        alignment_dir=alignment,
+        output_dir=metadata_output_dir,
+        reference_source=reference_source,
+        sample_info=sample_metadata,
+        **reference_kwargs,
+    )
+
+    assert metadata_result.reference_source == legacy_result.reference_source
+    assert _read_tsv(metadata_outputs.anchor_tsv) == _read_tsv(
+        legacy_outputs.anchor_tsv
+    )
+    assert _read_tsv(metadata_outputs.family_tsv) == _read_tsv(
+        legacy_outputs.family_tsv
+    )
+
+
 def test_injection_loess_reference_preserves_linear_ordered_anchor_drift():
     points = tuple(
         AnchorPoint(
@@ -710,6 +818,34 @@ def _write_sample_info(path: Path, samples: tuple[str, ...]) -> None:
     for order, sample in enumerate(samples, start=1):
         sheet.append([sample, order])
     workbook.save(path)
+
+
+def _write_sample_metadata(
+    path: Path,
+    rows: list[dict[str, str]],
+) -> None:
+    fieldnames = (
+        "schema_version",
+        "sample_name",
+        "raw_stem",
+        "injection_order",
+        "sample_role",
+        "batch_id",
+        "prep_batch_id",
+        "matrix_type",
+        "group",
+        "excluded",
+        "exclusion_reason",
+    )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
+        writer.writeheader()
+        for row in rows:
+            payload = {key: "" for key in fieldnames}
+            payload.update(row)
+            payload["schema_version"] = "sample_metadata_v1"
+            payload.setdefault("excluded", "FALSE")
+            writer.writerow(payload)
 
 
 def _write_alignment_run(

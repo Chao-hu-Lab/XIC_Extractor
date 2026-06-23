@@ -21,6 +21,11 @@ from xic_extractor.extraction.result_assembly import reproject_extraction_result
 from xic_extractor.extraction.targeted_projection_reasons import (
     OWN_MAX_SAME_PEAK_SUPPORT_REASON,
 )
+from xic_extractor.targeted_ms1_shape_identity_policy import (
+    EXPLICIT_SUPPORT_TSV_POLICY,
+    require_supported_activation_policy,
+    target_allowed_by_activation_policy,
+)
 
 if TYPE_CHECKING:
     from xic_extractor.config import Target
@@ -44,18 +49,26 @@ class TargetedMs1ShapeIdentitySupport:
 
 def load_targeted_ms1_shape_identity_supports(
     path: Path,
+    *,
+    activation_policy: str = EXPLICIT_SUPPORT_TSV_POLICY,
 ) -> tuple[TargetedMs1ShapeIdentitySupport, ...]:
     rows = read_tsv_required(path, REQUIRED_COLUMNS)
-    return targeted_ms1_shape_identity_supports_from_rows(rows)
+    return targeted_ms1_shape_identity_supports_from_rows(
+        rows,
+        activation_policy=activation_policy,
+    )
 
 
 def targeted_ms1_shape_identity_supports_from_rows(
     rows: Sequence[Mapping[str, str]],
+    *,
+    activation_policy: str = EXPLICIT_SUPPORT_TSV_POLICY,
 ) -> tuple[TargetedMs1ShapeIdentitySupport, ...]:
+    require_supported_activation_policy(activation_policy)
     supports: list[TargetedMs1ShapeIdentitySupport] = []
     seen: set[tuple[str, str]] = set()
     for row in rows:
-        support = _support_from_row(row)
+        support = _support_from_row(row, activation_policy=activation_policy)
         if support is None:
             continue
         key = (support.sample_name, support.target_name)
@@ -125,6 +138,8 @@ def result_with_targeted_ms1_shape_identity_support(
 
 def _support_from_row(
     row: Mapping[str, str],
+    *,
+    activation_policy: str,
 ) -> TargetedMs1ShapeIdentitySupport | None:
     if (
         text_value(row.get("schema_version")) != SCHEMA_VERSION
@@ -158,6 +173,11 @@ def _support_from_row(
         or optional_float(row.get("own_max_same_peak_similarity")) is None
     ):
         return None
+    if not target_allowed_by_activation_policy(activation_policy, target_name):
+        raise ValueError(
+            "targeted MS1 shape identity support row outside "
+            f"{activation_policy} scope: {sample_name}|{target_name}",
+        )
     return TargetedMs1ShapeIdentitySupport(
         sample_name=sample_name,
         target_name=target_name,

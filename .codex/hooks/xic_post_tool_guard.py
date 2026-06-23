@@ -9,6 +9,7 @@ import sys
 
 from xic_hook_policy import (
     CONTROL_PLANE_PATH,
+    HANDOFF_MAX_LINES,
     HANDOFF_PATH,
     PRODUCT_SURFACE_PATHS,
     mentions_any_path,
@@ -132,6 +133,20 @@ def changed_paths(cwd: str) -> list[str]:
     return paths
 
 
+def line_count(path: str) -> int | None:
+    override = os.environ.get("XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT")
+    if override is not None:
+        try:
+            return int(override)
+        except ValueError:
+            return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return sum(1 for _ in handle)
+    except OSError:
+        return None
+
+
 def main() -> int:
     try:
         event = json.load(sys.stdin)
@@ -212,8 +227,31 @@ def main() -> int:
         if handoff_missing_from_tool or handoff_missing_from_worktree:
             contexts.append(
                 "Product/control-plane state may have changed, but the plain-language handoff "
-                "is not part of this update. Before closeout, refresh "
-                f"{HANDOFF_PATH} or explicitly state why the handoff remains current."
+                "is not part of this update. Before closeout, rewrite and prune "
+                f"{HANDOFF_PATH} as a current-state snapshot, or explicitly state why the handoff remains current."
+            )
+
+        should_check_handoff_size = (
+            tool_mentions_managed_surface
+            or paths_touch_product
+            or paths_touch_control_plane
+            or paths_touch_handoff
+        )
+        handoff_lines = (
+            line_count(
+                os.path.join(
+                    repo_root(str(event.get("cwd", "."))),
+                    HANDOFF_PATH,
+                )
+            )
+            if should_check_handoff_size
+            else None
+        )
+        if handoff_lines is not None and handoff_lines > HANDOFF_MAX_LINES:
+            contexts.append(
+                f"Active handoff is {handoff_lines} lines, above the {HANDOFF_MAX_LINES}-line target. "
+                "Before continuing substantial implementation, rewrite it as a compact current-state snapshot; "
+                "move completed phase summaries to archive and long logs to notes."
             )
 
     if contexts:

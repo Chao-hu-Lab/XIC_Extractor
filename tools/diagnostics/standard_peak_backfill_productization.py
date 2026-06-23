@@ -34,6 +34,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             retained_backfill_gate_tsv=args.retained_backfill_gate_tsv,
             gallery_output_dir=args.gallery_output_dir,
+            high_signal_clean_activation_scope_audit_tsv=(
+                args.high_signal_clean_activation_scope_audit_tsv
+            ),
+            low_scan_clean_activation_scope_audit_tsv=(
+                args.low_scan_clean_activation_scope_audit_tsv
+            ),
+            low_height_clean_activation_scope_audit_tsv=(
+                args.low_height_clean_activation_scope_audit_tsv
+            ),
+            low_height_low_scan_clean_activation_scope_audit_tsv=(
+                args.low_height_low_scan_clean_activation_scope_audit_tsv
+            ),
+            low_height_reintegration_stable_activation_scope_audit_tsv=(
+                args.low_height_reintegration_stable_activation_scope_audit_tsv
+            ),
+            reintegration_stability_audit_tsv=args.reintegration_stability_audit_tsv,
+            backfill_policy_source_audit_tsv=args.backfill_policy_source_audit_tsv,
+            policy_observed_oracle_tsv=args.policy_observed_oracle_tsv,
+            policy_observed_oracle_summary_json=(
+                args.policy_observed_oracle_summary_json
+            ),
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -49,6 +70,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Activated matrix TSV: {outputs.activated_matrix_tsv}")
     if outputs.activation_value_delta_tsv is not None:
         print(f"Activation value delta TSV: {outputs.activation_value_delta_tsv}")
+    if outputs.narrow_product_writer_expected_diff_acceptance_json is not None:
+        print(
+            "Narrow product writer expected-diff acceptance JSON: "
+            f"{outputs.narrow_product_writer_expected_diff_acceptance_json}",
+        )
     if outputs.reconciliation_gallery_html is not None:
         print(
             "Activation-synced reconciliation gallery HTML: "
@@ -117,6 +143,92 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--gallery-output-dir",
         type=Path,
         help="Optional output directory for the synced gallery.",
+    )
+    parser.add_argument(
+        "--high-signal-clean-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation_high_signal_clean_scope_audit.tsv. When set, "
+            "matrix-only activation is limited to audit rows with "
+            "high_signal_clean_status=eligible and an explicit writer "
+            "expected-diff acceptance artifact is emitted."
+        ),
+    )
+    parser.add_argument(
+        "--low-scan-clean-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation scope audit TSV. When set, matrix-only "
+            "activation is limited to rows with low_scan_clean_status=eligible "
+            "and an explicit writer expected-diff acceptance artifact is emitted."
+        ),
+    )
+    parser.add_argument(
+        "--low-height-clean-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation scope audit TSV. When set, matrix-only "
+            "activation is limited to rows with low_height_clean_status=eligible "
+            "and an explicit writer expected-diff acceptance artifact is emitted."
+        ),
+    )
+    parser.add_argument(
+        "--low-height-low-scan-clean-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation scope audit TSV. When set, matrix-only "
+            "activation is limited to rows with "
+            "low_height_low_scan_clean_status=eligible and an explicit writer "
+            "expected-diff acceptance artifact is emitted."
+        ),
+    )
+    parser.add_argument(
+        "--low-height-reintegration-stable-activation-scope-audit-tsv",
+        type=Path,
+        help=(
+            "Optional activation scope audit TSV. When set with "
+            "--reintegration-stability-audit-tsv, matrix-only activation is "
+            "limited to low-height rows whose source row is eligible in the "
+            "reintegration stability audit."
+        ),
+    )
+    parser.add_argument(
+        "--reintegration-stability-audit-tsv",
+        type=Path,
+        help=(
+            "reintegration_stability_audit.tsv used by the low-height "
+            "reintegration-stable scope or the generated backfill policy path."
+        ),
+    )
+    parser.add_argument(
+        "--backfill-policy-source-audit-tsv",
+        type=Path,
+        help=(
+            "Broad activation scope audit TSV used to generate "
+            "standard_peak_backfill_policy.tsv. The product writer only "
+            "applies generated write_ready rows; detected_flagged and blocked "
+            "rows stay audit-only."
+        ),
+    )
+    parser.add_argument(
+        "--policy-observed-oracle-tsv",
+        type=Path,
+        help=(
+            "Optional standard_peak_policy_observed_oracle.tsv. When set with "
+            "--backfill-policy-source-audit-tsv, generated detected_flagged "
+            "rows whose source row has a passing full-trace observed oracle may "
+            "be promoted to generated write_ready before the writer "
+            "expected-diff gate runs."
+        ),
+    )
+    parser.add_argument(
+        "--policy-observed-oracle-summary-json",
+        type=Path,
+        help=(
+            "Required companion summary.json for "
+            "--policy-observed-oracle-tsv. The summary binds the oracle TSV to "
+            "the source activation audit and base generated policy hashes."
+        ),
     )
     return parser.parse_args(argv)
 

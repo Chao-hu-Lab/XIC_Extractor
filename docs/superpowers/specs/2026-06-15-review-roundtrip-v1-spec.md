@@ -59,6 +59,14 @@ application/expected-diff/apply-readiness/changeset planning only
 - Downstream consumer:
   - next review reintegration slice.
 
+Product direction update, 2026-06-17: the long-term target is low-manual
+intervention. The system should generate bounded candidate switches, manual
+boundary recompute proposals, expected-diff packets, and audit outputs so the
+user reviews only a small number of obvious or representative cases. This does
+not relax the current stop rule: selected peak, selected area, counted
+detection, workbook values, or matrix values still must not change without
+stable IDs, sidecar contracts, and approved expected-diff evidence.
+
 ## First slice contract
 
 This slice intentionally does not implement full review roundtrip. It only
@@ -305,6 +313,50 @@ blocked changeset rows by default.
 - no in-place overwrite of extraction outputs
 - no area or candidate change without the future recompute/sidecar writer
 
+## Sixth slice contract: candidate sidecar verification
+
+This slice still does not switch selected candidates. It verifies that a
+`select_candidate` action's `candidate_id` is present and unique in the
+targeted `peak_candidates.tsv` sidecar for the same `sample_name` /
+`target_label`, then writes an additive readiness TSV.
+
+### Public surface
+
+- `scripts/plan_review_action_candidate_sidecars.py`
+- `review_action_candidate_sidecar_v1` TSV
+- `plan_review_action_candidate_sidecars(...)`
+- `load_review_action_peak_candidate_rows(...)`
+
+### Candidate sidecar statuses
+
+- `action_duplicate`: more than one `select_candidate` action targets the same
+  sample/target in the same review action packet.
+- `candidate_verified`: the candidate id exists exactly once in
+  `peak_candidates.tsv` for the action target.
+- `candidate_current_selection`: the candidate id exists exactly once and is
+  already marked `selected=TRUE`; this is evidence for a no-op/current
+  selection, not a product switch.
+- `candidate_missing`: the action target has candidate rows, but not the
+  requested `candidate_id`.
+- `candidate_duplicate`: the requested `candidate_id` is not unique for the
+  action target.
+- `target_candidate_rows_missing`: no candidate rows exist for the action's
+  sample/target.
+
+Each verified/current-selection row records a SHA-256 of the matched candidate
+row plus candidate RT/area/confidence audit fields. Duplicate actions, missing
+candidates, duplicate candidate rows, and missing target candidate rows fail
+closed. This packet is an input to future expected-diff/reintegration work; it
+does not authorize product output mutation by itself.
+
+### Explicit non-goals
+
+- no selected candidate switch
+- no manual boundary area recompute
+- no area/counting/product-state mutation
+- no workbook or primary matrix rewrite
+- no use of display-only workbook fields as candidate identity
+
 ## Implementation closeout
 
 - Implemented owner: `xic_extractor.review_actions`
@@ -319,11 +371,15 @@ blocked changeset rows by default.
   - `REVIEW_ACTION_APPLY_CHANGESET_COLUMNS`
   - `REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION = review_action_apply_audit_v1`
   - `REVIEW_ACTION_APPLY_AUDIT_COLUMNS`
+  - `REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION = review_action_candidate_sidecar_v1`
+  - `REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS`
   - typed `ReviewAction`
   - `load_review_actions(...)`
   - `summarize_review_actions(...)`
   - `load_review_action_target_states(...)`
+  - `load_review_action_peak_candidate_rows(...)`
   - `plan_review_action_applications(...)`
+  - `plan_review_action_candidate_sidecars(...)`
   - `plan_review_action_expected_diff_templates(...)`
   - `plan_review_action_apply_readiness(...)`
   - `plan_review_action_apply_changesets(...)`
@@ -331,28 +387,33 @@ blocked changeset rows by default.
   - `load_review_action_expected_diff_approvals(...)`
   - `summarize_review_action_applications(...)`
   - `write_review_action_application_plan(...)`
+  - `write_review_action_candidate_sidecar_plan(...)`
   - `write_review_action_expected_diff_template(...)`
   - `write_review_action_apply_readiness_plan(...)`
   - `write_review_action_apply_changeset_plan(...)`
   - `scripts/validate_review_actions.py`
   - `scripts/plan_review_action_applications.py`
+  - `scripts/plan_review_action_candidate_sidecars.py`
   - `scripts/validate_review_action_expected_diffs.py`
   - `scripts/plan_review_action_apply_readiness.py`
   - `scripts/plan_review_action_apply_changesets.py`
-- Tier after fifth slice: `production_candidate` for action import validation,
-  dry-run application planning, expected-diff approval template/loader,
-  apply-readiness planning, and changeset planning only; full
-  review/reintegration remains `missing`.
+- Tier after sixth slice: `production_candidate` for action import validation,
+  dry-run application planning, candidate-sidecar verification,
+  expected-diff approval template/loader, apply-readiness planning, and
+  changeset planning only; audited targeted-long apply copy is
+  `production_surface`; full review/reintegration remains parked for selected
+  candidate switch and manual boundary area recompute.
 - Expected-diff: approved rows can now be consumed into readiness rows; still no
-  product-writing apply loop and no mutating action can change selected peak,
-  area, counted detection, product state, workbook, or matrix.
+  product-writing selected-candidate/manual-boundary loop and no mutating action
+  can change selected peak, area, counted detection, workbook, or matrix through
+  the candidate sidecar packet.
 - Validation:
   - `python -m pytest tests\test_review_actions.py -q`
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py tests\test_review_actions.py`
-  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\review_actions.py scripts\plan_review_action_candidate_sidecars.py tests\test_review_actions.py`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\review_actions.py scripts\plan_review_action_candidate_sidecars.py`
 - Residual blocker before full roundtrip:
-  - no product-writing action application/reintegration loop
+  - no product-writing selected-candidate switch loop
   - no manual boundary recompute path
-  - no selected candidate switch output writer
   - no audit trail export for applied review actions
-  - no product-writing loop that consumes changeset rows
+  - no product-writing loop that consumes verified candidate sidecar rows plus
+    approved expected-diff into selected peak/area output changes

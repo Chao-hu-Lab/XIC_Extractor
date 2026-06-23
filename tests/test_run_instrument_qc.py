@@ -197,6 +197,7 @@ def test_run_instrument_qc_cli_generates_manifest_from_method_doc(
         tmp_path / "out" / "instrument_qc_sequence_manifest.tsv"
     )
     assert (tmp_path / "out" / "instrument_qc_sequence_manifest.tsv").exists()
+    assert (tmp_path / "out" / "instrument_qc_sample_metadata.tsv").exists()
     assert (tmp_path / "out" / "instrument_qc_sequence_manifest.json").exists()
     assert (tmp_path / "out" / "instrument_qc_sequence_manifest.md").exists()
 

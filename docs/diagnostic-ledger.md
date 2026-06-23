@@ -1,7 +1,7 @@
 # Diagnostic Ledger And Rerun Policy
 
 **Status:** maintained repo-local diagnostic memory
-**Last updated:** 2026-06-16
+**Last updated:** 2026-06-17
 
 This ledger records diagnostic conclusions that should survive branch and
 worktree changes. Use it before rerunning expensive RAW validation or treating a
@@ -39,12 +39,14 @@ known, where the evidence lives, and when a rerun is justified.
 
 ## Known Diagnostic Conclusions
 
-### 2026-06-16 5-hmdC Own-Max Support Explicit Opt-In Smoke
+### 2026-06-16/17 5-hmdC Own-Max Support Limited Rescue Smoke
 
-Verdict: `production_candidate` for the explicit opt-in
-`targeted_ms1_shape_identity_support_tsv` ingestion path. This is not full
-product `production_ready`: the support TSV is still a reviewed diagnostic
-artifact, GUI is not connected, and the default extraction path remains off.
+Verdict: `production_ready` for three headless workflows: explicit reviewed
+`targeted_ms1_shape_identity_support_tsv`, explicit
+`xic-extractor-cli --targeted-ms1-shape-identity-auto-limited-default`, and the
+canonical no-flag normal CLI default. The ready claim is limited to
+`limited_5hmdc_5medc_v1`, `5-hmdC + 5-medC`, and `detected_flagged` output.
+GUI is not connected, and broader targets need separate expected-diff evidence.
 
 Update on the same date: the original five-row TSV was a handpicked review
 surface, not a product limitation. A generic RAW-backed support producer now
@@ -55,11 +57,41 @@ ratio, and then passes Gaussian-smoothed own-max same-peak identity.
 Generic producer smoke:
 `output/ms1_shape_identity_generic_support_85raw_20260616/`
 
+2026-06-17 support key-set gate update: the limited expected-diff gate now reads
+the actual `targeted_ms1_shape_identity_v0.tsv` with `--support-tsv` and fails
+closed unless accepted support keys exactly match product long-row diff keys.
+The existing 85RAW generic artifact rerun passed with `long_changed_rows=11`,
+`matrix_changed_cells=66`, and `support_tsv_supported_rows=11`.
+
+2026-06-17 auto-limited CLI update: `scripts/run_extraction.py` now has
+`--targeted-ms1-shape-identity-auto-limited-default`. It runs baseline CSV,
+builds a limited RAW-backed support TSV, reruns final extraction with that TSV,
+and writes `expected_diff_summary.tsv`, `matrix_diff_summary.tsv`, and
+`limited_default_expected_diff_gate_summary.tsv` under the auto output root.
+The 8RAW auto smoke passed with `1` support row, `1` changed long row, and
+`6` matrix cells. A single 85RAW auto smoke passed with `11` support rows,
+`11` changed long rows, `66` matrix cells, and wall-clock `369.2 s`.
+
+2026-06-17 no-flag default update: canonical settings defaults now use
+`targeted_ms1_shape_identity_activation_policy=limited_5hmdc_5medc_v1`. The
+headless CLI dispatches the same auto-limited workflow when no support TSV is
+configured, so no-flag normal CLI output is still gated by support TSV key-set
+expected-diff before `final/output` is published. Reused 85RAW artifact gate:
+`output/ms1_shape_identity_default_no_flag_existing_85raw_gate_20260617/limited_default_expected_diff_gate_summary.tsv`
+passed with 11 changed long rows, 66 matrix cells, and 11 support TSV supported
+rows. GUI and targets beyond `5-hmdC` / `5-medC` remain out of scope.
+
 Current 8RAW smoke:
 `output/ms1_shape_identity_optin_8raw_20260616/`
 
 Current 85RAW smoke:
 `output/ms1_shape_identity_optin_85raw_20260616/`
+
+Current auto-limited 8RAW smoke:
+`output/ms1_shape_identity_auto_limited_8raw_20260617/`
+
+Current auto-limited 85RAW smoke:
+`output/ms1_shape_identity_auto_limited_85raw_20260617/`
 
 Key facts:
 
@@ -93,6 +125,10 @@ Key facts:
 - The generic producer read the existing 85RAW baseline long CSV and emitted
   `11` diagnostic support rows: `10` for `5-hmdC` and `1` for `5-medC`.
   All `11` were `own_max_same_peak_supported`.
+- The auto-limited 8RAW workflow emitted one support row for
+  `TumorBC2263_DNA / 5-hmdC`, changed exactly that long row from
+  `not_counted / FALSE` to `detected_flagged / TRUE`, and wrote only the six
+  expected `5-hmdC` matrix measurement cells.
 - A new 85RAW opt-in run using that generic TSV changed exactly `11` rows:
   `BenignfatBC0980_DNA / 5-hmdC`,
   `BenignfatBC1028_DNA / 5-hmdC`,
@@ -109,11 +145,19 @@ Key facts:
   `detected_flagged / TRUE`. The wide matrix changed `66` value cells
   (`11` rows x `RT/Int/Area/PeakStart/PeakEnd/PeakWidth`). Baseline and
   generic opt-in `xic_diagnostics.csv` SHA256 values were identical.
+- The auto-limited 85RAW workflow generated the same support TSV SHA256 as the
+  existing generic artifact:
+  `0556026CFD22CD178C6686F76C83C7ED8CDFC3D0CAA7BAA0BA22811BD84BE104`.
+  Its expected-diff key set matched the existing generic artifact `11/11`,
+  its matrix-diff key set matched `66/66`, and baseline/final diagnostics CSV
+  SHA256 values were identical:
+  `59D3572A85F0F2596388C9374D34628320DF1660FBF722AAFCBB4934A34FC135`.
 
-Do not rerun 85RAW for this path unless current code changes product
-projection, support TSV parsing, selected-candidate semantics, matrix writing,
-or the cited artifacts become stale. If only the human review wording changes,
-reuse the 85RAW artifact above.
+Do not rerun 85RAW again for this path unless current code changes product
+projection, support TSV parsing/production, auto CLI orchestration,
+selected-candidate semantics, matrix writing, or the cited artifacts become
+stale. If only the human review wording changes, reuse the 85RAW artifacts
+above.
 
 ### 2026-06-05 Gaussian15 MS1 Morphology Primary Area Owner
 
