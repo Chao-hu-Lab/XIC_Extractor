@@ -26,6 +26,34 @@ migration policy. Stable runners and validation command shapes remain in
   critical-thinking review angle: strongest assumption, stale-artifact risk,
   cheaper existing oracle, or condition that would invalidate the path.
 
+## Stacked PR And Ledger Ownership
+
+Stacked PRs are allowed only when each PR has one owner surface and can pass CI
+from a clean checkout of its base. Before opening, retargeting, or repairing a
+stacked PR series, write or inspect a stack map that lists:
+
+- base and head branch for every PR;
+- repeated files across PRs, especially global ledgers such as productization
+  status indexes, control-plane plans, active handoffs, and artifact
+  inventories;
+- tracked fixtures versus externalized local artifacts;
+- which PR owns schema/product behavior, which PR owns artifact hygiene, and
+  which PR owns final rollup ledger updates;
+- whether default CI requires ignored `output/`, `.worktrees/`, or
+  `local_validation_artifacts/` bytes.
+
+If two or more PRs mutate the same global ledger or handoff, do not keep
+repairing each PR independently. Split out a prerequisite boundary PR or a final
+rollup PR so intermediate PRs carry scope-local manifests rather than a
+different snapshot of the whole productization world.
+
+Never use a later cleanup PR as an implicit prerequisite for an earlier PR's CI.
+If a PR externalizes bulky outputs, the same PR must also remove default CI
+requirements for those ignored local bytes. Local rendered review assets may be
+validated by explicit opt-in flags such as `--require-rendered-local`, but the
+default check must validate only tracked contract artifacts: schemas, summaries,
+minimal fixtures, paths, row counts, and hashes.
+
 ## Goal Contract Shape
 
 Use goals for phase-sized, cross-turn, RAW/data-backed, PR-ready, CI/release-like,

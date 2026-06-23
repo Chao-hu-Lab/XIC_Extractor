@@ -65,6 +65,15 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   `docs/agent-parameter-settings.md` and use documented runners and paths.
 - Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
   diagnostic output groups need a summary or index.
+- Before splitting, retargeting, or merge-repairing stacked PRs, build a stack
+  map first: base/head per PR, repeated global ledger files, tracked vs
+  externalized artifacts, and CI assumptions about local outputs. If multiple
+  PRs own the same ledger or CI needs ignored `output/` /
+  `local_validation_artifacts/`, stop and create a prerequisite boundary or
+  rollup PR instead of patching red checks one by one.
+- Default CI must not require ignored local output/cache artifacts. Track small
+  schemas, summaries, and fixtures; make rendered HTML/PNG, RAW-derived bulk
+  TSVs, and externalized local files opt-in local checks.
 - Keep active handoffs as short current-state snapshots, not logs. Use archive
   for completed phase summaries, notes for long scratch details, and prune
   around the 200-line target before substantial continuation.
