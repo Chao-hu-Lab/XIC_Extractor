@@ -1,15 +1,14 @@
 import csv
 import json
-import re
 from pathlib import Path
 
 from scripts.build_lockbox_next_action_plan import NEXT_ACTION_PLAN
 from scripts.build_lockbox_second_review_pack import (
     SECOND_REVIEW_INDEX,
     SECOND_REVIEW_QUEUE,
+    SECOND_REVIEW_RENDERED_OUTPUT_DIR,
     SECOND_REVIEW_SUMMARY,
     SECOND_REVIEW_TEMPLATE,
-    _source_hashes,
     build_lockbox_second_review_pack,
     check_lockbox_second_review_pack,
 )
@@ -104,19 +103,22 @@ def test_current_second_review_template_is_blank_slot_two_only() -> None:
         assert row["may_touch_matrix"] == "FALSE"
 
 
-def test_current_second_review_index_links_all_cases() -> None:
-    html = SECOND_REVIEW_INDEX.read_text(encoding="utf-8")
-    hrefs = re.findall(r'href="([^"]+)"', html)
-
-    assert "Lockbox Second Review v1" in html
-    assert "Gaussian15" in html
-    assert html.count("<tr><td>") == 53
-    assert hrefs
-    assert not [
-        href
-        for href in hrefs
-        if not (SECOND_REVIEW_INDEX.parent / href).resolve().exists()
-    ]
+def test_current_second_review_index_is_externalized() -> None:
+    queue_rows = _read_tsv(SECOND_REVIEW_QUEUE)
+    assert SECOND_REVIEW_INDEX == SECOND_REVIEW_RENDERED_OUTPUT_DIR / "index.html"
+    assert _is_externalized_path(SECOND_REVIEW_INDEX)
+    assert not Path(
+        "docs/superpowers/validation/lockbox_second_review_v1/index.html",
+    ).exists()
+    assert all(_is_externalized_path(row["case_html_path"]) for row in queue_rows)
+    assert all(
+        _is_externalized_path(row["review_plot_png_path"]) for row in queue_rows
+    )
+    assert all(_looks_like_sha256(row["plot_sha256"]) for row in queue_rows)
+    assert all(
+        _source_hash_value(row["source_hashes"], "plot") == row["plot_sha256"]
+        for row in queue_rows
+    )
 
 
 def test_second_review_builder_can_write_to_custom_paths(tmp_path: Path) -> None:
@@ -139,45 +141,6 @@ def test_second_review_builder_can_write_to_custom_paths(tmp_path: Path) -> None
         "product_authority_rows"
     ] == 0
     assert index.exists()
-
-
-def test_second_review_source_hashes_canonicalize_validation_text_line_endings(
-    tmp_path: Path,
-) -> None:
-    validation_dir = tmp_path / "docs/superpowers/validation"
-    validation_dir.mkdir(parents=True)
-    next_action_plan = validation_dir / "next_action.tsv"
-    static_bundle_index = validation_dir / "static_index.tsv"
-    label_log = validation_dir / "labels.tsv"
-    case_html = validation_dir / "case.html"
-    plot_png = validation_dir / "plot.png"
-    for path in (next_action_plan, static_bundle_index, label_log, case_html):
-        path.write_bytes(b"header\nvalue\n")
-    plot_png.write_bytes(b"png bytes")
-    static_row = {
-        "case_html_path": str(case_html),
-        "review_plot_png_path": str(plot_png),
-        "source_artifact_hashes": "nested_source=ABC",
-    }
-
-    lf_hashes = _source_hashes(
-        static_row,
-        next_action_plan_path=next_action_plan,
-        static_bundle_index_path=static_bundle_index,
-        label_log_path=label_log,
-    )
-    for path in (next_action_plan, static_bundle_index, label_log, case_html):
-        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
-
-    assert (
-        _source_hashes(
-            static_row,
-            next_action_plan_path=next_action_plan,
-            static_bundle_index_path=static_bundle_index,
-            label_log_path=label_log,
-        )
-        == lf_hashes
-    )
 
 
 def test_second_review_checker_rejects_prefilled_second_label(tmp_path: Path) -> None:
@@ -285,9 +248,36 @@ def test_second_review_checker_rejects_stale_static_plot_hash(
         second_review_template_path=tmp_path / "template.tsv",
         second_review_summary_path=tmp_path / "summary.json",
         second_review_index_path=tmp_path / "index.html",
+        require_rendered_local=True,
     )
 
     assert any("plot_sha256 must match linked PNG" in problem for problem in problems)
+
+
+def test_second_review_checker_default_allows_missing_rendered_index(
+    tmp_path: Path,
+) -> None:
+    queue, template, summary, index = _build_custom_pack(tmp_path)
+    index.unlink()
+
+    default_problems = check_lockbox_second_review_pack(
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+    )
+    rendered_problems = check_lockbox_second_review_pack(
+        second_review_queue_path=queue,
+        second_review_template_path=template,
+        second_review_summary_path=summary,
+        second_review_index_path=index,
+        require_rendered_local=True,
+    )
+
+    assert default_problems == []
+    assert any(
+        "lockbox second-review HTML index missing" in p for p in rendered_problems
+    )
 
 
 def test_second_review_checker_rejects_stale_summary(tmp_path: Path) -> None:
@@ -335,3 +325,26 @@ def _write_tsv(path: Path, header: list[str], rows: list[dict[str, str]]) -> Non
         writer = csv.DictWriter(handle, delimiter="\t", fieldnames=header)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _is_externalized_path(path_value: str | Path) -> bool:
+    try:
+        relative = Path(path_value).resolve().relative_to(Path.cwd().resolve())
+        normalized = str(relative).replace("\\", "/")
+    except ValueError:
+        normalized = str(path_value).replace("\\", "/")
+    return normalized.startswith(
+        "local_validation_artifacts/externalized_superpowers_validation/",
+    )
+
+
+def _looks_like_sha256(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789ABCDEF" for char in value)
+
+
+def _source_hash_value(source_hashes: str, key: str) -> str:
+    for part in source_hashes.split(";"):
+        name, _, value = part.partition("=")
+        if name == key:
+            return value
+    return ""

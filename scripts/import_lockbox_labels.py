@@ -95,7 +95,9 @@ def build_user_batch_label_log(
             static_bundle_index_path,
             required_columns=(
                 "lockbox_case_id",
+                "case_html_sha256",
                 "plot_status",
+                "plot_sha256",
                 "evidence_status",
                 "source_artifact_hashes",
             ),
@@ -691,21 +693,12 @@ def _label_source_artifact_hashes(
 ) -> str:
     parts = [
         f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
-        f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
+        f"case_html={static_row.get('case_html_sha256', '')}",
         "plot="
         + (static_row.get("plot_sha256", "") or static_row.get("plot_status", "")),
         static_row.get("source_artifact_hashes", ""),
     ]
     return ";".join(part for part in parts if part)
-
-
-def _hash_optional(path_value: str) -> str:
-    if not path_value:
-        return ""
-    path = Path(path_value)
-    if not path.is_absolute():
-        path = ROOT / path
-    return artifact_sha256(path) if path.exists() else ""
 
 
 def _repo_relative(path: Path) -> str:

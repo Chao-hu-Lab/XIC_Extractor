@@ -58,9 +58,12 @@ SECOND_REVIEW_TEMPLATE = (
 SECOND_REVIEW_SUMMARY = (
     ROOT / "docs/superpowers/validation/lockbox_second_review_summary_v1.json"
 )
-SECOND_REVIEW_INDEX = (
-    ROOT / "docs/superpowers/validation/lockbox_second_review_v1/index.html"
+SECOND_REVIEW_RENDERED_OUTPUT_DIR = (
+    ROOT
+    / "local_validation_artifacts/externalized_superpowers_validation/"
+    "lockbox_second_review_v1"
 )
+SECOND_REVIEW_INDEX = SECOND_REVIEW_RENDERED_OUTPUT_DIR / "index.html"
 
 SCHEMA_VERSION = "lockbox_second_review_pack_v1"
 SUMMARY_SCHEMA_VERSION = "lockbox_second_review_summary_v1"
@@ -120,6 +123,7 @@ def build_lockbox_second_review_pack(
     second_review_summary_path: Path = SECOND_REVIEW_SUMMARY,
     second_review_index_path: Path = SECOND_REVIEW_INDEX,
     write_outputs: bool = True,
+    require_rendered_local: bool = False,
 ) -> dict[str, object]:
     problems, action_rows, static_by_case, labels_by_case = _load_inputs(
         next_action_plan_path=next_action_plan_path,
@@ -127,6 +131,7 @@ def build_lockbox_second_review_pack(
         ai_challenge_result_summary_path=ai_challenge_result_summary_path,
         static_bundle_index_path=static_bundle_index_path,
         label_log_path=label_log_path,
+        require_rendered_local=require_rendered_local,
     )
     if problems:
         return {"problems": problems}
@@ -209,6 +214,7 @@ def check_lockbox_second_review_pack(
     second_review_template_path: Path = SECOND_REVIEW_TEMPLATE,
     second_review_summary_path: Path = SECOND_REVIEW_SUMMARY,
     second_review_index_path: Path = SECOND_REVIEW_INDEX,
+    require_rendered_local: bool = False,
 ) -> list[str]:
     problems = check_lockbox_next_action_plan(
         static_bundle_index_path=static_bundle_index_path,
@@ -232,6 +238,7 @@ def check_lockbox_second_review_pack(
         second_review_summary_path=second_review_summary_path,
         second_review_index_path=second_review_index_path,
         write_outputs=False,
+        require_rendered_local=require_rendered_local,
     )
     problems.extend(result.get("problems", []))
     if problems:
@@ -262,12 +269,13 @@ def check_lockbox_second_review_pack(
             problems.append("lockbox second-review template is stale")
         _check_template_contract(rows, problems)
 
-    if not second_review_index_path.exists():
-        problems.append("lockbox second-review HTML index missing")
-    else:
-        actual_index = second_review_index_path.read_text(encoding="utf-8")
-        if actual_index != expected_index:
-            problems.append("lockbox second-review HTML index is stale")
+    if require_rendered_local:
+        if not second_review_index_path.exists():
+            problems.append("lockbox second-review HTML index missing")
+        else:
+            actual_index = second_review_index_path.read_text(encoding="utf-8")
+            if actual_index != expected_index:
+                problems.append("lockbox second-review HTML index is stale")
 
     if not second_review_summary_path.exists():
         problems.append("lockbox second-review summary JSON missing")
@@ -288,6 +296,7 @@ def _load_inputs(
     ai_challenge_result_summary_path: Path,
     static_bundle_index_path: Path,
     label_log_path: Path,
+    require_rendered_local: bool = False,
 ) -> tuple[
     list[str],
     list[dict[str, str]],
@@ -317,6 +326,7 @@ def _load_inputs(
             required_columns=(
                 "lockbox_case_id",
                 "case_html_path",
+                "case_html_sha256",
                 "review_plot_png_path",
                 "plot_status",
                 "plot_sha256",
@@ -395,7 +405,11 @@ def _load_inputs(
         static_row = static_by_case.get(case_id)
         label_row = labels_by_case.get(case_id)
         if static_row:
-            _check_ready_static_row(static_row, problems)
+            _check_ready_static_row(
+                static_row,
+                problems,
+                require_rendered_local=require_rendered_local,
+            )
         if label_row:
             _check_ready_label_row(label_row, problems)
     return problems, action_rows, static_by_case, labels_by_case
@@ -442,7 +456,12 @@ def _check_ready_action_row(row: Mapping[str, str], problems: list[str]) -> None
             problems.append(f"{case_id}: {field} must be FALSE")
 
 
-def _check_ready_static_row(row: Mapping[str, str], problems: list[str]) -> None:
+def _check_ready_static_row(
+    row: Mapping[str, str],
+    problems: list[str],
+    *,
+    require_rendered_local: bool,
+) -> None:
     case_id = row["lockbox_case_id"]
     if row.get("plot_status") != "plotted_gaussian15":
         problems.append(f"{case_id}: static review plot must be plotted_gaussian15")
@@ -452,12 +471,19 @@ def _check_ready_static_row(row: Mapping[str, str], problems: list[str]) -> None
         problems.append(f"{case_id}: static review must use 15-point smoothing")
     for field in ("case_html_path", "review_plot_png_path"):
         path_value = row.get(field, "")
-        if not _repo_path(path_value).exists():
+        if not path_value:
             problems.append(f"{case_id}: {field} missing on disk")
+        elif require_rendered_local and not _repo_path(path_value).exists():
+            problems.append(f"{case_id}: {field} missing on disk")
+    if not _looks_like_sha256(row.get("case_html_sha256", "")):
+        problems.append(f"{case_id}: case_html_sha256 invalid")
     plot_path = row.get("review_plot_png_path", "")
-    expected_plot_hash = _hash_optional(plot_path)
-    if row.get("plot_sha256") != expected_plot_hash:
-        problems.append(f"{case_id}: plot_sha256 must match linked PNG")
+    if not _looks_like_sha256(row.get("plot_sha256", "")):
+        problems.append(f"{case_id}: plot_sha256 invalid")
+    elif require_rendered_local:
+        expected_plot_hash = _hash_optional(plot_path)
+        if row.get("plot_sha256") != expected_plot_hash:
+            problems.append(f"{case_id}: plot_sha256 must match linked PNG")
     if row.get("may_touch_matrix") != NO_AUTHORITY:
         problems.append(f"{case_id}: static row may_touch_matrix must be FALSE")
     if row.get("may_grant_product_authority") != NO_AUTHORITY:
@@ -906,8 +932,8 @@ def _source_hashes(
         f"lockbox_next_action_plan={artifact_sha256(next_action_plan_path)}",
         f"static_review_bundle_index={artifact_sha256(static_bundle_index_path)}",
         f"lockbox_reviewer_label_log={artifact_sha256(label_log_path)}",
-        f"case_html={_hash_optional(static_row.get('case_html_path', ''))}",
-        f"plot={_hash_optional(static_row.get('review_plot_png_path', ''))}",
+        f"case_html={static_row.get('case_html_sha256', '')}",
+        f"plot={static_row.get('plot_sha256', '')}",
         static_row.get("source_artifact_hashes", ""),
     ]
     return ";".join(part for part in parts if part)
@@ -926,6 +952,12 @@ def _rows_sha256(rows: Sequence[Mapping[str, str]], header: Sequence[str]) -> st
 
 def _text_sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest().upper()
+
+
+def _looks_like_sha256(value: str) -> bool:
+    if len(value) != 64:
+        return False
+    return all(character in "0123456789ABCDEFabcdef" for character in value)
 
 
 def _hash_optional(path_value: str) -> str:
@@ -974,9 +1006,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=SECOND_REVIEW_SUMMARY,
     )
-    parser.add_argument("--second-review-index", type=Path, default=SECOND_REVIEW_INDEX)
+    parser.add_argument(
+        "--rendered-output-dir",
+        type=Path,
+        default=SECOND_REVIEW_RENDERED_OUTPUT_DIR,
+    )
+    parser.add_argument("--second-review-index", type=Path, default=None)
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--require-rendered-local", action="store_true")
     args = parser.parse_args(argv)
+    second_review_index = args.second_review_index or (
+        args.rendered_output_dir / "index.html"
+    )
 
     if args.check_only:
         problems = check_lockbox_second_review_pack(
@@ -988,7 +1029,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             second_review_queue_path=args.second_review_queue,
             second_review_template_path=args.second_review_template,
             second_review_summary_path=args.second_review_summary,
-            second_review_index_path=args.second_review_index,
+            second_review_index_path=second_review_index,
+            require_rendered_local=args.require_rendered_local,
         )
         if problems:
             for problem in problems:
@@ -1006,7 +1048,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         second_review_queue_path=args.second_review_queue,
         second_review_template_path=args.second_review_template,
         second_review_summary_path=args.second_review_summary,
-        second_review_index_path=args.second_review_index,
+        second_review_index_path=second_review_index,
     )
     problems = result.get("problems", [])
     if problems:
