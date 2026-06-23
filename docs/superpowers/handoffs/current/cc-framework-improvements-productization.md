@@ -1,26 +1,36 @@
 # XIC productization handoff
 
 Updated: 2026-06-24
-Branch: `codex/pr-artifact-retention-boundary-20260624`
+Branch: `codex/pr03-quant-matrix-foundation`
+Status: PR #88 rebuilt on `master`; local gates passed, GitHub CI/review pending.
 
-This is the short current-state snapshot. Tier authority lives in
+This is a compact current-state snapshot. Tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md` plus the
-machine-readable validation indexes.
+machine-readable validation indexes. Handoff text is routing context only.
 
 ## Current Objective
 
-Phase 1 is closed: the lockbox shadow automation artifact is a shadow-only
-contract adapter/checker, not a scorer run and not product writer authority.
+Phase 1 is closed: `lockbox_shadow_automation_experiment_v1` is a
+shadow-only contract adapter/checker, not a scorer run and not product writer
+authority.
 
-Immediate operational objective: land the artifact-retention prerequisite before
-resuming product PR merges. Default CI must not depend on ignored `output/` or
-`local_validation_artifacts/`, and global ledger updates must be owned by a
-prerequisite or final rollup PR rather than every stacked product PR.
+Phase 2/3 QuantMatrix foundation is reintroduced on clean PR #88:
 
-Next productization phase after the stack boundary is stable: Phase 2,
-`ProductionAcceptanceManifest v1`. Phase 2 must define the only future Backfill
-`write_authority=true` decision artifact, still without writing the default
-matrix until Phase 3 expected-diff activation exists.
+- `ProductionAcceptanceManifest v1` defines the accepted Backfill row authority
+  artifact and fail-closed checker.
+- `QuantMatrixVersion v1` is the manifest-driven activation surface for
+  additive quant matrix outputs, gated by expected-diff checks.
+- QuantMatrix review, promotion, downstream-impact, real-bundle, packet,
+  dry-run, and closeout checks are product-evidence surfaces, not ProductWriter
+  authority by themselves.
+- `product_ready_default_matrix_activated` is the current 511-cell default
+  QuantMatrix activation state and must remain tied to expected-diff and the
+  authority manifest.
+
+This rebuild must not create broad production rows, change selected
+peak/area/counting, change review/replay behavior, or broaden Backfill
+authority. Default CI must not depend on ignored `output/` or
+`local_validation_artifacts/`.
 
 ## Active References
 
@@ -37,15 +47,15 @@ matrix until Phase 3 expected-diff activation exists.
 
 - Backfill values are accepted quantification values, not detections and not
   truth claims.
-- Future default `quant_matrix` should include detected plus accepted Backfill
-  values.
+- Default `quant_matrix` includes detected plus accepted Backfill values only
+  for the current 511-cell expected-diff-passing scope.
 - Detection claims remain based on `detected_count` only.
 - `quant_available_count` is detected plus accepted Backfill.
 - Production write authority must come from `ProductionAcceptanceManifest`
   keyed by `peak_hypothesis_id + sample_stem`.
 - Shadow/report/gallery/candidate artifacts remain non-authority.
 
-## Current State
+## Current Lane State
 
 - Current Backfill product authority remains exactly 511 cells.
 - Broad Backfill auto-write remains parked.
@@ -55,12 +65,6 @@ matrix until Phase 3 expected-diff activation exists.
 - `1087` missing-overlay rows remain evidence gaps, not negative truth.
 - Lockbox/owner-clean evidence remains non-authoritative challenge evidence.
 - Manual wrong-peak/no-peak controls remain negative controls.
-- No ProductWriter, matrix, workbook, selected peak/area, counted detection,
-  GUI, default extraction, authority manifest, or broad Backfill behavior
-  changes are introduced by the PR-stack governance work.
-
-## Current Lane State
-
 - `peak_choice_truth_lockbox_v1` remains `production_candidate`.
 - Mechanical adjudication, Review Packet / Approval Workflow v1,
   Missing-Overlay Evidence Recovery v1, and lockbox assets remain
@@ -76,7 +80,7 @@ matrix until Phase 3 expected-diff activation exists.
 
 ## Status Index Anchors
 
-These exact phrases are retained for `check_productization_state.py` anchors:
+These phrases are retained for `check_productization_state.py` anchors:
 
 - Goal 0/1 hardening added.
 - machine-adjudicated without granting new writer authority.
@@ -96,12 +100,12 @@ These exact phrases are retained for `check_productization_state.py` anchors:
 
 Do not continue patching PR88 red checks one by one. Recovery order:
 
-1. Land or base on the artifact-retention boundary prerequisite.
-2. Rebuild PR88 as QuantMatrix foundation only.
-3. Move discovery row identity hardening to its own PR or to the CID-NL
-   discovery PR where the contract belongs.
-4. Retarget PR89-PR92 one at a time.
-5. Use a final rollup PR for broad productization ledgers and handoff updates.
+1. Base on the already-merged artifact-retention boundary prerequisite.
+2. Rebuild PR #88 as QuantMatrix foundation only.
+3. Move discovery row identity hardening to the CID-NL discovery PR.
+4. Retarget PR #89-#92 one at a time after each predecessor is clean.
+5. Use a final rollup PR only for unavoidable broad productization ledger and
+   handoff updates.
 
 ## Rejected Paths
 
@@ -113,55 +117,28 @@ Do not continue patching PR88 red checks one by one. Recovery order:
 - Do not let shadow artifacts feed ProductWriter, matrix/workbook output,
   selected peak/area, counted detection, GUI, default extraction, reviewer slot
   2, or broad Backfill authority.
-- Do not write accepted Backfill into the default matrix before Phase 2
-  production acceptance manifest and Phase 3 expected-diff activation exist.
+- Do not treat low detected support or high Backfill dependency as a standalone
+  matrix-value blocker; they are prevalence/claim uncertainty flags.
+- Do not expand default quant matrix output beyond the current 511-cell scope
+  without a new authority manifest and expected-diff gate.
 
 ## Validation Snapshot
 
-Most recent Phase 1 validation, before the PR-stack incident:
-
-- `scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
-  passed.
-- Focused lockbox shadow automation tests passed.
-- `tests/test_productization_state_index.py` passed.
-- `scripts/check_productization_state.py` passed.
-- Scoped ruff, `git diff --check`, and secret/local-path scans passed.
-
-Current artifact-retention prerequisite evidence:
-
-- `scripts/build_lockbox_static_review_bundle.py --check-only` passed.
-- `scripts/import_lockbox_labels.py --check-only` passed.
-- `scripts/build_lockbox_next_action_plan.py --check-only` passed.
-- `scripts/build_lockbox_ai_challenge_pack.py --check-only` passed.
-- `scripts/check_lockbox_ai_challenge_results.py` passed with 72 cases and zero
-  owner-recheck flags.
-- `scripts/build_lockbox_second_review_pack.py --check-only` passed.
-- `scripts/build_lockbox_single_owner_ai_challenge_gate.py --check-only`
-  passed.
-- `scripts/build_lockbox_shadow_automation_experiment_design.py --check-only`
-  passed after regenerating the shadow-only manifest from updated upstream
-  artifact hashes.
-- `scripts/check_validation_artifact_retention.py` passed with 108 retained
-  validation files and no tracked rendered-artifact dependency. The checker now
-  hard-fails tracked rendered HTML/PNG even if marked `shrink_later`, and
-  validates retained file size/line metadata against the clean checkout.
-
-Hook smoke, sandbox doctor, diff check, PR gate, and secret/local-path scan
-remain required before closeout.
+- PR #94 artifact-retention prerequisite passed local PR gate and GitHub CI
+  before normal merge.
+- PR #88 clean rebuild passed focused QuantMatrix checks, retention and
+  productization checkers, bounded-lane checker, and the repo PR gate locally.
+- Validation status for local rebuild is `production_ready` only for the bounded
+  511-cell QuantMatrix default-output contract; GitHub CI/review must still pass
+  before normal merge.
 
 ## Control Plane Note
 
-No control-plane tier or authority update is needed for this governance work
-because maturity tier, active lane, matrix authority, selected area/counting
-behavior, review/replay behavior, ProductWriter authority, and broad
-uncontracted Backfill state did not change.
+The default QuantMatrix activation status-index change is paired with the
+control-plane updates in this rebuild. No extra control-plane update is needed
+for the handoff conflict resolution itself.
 
 ## Next Actions
 
-Immediate PR-stack action: create/land the artifact-retention prerequisite, then
-rebuild or retarget PR88-PR92 so each PR has one owner surface and can pass CI
-from a clean checkout of its base.
-
-Next productization phase after the stack boundary is stable: Phase 2,
-`ProductionAcceptanceManifest v1`; do not start default quant matrix activation
-until Phase 3.
+Mark PR #88 ready, wait for GitHub CI/review, normal-merge only after green,
+then handle #89-#92 sequentially with the same artifact-boundary discipline.
