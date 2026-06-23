@@ -286,10 +286,87 @@ manifest-sha contract fields plus the Gaussian15 boundary policy explicitly:
 Gaussian-smoothed boundaries are the review basis; raw-trace doublets are
 acceptable only when the Backfill/detect reference is on the left peak, and
 unclear or right-peak reference cases stay flagged. This is still
-`production_candidate` evidence/control infrastructure only. Next checkpoint is
-Phase 2 `ProductionAcceptanceManifest v1`, not a scorer run. It writes no
-ProductWriter input, matrix, workbook, selected peak/area, counted detection,
-reviewer slot2, GUI, default extraction, or broad Backfill authority.
+`production_candidate` evidence/control infrastructure only. Phase 2
+`ProductionAcceptanceManifest v1` is now defined as an additive schema/checker
+precursor; it is not a scorer run and writes no ProductWriter input, matrix,
+workbook, selected peak/area, counted detection, reviewer slot2, GUI, default
+extraction, or broad Backfill authority. Phase 3 `QuantMatrixVersion Activation`
+is now implemented as an explicit manifest-driven activation surface with
+expected-diff, `cell_provenance`, and `row_summary`; it still does not wire
+ProductWriter default extraction, workbooks, GUI, selected peak/area, counted
+detection, reviewer slot2, or broad Backfill authority. Phase 4
+`Gallery/Report Alignment` is now implemented as a review-only report surface
+over `QuantMatrixVersion` outputs and the validated manifest; it exposes
+accepted Backfill versus detected cells, prevalence risk, manual-negative and
+doublet closure, source paths/hashes, manifest sha, and the Gaussian-smoothed
+trace-primary/raw-trace-auxiliary convention without granting ProductWriter,
+matrix, workbook, GUI, selected peak/area, counted detection, reviewer slot2,
+or broad Backfill authority. Phase 5 `Validation/Promotion Readiness` is now
+implemented as a read-only promotion checker: it separates contract correctness
+from scientific confidence, writes readiness summary/check sidecars, and cannot
+claim `production_ready` from focused tests, 8RAW smoke evidence, or unbound
+tier/status strings alone. Required science pass rows must bind artifact relpath,
+SHA, and tier-specific provenance such as cohort/run, oracle packet, or
+downstream scope. `QuantMatrix Promotion Validation Packet v1` now materializes
+the first no-RAW evidence packet from existing artifacts: large-cohort and
+heldout-oracle evidence are artifact-bound and pass, while downstream-impact
+evidence is explicitly missing, so the Phase 5 readiness fixture remains
+`contract_ready_science_inconclusive` with
+`may_promote_default_quant_matrix=false`. Phase 6 now defines the no-RAW
+`QuantMatrix downstream-impact smoke` contract: a downstream artifact must
+prove that a real `QuantMatrixVersion` bundle improves numeric matrix coverage
+while preserving detected-only claims through sidecars; contract fixtures and
+tier strings cannot satisfy promotion. Phase 7 assembled the current real
+511-cell `QuantMatrixVersion` bundle from
+`seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`
+and confirmed contract correctness plus downstream-impact smoke, while keeping
+readiness science-inconclusive until evidence was rebound. Phase 8 now binds
+that real downstream-impact artifact together with the existing large-cohort
+and heldout-oracle artifacts into `QuantMatrix Promotion Packet v2`; real-bundle
+readiness is `production_ready_candidate_packet` with `production_ready=true`
+and `may_promote_default_quant_matrix=true`. At that point it was a candidate
+promotion packet only: ProductWriter default extraction, default matrix
+authority, workbook/GUI behavior, selected peak/area, counted detection, and
+broad Backfill authority remained unchanged until the later expected-diff
+activation gate described below.
+The default matrix authority phrase here is retained as a productization-state
+anchor for the Phase 8 boundary, as is the later expected-diff activation gate
+phrase.
+Phase 9 now adds that no-RAW default activation dry-run expected-diff gate:
+manifest-driven activation is rerun in a temporary directory and matches the
+Phase 7 reference `quant_matrix`, `cell_provenance`, `row_summary`, and
+`expected_diff_summary` hashes exactly, with 511 expected, 511 written, and 0
+unused expected-diff rows. The gate allows Product Ready closeout review to
+proceed, but it still writes no default matrix files and changes no
+ProductWriter/default behavior.
+Phase 10 closes that evidence chain as
+`product_ready_default_matrix_candidate`: Phase 8 and Phase 9 both validate,
+the closeout checklist has six passing checks, and the activation contract is
+ready for a separate explicit ProductWriter activation commit. This does not
+itself change default outputs, workbook/GUI, selected peak/area, counted
+detection, current 511-cell authority, or broad Backfill status.
+Phase 11 now performs that explicit ProductWriter/default output activation:
+the default output `quant_matrix.tsv` is written from the current
+ProductionAcceptanceManifest plus expected-diff contract and contains detected
+values plus 511 accepted Backfill quantification values. The activated product
+surface also writes `cell_provenance`, `row_summary`, `expected_diff_summary`,
+and `source_summary`; the summary is
+`product_ready_default_matrix_activated`, with 17489 detected cells, 511
+accepted Backfill cells, 18000 quant-available cells, and zero unused
+expected-diff rows. This activates the current 511-cell default matrix output
+only; it does not change workbook/GUI behavior, selected peak, selected area,
+counted detection, review/replay behavior, broad Backfill status, or the
+registered product authority scope.
+The `d4-N6-2HE-dA` target-row identity stop-ship is now traced to discovery
+MS2 seed extraction, not ProductWriter or Backfill: Thermo MS2 filter precursor
+can be an isolation/trigger mass, so CID-NL discovery must allow
+product-plus-neutral-loss inferred precursor seeds within
+`ms2_precursor_tol_da`. The discovery path now emits inferred
+`300.160x / 184.113` seeds without deleting valid `301.165 / 185.116` isotope
+seeds, and discovery `candidate_id` includes precursor/product row identity to
+avoid same-scan candidate collisions. This fixes the generation path only; the
+already activated default matrix bundle remains stale for this target until a
+later explicit discovery/alignment/default-activation expected-diff rerun.
 Missing-Overlay Evidence Recovery v1 now links the 1087
 `missing_overlay_path` rows back to existing family-level trace/overlay
 artifacts and sample-level trace fields across 114 families. This moves the
@@ -2809,6 +2886,533 @@ at that older checkpoint, not the latest release claim.
   scope. Do not treat this gate as `reviewer_slot=2` or broad Backfill
   authority.
 
+### 2026-06-19 - QuantMatrix Default Product Activation v1
+
+- Lane: Backfill default QuantMatrix ProductWriter activation / Phase 11.
+- Previous tier: `product_ready_default_matrix_candidate`, which still
+  required an explicit ProductWriter/default output activation commit.
+- New tier: `product_ready_default_matrix_activated`. The current 511-cell
+  authority is now materialized as default quant matrix output. Authority scope
+  and row count remain unchanged: `backfill_policy_write_ready_rows`, 511
+  accepted Backfill cells, broad 4613-row Backfill still parked.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_default_product_activation_schema.v1.json`,
+  `scripts/build_quant_matrix_default_product_activation.py`,
+  `tests/test_quant_matrix_default_product_activation.py`, and
+  `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`.
+- Product surface changed: explicit default output files are now written:
+  `default_output/quant_matrix.tsv`, `default_output/cell_provenance.tsv`,
+  `default_output/row_summary.tsv`,
+  `default_output/expected_diff_summary.tsv`,
+  `default_output/source_summary.tsv`,
+  `default_product_activation_checks.tsv`, and
+  `quant_matrix_default_product_activation_summary.json`.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. The checker revalidates the Phase 7 real
+  bundle and Phase 10 Product Ready closeout, reruns manifest-driven
+  activation, checks source hashes, requires expected-diff closure, and compares
+  the default outputs with the Phase 7 reference hashes.
+- Current validation result: activation status is `pass`; 511 expected,
+  511 accepted Backfill written, and 0 unused expected-diff rows. Default
+  `quant_matrix.tsv`, `cell_provenance.tsv`, `row_summary.tsv`, and
+  `expected_diff_summary.tsv` match the Phase 7 reference hashes. The sidecar
+  records 17489 detected cells, 511 accepted Backfill cells, and 18000
+  quant-available cells.
+- Product surface not changed: No workbook, GUI, selected peak, selected area,
+  counted detection, review/replay behavior, broad Backfill authority, scorer,
+  RAW, or 85RAW changed. Accepted Backfill values are quantification values in
+  the default matrix, not detections or truth claims.
+- Status-index update: updated the writer row's current artifact/public surface
+  to this activation summary and `quant_matrix_default_product_activation_v1`.
+  The writer row count and product authority scope remain exactly 511 and
+  `backfill_policy_write_ready_rows`.
+- Next checkpoint: maintain this default output through the authority manifest,
+  expected-diff checks, and focused public-surface tests; do not expand Backfill
+  authority without a new authority goal.
+
+### 2026-06-19 - Target-row identity gap stop-ship addendum
+
+- Lane: Default QuantMatrix target-row identity / targeted ISTD benchmark
+  semantics.
+- Previous tier: `product_ready_default_matrix_activated` for the 511-cell
+  default matrix activation bundle.
+- New tier: unchanged. The 511-cell matrix writer authority, active lane,
+  `backfill_policy_write_ready_rows` scope, and broad Backfill parked state are
+  unchanged. This addendum changes diagnostic/review semantics and records a
+  target-row identity blocker; it does not change ProductWriter output files or
+  matrix authority.
+- Evidence: user review found `d4-N6-2HE-dA` target `m/z=300.1605` absent from
+  `quant_matrix.tsv`. Investigation showed the final matrix has nearby rows
+  `299.155` and valid isotope-shift dR-tag feature row `301.165`, but no exact
+  target row for `300.1605`.
+  Discovery artifacts under `local_validation_artifacts/discovery/accepted_p8b/85raw`
+  contain `0` 22-25 min monoisotopic `300.1605 -> 184.113` candidates and
+  `160` isotope-shift `301.165 -> 185.116` candidates spanning all 85 samples.
+  Existing targeted ISTD benchmark output had incorrectly selected `FAM007866`
+  as a primary `d4-N6-2HE-dA` row despite `match_type=isotope_shift`.
+- Product surface changed: targeted ISTD benchmark summaries now count only
+  `match_type=exact` rows as primary matches, and matrix identity blast-radius
+  joins no longer promote isotope-shift benchmark rows to
+  `active_dna_istd_candidate`. Output schemas are unchanged; review/replay
+  classification semantics are stricter.
+- Validation: focused red/green tests now cover isotope-only active ISTD
+  failing as `MISS` and blast-radius refusing to promote isotope-shift target
+  aliases. `uv run pytest tests/test_targeted_istd_benchmark.py tests/test_matrix_identity_blast_radius.py -v --tb=short`
+  passed 25 tests. A no-RAW recheck over the existing targeted workbook and
+  alignment TSV/XLSX artifacts writes
+  `tmp_runtime/targeted_istd_benchmark_d4_recheck_20260619/` and reports
+  `d4-N6-2HE-dA status=FAIL`, `failure_modes=MISS`,
+  `primary_match_count=0`; `FAM007866` remains visible only as
+  `match_type=isotope_shift`.
+- Remaining blocker: the activated default matrix remains numerically usable for
+  downstream wide-matrix analysis, but release-facing target/ISTD lookup is not
+  product-ready for `d4-N6-2HE-dA` until active targets can materialize exact
+  target-anchored product rows and the default activation expected-diff bundle
+  is regenerated. Keep `301.165` as its own valid feature row; do not bridge it
+  back to `300.1605` as authority or treat it as a reason to suppress the
+  missing monoisotopic row.
+
+### 2026-06-19 - Discovery precursor inference root-cause fix v1
+
+- Lane: Untargeted discovery row identity / target-row stop-ship remediation.
+- Previous tier: unchanged from
+  `product_ready_default_matrix_activated` for the current 511-cell default
+  matrix activation bundle, with `d4-N6-2HE-dA` release-facing target lookup
+  blocked by the missing exact row.
+- New tier: unchanged. This fixes discovery generation behavior and artifact
+  identity only. It does not promote a new maturity tier, change active lane,
+  alter ProductWriter authority, regenerate the default matrix, unpark broad
+  Backfill, or change workbook/GUI, selected peak, selected area, counted
+  detection, review/replay, scorer, RAW/85RAW authority, or current 511-cell
+  Backfill authority.
+- Root cause: `xic_extractor.discovery.ms2_seeds` used the Thermo MS2 filter
+  precursor as the only exact precursor when searching for
+  `precursor - neutral_loss` products. For `TumorBC2312_DNA`, RAW MS2 scans in
+  the 22-25 min window include filter precursor `300.2028` with product
+  `184.1132`; `184.1132 + 116.0474 = 300.1606`, but the old direct-only search
+  looked near `184.1554` and rejected the row before grouping/alignment.
+- Product surface changed: `DiscoverySettings` and `scripts/run_discovery.py`
+  now expose `ms2_precursor_tol_da` / `--ms2-precursor-tol-da` for Da-level
+  MS2 filter precursor/isolation matching. Discovery seed extraction emits
+  product-plus-neutral-loss inferred precursor seeds in addition to direct
+  scan-precursor neutral-loss seeds. Discovery `candidate_id` now keeps the
+  `sample#scan` anchor but appends precursor/product row identity, preventing
+  same-scan candidate collisions. Discovery `tag_evidence_json` records
+  `precursor_mz_basis`, `scan_precursor_mz`, and scan-precursor delta fields.
+  CSV column schemas are unchanged.
+- Evidence: focused tests cover inferred monoisotopic seed recovery, direct and
+  inferred same-scan coexistence, old out-of-tolerance rejection behavior,
+  public CLI/preset plumbing, and same-scan candidate ID uniqueness. Single RAW
+  validation under
+  `docs/superpowers/validation/discovery_precursor_inference_v1/` reran only
+  `TumorBC2312_DNA.raw` over 22-25 min and observed
+  `duplicate_candidate_ids=0`, emitted `300.161 / 184.113` rows with
+  `precursor_mz_basis=product_plus_neutral_loss`, and retained the valid
+  `301.165 / 185.116` dR-tag row.
+- Validation:
+  `uv run pytest tests/test_discovery_ms2_seeds.py tests/test_discovery_grouping.py tests/test_discovery_csv.py tests/test_discovery_pipeline.py tests/test_run_discovery.py tests/test_presets_apply.py -v --tb=short`
+  passed `92`; focused ruff over the touched discovery/CLI/preset/tests passed.
+  The one-RAW command in
+  `docs/superpowers/validation/discovery_precursor_inference_v1/README.md`
+  exited `0`.
+- Remaining blocker: the existing activated default `quant_matrix.tsv` has not
+  been regenerated and still reflects pre-fix discovery artifacts. A later
+  explicit discovery/alignment/default-activation expected-diff rerun is needed
+  before claiming the released default matrix contains the `300.1605` target
+  row.
+
+### 2026-06-19 - QuantMatrix Product Ready Closeout v1
+
+- Lane: Backfill default QuantMatrix Product Ready candidate closeout /
+  Phase 10.
+- Previous tier: Phase 9 default activation dry-run gate passed, but Product
+  Ready closeout had not yet collected Phase 8 packet readiness and Phase 9
+  activation replay into one explicit activation contract.
+- New tier: `product_ready_default_matrix_candidate`. This means the current
+  511-cell default QuantMatrix candidate is ready for a separate explicit
+  ProductWriter activation commit. It is not itself ProductWriter activation,
+  default matrix output writing, or expanded matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_product_ready_closeout_schema.v1.json`,
+  `scripts/build_quant_matrix_product_ready_closeout.py`,
+  `tests/test_quant_matrix_product_ready_closeout.py`, and
+  `docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/`.
+- Product surface changed: additive Phase 10 closeout outputs only:
+  `quant_matrix_product_ready_closeout_summary.json` and
+  `quant_matrix_product_ready_closeout_checks.tsv`.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. The checker revalidates Phase 8 promotion
+  packet v2 and Phase 9 default activation dry-run, checks their source hashes,
+  and rebuilds the closeout checklist from those inputs.
+- Current validation result: closeout status is `pass`; checklist rows
+  `promotion_packet_v2_validated`, `science_evidence_complete`,
+  `default_activation_dry_run_passed`, `expected_diff_closed`,
+  `authority_unchanged`, and `product_ready_candidate_closeout` all pass. The
+  summary records `product_ready_candidate=true`,
+  `default_quant_matrix_product_ready_candidate=true`,
+  `may_activate_default_quant_matrix_with_explicit_contract=true`,
+  `requires_product_writer_activation_commit=true`,
+  `explicit_activation_not_in_this_commit=true`, `write_authority=false`, and
+  `default_matrix_files_written=false`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix files, workbook, GUI, selected peak, selected area, counted detection,
+  review/replay behavior, current 511-cell writer authority, or broad Backfill
+  authority changed.
+- Status-index update: not needed for Phase 10 because no active lane authority,
+  writer scope, row count, or output-changing flag changed. The status-index
+  writer row remains the current 511-cell Backfill scope only.
+- Next checkpoint: explicit ProductWriter activation commit, if/when requested,
+  with expected-diff output tests and public-surface review.
+
+### 2026-06-19 - QuantMatrix Default Activation Dry-Run v1
+
+- Lane: Backfill default matrix activation dry-run / Phase 9.
+- Previous tier: Phase 8 produced a `production_ready_candidate_packet`, but no
+  gate had replayed the actual manifest-driven default matrix activation path
+  against the Phase 7 real bundle expected diff.
+- New tier: default activation dry-run gate pass. This permits Phase 10 Product
+  Ready closeout review to proceed, but it is still a no-RAW, read-only
+  validation artifact: no ProductWriter default extraction, default matrix
+  output, selected peak/area/counting behavior, workbook/GUI behavior,
+  review/replay behavior, broad Backfill unpark, or new matrix write changed.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_default_activation_dry_run_schema.v1.json`,
+  `scripts/build_quant_matrix_default_activation_dry_run.py`,
+  `tests/test_quant_matrix_default_activation_dry_run.py`, and
+  `docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`.
+- Product surface changed: additive Phase 9 dry-run outputs only:
+  `quant_matrix_default_activation_dry_run_summary.json` and
+  `default_activation_dry_run_comparison.tsv`. The dry-run activation writes
+  temporary outputs only during build/check and commits no duplicate full matrix
+  outputs.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. Focused tests cover schema parity, candidate
+  expected-diff replay, stale comparison rejection, non-current 511 bundle
+  rejection, and CLI round trip.
+- Current validation result: default activation dry-run gate is `pass`; the
+  Phase 9 rerun writes `511` expected Backfill rows, `511` accepted Backfill
+  cells, and `0` unused expected-diff rows in temporary output. The rerun's
+  `quant_matrix`, `cell_provenance`, `row_summary`, and
+  `expected_diff_summary` hashes match the Phase 7 reference bundle exactly.
+  The summary records `dry_run_only=true`, `write_authority=false`,
+  `default_quant_matrix_changed=false`, and
+  `default_matrix_files_written=false`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix files, workbook, GUI, selected peak, selected area, counted detection,
+  review/replay behavior, current 511-cell writer authority, or broad Backfill
+  authority changed.
+- Remaining blocker: Product Ready still needs Phase 10 closeout to collect the
+  Phase 8/9 gates, review residual risk, and state the activation contract.
+- Next checkpoint: Phase 10 Product Ready closeout gate.
+
+### 2026-06-19 - QuantMatrix Promotion Packet v2
+
+- Lane: Backfill promotion evidence packet / Phase 8.
+- Previous tier: Phase 7 produced a real 511-cell `QuantMatrixVersion` bundle
+  with downstream-impact smoke, but readiness was still
+  `contract_ready_science_inconclusive` because the real downstream artifact had
+  not been rebound with the existing large-cohort and heldout-oracle evidence.
+- New tier: `production_ready_candidate_packet` for the packet/readiness gate
+  only. This is not ProductWriter default extraction, default matrix authority,
+  selected peak/area/counting behavior, workbook/GUI behavior, review/replay
+  behavior change, broad Backfill unpark, or a new matrix write.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_promotion_packet_v2_schema.v1.json`,
+  `scripts/build_quant_matrix_promotion_packet_v2.py`,
+  `tests/test_quant_matrix_promotion_packet_v2.py`, and
+  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`.
+- Product surface changed: additive Phase 8 promotion packet outputs only:
+  `quant_matrix_promotion_packet_v2_summary.json`,
+  `quant_matrix_validation_evidence_v1.json`,
+  `quant_matrix_validation_evidence_rows.tsv`,
+  `quant_matrix_validation_evidence_summary.json`, copied `artifacts/*`, and
+  `real_bundle_readiness/`. The packet copies the downstream-impact smoke bundle
+  plus packet-local downstream input TSVs so content validation can rerun
+  without trusting tier strings alone.
+- Evidence: default `--check-only` fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`. Focused tests cover schema parity, real-bundle
+  candidate readiness, stale real-bundle readiness rejection, non-current 511
+  bundle rejection, and CLI round trip.
+- Current validation result: large-cohort, heldout-oracle, and real
+  downstream-impact evidence all pass. Real-bundle readiness is
+  `production_ready_candidate_packet`, `contract_correctness_status=pass`,
+  `scientific_confidence_status=pass`, `production_ready=true`, and
+  `may_promote_default_quant_matrix=true`.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix authority, workbook, GUI, selected peak, selected area, counted
+  detection, review/replay behavior, current 511-cell writer authority, or
+  broad Backfill authority changed.
+- Remaining blocker: default matrix activation still needs a Phase 9 dry-run
+  expected-diff gate before any public writer/default behavior changes.
+- Next checkpoint: Phase 9 default-matrix activation dry-run expected-diff gate.
+
+### 2026-06-19 - QuantMatrix Real Bundle v1
+
+- Lane: Backfill real `QuantMatrixVersion` bundle assembly / Phase 7.
+- Previous tier: Phase 6 defined a downstream-impact smoke contract, but the
+  durable productization packet still did not include a real
+  `QuantMatrixVersion` bundle produced from the current 511-cell authority
+  replay.
+- New tier: unchanged. This is a no-RAW, read-only real-bundle builder/checker
+  and validation artifact, not a maturity-tier promotion, ProductWriter default
+  extraction change, selected peak/area/counting change, workbook/GUI change,
+  review/replay behavior change, broad Backfill unpark, or new matrix
+  authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_real_bundle_schema.v1.json`,
+  `scripts/build_quant_matrix_real_bundle.py`,
+  `tests/test_quant_matrix_real_bundle.py`, and
+  `docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
+- Product surface changed: additive Phase 7 bundle outputs only. The bundle
+  contains a `ProductionAcceptanceManifest`, expected diff,
+  `QuantMatrixVersion`, cell provenance, row summary, review summary/report,
+  downstream-impact smoke, and contract-only readiness sidecars generated from
+  the current source run
+  `seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`.
+- Evidence: default `--check-only` now fail-closes to
+  `source_run_id=seed-guard-realdata-85raw-generated-policy-policy-observed-oracle-20260617`,
+  `downstream_scope=current_511_authority_replay`, and
+  `accepted_backfill_count=511`; synthetic/partial bundles require explicit
+  test overrides and cannot satisfy the default Phase 7 check. Focused tests
+  cover schema parity, self-validation, source-copy tamper rejection,
+  non-current 511 bundle rejection, downstream rows deletion rejection, and CLI
+  round trip.
+- Current validation result: the real bundle check passes, contract correctness
+  passes, downstream-impact smoke passes, and readiness remains
+  `contract_ready_science_inconclusive` with `production_ready=false` and
+  `may_promote_default_quant_matrix=false` before Phase 8 evidence binding.
+- Product surface not changed: No ProductWriter default extraction, default
+  matrix authority, workbook, GUI, selected peak, selected area, counted
+  detection, review/replay behavior, current 511-cell writer authority, or
+  broad Backfill authority changed.
+- Remaining blocker: historical for Phase 7. Phase 8 now binds the real
+  downstream-impact artifact into promotion packet v2; default matrix activation
+  still requires a later expected-diff gate.
+- Next checkpoint: historical. Use `QuantMatrix Promotion Packet v2` above for
+  the current promotion candidate packet.
+
+### 2026-06-19 - QuantMatrix Downstream Impact Smoke v1
+
+- Lane: Backfill downstream-impact evidence contract / Phase 6.
+- Previous tier: `QuantMatrix Promotion Validation Packet v1` required
+  downstream-impact evidence, but the tier could only bind artifact relpath,
+  hash, and `downstream_scope`; it did not define the artifact content needed to
+  distinguish a real `QuantMatrixVersion` downstream smoke from a contract
+  fixture or arbitrary tier string.
+- New tier: unchanged. This is a no-RAW, read-only downstream-impact contract
+  and checker/builder surface, not a maturity-tier promotion, ProductWriter
+  default extraction, selected peak/area/counting change, workbook/GUI change,
+  or new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_downstream_impact_smoke_schema.v1.json`,
+  `scripts/build_quant_matrix_downstream_impact_smoke.py`, and
+  `xic_extractor/alignment/quant_matrix_downstream_impact.py`.
+- Product surface changed: additive downstream-impact smoke outputs only:
+  `quant_matrix_downstream_impact_smoke.json` and
+  `quant_matrix_downstream_impact_rows.tsv`. The existing validation packet and
+  promotion readiness check now content-validate the
+  `downstream_impact_smoke` artifact instead of trusting a tier string alone.
+  Validation packets copy the downstream smoke bundle as summary plus rows TSV.
+- Evidence: focused tests cover schema parity, real-bundle pass behavior,
+  contract-fixture no-promotion behavior, row-metrics hash drift rejection,
+  input-artifact hash drift rejection, recomputed row/metric mismatch rejection,
+  script `--check-only` round trip, promotion-readiness science-ready fixture
+  content validation, validation-packet rejection of downstream contract
+  fixtures, and validation-packet acceptance of real downstream bundles.
+- Current validation result: Phase 6 contract tests pass, but the current
+  durable promotion packet still remains `contract_ready_science_inconclusive`
+  until a real downstream-impact artifact is generated from a real
+  `QuantMatrixVersion` bundle and rebound into the packet.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: production-ready promotion still needs a real
+  `QuantMatrixVersion` bundle plus downstream-impact smoke generated from that
+  bundle. Contract fixtures cannot satisfy promotion.
+- Next checkpoint: assemble the real `QuantMatrixVersion` bundle and run the
+  downstream-impact smoke against it before building a promotion packet v2.
+
+### 2026-06-19 - QuantMatrix Promotion Validation Packet v1
+
+- Lane: Backfill validation/promotion evidence packet / Phase 5 follow-up.
+- Previous tier: `QuantMatrix Promotion Readiness v1` could parse validation
+  evidence rows, but no durable packet existed to bind source artifacts, copied
+  packet artifacts, hashes, and science-evidence gaps.
+- New tier: unchanged. This is a no-RAW, read-only validation evidence packet
+  and checker/builder surface, not a maturity-tier promotion, ProductWriter
+  default extraction, or new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_validation_evidence_schema.v1.json`,
+  `scripts/build_quant_matrix_promotion_validation_packet.py`,
+  `xic_extractor/alignment/quant_matrix_validation_packet.py`, and
+  `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
+- Product surface changed: additive validation packet outputs only:
+  `quant_matrix_validation_evidence_v1.json`,
+  `quant_matrix_validation_evidence_rows.tsv`,
+  `quant_matrix_validation_evidence_summary.json`, copied `artifacts/*`, and a
+  labeled readiness integration fixture under
+  `readiness_integration_fixture/`.
+- Evidence: the packet copies and hash-binds the existing no-RAW 85RAW
+  consolidated standard-peak activation input summary and the 20-case heldout
+  trace reintegration oracle smoke summary. Focused tests cover schema parity,
+  source/copy hash recording, copied-artifact hash drift rejection, authority
+  drift rejection, source-root binding, Phase 5 checker integration, rows/summary
+  drift rejection, readiness fixture rerun, and CLI `--check-only` round trip.
+- Current validation result: large-cohort evidence is `pass`,
+  heldout-oracle evidence is `pass`, downstream-impact evidence is `missing`.
+  The readiness integration fixture is `contract_ready_science_inconclusive`,
+  `production_ready=false`, and `may_promote_default_quant_matrix=false`.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: production-ready promotion still needs a real
+  downstream-impact smoke artifact and a real `QuantMatrixVersion` contract
+  bundle. Do not treat this packet as `production_ready`.
+- Next checkpoint: define and validate the downstream-impact evidence source
+  for accepted Backfill values; do not revive scoring or broad Backfill as the
+  promotion path.
+
+### 2026-06-19 - QuantMatrix Promotion Readiness v1
+
+- Lane: Backfill validation/promotion readiness / Phase 5.
+- Previous tier: Phase 4 `QuantMatrixVersion Review Report v1` provided a
+  review-only surface but did not define when contract correctness can be
+  separated from scientific production readiness.
+- New tier: unchanged. This is a read-only readiness checker and public output
+  schema, not a maturity-tier promotion, ProductWriter default extraction, or
+  new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_promotion_readiness_schema.v1.json`,
+  `scripts/check_quant_matrix_promotion_readiness.py`, and
+  `xic_extractor/alignment/quant_matrix_promotion.py`.
+- Product surface changed: additive readiness sidecars only:
+  `quant_matrix_promotion_readiness_summary.json` and
+  `quant_matrix_promotion_readiness_checks.tsv`.
+- Evidence: focused tests cover schema-column parity, contract-ready but
+  science-inconclusive behavior, focused-test/8RAW-only no-promotion guard,
+  unbound tier/status-string no-promotion guard, duplicate validation tier
+  fail-closed behavior, artifact-bound synthetic large-cohort + oracle +
+  downstream pass behavior, invalid accepted-cell hash format, contract-failure
+  dominance, script entrypoint, and `--require-production-ready` nonzero exit
+  when science evidence is missing.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Production-ready claim: the focused tests prove the gate behavior only.
+  Current status is contract-ready/science-inconclusive unless a later explicit
+  validation packet supplies artifact-bound passing large-cohort,
+  heldout-oracle or manual review, and downstream-impact evidence.
+- Remaining blocker: actual promotion still needs a named validation tier and
+  evidence packet with downstream-impact evidence. Do not run RAW/85RAW unless
+  an active goal names that tier.
+- Next checkpoint: current evidence packet is represented by
+  `QuantMatrix Promotion Validation Packet v1` above.
+
+### 2026-06-19 - QuantMatrixVersion Review Report v1
+
+- Lane: Backfill gallery/report alignment / Phase 4.
+- Previous tier: Phase 3 `QuantMatrixVersion Activation v1` produced explicit
+  quant/provenance/row/source sidecars but did not provide a user-facing review
+  surface.
+- New tier: unchanged. This is a review-only report adapter and public output
+  schema, not a maturity-tier promotion, ProductWriter default extraction, or
+  new matrix authority.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`,
+  `scripts/build_quant_matrix_version_report.py`, and
+  `xic_extractor/alignment/quant_matrix_report.py`.
+- Product surface changed: additive review outputs only:
+  `quant_matrix_review_rows.tsv`, `quant_matrix_review_summary.json`, and
+  `quant_matrix_review_report.html`.
+- Evidence: focused tests cover schema-column parity, review row rendering for
+  detected plus accepted Backfill cells, summary counts, manifest enrichment,
+  source-summary manifest file-hash drift, hash/authority-bound manifest joins,
+  fail-closed missing manifest join, HTML escaping, and script entrypoint.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: none for the review-only report adapter itself. Phase 5
+  readiness separation is represented by `QuantMatrix Promotion Readiness v1`
+  above.
+- Next checkpoint: historical. Use the Phase 5 readiness checker above before
+  any promotion packet.
+
+### 2026-06-19 - QuantMatrixVersion Activation v1
+
+- Lane: Backfill quant-matrix activation / Phase 3.
+- Previous tier: Phase 2 `ProductionAcceptanceManifest v1` schema/checker was
+  an authority precursor and did not write matrix outputs.
+- New tier: unchanged. This is an explicit activation adapter and public output
+  schema for manifest-authorized Backfill values, not a maturity-tier
+  promotion and not ProductWriter default extraction.
+- Current artifacts:
+  `docs/superpowers/specs/quant_matrix_version_schema.v1.json`,
+  `scripts/build_quant_matrix_version.py`, and
+  `xic_extractor/alignment/quant_matrix_version.py`.
+- Product surface changed: additive explicit outputs only:
+  `quant_matrix.tsv`, `cell_provenance.tsv`, `row_summary.tsv`,
+  `expected_diff_summary.tsv`, and `source_summary.tsv`.
+- Evidence: focused tests cover writing detected plus accepted Backfill values
+  from a validated `ProductionAcceptanceManifest`, expected-diff enforcement,
+  provenance completeness, row summary counts, detected-only view is reconstructable
+  from `quant_matrix + cell_provenance`, missing expected-diff
+  rejection, and detected-value overwrite rejection.
+- Product surface not changed: No ProductWriter default extraction, workbook,
+  GUI, selected peak, selected area, counted detection, review/replay behavior,
+  current 511-cell writer authority, or broad Backfill authority changed.
+- Remaining blocker: validation/promotion readiness still needs a separate
+  Phase 5 gate before any production-readiness claim.
+- Next checkpoint: Phase 4 Gallery/Report Alignment was the next phase from
+  this checkpoint and is now represented by
+  `QuantMatrixVersion Review Report v1` above.
+
+### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker
+
+- Lane: Backfill quant-matrix authority contract / Phase 2.
+- Previous tier: Phase 1 lockbox shadow adapter was
+  `shadow_only=true`, `write_authority=false`, and allowed only
+  `define_production_acceptance_manifest_v1`.
+- New tier: unchanged. This is an additive contract/checker surface and a
+  precursor to Phase 3 activation, not ProductWriter authority and not a
+  maturity-tier promotion.
+- Current artifact:
+  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
+  It defines `ProductionAcceptanceManifest v1`, where the authority key is
+  `peak_hypothesis_id + sample_stem`; `feature_family_id is context/provenance only`.
+- Evidence: `scripts/check_production_acceptance_manifest.py` validates the
+  schema and any candidate manifest TSV. The checker enforces acceptance
+  vocabulary, source/doublet artifact path containment, existence, and
+  file-hash match, source row hash and canonical manifest sha, finite
+  non-negative accepted quant values, Backfill-fraction consistency,
+  manual-negative hard stop, blocked doublet hard stop, authority-lane
+  contradictions, primary-key uniqueness, report-only prevalence risks, and
+  strict risk-specific closure.
+- Product surface changed: additive schema JSON, checker script, focused tests,
+  control-plane section, and handoff only. No ProductWriter, matrix, workbook,
+  selected peak/area, counted detection, workbook schema, CLI/config,
+  extraction default, GUI, broad Backfill, or truth-label behavior changed.
+- Validation:
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_production_acceptance_manifest.py`
+  returned `ProductionAcceptanceManifest schema is valid.`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_production_acceptance_manifest_contract.py -v --tb=short`
+  passed `16`;
+  `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py -v --tb=short`
+  passed `13`.
+- Remaining blocker: this checker can validate write-authority rows, but it does
+  not write the default matrix. Any matrix behavior still requires Phase 3
+  QuantMatrixVersion Activation with expected-diff, `cell_provenance`, and
+  focused output tests.
+- Next checkpoint: Phase 3 QuantMatrixVersion Activation, not default matrix
+  activation from a shadow/report/gallery/candidate artifact.
+
 ### 2026-06-19 - lockbox_shadow_automation_experiment_v1
 
 - Lane: Peak-choice truth acquisition / `peak_choice_truth_lockbox_v1`.
@@ -2848,11 +3452,12 @@ at that older checkpoint, not the latest release claim.
   returned `Productization state index is consistent and fail-closed.`;
   `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests/test_productization_state_index.py tests/test_lockbox_shadow_automation_experiment_design.py -v --tb=short`
   passed `25`.
-- Remaining blocker: this adapter cannot grant writer authority. Any
-  ProductWriter authority expansion still needs Phase 2
-  `ProductionAcceptanceManifest v1`, expected-diff, and focused output tests.
-- Next checkpoint: define `ProductionAcceptanceManifest v1` in a separate goal.
-  Do not promote shadow results to writer authority.
+- Remaining blocker: this adapter cannot grant writer authority. Phase 2 now
+  defines the separate `ProductionAcceptanceManifest v1` schema/checker; any
+  ProductWriter authority expansion still needs Phase 3 QuantMatrixVersion
+  Activation with expected-diff and focused output tests.
+- Next checkpoint: Phase 3 QuantMatrixVersion Activation. Do not promote shadow
+  results to writer authority.
 
 ### 2026-06-18 - productization_status_index_v1
 

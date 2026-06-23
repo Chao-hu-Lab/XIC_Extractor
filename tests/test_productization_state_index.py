@@ -34,9 +34,20 @@ def test_only_current_backfill_scope_has_writer_authority() -> None:
         "backfill_current_write_ready_scope"
     ]
     authority = authority_rows[0]
+    assert authority["current_artifact"] == (
+        "docs/superpowers/validation/quant_matrix_default_product_activation_v1/"
+        "quant_matrix_default_product_activation_summary.json"
+    )
     assert authority["product_authority_scope"] == "backfill_policy_write_ready_rows"
     assert authority["row_count"] == "511"
     assert authority["may_touch_matrix"] == "TRUE"
+    assert authority["may_change_quant_output"] == "TRUE"
+    assert authority["may_change_workbook"] == "FALSE"
+    assert authority["may_change_selected_peak"] == "FALSE"
+    assert authority["may_change_selected_area"] == "FALSE"
+    assert authority["may_change_counted_detection"] == "FALSE"
+    assert authority["product_effect"] == "default_quant_matrix_product_output"
+    assert authority["public_surface"] == "quant_matrix_default_product_activation_v1"
 
 
 def test_peak_choice_lockbox_status_points_to_shadow_automation_design() -> None:
@@ -73,6 +84,299 @@ def test_control_plane_lockbox_shadow_adapter_route_is_current() -> None:
     assert "ProductionAcceptanceManifest v1" in section
     assert "implement the shadow-only scoring experiment" not in section
     assert "No ProductWriter, matrix, workbook" in section
+    assert "Phase 2 `ProductionAcceptanceManifest v1`, expected-diff" not in section
+    assert "define `ProductionAcceptanceManifest v1` in a separate goal" not in section
+    assert "Phase 3 QuantMatrixVersion Activation" in section
+
+
+def test_control_plane_production_acceptance_manifest_contract_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker",
+        "### 2026-06-19 - lockbox_shadow_automation_experiment_v1",
+    )
+
+    assert "production_acceptance_manifest_schema.v1.json" in section
+    assert "scripts/check_production_acceptance_manifest.py" in section
+    assert "peak_hypothesis_id + sample_stem" in section
+    assert "feature_family_id is context/provenance only" in section
+    assert "No ProductWriter, matrix, workbook" in section
+    assert "Phase 3 QuantMatrixVersion Activation" in section
+
+
+def test_control_plane_quant_matrix_version_activation_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrixVersion Activation v1",
+        "### 2026-06-19 - ProductionAcceptanceManifest v1 schema/checker",
+    )
+
+    assert "quant_matrix_version_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_version.py" in section
+    assert "quant_matrix.tsv" in section
+    assert "cell_provenance.tsv" in section
+    assert "row_summary.tsv" in section
+    assert "expected-diff" in section
+    assert "detected-only view is reconstructable" in section
+    assert "No ProductWriter default extraction" in section
+    assert "Phase 4 Gallery/Report Alignment" in section
+
+
+def test_control_plane_quant_matrix_review_report_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrixVersion Review Report v1",
+        "### 2026-06-19 - QuantMatrixVersion Activation v1",
+    )
+
+    assert "quant_matrix_review_report_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_version_report.py" in section
+    assert "quant_matrix_review_rows.tsv" in section
+    assert "quant_matrix_review_summary.json" in section
+    assert "quant_matrix_review_report.html" in section
+    assert "review-only report adapter" in section
+    assert "No ProductWriter default extraction" in section
+    assert "QuantMatrix Promotion Readiness v1" in section
+
+
+def test_control_plane_quant_matrix_promotion_readiness_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Promotion Readiness v1",
+        "### 2026-06-19 - QuantMatrixVersion Review Report v1",
+    )
+
+    assert "quant_matrix_promotion_readiness_schema.v1.json" in section
+    assert "scripts/check_quant_matrix_promotion_readiness.py" in section
+    assert "quant_matrix_promotion_readiness_summary.json" in section
+    assert "quant_matrix_promotion_readiness_checks.tsv" in section
+    assert "contract-ready/science-inconclusive" in section
+    assert "focused tests prove the gate behavior only" in section
+    assert "artifact-bound passing large-cohort" in section
+    assert "No ProductWriter default extraction" in section
+    assert "broad Backfill authority changed" in section
+    assert "Do not run RAW/85RAW unless" in section
+    assert "an active goal names that tier" in section
+
+
+def test_control_plane_quant_matrix_validation_packet_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Promotion Validation Packet v1",
+        "### 2026-06-19 - QuantMatrix Promotion Readiness v1",
+    )
+
+    assert "quant_matrix_validation_evidence_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_promotion_validation_packet.py" in section
+    assert "quant_matrix_validation_evidence_v1.json" in section
+    assert "quant_matrix_validation_evidence_rows.tsv" in section
+    assert "readiness_integration_fixture" in section
+    assert "large-cohort evidence is `pass`" in section
+    assert "heldout-oracle evidence is `pass`" in section
+    assert "downstream-impact evidence is `missing`" in section
+    assert "`production_ready=false`" in section
+    assert "`may_promote_default_quant_matrix=false`" in section
+    assert "No ProductWriter default extraction" in section
+    assert "Do not treat this packet as `production_ready`" in section
+
+
+def test_control_plane_quant_matrix_product_ready_closeout_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Product Ready Closeout v1",
+        "### 2026-06-19 - QuantMatrix Default Activation Dry-Run v1",
+    )
+
+    assert "quant_matrix_product_ready_closeout_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_product_ready_closeout.py" in section
+    assert "quant_matrix_product_ready_closeout_v1" in section
+    assert "`product_ready_default_matrix_candidate`" in section
+    assert "`requires_product_writer_activation_commit=true`" in section
+    assert "`explicit_activation_not_in_this_commit=true`" in section
+    assert "Status-index update: not needed" in section
+    assert "No ProductWriter default extraction" in section
+    assert "current 511-cell writer authority" in section
+
+
+def test_control_plane_quant_matrix_default_product_activation_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    section = _section(
+        text,
+        "### 2026-06-19 - QuantMatrix Default Product Activation v1",
+        "### 2026-06-19 - QuantMatrix Product Ready Closeout v1",
+    )
+
+    assert "quant_matrix_default_product_activation_schema.v1.json" in section
+    assert "scripts/build_quant_matrix_default_product_activation.py" in section
+    assert "quant_matrix_default_product_activation_v1" in section
+    assert "`product_ready_default_matrix_activated`" in section
+    assert "`default_output/quant_matrix.tsv`" in section
+    assert "`cell_provenance.tsv`" in section
+    assert "`row_summary.tsv`" in section
+    assert "511 expected" in section
+    assert "511 accepted Backfill" in section
+    assert "17489 detected" in section
+    assert "No workbook, GUI, selected peak" in section
+    assert "Status-index update: updated" in section
+
+
+def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    summary = _section(
+        text,
+        "Lockbox Shadow Scoring Contract Adapter v1 turns",
+        "Missing-Overlay Evidence Recovery v1",
+    )
+
+    assert "Phase 2" in summary
+    assert "`ProductionAcceptanceManifest v1` is now defined" in summary
+    assert "Phase 3" in summary
+    assert "Phase 3 `QuantMatrixVersion Activation`" in summary
+    assert "is now implemented as an explicit manifest-driven activation" in summary
+    assert "Phase 4" in summary
+    assert "`Gallery/Report Alignment` is now implemented" in summary
+    assert "Phase 5" in summary
+    assert "`Validation/Promotion Readiness` is now" in summary
+    assert "contract correctness" in summary
+    assert "scientific confidence" in summary
+    assert "`QuantMatrix Promotion Validation Packet v1`" in summary
+    assert "`contract_ready_science_inconclusive`" in summary
+    assert "`may_promote_default_quant_matrix=false`" in summary
+    assert "Phase 6" in summary
+    assert "tier/status strings" in summary
+    assert "Phase 7" in summary
+    assert "current real\n511-cell `QuantMatrixVersion` bundle" in summary
+    assert "Phase 8" in summary
+    assert "`QuantMatrix Promotion Packet v2`" in summary
+    assert "`production_ready_candidate_packet`" in summary
+    assert "`production_ready=true`" in summary
+    assert "`may_promote_default_quant_matrix=true`" in summary
+    assert "candidate\npromotion packet" in summary
+    assert "ProductWriter default extraction" in summary
+    assert "default matrix authority" in summary
+    assert "later expected-diff activation gate" in summary
+    assert "Phase 9" in summary
+    assert "default activation dry-run expected-diff gate" in summary
+    assert "511 expected, 511 written, and 0\nunused expected-diff rows" in summary
+    assert "writes no default matrix files" in summary
+    assert "changes no\nProductWriter/default behavior" in summary
+    assert "Phase 10" in summary
+    assert "`product_ready_default_matrix_candidate`" in summary
+    assert "separate explicit ProductWriter activation commit" in summary
+    assert "default outputs, workbook/GUI" in summary
+    assert "current 511-cell authority" in summary
+    assert "Phase 11" in summary
+    assert "`product_ready_default_matrix_activated`" in summary
+    assert "default output `quant_matrix.tsv`" in summary
+    assert "511 accepted Backfill" in summary
+    assert "large-cohort" in summary
+    assert "heldout-oracle evidence" in summary
+    assert "`Validation/Promotion Readiness`" in summary
+    assert "`QuantMatrixVersion Activation`" in summary
+    assert "Next checkpoint is Phase 2" not in summary
+    assert "Next checkpoint is Phase 3" not in summary
+    assert "Next checkpoint is Phase 4" not in summary
+    assert "Next checkpoint is Phase 5" not in summary
+
+
+def test_specs_readme_lists_quant_matrix_version_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_version_schema.v1.json" in text
+    assert "cell_provenance" in text
+    assert "row_summary" in text
+    assert "expected-diff" in text
+
+
+def test_specs_readme_lists_quant_matrix_review_report_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_review_report_schema.v1.json" in text
+    assert "review rows" in text
+    assert "summary JSON" in text
+    assert "HTML report" in text
+    assert "does not grant ProductWriter or matrix authority" in text
+
+
+def test_specs_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_promotion_readiness_schema.v1.json" in text
+    assert "readiness summary JSON" in text
+    assert "checks" in text
+    assert "contract correctness from scientific confidence" in text
+    assert "focused tests and 8RAW smoke evidence cannot claim" in text
+    assert "artifact-bound large-cohort" in text
+
+
+def test_specs_readme_lists_quant_matrix_validation_evidence_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_validation_evidence_schema.v1.json" in text
+    assert "artifact-bound" in text
+    assert "source artifact paths/hashes" in text
+    assert "`write_authority=false`" in text
+
+
+def test_specs_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_promotion_packet_v2_schema.v1.json" in text
+    assert "`production_ready_candidate_packet`" in text
+    assert "large-cohort" in text
+    assert "heldout-oracle" in text
+    assert "real downstream-impact smoke" in text
+    assert "default matrix authority unchanged" in text
+
+
+def test_specs_readme_lists_quant_matrix_default_activation_dry_run_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_default_activation_dry_run_schema.v1.json" in text
+    assert "temporary directory" in text
+    assert "expected-diff summary hashes" in text
+    assert "comparison/summary artifacts" in text
+    assert "ProductWriter defaults and default matrix outputs remain unchanged" in text
+
+
+def test_specs_readme_lists_quant_matrix_product_ready_closeout_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_product_ready_closeout_schema.v1.json" in text
+    assert "`product_ready_default_matrix_candidate`" in text
+    assert "separate explicit ProductWriter activation commit" in text
+    assert "default outputs or matrix authority" in text
+
+
+def test_specs_readme_lists_quant_matrix_default_product_activation_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+        encoding="utf-8",
+    )
+
+    assert "quant_matrix_default_product_activation_schema.v1.json" in text
+    assert "`default_output/quant_matrix.tsv`" in text
+    assert "current\n  511-cell authority contract" in text
+    assert "quantification values, not detections or truth claims" in text
 
 
 def test_checker_rejects_parked_broad_backfill_authority(tmp_path: Path) -> None:
