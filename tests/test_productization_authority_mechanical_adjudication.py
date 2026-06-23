@@ -192,5 +192,3 @@ def _parse_semicolon_pairs(value: str) -> dict[str, str]:
         key, _, item = part.partition("=")
         parsed[key] = item
     return parsed
-
-
