@@ -27,6 +27,30 @@ python -m scripts.agent_sandbox_doctor
   used synthetic tests, 8RAW, 85RAW, targeted benchmark, or manual EIC/MS2
   review.
 
+## Artifact Boundary Gate
+
+Default CI must run in a clean checkout without the user's ignored local
+artifacts. A checker or test that needs any of these paths is a local validation
+check, not a default CI gate, unless the required bytes are tracked minimal
+fixtures:
+
+- `output/`;
+- `.worktrees/`;
+- `local_validation_artifacts/`;
+- rendered HTML/PNG review bundles;
+- large RAW-derived TSV/CSV files externalized from version control.
+
+For externalized artifacts, default checks may validate schema, manifest fields,
+relative path shape, row counts, hash format, and committed replacement
+summaries. They must not fail because the ignored local file is absent. Presence
+and byte-hash checks for ignored artifacts require an explicit opt-in flag such
+as `--require-rendered-local` or `--require-externalized-local`.
+
+When a PR both removes tracked generated outputs and changes tests/checkers,
+verify the same PR is self-contained: the removal, manifest update, checker
+fallback, and focused tests must all live in the same PR or in an already-merged
+prerequisite. Do not assume a later cleanup PR will make an earlier PR pass.
+
 ## RAW And Long Runs
 
 - Do not launch 85RAW or likely long RAW runs through background
