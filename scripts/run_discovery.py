@@ -143,6 +143,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=20.0,
     )
     parser.add_argument("--product-search-ppm", type=_positive_float, default=50.0)
+    parser.add_argument(
+        "--ms2-precursor-tol-da",
+        type=_positive_float,
+        default=float(CANONICAL_SETTINGS_DEFAULTS["ms2_precursor_tol_da"]),
+        help=(
+            "MS2 filter precursor / isolation window tolerance in Da for "
+            "product+neutral-loss inferred discovery seeds."
+        ),
+    )
     parser.add_argument("--nl-min-intensity-ratio", type=_positive_float, default=0.01)
     parser.add_argument("--seed-rt-gap-min", type=_positive_float, default=0.20)
     parser.add_argument("--ms1-search-padding-min", type=_positive_float, default=0.20)
@@ -167,6 +176,7 @@ def _discovery_settings(args: argparse.Namespace) -> DiscoverySettings:
         "precursor_mz_tolerance_ppm": args.precursor_mz_tolerance_ppm,
         "product_mz_tolerance_ppm": args.product_mz_tolerance_ppm,
         "product_search_ppm": args.product_search_ppm,
+        "ms2_precursor_tol_da": args.ms2_precursor_tol_da,
         "nl_min_intensity_ratio": args.nl_min_intensity_ratio,
         "seed_rt_gap_min": args.seed_rt_gap_min,
         "ms1_search_padding_min": args.ms1_search_padding_min,
@@ -226,7 +236,7 @@ def _peak_config(
         ),
         peak_rel_height=float(defaults["peak_rel_height"]),
         peak_min_prominence_ratio=float(defaults["peak_min_prominence_ratio"]),
-        ms2_precursor_tol_da=float(defaults["ms2_precursor_tol_da"]),
+        ms2_precursor_tol_da=settings.ms2_precursor_tol_da,
         nl_min_intensity_ratio=settings.nl_min_intensity_ratio,
         resolver_mode=settings.resolver_mode,
         resolver_chrom_threshold=float(defaults["resolver_chrom_threshold"]),

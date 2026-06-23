@@ -16,6 +16,7 @@ _POSITIVE_FLOAT_FIELDS = frozenset(
         "precursor_mz_tolerance_ppm",
         "product_mz_tolerance_ppm",
         "product_search_ppm",
+        "ms2_precursor_tol_da",
         "nl_min_intensity_ratio",
         "seed_rt_gap_min",
         "ms1_search_padding_min",
@@ -75,6 +76,11 @@ def apply_to_discovery(
             tuning,
             "product_search_ppm",
             baseline.product_search_ppm,
+        ),
+        ms2_precursor_tol_da=_float_setting(
+            tuning,
+            "ms2_precursor_tol_da",
+            baseline.ms2_precursor_tol_da,
         ),
         nl_min_intensity_ratio=_float_setting(
             tuning,

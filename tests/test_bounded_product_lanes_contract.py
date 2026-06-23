@@ -165,7 +165,7 @@ def test_checker_rejects_status_index_extra_writer_even_with_refreshed_hash(
         for problem in problems
     )
     assert any(
-        "status index: status index must have exactly one write_authority row"
+        "status index: status index writer lanes mismatch"
         in problem
         for problem in problems
     )

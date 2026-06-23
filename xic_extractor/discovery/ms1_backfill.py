@@ -12,6 +12,10 @@ from xic_extractor.discovery.models import (
     DiscoverySeed,
     DiscoverySeedGroup,
     DiscoverySettings,
+    GroupPrecursorMzBasis,
+    NeutralLossErrorBasis,
+    assign_discovery_candidate_state,
+    build_ms1_feature_row_id,
 )
 from xic_extractor.discovery.priority import (
     assign_review_priority,
@@ -93,6 +97,11 @@ def backfill_ms1_candidates(
             ms1_height=ms1_fields.height,
             ms1_trace_quality=ms1_fields.trace_quality,
             ms1_scan_support_score=ms1_fields.scan_support_score,
+            neutral_loss_error_basis=group.neutral_loss_error_basis,
+            precursor_mz_basis=group.precursor_mz_basis,
+            scan_precursor_mz=group.scan_precursor_mz,
+            scan_precursor_delta_da=group.scan_precursor_delta_da,
+            max_scan_precursor_abs_delta_da=group.max_scan_precursor_abs_delta_da,
             seed_event_count=len(group.seeds),
             ms1_peak_found=ms1_fields.peak_found,
             ms1_apex_rt=ms1_fields.apex_rt,
@@ -163,6 +172,7 @@ def _can_merge_by_ms1_peak(
     *,
     settings: DiscoverySettings,
 ) -> bool:
+    same_ms1_feature_row = _same_ms1_feature_row_identity(first, second)
     if not (
         first.raw_file == second.raw_file
         and first.sample_stem == second.sample_stem
@@ -176,20 +186,49 @@ def _can_merge_by_ms1_peak(
             settings.precursor_mz_tolerance_ppm,
         )
         and _peak_intervals_overlap(first, second)
-        and _seed_ranges_touch_shared_peak(first, second)
+        and (_seed_ranges_touch_shared_peak(first, second) or same_ms1_feature_row)
     ):
         return False
     if first.neutral_loss_tag == second.neutral_loss_tag:
-        return _within_ppm(
+        if not _within_ppm(
             first.product_mz,
             second.product_mz,
             settings.product_mz_tolerance_ppm,
-        ) and _within_ppm(
+        ):
+            return False
+        if same_ms1_feature_row:
+            return _configured_neutral_loss_compatible(
+                first,
+                settings=settings,
+            ) and _configured_neutral_loss_compatible(second, settings=settings)
+        return _within_ppm(
             first.observed_neutral_loss_da,
             second.observed_neutral_loss_da,
             settings.nl_tolerance_ppm,
         )
     return settings.tag_combine_mode == "union"
+
+
+def _same_ms1_feature_row_identity(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> bool:
+    return (
+        bool(first.ms1_feature_row_id)
+        and first.ms1_feature_row_id == second.ms1_feature_row_id
+    )
+
+
+def _configured_neutral_loss_compatible(
+    candidate: DiscoveryCandidate,
+    *,
+    settings: DiscoverySettings,
+) -> bool:
+    return _within_ppm(
+        candidate.observed_neutral_loss_da,
+        candidate.configured_neutral_loss_da,
+        settings.nl_tolerance_ppm,
+    )
 
 
 def _merge_candidate_pair(
@@ -219,6 +258,7 @@ def _merge_candidate_pair(
         first.matched_tag_names + second.matched_tag_names,
         settings=settings,
     )
+    precursor_mz_basis = _combined_precursor_mz_basis(first, second)
     return replace(
         representative,
         seed_event_count=seed_event_count,
@@ -231,6 +271,26 @@ def _merge_candidate_pair(
         ms2_product_max_intensity=max(
             first.ms2_product_max_intensity,
             second.ms2_product_max_intensity,
+        ),
+        neutral_loss_error_basis=_combined_neutral_loss_error_basis(first, second),
+        precursor_mz_basis=precursor_mz_basis,
+        max_scan_precursor_abs_delta_da=_combined_max_scan_precursor_abs_delta_da(
+            first,
+            second,
+        ),
+        discovery_candidate_state=assign_discovery_candidate_state(
+            ms1_peak_found=True,
+            precursor_mz_basis=precursor_mz_basis,
+        ),
+        ms1_feature_row_id=build_ms1_feature_row_id(
+            sample_stem=representative.sample_stem,
+            neutral_loss_tag=representative.neutral_loss_tag,
+            precursor_mz=representative.precursor_mz,
+            best_seed_rt=representative.best_seed_rt,
+            ms1_peak_found=True,
+            ms1_apex_rt=representative.ms1_apex_rt,
+            ms1_peak_rt_start=representative.ms1_peak_rt_start,
+            ms1_peak_rt_end=representative.ms1_peak_rt_end,
         ),
         review_priority=priority,
         reason=reason,
@@ -271,6 +331,41 @@ def _candidate_peak_bounds_present(candidate: DiscoveryCandidate) -> bool:
         and candidate.ms1_peak_rt_end is not None
         and candidate.ms1_peak_rt_start <= candidate.ms1_peak_rt_end
     )
+
+
+def _combined_precursor_mz_basis(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> GroupPrecursorMzBasis:
+    if first.precursor_mz_basis == second.precursor_mz_basis:
+        return first.precursor_mz_basis
+    return "mixed"
+
+
+def _combined_neutral_loss_error_basis(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> NeutralLossErrorBasis:
+    if first.neutral_loss_error_basis == second.neutral_loss_error_basis:
+        return first.neutral_loss_error_basis
+    return "mixed"
+
+
+def _combined_max_scan_precursor_abs_delta_da(
+    first: DiscoveryCandidate,
+    second: DiscoveryCandidate,
+) -> float | None:
+    values = [
+        value
+        for value in (
+            first.max_scan_precursor_abs_delta_da,
+            second.max_scan_precursor_abs_delta_da,
+        )
+        if value is not None
+    ]
+    if not values:
+        return None
+    return max(values)
 
 
 def _peak_intervals_overlap(

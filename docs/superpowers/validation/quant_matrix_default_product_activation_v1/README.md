@@ -33,13 +33,15 @@ materialized as a product row in this activation bundle. The nearby
 feature row; it must not be used as authority for `300.1605` target-row
 presence.
 
-Current stop-ship finding: this bundle was built from discovery artifacts that
-contain no 22-25 min monoisotopic `300.1605 -> 184.113` candidate for this
+Known stale-generation finding: this bundle was built from discovery artifacts
+that contain no 22-25 min monoisotopic `300.1605 -> 184.113` candidate for this
 target, while they do contain `301.165 -> 185.116` isotope-shift candidates
-across all 85 samples. The generation-path fix is CID-NL discovery precursor
-inference plus a later regenerated discovery/alignment/default-activation
-expected-diff bundle, not deleting/demoting `301.165` and not a label bridge
-over `301.165`.
+across all 85 samples. The Discovery generation-path fix is now represented by
+`../discovery_precursor_inference_v1/`, where one-RAW validation emits both the
+inferred `300.1605` row and the valid `301.165` isotope row. This activation
+bundle still predates that fix and must be regenerated through an explicit
+discovery/alignment/default-activation expected-diff goal before it can claim
+`300.1605` target-row presence.
 
 ## Audit Use Path
 

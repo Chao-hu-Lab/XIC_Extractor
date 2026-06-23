@@ -10,9 +10,9 @@ def test_current_validation_retention_inventory_accepts_worktree() -> None:
     result = check_validation_artifact_retention()
 
     assert result.problems == ()
-    assert result.summary["inventory_rows"] == 172
-    assert result.summary["present_validation_files"] == 167
-    assert result.summary["externalized_count"] == 4
+    assert result.summary["inventory_rows"] == 207
+    assert result.summary["present_validation_files"] == 198
+    assert result.summary["externalized_count"] == 8
     assert result.summary["shrink_later_count"] == 6
 
 

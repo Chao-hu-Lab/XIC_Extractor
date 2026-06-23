@@ -36,7 +36,16 @@ DEFAULT_CONTROL_PLANE = (
     ROOT / "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
 )
 
-ALLOWED_WRITER_SCOPE = "backfill_policy_write_ready_rows"
+WRITER_LANE_AUTHORITY = {
+    "backfill_current_write_ready_scope": {
+        "authority_key": "backfill",
+        "scope": "backfill_policy_write_ready_rows",
+    },
+    "cid_nl_default_product_activation_v1": {
+        "authority_key": "cid_nl_default_activation",
+        "scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
+    },
+}
 WRITE_FORBIDDEN_STATUSES = {
     "parked",
     "blocked",
@@ -142,26 +151,40 @@ def _check_authority_boundaries(
         problems.append("authority manifest missing policy/current backfill")
         return
     allowed_scopes = set(policy.get("product_writer_allowed_scopes", []))
-    if allowed_scopes != {ALLOWED_WRITER_SCOPE}:
+    expected_scopes = {item["scope"] for item in WRITER_LANE_AUTHORITY.values()}
+    if allowed_scopes != expected_scopes:
         problems.append("authority manifest allowed scopes drifted")
     authority_rows = [row for row in rows if row.get("write_authority") == "TRUE"]
-    if len(authority_rows) != 1:
-        problems.append("status index must have exactly one write_authority row")
-    if authority_rows:
-        for row in authority_rows:
-            if row.get("lane_id") == "backfill_current_write_ready_scope":
-                if row.get("product_authority_scope") != ALLOWED_WRITER_SCOPE:
-                    problems.append("writer row has unexpected product_authority_scope")
-                if row.get("row_count") != str(
-                    current.get("current_product_authority_rows")
-                ):
-                    problems.append(
-                        "writer row_count does not match authority manifest"
-                    )
-                if row.get("may_touch_matrix") != "TRUE":
-                    problems.append("writer row must explicitly mark matrix touch")
-            else:
-                problems.append("only backfill_current_write_ready_scope may write")
+    writer_lane_ids = {row.get("lane_id", "") for row in authority_rows}
+    expected_writer_lane_ids = set(WRITER_LANE_AUTHORITY)
+    if writer_lane_ids != expected_writer_lane_ids:
+        problems.append(
+            "status index writer lanes mismatch: "
+            f"expected {sorted(expected_writer_lane_ids)!r}, "
+            f"found {sorted(writer_lane_ids)!r}",
+        )
+    for row in authority_rows:
+        lane_id = row.get("lane_id", "")
+        expected = WRITER_LANE_AUTHORITY.get(lane_id)
+        if expected is None:
+            problems.append(f"unregistered writer lane: {lane_id}")
+            continue
+        if row.get("product_authority_scope") != expected["scope"]:
+            problems.append("writer row has unexpected product_authority_scope")
+        current_scope = _mapping_path(
+            authority,
+            "current_authority",
+            expected["authority_key"],
+        )
+        if not isinstance(current_scope, Mapping):
+            problems.append(f"authority manifest missing {expected['authority_key']}")
+            continue
+        if row.get("row_count") != str(
+            current_scope.get("current_product_authority_rows")
+        ):
+            problems.append("writer row_count does not match authority manifest")
+        if row.get("may_touch_matrix") != "TRUE":
+            problems.append("writer row must explicitly mark matrix touch")
 
     for index, row in enumerate(rows, start=2):
         status = row.get("readiness_status", "")
@@ -179,7 +202,7 @@ def _check_authority_boundaries(
             )
         }
         output_change = any(value == "TRUE" for value in output_change_flags.values())
-        is_writer_lane = row.get("lane_id") == "backfill_current_write_ready_scope"
+        is_writer_lane = row.get("lane_id") in WRITER_LANE_AUTHORITY
         if not is_writer_lane:
             if scope:
                 problems.append(f"row {index}: non-writer row has authority scope")
