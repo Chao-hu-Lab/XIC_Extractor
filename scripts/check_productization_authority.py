@@ -32,7 +32,14 @@ DEFAULT_INDEX = (
 
 APPROVED_SCOPE = "backfill_policy_write_ready_rows"
 CID_NL_APPROVED_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"
-APPROVED_SCOPES = {APPROVED_SCOPE, CID_NL_APPROVED_SCOPE}
+BACKFILL_EXPANSION_CLEAN_TARGET_SCOPE = (
+    "backfill_expansion_clean_target_selective_activation_84_cells"
+)
+APPROVED_SCOPES = {
+    APPROVED_SCOPE,
+    CID_NL_APPROVED_SCOPE,
+    BACKFILL_EXPANSION_CLEAN_TARGET_SCOPE,
+}
 PARKED_BROAD_BACKFILL = "broad_backfill"
 NEGATIVE_SCOPE_IDS = {
     "all_stability",
@@ -61,7 +68,7 @@ def check_productization_authority(
     _check_schema_and_index(schema, header, rows, problems)
     _check_index_authority(manifest, rows, problems)
     _check_source_hashes(manifest, rows, repo_root, problems)
-    _check_cid_nl_source_hashes(manifest, repo_root, problems)
+    _check_retained_authority_source_hashes(manifest, repo_root, problems)
     return problems
 
 
@@ -106,6 +113,31 @@ def _check_manifest(manifest: Mapping[str, Any], problems: list[str]) -> None:
         for key, value in expected_cid_nl.items():
             if cid_nl.get(key) != value:
                 problems.append(f"manifest CID-NL {key} must be {value!r}")
+
+    clean_target = _mapping_path(
+        manifest,
+        "current_authority",
+        "backfill_expansion_clean_target_selective_activation",
+    )
+    if clean_target is None:
+        problems.append(
+            "manifest missing current_authority."
+            "backfill_expansion_clean_target_selective_activation",
+        )
+    else:
+        expected_clean_target = {
+            "current_product_authority_rows": 84,
+            "candidate_peak_rows": 7,
+            "projected_held_cell_rows": 28,
+            "boundary_review_excluded_cell_rows": 37,
+            "off_target_hold_or_remap_excluded_cell_rows": 29,
+            "authority_scope": BACKFILL_EXPANSION_CLEAN_TARGET_SCOPE,
+        }
+        for key, value in expected_clean_target.items():
+            if clean_target.get(key) != value:
+                problems.append(
+                    f"manifest Backfill clean-target {key} must be {value!r}",
+                )
 
     parked = _mapping_path(manifest, "parked_lanes", PARKED_BROAD_BACKFILL)
     if parked is None:
@@ -252,34 +284,46 @@ def _check_source_hashes(
             problems.append(f"{source_id} artifact hash does not match index")
 
 
-def _check_cid_nl_source_hashes(
+def _check_retained_authority_source_hashes(
     manifest: Mapping[str, Any],
     repo_root: Path,
     problems: list[str],
 ) -> None:
-    cid_nl = _mapping_path(manifest, "current_authority", "cid_nl_default_activation")
-    if cid_nl is None:
-        return
+    retained_authorities = {
+        "CID-NL": _mapping_path(
+            manifest,
+            "current_authority",
+            "cid_nl_default_activation",
+        ),
+        "Backfill clean-target": _mapping_path(
+            manifest,
+            "current_authority",
+            "backfill_expansion_clean_target_selective_activation",
+        ),
+    }
     artifact_fields = {
         "artifact": "artifact_sha256",
         "acceptance_artifact": "acceptance_artifact_sha256",
         "compact_manifest": "compact_manifest_sha256",
     }
-    for path_key, sha_key in artifact_fields.items():
-        relative = cid_nl.get(path_key)
-        expected_hash = cid_nl.get(sha_key)
-        if not isinstance(relative, str) or not relative:
-            problems.append(f"manifest CID-NL {path_key} must be a non-empty path")
+    for label, authority in retained_authorities.items():
+        if authority is None:
             continue
-        if not isinstance(expected_hash, str) or not expected_hash:
-            problems.append(f"manifest CID-NL {sha_key} must be a non-empty hash")
-            continue
-        path = repo_root / relative
-        if not path.is_file():
-            problems.append(f"CID-NL {path_key} artifact is missing: {relative}")
-            continue
-        if artifact_sha256(path) != expected_hash:
-            problems.append(f"CID-NL {path_key} hash does not match manifest")
+        for path_key, sha_key in artifact_fields.items():
+            relative = authority.get(path_key)
+            expected_hash = authority.get(sha_key)
+            if not isinstance(relative, str) or not relative:
+                problems.append(f"manifest {label} {path_key} must be a non-empty path")
+                continue
+            if not isinstance(expected_hash, str) or not expected_hash:
+                problems.append(f"manifest {label} {sha_key} must be a non-empty hash")
+                continue
+            path = repo_root / relative
+            if not path.is_file():
+                problems.append(f"{label} {path_key} artifact is missing: {relative}")
+                continue
+            if artifact_sha256(path) != expected_hash:
+                problems.append(f"{label} {path_key} hash does not match manifest")
 
 
 def _mapping_path(

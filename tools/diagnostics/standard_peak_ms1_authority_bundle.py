@@ -29,6 +29,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             min_anchor_own_max_shape_similarity=(
                 args.min_anchor_own_max_shape_similarity
             ),
+            selective_shift_cells_tsv=args.selective_shift_cells_tsv,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -87,6 +88,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=float,
         default=0.5,
         help="Minimum per-cell own-max shape similarity required by authority.",
+    )
+    parser.add_argument(
+        "--selective-shift-cells-tsv",
+        type=Path,
+        default=None,
+        help=(
+            "Selective source-family shift-aware cell TSV. Required when "
+            "--authority-mode machine-selective-source-gate is used."
+        ),
     )
     return parser.parse_args(argv)
 

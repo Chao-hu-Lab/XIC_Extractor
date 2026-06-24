@@ -51,6 +51,7 @@ RENDERED_REFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 MAINTAINED_RENDERED_DOCS = {
+    "docs/superpowers/validation/evidence_chain_status_guide.html",
     "docs/superpowers/validation/evidence_overlay_interpretation_guide.html",
 }
 

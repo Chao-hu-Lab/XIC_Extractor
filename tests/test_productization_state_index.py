@@ -33,6 +33,7 @@ def test_registered_default_scopes_have_writer_authority() -> None:
     assert {row["lane_id"] for row in authority_rows} == {
         "backfill_current_write_ready_scope",
         "cid_nl_default_product_activation_v1",
+        "backfill_expansion_clean_target_selective_product_activation_v1",
     }
     authority_by_lane = {row["lane_id"]: row for row in authority_rows}
 
@@ -69,6 +70,60 @@ def test_registered_default_scopes_have_writer_authority() -> None:
     assert cid_nl["may_change_counted_detection"] == "FALSE"
     assert cid_nl["product_effect"] == "cid_nl_default_quant_matrix_product_output"
     assert cid_nl["public_surface"] == "cid_nl_default_product_activation_v1"
+
+    expansion = next(
+        row
+        for row in rows
+        if row["lane_id"] == "backfill_expansion_default_product_activation_v1"
+    )
+    assert expansion["current_artifact"] == (
+        "docs/superpowers/validation/"
+        "backfill_expansion_default_product_activation_v1/"
+        "backfill_expansion_default_product_activation_summary.json"
+    )
+    assert expansion["readiness_status"] == "production_candidate"
+    assert expansion["write_authority"] == "FALSE"
+    assert expansion["product_authority_scope"] == ""
+    assert expansion["row_count"] == "666"
+    assert expansion["may_touch_matrix"] == "FALSE"
+    assert expansion["may_change_quant_output"] == "FALSE"
+    assert expansion["may_change_workbook"] == "FALSE"
+    assert expansion["may_change_selected_peak"] == "FALSE"
+    assert expansion["may_change_selected_area"] == "FALSE"
+    assert expansion["may_change_counted_detection"] == "FALSE"
+    assert expansion["product_effect"] == "candidate_replay_no_public_write"
+    assert (
+        expansion["public_surface"]
+        == "backfill_expansion_default_product_activation_v1"
+    )
+    assert "374/666 pass and 292 held" in expansion["notes"]
+
+    selective = authority_by_lane[
+        "backfill_expansion_clean_target_selective_product_activation_v1"
+    ]
+    assert selective["current_artifact"] == (
+        "docs/superpowers/validation/"
+        "backfill_expansion_clean_target_selective_product_activation_v1/"
+        "backfill_expansion_clean_target_selective_product_activation_summary.json"
+    )
+    assert selective["product_authority_scope"] == (
+        "backfill_expansion_clean_target_selective_activation_84_cells"
+    )
+    assert selective["row_count"] == "84"
+    assert selective["may_touch_matrix"] == "TRUE"
+    assert selective["may_change_quant_output"] == "TRUE"
+    assert selective["may_change_workbook"] == "FALSE"
+    assert selective["may_change_selected_peak"] == "FALSE"
+    assert selective["may_change_selected_area"] == "FALSE"
+    assert selective["may_change_counted_detection"] == "FALSE"
+    assert selective["product_effect"] == (
+        "write_backfill_expansion_clean_target_selective_default_cell"
+    )
+    assert (
+        selective["public_surface"]
+        == "backfill_expansion_clean_target_selective_product_activation_v1"
+    )
+    assert "28 projected-held clean-target cells" in selective["notes"]
 
 
 def test_peak_choice_lockbox_status_points_to_shadow_automation_design() -> None:
@@ -247,6 +302,49 @@ def test_control_plane_quant_matrix_default_product_activation_is_current() -> N
     assert "Status-index update: updated" in section
 
 
+def test_control_plane_backfill_expansion_candidate_replay_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    start = "### 2026-06-21 - Backfill Expansion Candidate Replay v1"
+    section = _section(
+        text,
+        start,
+        "### 2026-06-21 - Backfill Expansion Full Evidence Chain v1",
+    )
+
+    assert "backfill_expansion_default_product_activation_v1" in section
+    assert "production_candidate" in section
+    assert "write_authority=FALSE" in section
+    assert "666-cell packet" in section
+    assert "dry-run replay" in section
+    assert "shift-aware" in section
+    assert "own-max" in section
+    assert "263 held cells" in section
+    assert "Broad\n  Backfill remains parked" in section
+    assert "no public ProductWriter authority" in section
+    assert "Control-plane decision: updated" in section
+
+
+def test_control_plane_backfill_expansion_clean_target_activation_is_current() -> None:
+    text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
+    start = (
+        "### 2026-06-22 - Backfill Expansion Clean-Target "
+        "Selective Default Activation v1"
+    )
+    section = text[text.index(start) :]
+
+    assert "backfill_expansion_clean_target_selective_product_activation_v1" in section
+    assert "production-ready writer lane" in section
+    assert "backfill_expansion_clean_target_selective_activation_84_cells" in section
+    assert "changes exactly 84" in section
+    assert "0 unused" in section
+    assert "28 projected-held clean-target cells" in section
+    assert "boundary-review cells" in section
+    assert "29 off-target hold/remap cells" in section
+    assert "no workbook/GUI change" in section
+    assert "CLI/GUI preset" in section
+    assert "Control-plane decision: updated" in section
+
+
 def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     text = DEFAULT_CONTROL_PLANE.read_text(encoding="utf-8")
     summary = _section(
@@ -300,6 +398,14 @@ def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     assert "heldout-oracle evidence" in summary
     assert "`Validation/Promotion Readiness`" in summary
     assert "`QuantMatrixVersion Activation`" in summary
+    assert "`backfill_expansion_default_product_activation_v1`" in summary
+    assert "`production_candidate`" in summary
+    assert "374/666 full-chain pass" in summary
+    assert "292 held" in summary
+    assert "not a public default" in summary
+    assert "backfill_expansion_clean_target_selective_activation_84_cells" in summary
+    assert "84 cells" in summary
+    assert "28\nprojected-held clean-target cells" in summary
     assert "Next checkpoint is Phase 2" not in summary
     assert "Next checkpoint is Phase 3" not in summary
     assert "Next checkpoint is Phase 4" not in summary

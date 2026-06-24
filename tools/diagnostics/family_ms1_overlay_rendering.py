@@ -97,7 +97,8 @@ def render_family_ms1_overlay(
 
     fig.suptitle(
         (
-            f"{family_id} family MS1 pattern context: m/z {mz:g} +/-{ppm:g} ppm\n"
+            f"{family_id} family MS1 pattern context: "
+            f"m/z {_format_mz(mz)} +/-{ppm:g} ppm\n"
             f"selected RT segment {_selected_peak_segment_label(focus_rows)}; "
             f"{len(rows)} traces; "
             f"{len([row for row in rows if row.group == 'detected_seed'])} "
@@ -165,7 +166,8 @@ def render_hypothesis_ms1_overlay(
 
     fig.suptitle(
         (
-            f"{family_id} hypothesis MS1 evidence: m/z {mz:g} +/-{ppm:g} ppm\n"
+            f"{family_id} hypothesis MS1 evidence: "
+            f"m/z {_format_mz(mz)} +/-{ppm:g} ppm\n"
             f"selected RT segment {_selected_peak_segment_label(focus_rows)}; "
             f"{len(focus_detected)} detected NL anchor traces; "
             f"{len(focus_rows)} selected-peak membership traces"
@@ -183,6 +185,10 @@ def _family_overlay_panel_layout() -> list[list[str]]:
         ["norm", "raw"],
         ["legend", "legend"],
     ]
+
+
+def _format_mz(value: float) -> str:
+    return f"{value:.4f}"
 
 
 def _hypothesis_overlay_panel_layout() -> list[list[str]]:

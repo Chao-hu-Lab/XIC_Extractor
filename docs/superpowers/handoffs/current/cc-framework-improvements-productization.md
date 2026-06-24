@@ -1,89 +1,123 @@
 # XIC productization handoff
 
 Updated: 2026-06-24
-Branch: `codex/pr04-cid-nl-rebuild-20260624`
-Status: PR #88, #93, and #94 are merged on `master`; old PR #89 was closed as
-superseded; replacement PR #95 is the clean CID-NL discovery activation slice
-rebuilt from `origin/master`.
+Branch: `codex/pr05-backfill-clean-target-rebuild-20260624`
+Status: #88, #93, #94, and #95 are merged on `master`; #89 was closed as
+superseded by #95, and the stale stacked #90 was closed as superseded by #96.
+The remaining stack is being rebuilt one PR at a time from the current
+`master` so CI and review do not depend on ignored local artifacts.
+#96 is the active replacement PR. Its local clean-checkout portability fix has
+passed focused Backfill tests, productization/retention gates, and the full
+local CI-equivalent gate. A GitHub CI failure on the previously published #96
+head was traced to the same clean-checkout artifact boundary in the selective
+activation validator; the local fix now covers the provenance, default
+activation, and clean-target selective activation validators. The next step is
+to publish the amended branch and wait for GitHub CI/review before normal
+merge. A follow-up CI failure exposed a local-output-polluted hash-binding test;
+the test now points at retained clean-checkout artifacts before forcing a bad
+hash. A later CI failure exposed the same `cells_tsv` output coupling in full
+evidence-chain style validators; the shared helper now covers declared
+externalized cells artifacts for full evidence chain, peak-mode decomposition,
+selective shift-aware gate, and clean-target replay while retained cells still
+fail closed.
 
 This is a compact current-state snapshot. Tier authority lives in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md` and the
-machine-readable validation indexes. Handoff text is routing context only.
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+`docs/superpowers/specs/productization_authority_manifest.v1.json`, and
+`docs/superpowers/validation/productization_status_index_v1.tsv`.
 
 ## Current Objective
 
-Rebuild and retarget #89-#92 one at a time so each PR can be reviewed and
-tested from a clean base without depending on ignored `output/` or
+Rebuild and close #96, then #91-#92, without carrying old stacked output,
+artifact, or global-ledger coupling:
+
+- #96: clean-target Backfill expansion activation replacement for old #90.
+- #91: DNA-dR product-ready preset performance.
+- #92: row-completion confidence shadow gate.
+
+Each PR must have a clean base, CI-visible retained artifacts, accurate PR
+description, and no required dependency on ignored `output/` or
 `local_validation_artifacts/`.
-
-Current #95 scope is CID-NL discovery activation only:
-
-- The immediate product direction is Discovery first.
-- accepted_discovery_cell_count=95.
-- keep Discovery precursor inference, candidate row identity, and alignment
-  replay fail-closed behavior;
-- keep CID-NL feature-inclusion/default-activation/release/85RAW closure gates;
-- exclude old QuantMatrix commits already represented by #88;
-- exclude artifact-retention cleanup already represented by #94;
-- exclude `.codex/skills` packaging, broad lockbox drift, and `output/`
-  deletions from #95.
 
 ## Product State
 
-- `product_ready_default_matrix_activated` remains the current default
-  QuantMatrix state for the bounded 511-cell Backfill authority from #88.
-- CID-NL default product activation v1 is the #95 candidate authority slice for
-  the explicit 95-cell CID-NL activation contract.
+- `backfill_current_write_ready_scope` remains the existing 511-cell Backfill
+  authority from #88.
+- `cid_nl_default_product_activation_v1` remains the 95-cell CID-NL Discovery
+  authority from #95.
+- #96 introduces `backfill_expansion_default_product_activation_v1` as a
+  bounded 666-cell Backfill expansion packet, not broad Backfill authority.
+- Backfill Expansion Clean-Target Selective Default Activation v1 is the #96
+  writer scope for the 84-cell clean-target subset.
 - Broad Backfill auto-write remains parked.
-- CID-NL discovery row-identity evidence is being promoted through explicit
-  gates; Discovery/MS2 evidence must not directly become ProductWriter authority
-  outside the activation contract.
-- Shadow/report/gallery/candidate artifacts remain non-authority unless a
-  product activation checker binds them into the current authority manifest.
+- Diagnostics, galleries, review packets, and retained summaries are evidence
+  surfaces only unless a ProductWriter scope, expected diff, and authority
+  manifest entry bind them.
 
 ## Boundaries
 
-- No selected peak, selected area, counted-detection, workbook schema, GUI,
-  broad Backfill, or unrelated default extraction behavior changes are allowed
-  in #95.
-- Default CI must stay hermetic and must not require ignored local artifacts.
-- Do not reopen broad Backfill while the active goal is Discovery productization.
-- PR #90, #91, and #92 wait until their predecessor is merged or cleanly
-  retargeted to the updated `master`.
+- Do not put full matrices, full opportunity maps, cell provenance dumps, or
+  generated overlay bundles into git.
+- Do not use ignored `output/` or `local_validation_artifacts/` as clean-checkout
+  CI prerequisites.
+- Missing externalized artifacts may be absent only when the retained summary
+  declares that exact artifact as externalized; retained artifacts must still
+  fail closed.
+- Do not expand CID-NL beyond 95 cells or Backfill expansion beyond 666 cells
+  without a new expected-diff and authority update.
+- Do not change workbook/GUI behavior, selected peak, selected area, counted
+  detection, or broad Backfill authority in #96.
+- Any CI red must be diagnosed from logs and stack boundary first, then fixed at
+  the owner boundary.
 
 ## Required Gates
 
-Before #95 is ready:
+For #96 before ready/merge:
 
-- CID-NL/discovery focused tests and productization checkers must pass locally.
-- The repo PR gate must pass locally unless a clear external blocker is recorded.
-- GitHub CI must be green and review must be clear before normal merge.
-- Any CI red must be diagnosed from logs before code changes.
-- CID-NL Discovery full-scope classification v1.
-- CID-NL 85RAW Universe Closure v1.
+- Backfill expansion focused checkers and tests: passed locally
+  (`134 passed`).
+- `uv run python scripts/check_productization_state.py`: passed locally.
+- `uv run python scripts/check_productization_authority.py`: passed locally.
+- `uv run python scripts/check_validation_artifact_retention.py`: passed
+  locally with the existing 6 `shrink_later` warnings.
+- `uv run python scripts/check_cid_nl_discovery_release_slice.py`: passed
+  locally.
+- CI-equivalent local gate:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`:
+    passed.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`: passed.
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`: passed
+    (`4294 passed, 1 skipped`).
+- GitHub CI green and review clear before normal merge.
 
 ## Status Index Anchors
 
-These phrases are retained for `scripts/check_productization_state.py`:
+Retain these anchor phrases for productization state checks:
 
-- Goal 0/1 hardening added.
-- machine-adjudicated without granting new writer authority.
-- Goal 2 added Review Packet / Approval Workflow v1.
-- lockbox_shadow_automation_experiment_v1.
-- Goal 4 added Missing-Overlay Evidence Recovery v1.
-- keep only as explanation/triage.
-- Targeted MS1 shape identity limited rescue remains production-ready.
-- GUI and broader targets remain blocked.
-- `sample_metadata_v1` remains production-ready for no-output ordering.
-- roles/batch/matrix/exclusion must not alter quant output.
-- ReviewAction selected-candidate switch and manual-boundary area recompute remain parked.
-- manual-boundary area recompute remain parked.
-- classification and planning only.
+- `product_ready_default_matrix_activated`
+- `CID-NL default product activation v1`
+- `Backfill Expansion Default Product Activation v1`
+- Broad Backfill auto-write remains parked
+- Goal 0/1 hardening added
+- machine-adjudicated without granting new writer authority
+- Goal 2 added Review Packet / Approval Workflow v1
+- lockbox_shadow_automation_experiment_v1
+- Goal 4 added Missing-Overlay Evidence Recovery v1
+- keep only as explanation/triage
+- Targeted MS1 shape identity limited rescue remains production-ready
+- GUI and broader targets remain blocked
+- `sample_metadata_v1` remains production-ready for no-output ordering
+- roles/batch/matrix/exclusion must not alter quant output
+- ReviewAction selected-candidate switch and manual-boundary area recompute remain parked
+- manual-boundary area recompute remain parked
+- classification and planning only
 
 ## Next Actions
 
-1. Finish #95 CI/review remediation without changing tier or authority scope.
-2. Rerun focused CID-NL gates, then full local PR gate.
-3. Update #95 body with final verification and mark ready only after CI/review
-   are clear.
-4. Normal-merge #95 only after CI and review pass, then repeat for #90-#92.
+1. Amend the local #96 commit with the clean-checkout artifact portability fix.
+2. API-update the #96 branch and refresh the PR description if verification
+   wording changed.
+3. Wait for GitHub CI and review, normal-merge #96 only if green/clear.
+4. Rebuild or retarget #91 from updated `master`; do not reuse the stale stacked
+   base blindly.
+5. Repeat the same boundary-first process for #92 after #91 is clean.

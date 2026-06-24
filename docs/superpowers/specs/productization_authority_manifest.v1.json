@@ -6,7 +6,8 @@
     "unregistered_scope_policy": "fail_closed",
     "product_writer_allowed_scopes": [
       "backfill_policy_write_ready_rows",
-      "cid_nl_adopt_ready_feature_inclusion_95_cells"
+      "cid_nl_adopt_ready_feature_inclusion_95_cells",
+      "backfill_expansion_clean_target_selective_activation_84_cells"
     ],
     "matrix_write_requires": [
       "registered_product_authority_scope",
@@ -47,6 +48,21 @@
       "acceptance_artifact_sha256": "A948873B0FC35CF1A74487D935CB3EA6D3ABDB582A505F6E26774ABD7F147DED",
       "compact_manifest": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv",
       "compact_manifest_sha256": "AFEEE1B12DE2B16BAC4D0288CBBD5971BD21177B01B04EA4400C192692DFCB5C"
+    },
+    "backfill_expansion_clean_target_selective_activation": {
+      "current_product_authority_rows": 84,
+      "candidate_peak_rows": 7,
+      "projected_held_cell_rows": 28,
+      "boundary_review_excluded_cell_rows": 37,
+      "off_target_hold_or_remap_excluded_cell_rows": 29,
+      "authority_scope": "backfill_expansion_clean_target_selective_activation_84_cells",
+      "authority_source": "backfill_expansion_clean_target_selective_product_activation_v1",
+      "artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_summary.json",
+      "artifact_sha256": "B6A0A988CD21ED42AD9DE2A3A16B0AE95EDB353E52CD7B2965AB847E6D05B2AE",
+      "acceptance_artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_checks.tsv",
+      "acceptance_artifact_sha256": "F7F83B1352B6FBFA98C93B3E952A2E05096A1FD6D62B0D541AEBB5A90C30D0A5",
+      "compact_manifest": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_manifest.tsv",
+      "compact_manifest_sha256": "8787C8CB46310C8F7470A168245A8039CC8DD3F276B80FB033C4715D40657A00"
     }
   },
   "parked_lanes": {
@@ -90,6 +106,11 @@
       "scope_id": "shape_clean_reintegration_stable_writer_probe",
       "status": "negative_evidence",
       "reason": "Writer probe produced 0 new writes and 104 unchanged pre-existing values."
+    },
+    {
+      "scope_id": "backfill_expansion_raw_trace_expected_diff_666_cells",
+      "status": "held_candidate",
+      "reason": "The 666-cell Backfill expansion packet has sample-local alignment, RAW trace identity, expected-diff, and provenance replay, but shift-aware standard-peak support and MS1 own-max evidence are not wired by stable row/cell keys; it may not grant ProductWriter authority."
     }
   ]
 }
