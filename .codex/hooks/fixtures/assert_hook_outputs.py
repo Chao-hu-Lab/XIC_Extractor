@@ -161,6 +161,118 @@ def main() -> int:
     if result.stdout.strip():
         raise AssertionError("non-product path emitted productization context")
 
+    lock_text_search_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "rg -n \"index.lock|cannot lock ref\" docs .codex",
+        },
+        "tool_response": {
+            "stdout": "docs/agent-parameter-settings.md:149:.git\\index.lock\n"
+            ".codex/hooks/xic_post_tool_guard.py:181:cannot lock ref",
+            "stderr": "",
+        },
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(lock_text_search_payload),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError("searching lock text emitted git lock warning")
+
+    git_diff_lock_text_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "git diff -- .codex/hooks",
+        },
+        "tool_response": {
+            "stdout": (
+                "+fatal: Unable to create '.git/index.lock': File exists.\n"
+                "+cannot lock ref 'refs/heads/example'"
+            ),
+            "stderr": "",
+        },
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(git_diff_lock_text_payload),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError("git diff lock text emitted git lock warning")
+
+    git_diff_string_response_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "git diff -- .codex/hooks",
+        },
+        "tool_response": (
+            "Exit code: 0\n"
+            "Output:\n"
+            "+fatal: Unable to create '.git/index.lock': File exists.\n"
+            "+cannot lock ref 'refs/heads/example'"
+        ),
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(git_diff_string_response_payload),
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError(
+            "successful git diff string response emitted git lock warning"
+        )
+
+    real_git_lock_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "git status --short",
+        },
+        "tool_response": {
+            "stdout": "",
+            "stderr": (
+                "fatal: Unable to create '.git/index.lock': File exists.\n"
+                "Another git process seems to be running in this repository."
+            ),
+        },
+    }
+    assert_contains(
+        run_hook("xic_post_tool_guard.py", real_git_lock_payload),
+        "Git lock/ref-lock friction detected",
+    )
+
     unrelated_write_with_ambient_product_dirty_payload = {
         "hook_event_name": "PostToolUse",
         "turn_id": "fixture",
