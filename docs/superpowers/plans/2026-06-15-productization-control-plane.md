@@ -5220,3 +5220,42 @@ the later low-height writer entry above as the current tier source.
   workbook/GUI behavior, selected peak/area, or counted detection; it only
   exposes the already registered clean-target selective activation through the
   normal `run_alignment` preset surface.
+
+### 2026-06-23 - Row-Completion Confidence Shadow Gate v1
+
+- Lane: row-completion confidence benchmark for alignment/backfill method
+  validation.
+- Previous tier: `diagnostic_only` for row-completion confidence artifacts.
+- New tier: `shadow_ready` only for the baseline-bound product-gate mode. The
+  default diagnostic mode remains `diagnostic_only`; product readiness remains
+  false.
+- Product/public surface changed: additive CLI/API behavior only. The
+  `row_completion_confidence` CLI now accepts `--gate-mode product-gate`; the
+  summary JSON records `gate_mode`, `product_gate_eligible`, and a
+  gate-specific `no_authority_statement`; outputs keep the legacy
+  `row_completion_family_sentinels.tsv` compatibility alias alongside
+  `row_completion_sentinels.tsv`. No matrix, workbook, selected peak, selected
+  area, counted detection, ProductWriter authority, Backfill authority, active
+  lane, or default preset behavior changes.
+- Gate decision: product-gate mode fails closed without
+  `--baseline-alignment-dir` using
+  `missing_evidence_code=baseline_current_unbound` and CLI exit code `1`.
+  With a bound baseline and no selected-value, `Mz`/`RT` anchor, or
+  matrix-identity drift, it can report `validation_tier=shadow_ready` and CLI
+  exit code `0`; with drift, it reports `gate_ok=false`,
+  `authority_decision=expected_diff_required`, and CLI exit code `1`.
+- Evidence: focused tests
+  `python -m pytest tests\test_row_completion_confidence_daily.py tests\test_row_completion_confidence_cli.py tests\test_row_completion_confidence_schema.py -q`
+  passed 31 tests; focused ruff passed on the changed row-completion modules,
+  CLI, and tests. The 8RAW no-RAW product-gate smoke under
+  `output/diagnostics/row_completion_confidence_8raw_product_gate_20260623`
+  compares
+  `output/performance/dna_dr_product_ready_8raw_baseline_20260622_freshinput`
+  to
+  `output/performance/dna_dr_product_ready_8raw_stage_replay_cache_reviewfix_v3_20260623`
+  and reports `run_ok=true`, `gate_ok=true`, `status=PASS`,
+  `validation_tier=shadow_ready`, and `selected_value_drift=0`.
+- Remaining blocker: this is still a non-mutating shadow gate. Promotion beyond
+  shadow readiness requires 85RAW baseline/current evidence plus a separate
+  expected-diff/control-plane decision if any product output or writer authority
+  would change.
