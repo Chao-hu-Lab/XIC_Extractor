@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 from tools.diagnostics import family_ms1_alignment_experiment
 from tools.diagnostics.standard_peak_backfill_machine_pipeline import (
+    render_overlay_batch_summary_from_review_queue,
     run_machine_pipeline,
+    write_overlay_batch_summary_slice,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery import (
     run_reconciliation_gallery,
@@ -22,7 +25,7 @@ from xic_extractor.diagnostics.standard_peak_backfill_chunk_consolidation import
     StandardPeakChunkConsolidationOutputs,
     run_standard_peak_backfill_chunk_consolidation,
 )
-from xic_extractor.diagnostics.timing import TimingRecorder
+from xic_extractor.diagnostics.timing import TimingRecord, TimingRecorder
 
 PRESET_NAME = "standard-peak-backfill"
 DEFAULT_CHUNK_SIZE = 120
@@ -38,6 +41,13 @@ class StandardPeakBackfillPresetOutputs:
     consolidation_summary_json: Path | None = None
     published_alignment_manifest_json: Path | None = None
     gallery_html: Path | None = None
+
+
+@dataclass(frozen=True)
+class _ChunkExecutionResult:
+    chunk_index: int
+    summary_path: Path
+    timing_records: tuple[TimingRecord, ...] = ()
 
 
 MachinePipelineRunner = Callable[..., Path]
@@ -60,6 +70,7 @@ def run_standard_peak_backfill_preset(
     max_highlight_rescued: int = 8,
     min_shape_r: float = 0.95,
     render_workers: int = 1,
+    chunk_workers: int = 1,
     render_dpi: int = 140,
     timing_recorder: TimingRecorder | None = None,
     machine_pipeline_runner: MachinePipelineRunner = run_machine_pipeline,
@@ -74,6 +85,8 @@ def run_standard_peak_backfill_preset(
         raise ValueError("standard-peak backfill preset chunk_size must be >= 1")
     if render_workers < 1:
         raise ValueError("standard-peak backfill preset render_workers must be >= 1")
+    if chunk_workers < 1:
+        raise ValueError("standard-peak backfill preset chunk_workers must be >= 1")
     recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
     publication_mode = _resolve_publication_mode(
         publication_mode,
@@ -125,6 +138,7 @@ def run_standard_peak_backfill_preset(
             status_reasons=("no_standard_peak_backfill_review_rows",),
             publication_mode=publication_mode,
             render_workers=render_workers,
+            chunk_workers=chunk_workers,
             render_dpi=render_dpi,
         )
         with recorder.stage("standard_peak.summary_write"):
@@ -167,6 +181,7 @@ def run_standard_peak_backfill_preset(
 
     pending_chunk_specs = [spec for spec in chunk_specs if not spec[4]]
     source_family_by_family_sample: Mapping[str, Mapping[str, str]] = {}
+    global_overlay_batch_summary_tsv: Path | None = None
     reconciliation_groups_tsv: Path | None = None
     if pending_chunk_specs:
         queue_family_ids = _review_queue_family_ids(review_queue_rows)
@@ -202,54 +217,117 @@ def run_standard_peak_backfill_preset(
             )
             scope.metrics["reconciliation_groups_tsv"] = str(reconciliation_groups_tsv)
 
-    for start_rank, limit, chunk_dir, existing_summary_path, can_reuse_chunk in (
-        chunk_specs
-    ):
-        end_rank = start_rank + limit - 1
-        if can_reuse_chunk:
-            chunk_summary_jsons.append(existing_summary_path)
-            continue
-        if reconciliation_groups_tsv is None:
-            raise ValueError("reconciliation groups were not built for pending chunk")
         with recorder.stage(
-            "standard_peak.chunk",
+            "standard_peak.global_overlay_batch",
             metrics={
-                "start_rank": start_rank,
-                "end_rank": end_rank,
-                "limit": limit,
+                "queue_row_count": queue_row_count,
                 "publication_mode": publication_mode,
+                "evidence_only": evidence_only,
             },
         ) as scope:
-            summary_path = machine_pipeline_runner(
+            global_overlay_source = render_overlay_batch_summary_from_review_queue(
                 review_queue_tsv=retained_outputs.review_overlay_queue_tsv,
+                alignment_cells_tsv=paths["cells"],
                 raw_dir=raw_dir,
                 dll_dir=dll_dir,
-                alignment_review_tsv=paths["review"],
-                alignment_cells_tsv=paths["cells"],
-                alignment_matrix_tsv=paths["activation_matrix"],
-                alignment_matrix_identity_tsv=paths["activation_identity"],
-                retained_gate_tsv=retained_outputs.tsv,
-                reconciliation_groups_tsv=reconciliation_groups_tsv,
-                output_dir=chunk_dir,
-                source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
-                backfill_seed_audit_tsv=paths["seed_audit"],
-                start_rank=start_rank,
-                limit=limit,
+                output_dir=output_dir / "global_family_ms1_overlay_batch",
+                start_rank=1,
+                limit=queue_row_count,
                 reuse_existing=reuse_existing,
                 ppm=ppm,
                 max_highlight_rescued=max_highlight_rescued,
                 write_overlay_pdf=False,
-                min_shape_r=min_shape_r,
-                publication_mode=publication_mode,
                 evidence_only=evidence_only,
-                defer_projection=True,
+                workers=render_workers,
+                dpi=render_dpi,
+            )
+            global_overlay_batch_summary_tsv = global_overlay_source.summary_tsv
+            scope.metrics["overlay_batch_summary_tsv"] = str(
+                global_overlay_batch_summary_tsv,
+            )
+            if global_overlay_source.metrics:
+                scope.metrics.update(global_overlay_source.metrics)
+
+    chunk_summary_by_index: dict[int, Path] = {}
+    chunk_timing_by_index: dict[int, tuple[TimingRecord, ...]] = {}
+    pending_indexed_specs: list[tuple[int, tuple[int, int, Path, Path, bool]]] = []
+    for chunk_index, spec in enumerate(chunk_specs):
+        existing_summary_path = spec[3]
+        can_reuse_chunk = spec[4]
+        if can_reuse_chunk:
+            chunk_summary_by_index[chunk_index] = existing_summary_path
+        else:
+            pending_indexed_specs.append((chunk_index, spec))
+
+    active_chunk_workers = min(chunk_workers, len(pending_indexed_specs)) or 1
+    recorder.record(
+        "standard_peak.chunk_dispatch",
+        elapsed_sec=0.0,
+        metrics={
+            "chunk_workers": active_chunk_workers,
+            "pending_chunk_count": len(pending_indexed_specs),
+            "reused_chunk_count": len(chunk_specs) - len(pending_indexed_specs),
+        },
+    )
+    if active_chunk_workers == 1:
+        for chunk_index, spec in pending_indexed_specs:
+            result = _run_chunk(
+                chunk_index=chunk_index,
+                spec=spec,
+                recorder=recorder,
+                reconciliation_groups_tsv=reconciliation_groups_tsv,
+                global_overlay_batch_summary_tsv=global_overlay_batch_summary_tsv,
+                publication_mode=publication_mode,
+                source_run_id=source_run_id,
+                machine_pipeline_runner=machine_pipeline_runner,
+                paths=paths,
+                retained_gate_tsv=retained_outputs.tsv,
+                reuse_existing=reuse_existing,
+                min_shape_r=min_shape_r,
                 render_workers=render_workers,
                 render_dpi=render_dpi,
-                timing_recorder=recorder,
                 source_family_by_family_sample=source_family_by_family_sample,
             )
-            scope.metrics["summary_json"] = str(summary_path)
-        chunk_summary_jsons.append(summary_path)
+            chunk_summary_by_index[chunk_index] = result.summary_path
+    elif pending_indexed_specs:
+        with ThreadPoolExecutor(max_workers=active_chunk_workers) as executor:
+            future_to_index = {
+                executor.submit(
+                    _run_chunk_with_private_timing,
+                    chunk_index=chunk_index,
+                    spec=spec,
+                    parent_recorder=recorder,
+                    reconciliation_groups_tsv=reconciliation_groups_tsv,
+                    global_overlay_batch_summary_tsv=global_overlay_batch_summary_tsv,
+                    publication_mode=publication_mode,
+                    source_run_id=source_run_id,
+                    machine_pipeline_runner=machine_pipeline_runner,
+                    paths=paths,
+                    retained_gate_tsv=retained_outputs.tsv,
+                    reuse_existing=reuse_existing,
+                    min_shape_r=min_shape_r,
+                    render_workers=render_workers,
+                    render_dpi=render_dpi,
+                    source_family_by_family_sample=source_family_by_family_sample,
+                ): chunk_index
+                for chunk_index, spec in pending_indexed_specs
+            }
+            for future in as_completed(future_to_index):
+                result = future.result()
+                chunk_summary_by_index[result.chunk_index] = result.summary_path
+                chunk_timing_by_index[result.chunk_index] = result.timing_records
+        for chunk_index, _spec in pending_indexed_specs:
+            for record in chunk_timing_by_index.get(chunk_index, ()):
+                recorder.record(
+                    record.stage,
+                    elapsed_sec=record.elapsed_sec,
+                    sample_stem=record.sample_stem,
+                    metrics=record.metrics,
+                )
+
+    chunk_summary_jsons = [
+        chunk_summary_by_index[index] for index in range(len(chunk_specs))
+    ]
 
     consolidated_dir = output_dir / "consolidated"
     gallery_dir = (
@@ -299,6 +377,7 @@ def run_standard_peak_backfill_preset(
         status_reasons=(),
         publication_mode=publication_mode,
         render_workers=render_workers,
+        chunk_workers=chunk_workers,
         render_dpi=render_dpi,
     )
     with recorder.stage("standard_peak.summary_write"):
@@ -406,6 +485,118 @@ def _build_global_reconciliation_groups(
     return outputs.groups_tsv
 
 
+def _run_chunk_with_private_timing(
+    *,
+    chunk_index: int,
+    spec: tuple[int, int, Path, Path, bool],
+    parent_recorder: TimingRecorder,
+    reconciliation_groups_tsv: Path | None,
+    global_overlay_batch_summary_tsv: Path | None,
+    publication_mode: str,
+    source_run_id: str,
+    machine_pipeline_runner: MachinePipelineRunner,
+    paths: Mapping[str, Path],
+    retained_gate_tsv: Path,
+    reuse_existing: bool,
+    min_shape_r: float,
+    render_workers: int,
+    render_dpi: int,
+    source_family_by_family_sample: Mapping[str, Mapping[str, str]],
+) -> _ChunkExecutionResult:
+    chunk_recorder = TimingRecorder(
+        parent_recorder.pipeline,
+        run_id=parent_recorder.run_id,
+        enabled=parent_recorder.enabled,
+    )
+    result = _run_chunk(
+        chunk_index=chunk_index,
+        spec=spec,
+        recorder=chunk_recorder,
+        reconciliation_groups_tsv=reconciliation_groups_tsv,
+        global_overlay_batch_summary_tsv=global_overlay_batch_summary_tsv,
+        publication_mode=publication_mode,
+        source_run_id=source_run_id,
+        machine_pipeline_runner=machine_pipeline_runner,
+        paths=paths,
+        retained_gate_tsv=retained_gate_tsv,
+        reuse_existing=reuse_existing,
+        min_shape_r=min_shape_r,
+        render_workers=render_workers,
+        render_dpi=render_dpi,
+        source_family_by_family_sample=source_family_by_family_sample,
+    )
+    return _ChunkExecutionResult(
+        chunk_index=chunk_index,
+        summary_path=result.summary_path,
+        timing_records=chunk_recorder.records,
+    )
+
+
+def _run_chunk(
+    *,
+    chunk_index: int,
+    spec: tuple[int, int, Path, Path, bool],
+    recorder: TimingRecorder,
+    reconciliation_groups_tsv: Path | None,
+    global_overlay_batch_summary_tsv: Path | None,
+    publication_mode: str,
+    source_run_id: str,
+    machine_pipeline_runner: MachinePipelineRunner,
+    paths: Mapping[str, Path],
+    retained_gate_tsv: Path,
+    reuse_existing: bool,
+    min_shape_r: float,
+    render_workers: int,
+    render_dpi: int,
+    source_family_by_family_sample: Mapping[str, Mapping[str, str]],
+) -> _ChunkExecutionResult:
+    start_rank, limit, chunk_dir, _existing_summary_path, _can_reuse_chunk = spec
+    end_rank = start_rank + limit - 1
+    if reconciliation_groups_tsv is None:
+        raise ValueError("reconciliation groups were not built for pending chunk")
+    if global_overlay_batch_summary_tsv is None:
+        raise ValueError("global overlay summary was not built for pending chunk")
+    with recorder.stage(
+        "standard_peak.chunk",
+        metrics={
+            "start_rank": start_rank,
+            "end_rank": end_rank,
+            "limit": limit,
+            "publication_mode": publication_mode,
+        },
+    ) as scope:
+        chunk_overlay_batch_summary_tsv = write_overlay_batch_summary_slice(
+            source_overlay_batch_summary_tsv=global_overlay_batch_summary_tsv,
+            output_dir=chunk_dir / "family_ms1_overlay_batch",
+            start_rank=start_rank,
+            limit=limit,
+        )
+        summary_path = machine_pipeline_runner(
+            overlay_batch_summary_tsv=chunk_overlay_batch_summary_tsv,
+            alignment_review_tsv=paths["review"],
+            alignment_cells_tsv=paths["cells"],
+            alignment_matrix_tsv=paths["activation_matrix"],
+            alignment_matrix_identity_tsv=paths["activation_identity"],
+            retained_gate_tsv=retained_gate_tsv,
+            reconciliation_groups_tsv=reconciliation_groups_tsv,
+            output_dir=chunk_dir,
+            source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
+            backfill_seed_audit_tsv=paths["seed_audit"],
+            start_rank=start_rank,
+            limit=limit,
+            reuse_existing=reuse_existing,
+            min_shape_r=min_shape_r,
+            publication_mode=publication_mode,
+            defer_projection=True,
+            render_workers=render_workers,
+            render_dpi=render_dpi,
+            timing_recorder=recorder,
+            source_family_by_family_sample=source_family_by_family_sample,
+        )
+        scope.metrics["summary_json"] = str(summary_path)
+    return _ChunkExecutionResult(chunk_index=chunk_index, summary_path=summary_path)
+
+
 def _summary(
     *,
     status: str,
@@ -421,6 +612,7 @@ def _summary(
     status_reasons: Sequence[str],
     publication_mode: str,
     render_workers: int,
+    chunk_workers: int,
     render_dpi: int,
 ) -> dict[str, object]:
     consolidation_summary = (
@@ -433,6 +625,7 @@ def _summary(
         "preset_name": PRESET_NAME,
         "publication_mode": publication_mode,
         "render_workers": str(render_workers),
+        "chunk_workers": str(chunk_workers),
         "render_dpi": str(render_dpi),
         "status": status,
         "source_run_id": source_run_id,

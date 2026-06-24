@@ -45,8 +45,9 @@ def test_load_builtin_dna_dr_product_ready_preset_stays_sample_universe_safe() -
     assert preset.tags[0].name == "DNA_dR"
     assert preset.alignment_overrides == {
         "standard_peak_backfill": True,
-        "standard_peak_backfill_chunk_size": 120,
+        "standard_peak_backfill_chunk_size": 240,
         "standard_peak_backfill_publication_mode": "matrix-only",
+        "owner_build_xic_backend": "raw-super-window",
     }
 
 
@@ -71,6 +72,7 @@ standard_peak_backfill = true
 standard_peak_backfill_chunk_size = 24
 standard_peak_backfill_publication_mode = "review-gallery"
 standard_peak_backfill_min_shape_r = 0.97
+owner_build_xic_backend = "raw-super-window"
 backfill_expansion_productization = "clean-target-selective"
 """.strip(),
         encoding="utf-8",
@@ -85,6 +87,7 @@ backfill_expansion_productization = "clean-target-selective"
         "standard_peak_backfill_chunk_size": 24,
         "standard_peak_backfill_publication_mode": "review-gallery",
         "standard_peak_backfill_min_shape_r": 0.97,
+        "owner_build_xic_backend": "raw-super-window",
         "backfill_expansion_productization": "clean-target-selective",
     }
 

@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 
+from xic_extractor.alignment import cross_sample_peak_groups as peak_groups_module
 from xic_extractor.alignment import owner_clustering as owner_clustering_module
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.edge_scoring import evaluate_owner_edge
@@ -277,6 +278,38 @@ def test_owner_clustering_rejects_product_or_observed_loss_conflict() -> None:
     )
 
     assert len(features) == 3
+
+
+def test_owner_clustering_range_hard_gate_keeps_ppm_boundary_inclusive() -> None:
+    reference = 500.0
+    tolerance_delta = reference * 20.0 / 1_000_000.0
+
+    assert not peak_groups_module._range_exceeds_ppm(
+        reference,
+        reference,
+        reference + tolerance_delta,
+        20.0,
+    )
+    assert peak_groups_module._range_exceeds_ppm(
+        reference,
+        reference,
+        reference + tolerance_delta + 1e-9,
+        20.0,
+    )
+
+
+def test_owner_clustering_precursor_bucket_boundary_keeps_exact_hard_gate() -> None:
+    features = cluster_sample_local_owners(
+        (
+            _owner("sample-a", "a", precursor_mz=500.9999),
+            _owner("sample-b", "b", precursor_mz=501.0001),
+        ),
+        config=AlignmentConfig(preferred_ppm=10.0, max_ppm=10.0),
+    )
+
+    assert [feature.event_cluster_ids for feature in features] == [
+        ("OWN-sample-a-a", "OWN-sample-b-b"),
+    ]
 
 
 def test_owner_clustering_keeps_different_neutral_loss_tags_separate() -> None:

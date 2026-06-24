@@ -23,7 +23,9 @@ from xic_extractor.alignment.identity_coherence.models import (
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.ms1_index_source import (
     OwnerBackfillXicBackend,
+    OwnerBuildXicBackend,
     source_for_owner_backfill_backend,
+    source_for_owner_build_backend,
 )
 from xic_extractor.alignment.owner_backfill import (
     OwnerBackfillCandidateAuditRow,
@@ -59,6 +61,7 @@ class OwnerBuildSampleJob:
     alignment_config: AlignmentConfig
     peak_config: ExtractionConfig
     raw_xic_batch_size: int = 1
+    owner_build_xic_backend: OwnerBuildXicBackend = "raw"
     emit_region_audit: bool = False
     region_audit_family_ids: frozenset[str] | None = None
     audit_evidence_mode: str = "full"
@@ -225,6 +228,7 @@ def run_owner_build_process(
     peak_config: ExtractionConfig,
     max_workers: int,
     raw_xic_batch_size: int = 1,
+    owner_build_xic_backend: OwnerBuildXicBackend = "raw",
     emit_region_audit: bool = False,
     region_audit_family_ids: frozenset[str] | None = None,
     audit_evidence_mode: str = "full",
@@ -280,6 +284,7 @@ def run_owner_build_process(
                 alignment_config=alignment_config,
                 peak_config=peak_config,
                 raw_xic_batch_size=raw_xic_batch_size,
+                owner_build_xic_backend=owner_build_xic_backend,
                 emit_region_audit=emit_region_audit,
                 region_audit_family_ids=region_audit_family_ids,
                 audit_evidence_mode=audit_evidence_mode,
@@ -386,7 +391,11 @@ def extract_owner_build_sample_job(
     try:
         with open_raw(job.raw_path, job.dll_dir) as raw:
             stats = _TimedProcessStats(sample_stem=job.sample_stem)
-            timed_raw = _TimedProcessRawSource(raw, stats=stats)
+            owner_build_source = source_for_owner_build_backend(
+                raw,
+                job.owner_build_xic_backend,
+            )
+            timed_raw = _TimedProcessRawSource(owner_build_source, stats=stats)
             ownership = build_sample_local_owners(
                 job.candidates,
                 raw_sources={job.sample_stem: timed_raw},
@@ -1143,6 +1152,8 @@ def _raw_call_delta(before: int | None, after: int | None) -> int:
 
 
 def _validate_payload_value(value: Any, *, path: str) -> None:
+    if value is None or isinstance(value, (str, int, float, bool, bytes, Path)):
+        return
     if callable(value):
         raise TypeError(f"{path} contains callable value")
     if isinstance(value, io.IOBase):

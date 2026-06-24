@@ -57,6 +57,7 @@ def test_apply_to_alignment_returns_runtime_standard_peak_options() -> None:
         "standard_peak_backfill_write_gallery": False,
         "standard_peak_backfill_reuse_existing": False,
         "standard_peak_backfill_min_shape_r": pytest.approx(0.95),
+        "owner_build_xic_backend": "raw",
         "backfill_expansion_productization": "off",
         "backfill_expansion_reuse_existing_raw_overlay": False,
         "backfill_expansion_reuse_existing_shift_aware": False,
@@ -72,7 +73,9 @@ def test_apply_to_alignment_returns_product_ready_runtime_options() -> None:
 
     assert alignment_config == AlignmentConfig()
     assert run_overrides["standard_peak_backfill"] is True
+    assert run_overrides["standard_peak_backfill_chunk_size"] == 240
     assert run_overrides["standard_peak_backfill_publication_mode"] == "matrix-only"
+    assert run_overrides["owner_build_xic_backend"] == "raw-super-window"
     assert run_overrides["backfill_expansion_productization"] == "off"
     assert run_overrides["backfill_expansion_reuse_existing_raw_overlay"] is False
     assert run_overrides["backfill_expansion_reuse_existing_shift_aware"] is False
@@ -161,6 +164,7 @@ def test_apply_to_alignment_review_gallery_keeps_gallery_surface_enabled() -> No
             "gallery",
             "standard_peak_backfill_publication_mode",
         ),
+        ("owner_build_xic_backend", "fast-ish", "owner_build_xic_backend"),
         (
             "backfill_expansion_productization",
             "all",

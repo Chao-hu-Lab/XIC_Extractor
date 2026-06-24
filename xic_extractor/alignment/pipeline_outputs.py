@@ -20,7 +20,10 @@ from xic_extractor.alignment.debug_writer import (
 from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.html_report import write_alignment_review_html
 from xic_extractor.alignment.matrix import AlignmentMatrix
-from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    OwnerBuildXicBackend,
+)
 from xic_extractor.alignment.output_levels import (
     AlignmentOutputLevel,
     artifact_names_for_output_level,
@@ -169,6 +172,7 @@ def alignment_metadata(
     raw_dir: Path,
     dll_dir: Path,
     owner_backfill_xic_backend: OwnerBackfillXicBackend,
+    owner_build_xic_backend: OwnerBuildXicBackend = "raw",
     output_level: AlignmentOutputLevel,
     peak_config: ExtractionConfig,
     owner_backfill_window_strategy: str = "exact",
@@ -190,6 +194,7 @@ def alignment_metadata(
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
+        "owner_build_xic_backend": owner_build_xic_backend,
         "owner_backfill_xic_backend": owner_backfill_xic_backend,
         "owner_backfill_window_strategy": owner_backfill_window_strategy,
         "owner_backfill_superwindow_span_factor": str(

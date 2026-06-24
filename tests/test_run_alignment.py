@@ -104,6 +104,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
+    assert captured["owner_build_xic_backend"] == "raw"
     assert captured["owner_backfill_window_strategy"] == "exact"
     assert captured["owner_backfill_superwindow_span_factor"] == 2
     assert captured["backfill_scope"] == "full-audit"
@@ -732,6 +733,8 @@ def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
     assert captured_preset["publication_mode"] == "matrix-only"
     assert captured_preset["write_gallery"] is False
     assert captured_preset["reuse_existing"] is False
+    assert captured_preset["render_workers"] == 1
+    assert captured_preset["chunk_workers"] == 1
     assert captured_preset["min_shape_r"] == pytest.approx(0.95)
 
 
@@ -830,11 +833,92 @@ def test_run_alignment_cli_product_ready_preset_does_not_run_fixed_backfill_repl
     assert call_order == ["alignment", "standard_peak", "product_ready_check"]
     assert captured_alignment["emit_alignment_backfill_seed_audit"] is True
     assert captured_alignment["emit_alignment_cells"] is False
+    assert captured_alignment["owner_build_xic_backend"] == "raw_superwindow"
+    assert captured_standard_peak["chunk_size"] == 240
     assert captured_standard_peak["publication_mode"] == "matrix-only"
+    assert captured_standard_peak["render_workers"] == 1
+    assert captured_standard_peak["chunk_workers"] == 1
     assert captured_product_ready_check["alignment_dir"] == output_dir.resolve()
     stdout = capsys.readouterr().out
     assert "Backfill expansion productization summary JSON:" not in stdout
     assert "Product-ready preset publication summary JSON:" in stdout
+
+
+def test_run_alignment_cli_can_override_product_ready_owner_build_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment = {}
+
+    def fake_run_alignment(**kwargs):
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return AlignmentRunOutputs(
+            review_tsv=output_dir / "alignment_review.tsv",
+            matrix_tsv=output_dir / "alignment_matrix.tsv",
+            matrix_identity_tsv=output_dir / "alignment_matrix_identity.tsv",
+            backfill_cell_evidence_tsv=(
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            backfill_seed_audit_tsv=(
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        )
+
+    def fake_standard_peak_runner(**_kwargs):
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=(
+                output_dir / "standard_peak_default_matrix_manifest.json"
+            ),
+            gallery_html=None,
+        )
+
+    def fake_product_ready_check(**_kwargs):
+        return SimpleNamespace(
+            status="pass",
+            summary_json=output_dir / "product_ready_check_summary.json",
+            checks_tsv=output_dir / "product_ready_check_checks.tsv",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "check_product_ready_preset_publication",
+        fake_product_ready_check,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr_product_ready",
+            "--owner-build-xic-backend",
+            "raw",
+        ]
+    )
+
+    assert code == 0
+    assert captured_alignment["owner_build_xic_backend"] == "raw"
 
 
 def test_run_alignment_cli_product_ready_preset_fails_when_publication_check_fails(
@@ -1214,6 +1298,48 @@ def test_run_alignment_cli_passes_raw_workers(
     assert captured["raw_workers"] == 4
 
 
+@pytest.mark.parametrize(
+    ("raw_workers", "cpu_count", "expected"),
+    [
+        (11, 32, 8),
+        (11, 4, 4),
+        (11, None, 1),
+        (3, 32, 3),
+    ],
+)
+def test_standard_peak_render_workers_uses_conservative_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_workers: int,
+    cpu_count: int | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(run_alignment.os, "cpu_count", lambda: cpu_count)
+
+    assert run_alignment._standard_peak_render_workers(raw_workers) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_workers", "cpu_count", "expected"),
+    [
+        (11, 32, 3),
+        (11, 8, 2),
+        (11, 4, 1),
+        (11, None, 1),
+        (2, 32, 2),
+        (1, 32, 1),
+    ],
+)
+def test_standard_peak_chunk_workers_uses_conservative_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_workers: int,
+    cpu_count: int | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(run_alignment.os, "cpu_count", lambda: cpu_count)
+
+    assert run_alignment._standard_peak_chunk_workers(raw_workers) == expected
+
+
 def test_run_alignment_cli_passes_raw_xic_batch_size(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1282,6 +1408,76 @@ def test_run_alignment_cli_passes_owner_backfill_xic_backend(
 
     assert code == 0
     assert captured["owner_backfill_xic_backend"] == "ms1_index"
+
+
+def test_run_alignment_cli_passes_owner_build_xic_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-build-xic-backend",
+            "ms1-index",
+        ],
+    )
+
+    assert code == 0
+    assert captured["owner_build_xic_backend"] == "ms1_index"
+
+
+def test_run_alignment_cli_passes_raw_superwindow_owner_build_xic_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-build-xic-backend",
+            "raw-super-window",
+        ],
+    )
+
+    assert code == 0
+    assert captured["owner_build_xic_backend"] == "raw_superwindow"
 
 
 def test_run_alignment_cli_passes_owner_backfill_window_strategy(

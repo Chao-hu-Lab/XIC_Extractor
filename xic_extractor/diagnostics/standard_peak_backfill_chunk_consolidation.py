@@ -143,6 +143,7 @@ def run_standard_peak_backfill_chunk_consolidation(
         if text_value(chunk.get("authorized_ms1_pattern_tsv"))
     )
     merged_shadow_tsv = output_dir / "consolidated_shadow_projection_cells.tsv"
+    shadow_rows: Sequence[Mapping[str, str]]
     if authority_tsvs and len(authority_tsvs) == len(chunk_summaries):
         if retained_backfill_gate_tsv is None:
             status_reasons.append("global_shadow_projection_requires_retained_gate")
@@ -622,7 +623,7 @@ def _load_chunk_summary(path: Path) -> dict[str, object]:
         raise FileNotFoundError(str(path))
     summary = _load_json_mapping(path)
     summary["_summary_json"] = str(path)
-    required = (
+    required: tuple[str, ...] = (
         "status",
         "start_rank",
         "overlay_selected_row_count",

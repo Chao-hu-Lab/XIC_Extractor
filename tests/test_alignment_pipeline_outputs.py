@@ -52,10 +52,25 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
         == "gaussian15_positive_asls_residual_primary"
     )
     assert metadata["baseline_audit_method"] == "asls"
+    assert metadata["owner_build_xic_backend"] == "raw"
     assert metadata["backfill_scope"] == "full-audit"
     assert metadata["output_scope"] == "full-audit"
     assert metadata["selected_family_source"] == ""
     assert metadata["scope_warning"] == ""
+
+
+def test_alignment_metadata_records_owner_build_xic_backend() -> None:
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_build_xic_backend="ms1_index",
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=_peak_config(),
+    )
+
+    assert metadata["owner_build_xic_backend"] == "ms1_index"
 
 
 def test_alignment_metadata_records_baseline_integration_method() -> None:

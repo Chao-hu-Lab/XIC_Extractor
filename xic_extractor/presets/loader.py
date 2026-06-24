@@ -55,6 +55,7 @@ ALIGNMENT_RUNTIME_OVERRIDE_KEYS = frozenset(
         "standard_peak_backfill_write_gallery",
         "standard_peak_backfill_reuse_existing",
         "standard_peak_backfill_min_shape_r",
+        "owner_build_xic_backend",
         "backfill_expansion_productization",
         "backfill_expansion_reuse_existing_raw_overlay",
         "backfill_expansion_reuse_existing_shift_aware",

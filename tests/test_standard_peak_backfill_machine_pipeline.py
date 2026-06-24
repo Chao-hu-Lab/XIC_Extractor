@@ -605,6 +605,31 @@ def test_machine_pipeline_rejects_ambiguous_overlay_source(
         raise AssertionError("ambiguous overlay inputs should fail")
 
 
+def test_write_overlay_batch_summary_slice_keeps_chunk_ranks(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "global_overlay.tsv"
+    source.write_text(
+        "rank\tfeature_family_id\tstatus\tfamily_verdict\n"
+        "1\tFAM001\tsuccess\tms1_shape_supports_family_backfill\n"
+        "2\tFAM002\tsuccess\tms1_shape_supports_family_backfill\n"
+        "3\tFAM003\tsuccess\tms1_shape_supports_family_backfill\n",
+        encoding="utf-8",
+    )
+
+    sliced = pipeline.write_overlay_batch_summary_slice(
+        source_overlay_batch_summary_tsv=source,
+        output_dir=tmp_path / "chunk_overlay",
+        start_rank=2,
+        limit=1,
+    )
+
+    lines = sliced.read_text(encoding="utf-8").splitlines()
+    assert lines[0].split("\t")[:3] == ["rank", "feature_family_id", "seed_group_id"]
+    assert len(lines) == 2
+    assert lines[1].split("\t")[:2] == ["2", "FAM002"]
+
+
 def test_machine_pipeline_marks_zero_shift_success_incomplete(
     tmp_path: Path,
     monkeypatch,

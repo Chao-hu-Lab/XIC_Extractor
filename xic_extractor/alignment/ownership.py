@@ -4,6 +4,7 @@ import math
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import groupby
 from typing import Any, Protocol
 
 import numpy as np
@@ -81,6 +82,10 @@ class _ResolvedCandidate:
 class _ResolutionOutcome:
     resolved: _ResolvedCandidate | None
     unresolved: OwnerAssignment | None
+
+
+_ResolutionRequestItem = tuple[int, Any, float, XICRequest, bool]
+_ResolutionRequestGroupKey = tuple[str, int | float, int | float]
 
 
 def build_sample_local_owners(
@@ -184,7 +189,11 @@ def _resolve_candidates(
         )
     for sample_stem, sample_requests in requests_by_sample.items():
         source = raw_sources[sample_stem]
-        for chunk in _chunked(tuple(sample_requests), raw_xic_batch_size):
+        for chunk in _request_chunks(
+            source,
+            tuple(sample_requests),
+            raw_xic_batch_size,
+        ):
             traces = _extract_many(source, tuple(item[3] for item in chunk))
             for (
                 index,
@@ -334,6 +343,18 @@ def _extract_many(
     source: OwnershipXICSource,
     requests: tuple[XICRequest, ...],
 ) -> tuple[XICTrace, ...]:
+    unique_requests = tuple(dict.fromkeys(requests))
+    if len(unique_requests) != len(requests):
+        unique_traces = _extract_unique_many(source, unique_requests)
+        traces_by_request = dict(zip(unique_requests, unique_traces, strict=True))
+        return tuple(traces_by_request[request] for request in requests)
+    return _extract_unique_many(source, requests)
+
+
+def _extract_unique_many(
+    source: OwnershipXICSource,
+    requests: tuple[XICRequest, ...],
+) -> tuple[XICTrace, ...]:
     if hasattr(source, "extract_xic_many"):
         return tuple(source.extract_xic_many(requests))  # type: ignore[attr-defined]
     traces: list[XICTrace] = []
@@ -348,15 +369,53 @@ def _extract_many(
     return tuple(traces)
 
 
-def _chunked(
-    items: tuple[Any, ...],
+def _request_chunks(
+    source: OwnershipXICSource,
+    items: tuple[_ResolutionRequestItem, ...],
     chunk_size: int,
-) -> tuple[tuple[Any, ...], ...]:
+) -> tuple[tuple[_ResolutionRequestItem, ...], ...]:
     if chunk_size < 1:
         raise ValueError("raw_xic_batch_size must be >= 1")
-    return tuple(
-        items[index : index + chunk_size] for index in range(0, len(items), chunk_size)
-    )
+    keyed_items = tuple((_request_group_key(source, item), item) for item in items)
+    ordered_items = tuple(sorted(keyed_items, key=_grouped_request_sort_key))
+    chunks: list[tuple[_ResolutionRequestItem, ...]] = []
+    current: list[_ResolutionRequestItem] = []
+    for _group_key, group_iter in groupby(ordered_items, key=lambda pair: pair[0]):
+        group = [item for _key, item in group_iter]
+        if current and len(current) + len(group) > chunk_size:
+            chunks.append(tuple(current))
+            current = []
+        current.extend(group)
+        if len(current) >= chunk_size:
+            chunks.append(tuple(current))
+            current = []
+    if current:
+        chunks.append(tuple(current))
+    return tuple(chunks)
+
+
+def _request_group_key(
+    source: OwnershipXICSource,
+    item: _ResolutionRequestItem,
+) -> _ResolutionRequestGroupKey:
+    request = item[3]
+    resolver = getattr(source, "scan_window_for_request", None)
+    if callable(resolver):
+        try:
+            start_scan, end_scan = resolver(request)
+        except (AttributeError, NotImplementedError):
+            pass
+        else:
+            return ("scan", int(start_scan), int(end_scan))
+    return ("rt", request.rt_min, request.rt_max)
+
+
+def _grouped_request_sort_key(
+    keyed_item: tuple[_ResolutionRequestGroupKey, _ResolutionRequestItem],
+) -> tuple[str, int | float, int | float, float, int]:
+    group_key, item = keyed_item
+    original_index, _candidate, _seed_rt, request, _emit_region_audit = item
+    return (*group_key, request.mz, original_index)
 
 
 def _unresolved_outcome(candidate: Any, reason: str) -> _ResolutionOutcome:

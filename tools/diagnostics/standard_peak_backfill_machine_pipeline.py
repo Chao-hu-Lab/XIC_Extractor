@@ -455,6 +455,111 @@ def run_machine_pipeline(
     return summary_path
 
 
+def render_overlay_batch_summary_from_review_queue(
+    *,
+    review_queue_tsv: Path,
+    alignment_cells_tsv: Path,
+    raw_dir: Path,
+    dll_dir: Path,
+    output_dir: Path,
+    start_rank: int = 1,
+    limit: int | None = None,
+    reuse_existing: bool = False,
+    ppm: float = 20.0,
+    max_highlight_rescued: int = 8,
+    write_overlay_pdf: bool = False,
+    evidence_only: bool = False,
+    workers: int = 1,
+    dpi: int = 140,
+) -> OverlaySourceResolution:
+    queue_rows = read_tsv_required(
+        review_queue_tsv,
+        ("feature_family_id",),
+    )
+    remaining = len(queue_rows) - start_rank + 1
+    if remaining < 1:
+        raise ValueError(
+            f"--start-rank {start_rank} is outside review queue row count "
+            f"{len(queue_rows)}.",
+        )
+    effective_limit = remaining if limit is None else limit
+    overlay_metrics: dict[str, Any] = {}
+    overlay_rows = family_ms1_overlay_batch.run_overlay_batch(
+        review_queue_tsv=review_queue_tsv,
+        alignment_cells=alignment_cells_tsv,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        limit=effective_limit,
+        start_rank=start_rank,
+        ppm=ppm,
+        max_highlight_rescued=max_highlight_rescued,
+        reuse_existing=reuse_existing,
+        write_pdf=write_overlay_pdf,
+        evidence_only=evidence_only,
+        workers=workers,
+        dpi=dpi,
+        metrics=overlay_metrics,
+    )
+    family_ms1_overlay_batch._write_outputs(
+        output_dir,
+        overlay_rows,
+        metrics=overlay_metrics,
+    )
+    failed = [row for row in overlay_rows if row["status"] == "failed"]
+    _run_step("family MS1 overlay batch", 2 if failed else 0)
+    return OverlaySourceResolution(
+        summary_tsv=output_dir / "family_ms1_overlay_batch_summary.tsv",
+        mode=(
+            "evidence_from_review_queue"
+            if evidence_only
+            else "rendered_from_review_queue"
+        ),
+        evidence_source_mode="evidence_only" if evidence_only else "rendered_images",
+        queue_row_count=len(queue_rows),
+        requested_limit=limit,
+        effective_limit=effective_limit,
+        metrics=overlay_metrics,
+    )
+
+
+def write_overlay_batch_summary_slice(
+    *,
+    source_overlay_batch_summary_tsv: Path,
+    output_dir: Path,
+    start_rank: int,
+    limit: int,
+) -> Path:
+    if start_rank < 1:
+        raise ValueError("--start-rank must be >= 1")
+    if limit < 1:
+        raise ValueError("--limit must be >= 1")
+    overlay_rows = read_tsv_required(
+        source_overlay_batch_summary_tsv,
+        ("rank", "feature_family_id", "status"),
+    )
+    selected_rows = [
+        row
+        for row in overlay_rows
+        if _positive_int(text_value(row.get("rank"))) >= start_rank
+    ][:limit]
+    if len(selected_rows) != limit:
+        raise ValueError(
+            f"overlay summary slice r{start_rank}-{start_rank + limit - 1} "
+            f"expected {limit} rows but found {len(selected_rows)}",
+        )
+    family_ms1_overlay_batch._write_outputs(
+        output_dir,
+        selected_rows,
+        metrics={
+            "source_overlay_batch_summary_tsv": str(source_overlay_batch_summary_tsv),
+            "slice_start_rank": start_rank,
+            "slice_limit": limit,
+        },
+    )
+    return output_dir / "family_ms1_overlay_batch_summary.tsv"
+
+
 def _resolve_overlay_batch_summary_tsv(
     *,
     overlay_batch_summary_tsv: Path | None,
@@ -512,55 +617,22 @@ def _resolve_overlay_batch_summary_tsv(
             "Provide --overlay-batch-summary-tsv, or provide "
             f"{', '.join(missing)} so the pipeline can render overlays.",
         )
-    queue_rows = read_tsv_required(
-        review_queue_tsv,
-        ("feature_family_id",),
-    )
-    remaining = len(queue_rows) - start_rank + 1
-    if remaining < 1:
-        raise ValueError(
-            f"--start-rank {start_rank} is outside review queue row count "
-            f"{len(queue_rows)}.",
-        )
-    effective_limit = remaining if limit is None else limit
     overlay_dir = overlay_output_dir or output_dir / "family_ms1_overlay_batch"
-    overlay_metrics: dict[str, Any] = {}
-    overlay_rows = family_ms1_overlay_batch.run_overlay_batch(
+    return render_overlay_batch_summary_from_review_queue(
         review_queue_tsv=review_queue_tsv,
-        alignment_cells=alignment_cells_tsv,
+        alignment_cells_tsv=alignment_cells_tsv,
         raw_dir=raw_dir,
         dll_dir=dll_dir,
         output_dir=overlay_dir,
-        limit=effective_limit,
         start_rank=start_rank,
+        limit=limit,
         ppm=ppm,
         max_highlight_rescued=max_highlight_rescued,
         reuse_existing=reuse_existing,
-        write_pdf=write_overlay_pdf,
+        write_overlay_pdf=write_overlay_pdf,
         evidence_only=evidence_only,
         workers=workers,
         dpi=dpi,
-        metrics=overlay_metrics,
-    )
-    family_ms1_overlay_batch._write_outputs(
-        overlay_dir,
-        overlay_rows,
-        metrics=overlay_metrics,
-    )
-    failed = [row for row in overlay_rows if row["status"] == "failed"]
-    _run_step("family MS1 overlay batch", 2 if failed else 0)
-    return OverlaySourceResolution(
-        summary_tsv=overlay_dir / "family_ms1_overlay_batch_summary.tsv",
-        mode=(
-            "evidence_from_review_queue"
-            if evidence_only
-            else "rendered_from_review_queue"
-        ),
-        evidence_source_mode="evidence_only" if evidence_only else "rendered_images",
-        queue_row_count=len(queue_rows),
-        requested_limit=limit,
-        effective_limit=effective_limit,
-        metrics=overlay_metrics,
     )
 
 
@@ -594,6 +666,14 @@ def _resolve_reconciliation_groups_tsv(
 def _run_step(label: str, code: int) -> None:
     if code != 0:
         raise ValueError(f"{label} failed with exit code {code}")
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
 
 
 def _summarize_overlay_batch(path: Path) -> dict[str, Any]:

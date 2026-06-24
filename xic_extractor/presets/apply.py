@@ -36,6 +36,13 @@ BACKFILL_EXPANSION_PRODUCTIZATION_MODES = frozenset(
         "clean-target-selective",
     }
 )
+OWNER_BUILD_XIC_BACKENDS = frozenset(
+    {
+        "raw",
+        "raw-super-window",
+        "ms1-index",
+    }
+)
 
 
 def apply_to_discovery(
@@ -139,6 +146,12 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
         minimum=0.0,
         maximum=1.0,
     )
+    owner_build_xic_backend = _enum_str_setting(
+        overrides,
+        "owner_build_xic_backend",
+        "raw",
+        OWNER_BUILD_XIC_BACKENDS,
+    )
     backfill_expansion_productization = _enum_str_setting(
         overrides,
         "backfill_expansion_productization",
@@ -181,6 +194,7 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
         "standard_peak_backfill_write_gallery": write_gallery,
         "standard_peak_backfill_reuse_existing": reuse_existing,
         "standard_peak_backfill_min_shape_r": min_shape_r,
+        "owner_build_xic_backend": owner_build_xic_backend,
         "backfill_expansion_productization": backfill_expansion_productization,
         "backfill_expansion_reuse_existing_raw_overlay": (
             backfill_expansion_reuse_existing_raw_overlay
