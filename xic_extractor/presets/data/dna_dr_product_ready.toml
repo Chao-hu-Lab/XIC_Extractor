@@ -1,5 +1,5 @@
 name = "DNA dR Product Ready"
-description = "CID neutral-loss discovery, standard-peak publication, and bounded clean-target Backfill expansion activation"
+description = "CID neutral-loss discovery and current-run standard-peak publication"
 combine_mode = "single"
 
 [[tag]]
@@ -13,7 +13,3 @@ value = 116.0474
 standard_peak_backfill = true
 standard_peak_backfill_chunk_size = 120
 standard_peak_backfill_publication_mode = "matrix-only"
-backfill_expansion_productization = "clean-target-selective"
-backfill_expansion_reuse_existing_raw_overlay = false
-backfill_expansion_reuse_existing_shift_aware = false
-backfill_expansion_render_shift_aware_images = false

@@ -234,6 +234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     standard_peak_outputs = None
     backfill_expansion_outputs = None
+    product_ready_publication_check_outputs = None
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
@@ -371,8 +372,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                             "backfill_expansion_min_shape_r",
                         ),
                         timing_recorder=timing_recorder,
+                        activation_scope_expected_diff_tsv=(
+                            _clean_target_selective_activation_expected_diff_tsv()
+                        ),
                     )
                 )
+            if _is_builtin_product_ready_preset(preset):
+                product_ready_publication_check_outputs = (
+                    check_product_ready_preset_publication(
+                        alignment_dir=output_dir,
+                    )
+                )
+                if product_ready_publication_check_outputs.status != "pass":
+                    raise ValueError(
+                        "Product-ready preset publication check failed: "
+                        f"{product_ready_publication_check_outputs.summary_json}",
+                    )
         finally:
             if profiler is not None:
                 _write_cprofile_outputs(
@@ -443,6 +458,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         gallery_html = getattr(standard_peak_outputs, "gallery_html", None)
         if gallery_html is not None:
             print(f"Standard-peak backfill gallery HTML: {gallery_html}")
+    if product_ready_publication_check_outputs is not None:
+        print(
+            "Product-ready preset publication summary JSON: "
+            f"{product_ready_publication_check_outputs.summary_json}"
+        )
+        print(
+            "Product-ready preset publication checks TSV: "
+            f"{product_ready_publication_check_outputs.checks_tsv}"
+        )
     if backfill_expansion_outputs is not None:
         print(
             "Backfill expansion productization summary JSON: "
@@ -953,6 +977,29 @@ def run_backfill_expansion_clean_target_selective_preset_from_alignment(**kwargs
     )
 
     return runner(**kwargs)
+
+
+def check_product_ready_preset_publication(**kwargs):
+    from xic_extractor.diagnostics.product_ready_preset_publication_check import (
+        check_product_ready_preset_publication as checker,
+    )
+
+    return checker(**kwargs)
+
+
+def _is_builtin_product_ready_preset(preset: Preset | None) -> bool:
+    return preset is not None and preset.source == "builtin:dna_dr_product_ready"
+
+
+def _clean_target_selective_activation_expected_diff_tsv() -> Path:
+    from scripts import (
+        build_backfill_expansion_clean_target_selective_product_activation,
+    )
+
+    return (
+        build_backfill_expansion_clean_target_selective_product_activation
+        .DEFAULT_FILTERED_EXPECTED_DIFF_TSV
+    )
 
 
 def _expect_arg(

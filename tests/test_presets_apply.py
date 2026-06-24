@@ -73,10 +73,7 @@ def test_apply_to_alignment_returns_product_ready_runtime_options() -> None:
     assert alignment_config == AlignmentConfig()
     assert run_overrides["standard_peak_backfill"] is True
     assert run_overrides["standard_peak_backfill_publication_mode"] == "matrix-only"
-    assert (
-        run_overrides["backfill_expansion_productization"]
-        == "clean-target-selective"
-    )
+    assert run_overrides["backfill_expansion_productization"] == "off"
     assert run_overrides["backfill_expansion_reuse_existing_raw_overlay"] is False
     assert run_overrides["backfill_expansion_reuse_existing_shift_aware"] is False
     assert run_overrides["backfill_expansion_render_shift_aware_images"] is False

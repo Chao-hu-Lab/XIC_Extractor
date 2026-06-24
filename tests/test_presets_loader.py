@@ -37,7 +37,7 @@ def test_list_presets_works_outside_repo_cwd(
     assert "dna_dr_product_ready" in list_presets()
 
 
-def test_load_builtin_dna_dr_product_ready_preset_enables_backfill_expansion() -> None:
+def test_load_builtin_dna_dr_product_ready_preset_stays_sample_universe_safe() -> None:
     preset = load_preset("dna_dr_product_ready")
 
     assert preset.name == "DNA dR Product Ready"
@@ -47,10 +47,6 @@ def test_load_builtin_dna_dr_product_ready_preset_enables_backfill_expansion() -
         "standard_peak_backfill": True,
         "standard_peak_backfill_chunk_size": 120,
         "standard_peak_backfill_publication_mode": "matrix-only",
-        "backfill_expansion_productization": "clean-target-selective",
-        "backfill_expansion_reuse_existing_raw_overlay": False,
-        "backfill_expansion_reuse_existing_shift_aware": False,
-        "backfill_expansion_render_shift_aware_images": False,
     }
 
 
