@@ -25,10 +25,13 @@ ZERO_TEST_PATTERNS = [
     re.compile(r"ERROR:\s+not\s+found:", re.IGNORECASE),
 ]
 
-LOCK_PATTERNS = [
-    re.compile(r"\.git[\\/]+index\.lock", re.IGNORECASE),
-    re.compile(r"cannot lock ref", re.IGNORECASE),
+LOCK_ERROR_PATTERNS = [
+    re.compile(r"(?:fatal|error):.*(?:\.git[\\/]+index\.lock|index\.lock)", re.IGNORECASE | re.DOTALL),
+    re.compile(r"(?:unable to create|could not create|file exists).*\.git[\\/]+index\.lock", re.IGNORECASE | re.DOTALL),
+    re.compile(r"another git process.*(?:index\.lock|repository)", re.IGNORECASE | re.DOTALL),
+    re.compile(r"(?:cannot|could not|failed to|unable to)\s+lock\s+ref", re.IGNORECASE),
 ]
+GIT_COMMAND = re.compile(r"(?:^|[;&|()\r\n])\s*git(?:\.exe)?\s+", re.IGNORECASE)
 
 WRITE_COMMAND = re.compile(
     r"\b(apply_patch|Set-Content|Add-Content|Out-File|New-Item|Move-Item|Remove-Item|Copy-Item|"
@@ -57,6 +60,27 @@ def text_from_response(value: object) -> str:
     return ""
 
 
+def error_text_from_response(value: object) -> str:
+    if isinstance(value, str):
+        if re.search(r"Exit code:\s*0\b", value, re.IGNORECASE):
+            return ""
+        return value
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if key_text in {"stderr", "error", "error_message"} and isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, (dict, list)):
+                nested = error_text_from_response(item)
+                if nested:
+                    parts.append(nested)
+        return "\n".join(part for part in parts if part)
+    if isinstance(value, list):
+        return "\n".join(error_text_from_response(item) for item in value)
+    return ""
+
+
 def text_from_value(value: object) -> str:
     if isinstance(value, str):
         return value
@@ -73,6 +97,12 @@ def is_write_like(event: dict[str, object], command: str) -> bool:
         return True
     tool_input_text = text_from_value(event.get("tool_input"))
     return bool(WRITE_COMMAND.search(f"{command}\n{tool_input_text}"))
+
+
+def is_git_lock_friction(command: str, response_text: str) -> bool:
+    if not GIT_COMMAND.search(command):
+        return False
+    return any(pattern.search(response_text) for pattern in LOCK_ERROR_PATTERNS)
 
 
 def repo_root(cwd: str) -> str:
@@ -158,7 +188,9 @@ def main() -> int:
     if isinstance(tool_input, dict) and isinstance(tool_input.get("command"), str):
         command = str(tool_input["command"])
 
-    response_text = text_from_response(event.get("tool_response"))
+    tool_response = event.get("tool_response")
+    response_text = text_from_response(tool_response)
+    error_text = error_text_from_response(tool_response)
     combined = f"{command}\n{response_text}"
 
     if "pytest" in command.lower() and any(pattern.search(combined) for pattern in ZERO_TEST_PATTERNS):
@@ -176,7 +208,7 @@ def main() -> int:
 
     contexts: list[str] = []
 
-    if any(pattern.search(combined) for pattern in LOCK_PATTERNS):
+    if is_git_lock_friction(command, error_text):
         contexts.append(
             "Git lock/ref-lock friction detected. Stop retrying the same shape; inspect the lock/ref state and use the documented Windows git recovery path."
         )
