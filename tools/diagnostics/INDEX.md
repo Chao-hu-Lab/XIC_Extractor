@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-23
-**Total entry-points:** 99
-**Total files (incl. helpers):** 178 Python files under `tools/diagnostics/`
+**Total entry-points:** 101
+**Total files (incl. helpers):** 180 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -25,7 +25,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 
 1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
-3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
+3. [Alignment Diagnostics](#alignment-diagnostics) — 8 tools
 4. [Backfill Reviews](#backfill-reviews) — 42 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
@@ -365,6 +365,22 @@ primary detected values.
 CLI reports and audits over alignment outputs (cells, families, owner
 decisions, RT normalization, matrix identity).
 
+### `row_completion_confidence.py`
+
+**Purpose**: Build the daily artifact-lane row-completion confidence packet from
+existing alignment health and matrix artifacts.
+**Topic group**: `row_completion_confidence.py` + package-owned
+`xic_extractor.diagnostics.row_completion_confidence`
+**Originating spec/plan**:
+`docs/superpowers/specs/2026-06-23-final-matrix-row-completion-confidence-benchmark-design.md`;
+`docs/superpowers/plans/2026-06-23-row-completion-confidence-benchmark-implementation-plan.md`
+**Status**: diagnostic_only. Builds manifest-bound row-completion confidence
+outputs from existing alignment health and matrix artifacts. Does not open RAW,
+recompute evidence, run mature tools, alter matrix authority, or change
+selected values/counting.
+
+---
+
 ### `alignment_decision_report.py`
 
 **Purpose**: Render an HTML decision report from alignment diagnostics.
@@ -402,6 +418,24 @@ decisions, RT normalization, matrix identity).
 current-review lookup, and per-family cell-row groups together, preserving
 cluster order, sorted sample order, row grouping order, TSV/JSON schemas, and
 benchmark join behavior.
+
+---
+
+### `alignment_health_packet.py`
+
+**Purpose**: Build a no-RAW alignment health packet from existing alignment
+outputs so repeated 8RAW/85RAW validation can quickly surface owner ambiguity,
+backfill dependency, unchecked pressure, and primary-consolidation sentinel
+families.
+**Topic group**: `alignment_health_packet.py` (single-file)
+**Status note**: Writes `alignment_health_summary.json`,
+`alignment_health_summary.tsv`, and `alignment_health_family_sentinels.tsv`.
+It reads `alignment_review.tsv`, `alignment_matrix.tsv`,
+`alignment_matrix_identity.tsv`, optional `alignment_backfill_cell_evidence.tsv`
+or `alignment_cells.tsv`, and optional `alignment_owner_backfill_seed_audit.tsv`.
+It is `diagnostic_only`: it does not read RAW, recompute evidence, change
+selected peaks/areas/counting, alter matrix identity, or grant product
+authority.
 
 ---
 
