@@ -6,6 +6,7 @@ from pathlib import Path
 from xic_extractor.diagnostics.product_ready_preset_publication_check import (
     check_product_ready_preset_publication,
 )
+from xic_extractor.tabular_io import file_sha256
 
 
 def test_product_ready_preset_publication_check_passes_current_run_manifest(
@@ -19,7 +20,7 @@ def test_product_ready_preset_publication_check_passes_current_run_manifest(
     summary = json.loads(outputs.summary_json.read_text(encoding="utf-8"))
     assert summary["status"] == "pass"
     assert summary["matrix_cells_written"] == "2"
-    assert summary["product_surface_changed"] == "FALSE"
+    assert summary["product_surface_changed"] == "TRUE"
 
 
 def test_product_ready_preset_publication_check_rejects_fixed_replay_dir(
@@ -60,6 +61,8 @@ def test_product_ready_preset_publication_check_allows_noop_no_queue_run(
     outputs = check_product_ready_preset_publication(alignment_dir=alignment_dir)
 
     assert outputs.status == "pass"
+    summary = json.loads(outputs.summary_json.read_text(encoding="utf-8"))
+    assert summary["product_surface_changed"] == "FALSE"
 
 
 def test_product_ready_preset_publication_check_rejects_mismatched_manifest(
@@ -77,6 +80,25 @@ def test_product_ready_preset_publication_check_rejects_mismatched_manifest(
     checks = outputs.checks_tsv.read_text(encoding="utf-8")
     assert (
         "default_matrix_manifest_matrix_cells_written_matches_summary\tfail"
+        in checks
+    )
+
+
+def test_product_ready_preset_publication_check_rejects_stale_published_matrix(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_publication_artifacts(tmp_path)
+    (alignment_dir / "alignment_matrix.tsv").write_text(
+        "Mz\tRT\tS1\n1\t2\t999\n",
+        encoding="utf-8",
+    )
+
+    outputs = check_product_ready_preset_publication(alignment_dir=alignment_dir)
+
+    assert outputs.status == "fail"
+    checks = outputs.checks_tsv.read_text(encoding="utf-8")
+    assert (
+        "default_matrix_manifest_published_alignment_matrix_sha256_matches\tfail"
         in checks
     )
 
@@ -113,6 +135,8 @@ def _write_publication_artifacts(
         encoding="utf-8",
     )
     if write_manifest:
+        matrix_tsv = alignment_dir / "alignment_matrix.tsv"
+        identity_tsv = alignment_dir / "alignment_matrix_identity.tsv"
         manifest = {
             "status": "pass",
             "source_run_id": source_run_id,
@@ -121,11 +145,15 @@ def _write_publication_artifacts(
             "missing_queue_rank_count": "0",
             "duplicate_queue_rank_count": "0",
             "matrix_cells_written": matrix_cells_written,
-            "published_alignment_matrix_tsv": str(
-                alignment_dir / "alignment_matrix.tsv",
+            "published_alignment_matrix_tsv": str(matrix_tsv),
+            "published_alignment_matrix_identity_tsv": str(identity_tsv),
+            "published_alignment_matrix_sha256": file_sha256(
+                matrix_tsv,
+                uppercase=False,
             ),
-            "published_alignment_matrix_identity_tsv": str(
-                alignment_dir / "alignment_matrix_identity.tsv",
+            "published_alignment_matrix_identity_sha256": file_sha256(
+                identity_tsv,
+                uppercase=False,
             ),
         }
         (alignment_dir / "standard_peak_default_matrix_manifest.json").write_text(

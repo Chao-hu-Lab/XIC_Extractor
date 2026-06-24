@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from xic_extractor.tabular_io import format_diagnostic_value, text_value, write_tsv
+from xic_extractor.tabular_io import (
+    file_sha256,
+    format_diagnostic_value,
+    text_value,
+    write_tsv,
+)
 
 SCHEMA_VERSION = "product_ready_preset_publication_check_v1"
 DEFAULT_EXPECTED_SOURCE_RUN_PREFIX = "alignment-preset:builtin:dna_dr_product_ready"
@@ -157,17 +162,36 @@ def check_product_ready_preset_publication(
                 else "not checked"
             ),
         )
-        for field in (
-            "published_alignment_matrix_tsv",
-            "published_alignment_matrix_identity_tsv",
+        for path_field, hash_field in (
+            (
+                "published_alignment_matrix_tsv",
+                "published_alignment_matrix_sha256",
+            ),
+            (
+                "published_alignment_matrix_identity_tsv",
+                "published_alignment_matrix_identity_sha256",
+            ),
         ):
-            published_path = _path_value(default_manifest.get(field))
+            published_path = _path_value(default_manifest.get(path_field))
+            expected_hash = text_value(default_manifest.get(hash_field)).lower()
             _append_check(
                 checks,
-                f"default_matrix_manifest_{field}_exists",
+                f"default_matrix_manifest_{path_field}_exists",
                 published_path is not None and published_path.is_file(),
                 observed=str(published_path) if published_path else "",
                 expected="existing file",
+            )
+            observed_hash = (
+                file_sha256(published_path, uppercase=False)
+                if published_path is not None and published_path.is_file()
+                else ""
+            )
+            _append_check(
+                checks,
+                f"default_matrix_manifest_{hash_field}_matches",
+                bool(expected_hash) and observed_hash == expected_hash,
+                observed=observed_hash,
+                expected=expected_hash,
             )
 
     _append_check(
@@ -215,7 +239,9 @@ def check_product_ready_preset_publication(
             sum(1 for row in checks if row["status"] != "pass"),
         ),
         "checks_tsv": str(checks_tsv),
-        "product_surface_changed": "FALSE",
+        "product_surface_changed": (
+            "TRUE" if _intish(matrix_cells_written) > 0 else "FALSE"
+        ),
         "authority_changed": "FALSE",
         "next_action": (
             "current_run_product_ready_preset_publication_verified"
