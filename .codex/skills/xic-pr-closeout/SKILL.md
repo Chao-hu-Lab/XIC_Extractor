@@ -15,6 +15,11 @@ the fallback closeout contract.
 Use the global skill first for PR/branch narrative, verification, residual risk,
 and follow-up structure. Then apply the XIC-specific additions below.
 
+If the branch is part of a stacked, superseded, retargeted, or split PR series,
+use `xic-pr-stack-repair` first. Do not treat stale bases, repeated global
+ledger edits, or missing ignored artifacts in clean checkout as ordinary CI
+bugs until the stack boundary and artifact ownership have been mapped.
+
 ## XIC Closeout Additions
 
 Include these when relevant:

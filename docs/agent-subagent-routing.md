@@ -51,6 +51,9 @@ when their trigger threshold applies before recreating process instructions:
   coding.
 - global `pr-closeout` for durable PR/branch closeout; `xic-pr-closeout` only
   adds XIC readiness labels and artifact rules.
+- `xic-pr-stack-repair` before repairing, retargeting, rebuilding, or merging a
+  stacked/superseded PR series when stale bases, repeated ledger edits,
+  externalized artifacts, or clean-checkout CI dependencies are plausible.
 - `xic-raw-validation` remains repo-local because 8RAW/85RAW, Thermo RAW paths,
   output levels, heartbeat, timing, and benchmark acceptance are XIC-specific.
 
