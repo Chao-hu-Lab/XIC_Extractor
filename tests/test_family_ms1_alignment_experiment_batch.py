@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tools.diagnostics import family_ms1_alignment_experiment_batch as batch
 
 
@@ -338,6 +340,71 @@ def test_batch_preloads_cell_evidence_once_for_selected_families(
     assert load_calls == [("FAM001", "FAM002")]
     assert [row["alignment_status"] for row in rows] == ["rendered", "rendered"]
     assert summary["successful_shift_aware_row_count"] == 2
+    assert summary["source_family_map_source"] == "cell_evidence_tsv"
+
+
+def test_batch_uses_preloaded_source_family_map(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    trace_json = _write_trace_json(tmp_path, family_id="FAM001")
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n",
+        encoding="utf-8",
+    )
+    overlay_summary = tmp_path / "family_ms1_overlay_batch_summary.tsv"
+    overlay_summary.write_text(
+        "\t".join(
+            (
+                "rank",
+                "feature_family_id",
+                "seed_group_id",
+                "output_prefix",
+                "status",
+                "trace_data_json",
+            ),
+        )
+        + "\n"
+        + "\t".join(
+            (
+                "1",
+                "FAM001",
+                "seed::FAM001",
+                "001_fam001_retained_backfill_missing_overlay",
+                "success",
+                str(trace_json),
+            ),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fail_loader(*_args, **_kwargs) -> dict[str, dict[str, str]]:
+        raise AssertionError("preloaded source-family map should avoid TSV scan")
+
+    monkeypatch.setattr(
+        batch.family_ms1_alignment_experiment,
+        "load_source_family_by_family_sample",
+        fail_loader,
+    )
+    out_dir = tmp_path / "shift"
+
+    rows, summary = batch.run_alignment_experiment_batch(
+        overlay_batch_summary_tsv=overlay_summary,
+        cell_evidence_tsv=cell_evidence,
+        output_dir=out_dir,
+        render_images=False,
+        source_family_by_family_sample={
+            "FAM001": {
+                "FAM001-detected": "FAM000001",
+                "FAM001-rescued": "FAM000002",
+            },
+        },
+    )
+
+    assert rows[0]["alignment_status"] == "rendered"
+    assert summary["source_family_map_source"] == "preloaded"
 
 
 def test_batch_reuses_existing_best_shift_summary(tmp_path: Path) -> None:
@@ -402,6 +469,109 @@ def test_batch_reuses_existing_best_shift_summary(tmp_path: Path) -> None:
     rows = _read_tsv(out_dir / "family_ms1_alignment_experiment_batch_summary.tsv")
     assert rows[0]["alignment_status"] == "reused"
     assert rows[0]["source_best_shift_summary_tsv"] == str(existing)
+
+
+def test_render_or_reuse_row_job_runs_in_process(tmp_path: Path) -> None:
+    trace_json = _write_trace_json(tmp_path, family_id="FAM001")
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n",
+        encoding="utf-8",
+    )
+    payload = (
+        {
+            "rank": "1",
+            "feature_family_id": "FAM001",
+            "seed_group_id": "seed::FAM001",
+            "output_prefix": "001_fam001_retained_backfill_missing_overlay",
+            "status": "success",
+            "trace_data_json": str(trace_json),
+        },
+        {
+            "cell_evidence_tsv": cell_evidence,
+            "output_dir": tmp_path / "shift",
+            "reuse_existing": False,
+            "render_images": False,
+            "source_family_by_sample": {
+                "FAM001-detected": "FAM000001",
+                "FAM001-rescued": "FAM000002",
+            },
+            "dpi": 140,
+        },
+    )
+
+    result = batch._render_or_reuse_row_job(payload)
+
+    assert result["feature_family_id"] == "FAM001"
+    assert result["alignment_status"] == "rendered"
+
+
+def test_batch_threads_dpi_to_run_alignment_experiment(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(**kwargs: object) -> dict[str, Path]:
+        captured["dpi"] = kwargs.get("dpi")
+        output_dir = kwargs["output_dir"]
+        prefix = kwargs["output_prefix"]
+        (output_dir / f"{prefix}_source_family_best_shift_summary.tsv").write_text(
+            "x\n",
+            encoding="utf-8",
+        )
+        return {}
+
+    monkeypatch.setattr(
+        batch.family_ms1_alignment_experiment,
+        "run_alignment_experiment",
+        fake_run,
+    )
+    trace_json = _write_trace_json(tmp_path, family_id="FAM001")
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n",
+        encoding="utf-8",
+    )
+    overlay_summary = tmp_path / "family_ms1_overlay_batch_summary.tsv"
+    overlay_summary.write_text(
+        "rank\tfeature_family_id\tseed_group_id\toutput_prefix\tstatus\t"
+        "trace_data_json\n"
+        f"1\tFAM001\tseed::FAM001\t001_fam001\tsuccess\t{trace_json}\n",
+        encoding="utf-8",
+    )
+
+    rows, summary = batch.run_alignment_experiment_batch(
+        overlay_batch_summary_tsv=overlay_summary,
+        cell_evidence_tsv=cell_evidence,
+        output_dir=tmp_path / "shift",
+        dpi=99,
+    )
+
+    assert captured["dpi"] == 99
+    assert rows[0]["alignment_status"] == "rendered"
+    assert summary["render_dpi"] == 99
+
+
+def test_batch_workers_must_be_positive(tmp_path: Path) -> None:
+    overlay_summary = tmp_path / "overlay.tsv"
+    overlay_summary.write_text(
+        "rank\tfeature_family_id\toutput_prefix\tstatus\n",
+        encoding="utf-8",
+    )
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="workers"):
+        batch.run_alignment_experiment_batch(
+            overlay_batch_summary_tsv=overlay_summary,
+            cell_evidence_tsv=cell_evidence,
+            output_dir=tmp_path / "out",
+            workers=0,
+        )
 
 
 def _trace_json(

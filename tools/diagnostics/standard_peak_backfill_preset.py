@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.diagnostics import family_ms1_alignment_experiment
 from tools.diagnostics.standard_peak_backfill_machine_pipeline import (
     run_machine_pipeline,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery import (
+    run_reconciliation_gallery,
 )
 from xic_extractor.diagnostics.diagnostic_io import read_tsv_required, text_value
 from xic_extractor.diagnostics.retained_backfill_evidence_gate import (
@@ -38,6 +42,7 @@ class StandardPeakBackfillPresetOutputs:
 
 MachinePipelineRunner = Callable[..., Path]
 ConsolidationRunner = Callable[..., StandardPeakChunkConsolidationOutputs]
+ReconciliationGroupsRunner = Callable[..., Path]
 
 
 def run_standard_peak_backfill_preset(
@@ -54,16 +59,21 @@ def run_standard_peak_backfill_preset(
     ppm: float = 20.0,
     max_highlight_rescued: int = 8,
     min_shape_r: float = 0.95,
+    render_workers: int = 1,
+    render_dpi: int = 140,
     timing_recorder: TimingRecorder | None = None,
     machine_pipeline_runner: MachinePipelineRunner = run_machine_pipeline,
     consolidation_runner: ConsolidationRunner = (
         run_standard_peak_backfill_chunk_consolidation
     ),
+    reconciliation_groups_runner: ReconciliationGroupsRunner | None = None,
 ) -> StandardPeakBackfillPresetOutputs:
     """Run retained-gate, chunked machine pipeline, and formal consolidation."""
 
     if chunk_size < 1:
         raise ValueError("standard-peak backfill preset chunk_size must be >= 1")
+    if render_workers < 1:
+        raise ValueError("standard-peak backfill preset render_workers must be >= 1")
     recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
     publication_mode = _resolve_publication_mode(
         publication_mode,
@@ -114,6 +124,8 @@ def run_standard_peak_backfill_preset(
             consolidation_outputs=None,
             status_reasons=("no_standard_peak_backfill_review_rows",),
             publication_mode=publication_mode,
+            render_workers=render_workers,
+            render_dpi=render_dpi,
         )
         with recorder.stage("standard_peak.summary_write"):
             summary_json.write_text(
@@ -129,13 +141,14 @@ def run_standard_peak_backfill_preset(
     chunk_summary_jsons: list[Path] = []
     queue_row_count = len(review_queue_rows)
     chunks_dir = output_dir / "chunks"
+    chunk_specs: list[tuple[int, int, Path, Path, bool]] = []
     for start_rank, limit in _chunk_plan(queue_row_count, chunk_size):
         end_rank = start_rank + limit - 1
         chunk_dir = chunks_dir / f"r{start_rank}_{end_rank}"
         existing_summary_path = (
             chunk_dir / "standard_peak_backfill_machine_pipeline_summary.json"
         )
-        if (
+        can_reuse_chunk = (
             reuse_existing
             and existing_summary_path.is_file()
             and _can_reuse_chunk_summary(
@@ -145,10 +158,59 @@ def run_standard_peak_backfill_preset(
                 limit=limit,
                 source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
                 min_shape_r=min_shape_r,
+                render_dpi=render_dpi,
             )
-        ):
+        )
+        chunk_specs.append(
+            (start_rank, limit, chunk_dir, existing_summary_path, can_reuse_chunk),
+        )
+
+    pending_chunk_specs = [spec for spec in chunk_specs if not spec[4]]
+    source_family_by_family_sample: Mapping[str, Mapping[str, str]] = {}
+    reconciliation_groups_tsv: Path | None = None
+    if pending_chunk_specs:
+        queue_family_ids = _review_queue_family_ids(review_queue_rows)
+        with recorder.stage(
+            "standard_peak.source_family_map_read",
+            metrics={"family_count": len(queue_family_ids)},
+        ) as scope:
+            source_family_by_family_sample = (
+                family_ms1_alignment_experiment.load_source_family_by_family_sample(
+                    paths["cells"],
+                    family_ids=queue_family_ids,
+                )
+                if queue_family_ids
+                else {}
+            )
+            scope.metrics["mapped_family_count"] = len(source_family_by_family_sample)
+
+        reconciliation_groups_runner = (
+            reconciliation_groups_runner or _build_global_reconciliation_groups
+        )
+        with recorder.stage(
+            "standard_peak.global_reconciliation_groups",
+            metrics={"family_count": len(queue_family_ids)},
+        ) as scope:
+            reconciliation_groups_tsv = reconciliation_groups_runner(
+                alignment_review_tsv=paths["review"],
+                alignment_cells_tsv=paths["cells"],
+                alignment_matrix_tsv=paths["activation_matrix"],
+                backfill_seed_audit_tsv=paths["seed_audit"],
+                retained_gate_tsv=retained_outputs.tsv,
+                output_dir=output_dir / "global_reconciliation_group_index",
+                source_run_id=source_run_id,
+            )
+            scope.metrics["reconciliation_groups_tsv"] = str(reconciliation_groups_tsv)
+
+    for start_rank, limit, chunk_dir, existing_summary_path, can_reuse_chunk in (
+        chunk_specs
+    ):
+        end_rank = start_rank + limit - 1
+        if can_reuse_chunk:
             chunk_summary_jsons.append(existing_summary_path)
             continue
+        if reconciliation_groups_tsv is None:
+            raise ValueError("reconciliation groups were not built for pending chunk")
         with recorder.stage(
             "standard_peak.chunk",
             metrics={
@@ -167,6 +229,7 @@ def run_standard_peak_backfill_preset(
                 alignment_matrix_tsv=paths["activation_matrix"],
                 alignment_matrix_identity_tsv=paths["activation_identity"],
                 retained_gate_tsv=retained_outputs.tsv,
+                reconciliation_groups_tsv=reconciliation_groups_tsv,
                 output_dir=chunk_dir,
                 source_run_id=f"{source_run_id}-r{start_rank}-{end_rank}",
                 backfill_seed_audit_tsv=paths["seed_audit"],
@@ -179,7 +242,11 @@ def run_standard_peak_backfill_preset(
                 min_shape_r=min_shape_r,
                 publication_mode=publication_mode,
                 evidence_only=evidence_only,
+                defer_projection=True,
+                render_workers=render_workers,
+                render_dpi=render_dpi,
                 timing_recorder=recorder,
+                source_family_by_family_sample=source_family_by_family_sample,
             )
             scope.metrics["summary_json"] = str(summary_path)
         chunk_summary_jsons.append(summary_path)
@@ -231,6 +298,8 @@ def run_standard_peak_backfill_preset(
         consolidation_outputs=consolidation_outputs,
         status_reasons=(),
         publication_mode=publication_mode,
+        render_workers=render_workers,
+        render_dpi=render_dpi,
     )
     with recorder.stage("standard_peak.summary_write"):
         summary_json.write_text(
@@ -301,6 +370,42 @@ def _chunk_plan(queue_row_count: int, chunk_size: int) -> tuple[tuple[int, int],
     return tuple(plan)
 
 
+def _review_queue_family_ids(
+    rows: Sequence[Mapping[str, str]],
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            {
+                family
+                for row in rows
+                if (family := text_value(row.get("feature_family_id")))
+            },
+        ),
+    )
+
+
+def _build_global_reconciliation_groups(
+    *,
+    alignment_review_tsv: Path,
+    alignment_cells_tsv: Path,
+    alignment_matrix_tsv: Path,
+    backfill_seed_audit_tsv: Path,
+    retained_gate_tsv: Path,
+    output_dir: Path,
+    source_run_id: str,
+) -> Path:
+    outputs = run_reconciliation_gallery(
+        alignment_review_tsv=alignment_review_tsv,
+        alignment_cells_tsv=alignment_cells_tsv,
+        output_dir=output_dir,
+        alignment_matrix_tsv=alignment_matrix_tsv,
+        backfill_seed_audit_tsv=backfill_seed_audit_tsv,
+        retained_backfill_gate_tsv=retained_gate_tsv,
+        source_run_id=source_run_id,
+    )
+    return outputs.groups_tsv
+
+
 def _summary(
     *,
     status: str,
@@ -315,6 +420,8 @@ def _summary(
     consolidation_outputs: StandardPeakChunkConsolidationOutputs | None,
     status_reasons: Sequence[str],
     publication_mode: str,
+    render_workers: int,
+    render_dpi: int,
 ) -> dict[str, object]:
     consolidation_summary = (
         _load_json_mapping(consolidation_outputs.summary_json)
@@ -325,6 +432,8 @@ def _summary(
         "schema_version": "standard_peak_backfill_preset_v0",
         "preset_name": PRESET_NAME,
         "publication_mode": publication_mode,
+        "render_workers": str(render_workers),
+        "render_dpi": str(render_dpi),
         "status": status,
         "source_run_id": source_run_id,
         "alignment_dir": str(alignment_dir),
@@ -396,6 +505,7 @@ def _can_reuse_chunk_summary(
     limit: int,
     source_run_id: str,
     min_shape_r: float,
+    render_dpi: int,
 ) -> bool:
     summary = _load_json_mapping(path)
     if text_value(summary.get("status")) != "pass":
@@ -408,6 +518,11 @@ def _can_reuse_chunk_summary(
     if _int_value(summary.get("effective_overlay_limit")) != limit:
         return False
     if text_value(summary.get("source_run_id")) != source_run_id:
+        return False
+    existing_render_dpi = _int_value(summary.get("render_dpi"))
+    if existing_render_dpi is None and publication_mode != "matrix-only":
+        return False
+    if existing_render_dpi is not None and existing_render_dpi != render_dpi:
         return False
     existing_min_shape_r = _float_value(summary.get("min_shape_r"))
     return (

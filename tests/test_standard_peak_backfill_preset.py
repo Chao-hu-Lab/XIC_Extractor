@@ -57,6 +57,8 @@ def test_standard_peak_backfill_preset_skips_machine_pipeline_without_queue(
     assert summary["status"] == "pass"
     assert summary["review_queue_row_count"] == "0"
     assert summary["chunk_count"] == "0"
+    assert summary["render_workers"] == "1"
+    assert summary["render_dpi"] == "140"
     assert summary["status_reasons"] == "no_standard_peak_backfill_review_rows"
 
 
@@ -72,6 +74,7 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
     dll_dir.mkdir()
     machine_calls: list[dict[str, object]] = []
     consolidation_calls: list[dict[str, object]] = []
+    reconciliation_group_calls: list[dict[str, object]] = []
 
     def fake_gate(**_kwargs):
         gate_dir = output_dir / "retained_backfill_evidence_gate"
@@ -126,6 +129,10 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
             published_alignment_manifest_json=output / "publish_manifest.json",
         )
 
+    fake_reconciliation_groups = _fake_reconciliation_groups_runner(
+        output_dir,
+        reconciliation_group_calls,
+    )
     monkeypatch.setattr(
         standard_peak_backfill_preset,
         "run_retained_backfill_evidence_gate",
@@ -139,14 +146,31 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
         source_run_id="preset:test",
         chunk_size=2,
         write_gallery=True,
+        render_workers=5,
+        render_dpi=123,
         machine_pipeline_runner=fake_machine,
         consolidation_runner=fake_consolidation,
+        reconciliation_groups_runner=fake_reconciliation_groups,
     )
 
     assert [call["start_rank"] for call in machine_calls] == [1, 3]
     assert [call["limit"] for call in machine_calls] == [2, 1]
+    assert all(call["render_workers"] == 5 for call in machine_calls)
+    assert all(call["render_dpi"] == 123 for call in machine_calls)
     assert all(call["raw_dir"] == raw_dir for call in machine_calls)
     assert all(call["dll_dir"] == dll_dir for call in machine_calls)
+    assert len(reconciliation_group_calls) == 1
+    assert all(
+        call["reconciliation_groups_tsv"]
+        == output_dir
+        / "global_reconciliation_group_index"
+        / "backfill_evidence_reconciliation_groups.tsv"
+        for call in machine_calls
+    )
+    assert all(
+        call["source_family_by_family_sample"] == {}
+        for call in machine_calls
+    )
     assert consolidation_calls[0]["publish_to_source_alignment_output"] is True
     assert (
         consolidation_calls[0]["publish_alignment_matrix_tsv"]
@@ -160,6 +184,8 @@ def test_standard_peak_backfill_preset_chunks_and_publishes_alignment_output(
     assert summary["status"] == "pass"
     assert summary["review_queue_row_count"] == "3"
     assert summary["chunk_count"] == "2"
+    assert summary["render_workers"] == "5"
+    assert summary["render_dpi"] == "123"
     assert summary["matrix_cells_written"] == "3"
     assert outputs.published_alignment_manifest_json == output_dir / (
         "consolidated/publish_manifest.json"
@@ -179,6 +205,7 @@ def test_standard_peak_backfill_preset_matrix_only_uses_evidence_only_chunks(
     dll_dir.mkdir()
     machine_calls: list[dict[str, object]] = []
     consolidation_calls: list[dict[str, object]] = []
+    reconciliation_group_calls: list[dict[str, object]] = []
 
     def fake_gate(**_kwargs):
         gate_dir = output_dir / "retained_backfill_evidence_gate"
@@ -231,6 +258,10 @@ def test_standard_peak_backfill_preset_matrix_only_uses_evidence_only_chunks(
         "run_retained_backfill_evidence_gate",
         fake_gate,
     )
+    fake_reconciliation_groups = _fake_reconciliation_groups_runner(
+        output_dir,
+        reconciliation_group_calls,
+    )
     recorder = TimingRecorder("alignment", run_id="test-standard-peak")
 
     outputs = standard_peak_backfill_preset.run_standard_peak_backfill_preset(
@@ -243,12 +274,15 @@ def test_standard_peak_backfill_preset_matrix_only_uses_evidence_only_chunks(
         write_gallery=True,
         machine_pipeline_runner=fake_machine,
         consolidation_runner=fake_consolidation,
+        reconciliation_groups_runner=fake_reconciliation_groups,
         timing_recorder=recorder,
     )
 
     assert machine_calls[0]["publication_mode"] == "matrix-only"
     assert machine_calls[0]["evidence_only"] is True
+    assert machine_calls[0]["defer_projection"] is True
     assert machine_calls[0]["timing_recorder"] is recorder
+    assert len(reconciliation_group_calls) == 1
     assert consolidation_calls[0]["write_gallery"] is False
     assert outputs.gallery_html is None
     stages = [record.stage for record in recorder.records]
@@ -285,6 +319,7 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
                 "start_rank": 1,
                 "effective_overlay_limit": 2,
                 "min_shape_r": 0.95,
+                "render_dpi": 140,
                 "source_run_id": "standard-peak-backfill-r1-2",
             },
         ),
@@ -292,6 +327,7 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
     )
     machine_calls: list[dict[str, object]] = []
     consolidation_calls: list[dict[str, object]] = []
+    reconciliation_group_calls: list[dict[str, object]] = []
 
     def fake_gate(**_kwargs):
         gate_dir = output_dir / "retained_backfill_evidence_gate"
@@ -337,6 +373,10 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
         "run_retained_backfill_evidence_gate",
         fake_gate,
     )
+    fake_reconciliation_groups = _fake_reconciliation_groups_runner(
+        output_dir,
+        reconciliation_group_calls,
+    )
 
     standard_peak_backfill_preset.run_standard_peak_backfill_preset(
         alignment_dir=alignment_dir,
@@ -347,11 +387,127 @@ def test_standard_peak_backfill_preset_reuses_completed_chunk_summaries(
         reuse_existing=True,
         machine_pipeline_runner=fake_machine,
         consolidation_runner=fake_consolidation,
+        reconciliation_groups_runner=fake_reconciliation_groups,
     )
 
     assert [call["start_rank"] for call in machine_calls] == [3]
+    assert len(reconciliation_group_calls) == 1
     assert consolidation_calls[0]["machine_pipeline_summary_jsons"] == (
         completed_summary,
+        output_dir
+        / "chunks"
+        / "r3_3"
+        / "standard_peak_backfill_machine_pipeline_summary.json",
+    )
+
+
+def test_standard_peak_backfill_preset_skips_global_inputs_when_all_chunks_reused(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    alignment_dir = _write_alignment_artifacts(tmp_path)
+    raw_dir = tmp_path / "raws"
+    dll_dir = tmp_path / "dll"
+    output_dir = tmp_path / "preset"
+    raw_dir.mkdir()
+    dll_dir.mkdir()
+    for chunk_name, start_rank, limit in (
+        ("r1_2", 1, 2),
+        ("r3_3", 3, 1),
+    ):
+        summary = (
+            output_dir
+            / "chunks"
+            / chunk_name
+            / "standard_peak_backfill_machine_pipeline_summary.json"
+        )
+        summary.parent.mkdir(parents=True)
+        end_rank = start_rank + limit - 1
+        summary.write_text(
+            json.dumps(
+                {
+                    "status": "pass",
+                    "publication_mode": "deep-audit",
+                    "start_rank": start_rank,
+                    "effective_overlay_limit": limit,
+                    "min_shape_r": 0.95,
+                    "render_dpi": 140,
+                    "source_run_id": (
+                        f"standard-peak-backfill-r{start_rank}-{end_rank}"
+                    ),
+                },
+            ),
+            encoding="utf-8",
+        )
+    consolidation_calls: list[dict[str, object]] = []
+
+    def fake_gate(**_kwargs):
+        gate_dir = output_dir / "retained_backfill_evidence_gate"
+        gate_dir.mkdir(parents=True, exist_ok=True)
+        gate_tsv = gate_dir / "retained_backfill_evidence_gate.tsv"
+        queue = gate_dir / "review_overlay_queue.tsv"
+        gate_tsv.write_text("feature_family_id\n", encoding="utf-8")
+        queue.write_text("feature_family_id\nFAM1\nFAM2\nFAM3\n", encoding="utf-8")
+        missing = gate_dir / "missing_overlay_queue.tsv"
+        missing.write_text("feature_family_id\n", encoding="utf-8")
+        return RetainedBackfillGateOutputs(
+            tsv=gate_tsv,
+            json=gate_dir / "retained_backfill_evidence_gate.json",
+            missing_overlay_queue_tsv=missing,
+            review_overlay_queue_tsv=queue,
+        )
+
+    def fail_machine(**_kwargs):
+        raise AssertionError("all chunks should be reused")
+
+    def fail_reconciliation_groups(**_kwargs):
+        raise AssertionError("global reconciliation groups should not be built")
+
+    def fail_source_family_loader(*_args, **_kwargs):
+        raise AssertionError("source-family map should not be read")
+
+    def fake_consolidation(**kwargs):
+        consolidation_calls.append(dict(kwargs))
+        output = Path(kwargs["output_dir"])
+        output.mkdir(parents=True, exist_ok=True)
+        summary_json = output / "summary.json"
+        summary_json.write_text('{"status": "pass"}', encoding="utf-8")
+        return StandardPeakChunkConsolidationOutputs(
+            summary_tsv=output / "summary.tsv",
+            summary_json=summary_json,
+            status="pass",
+            merged_shadow_projection_cells_tsv=output / "shadow.tsv",
+            productization=SimpleNamespace(reconciliation_gallery_html=None),
+        )
+
+    monkeypatch.setattr(
+        standard_peak_backfill_preset,
+        "run_retained_backfill_evidence_gate",
+        fake_gate,
+    )
+    monkeypatch.setattr(
+        standard_peak_backfill_preset.family_ms1_alignment_experiment,
+        "load_source_family_by_family_sample",
+        fail_source_family_loader,
+    )
+
+    standard_peak_backfill_preset.run_standard_peak_backfill_preset(
+        alignment_dir=alignment_dir,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        chunk_size=2,
+        reuse_existing=True,
+        machine_pipeline_runner=fail_machine,
+        consolidation_runner=fake_consolidation,
+        reconciliation_groups_runner=fail_reconciliation_groups,
+    )
+
+    assert consolidation_calls[0]["machine_pipeline_summary_jsons"] == (
+        output_dir
+        / "chunks"
+        / "r1_2"
+        / "standard_peak_backfill_machine_pipeline_summary.json",
         output_dir
         / "chunks"
         / "r3_3"
@@ -391,6 +547,7 @@ def test_standard_peak_backfill_preset_reruns_failed_reuse_summary(
     )
     machine_calls: list[dict[str, object]] = []
     consolidation_calls: list[dict[str, object]] = []
+    reconciliation_group_calls: list[dict[str, object]] = []
 
     def fake_gate(**_kwargs):
         gate_dir = output_dir / "retained_backfill_evidence_gate"
@@ -448,6 +605,10 @@ def test_standard_peak_backfill_preset_reruns_failed_reuse_summary(
         "run_retained_backfill_evidence_gate",
         fake_gate,
     )
+    fake_reconciliation_groups = _fake_reconciliation_groups_runner(
+        output_dir,
+        reconciliation_group_calls,
+    )
 
     standard_peak_backfill_preset.run_standard_peak_backfill_preset(
         alignment_dir=alignment_dir,
@@ -459,9 +620,11 @@ def test_standard_peak_backfill_preset_reruns_failed_reuse_summary(
         reuse_existing=True,
         machine_pipeline_runner=fake_machine,
         consolidation_runner=fake_consolidation,
+        reconciliation_groups_runner=fake_reconciliation_groups,
     )
 
     assert [call["start_rank"] for call in machine_calls] == [1, 3]
+    assert len(reconciliation_group_calls) == 1
     assert consolidation_calls[0]["machine_pipeline_summary_jsons"] == (
         output_dir
         / "chunks"
@@ -484,6 +647,7 @@ def test_standard_peak_backfill_preset_reuse_summary_requires_matching_provenanc
         "start_rank": 1,
         "effective_overlay_limit": 2,
         "min_shape_r": 0.95,
+        "render_dpi": 140,
         "source_run_id": "preset:test-r1-2",
     }
     summary_json.write_text(json.dumps(reusable_summary), encoding="utf-8")
@@ -494,6 +658,7 @@ def test_standard_peak_backfill_preset_reuse_summary_requires_matching_provenanc
         limit=2,
         source_run_id="preset:test-r1-2",
         min_shape_r=0.95,
+        render_dpi=140,
     )
 
     for field, value in (
@@ -503,6 +668,7 @@ def test_standard_peak_backfill_preset_reuse_summary_requires_matching_provenanc
         ("effective_overlay_limit", 1),
         ("source_run_id", "other-run-r1-2"),
         ("min_shape_r", 0.9),
+        ("render_dpi", 99),
     ):
         stale_summary = dict(reusable_summary)
         stale_summary[field] = value
@@ -514,6 +680,7 @@ def test_standard_peak_backfill_preset_reuse_summary_requires_matching_provenanc
             limit=2,
             source_run_id="preset:test-r1-2",
             min_shape_r=0.95,
+            render_dpi=140,
         )
 
 
@@ -529,3 +696,24 @@ def _write_alignment_artifacts(tmp_path: Path) -> Path:
     ):
         (alignment_dir / name).write_text("x\n", encoding="utf-8")
     return alignment_dir
+
+
+def _fake_reconciliation_groups_runner(
+    output_dir: Path,
+    calls: list[dict[str, object]],
+):
+    def fake_reconciliation_groups(**kwargs):
+        calls.append(dict(kwargs))
+        groups = (
+            output_dir
+            / "global_reconciliation_group_index"
+            / "backfill_evidence_reconciliation_groups.tsv"
+        )
+        groups.parent.mkdir(parents=True, exist_ok=True)
+        groups.write_text(
+            "feature_family_id\tproduct_behavior_state\n",
+            encoding="utf-8",
+        )
+        return groups
+
+    return fake_reconciliation_groups

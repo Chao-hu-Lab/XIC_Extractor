@@ -9,6 +9,7 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Mapping, MutableMapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -111,6 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_pdf=not args.no_pdf,
             evidence_only=args.evidence_only,
             write_incremental=True,
+            workers=args.workers,
+            dpi=args.dpi,
             metrics=metrics,
         )
         _write_outputs(args.output_dir, rows, metrics=metrics)
@@ -137,12 +140,16 @@ def run_overlay_batch(
     write_pdf: bool = True,
     evidence_only: bool = False,
     write_incremental: bool = False,
+    workers: int = 1,
+    dpi: int = 140,
     metrics: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     if limit < 1:
         raise ValueError("--limit must be >= 1")
     if start_rank < 1:
         raise ValueError("--start-rank must be >= 1")
+    if workers < 1:
+        raise ValueError("--workers must be >= 1")
 
     requests = _load_requests(
         review_queue_tsv,
@@ -190,35 +197,66 @@ def run_overlay_batch(
         max_highlight_rescued=max_highlight_rescued,
         extraction_stats=extraction_stats,
     )
-    for request in requests:
-        if request.rank in existing_by_rank:
-            rows.append(existing_by_rank[request.rank])
-        else:
-            try:
-                rows.append(
-                    _render_family(
-                        request,
-                        alignment_cells=alignment_cells,
-                        raw_dir=raw_dir,
-                        dll_dir=dll_dir,
-                        output_dir=output_dir,
-                        max_highlight_rescued=max_highlight_rescued,
-                        source_provenance=source_provenance,
-                        write_pdf=write_pdf,
-                        evidence_only=evidence_only,
-                        trace_rows=fast_trace_rows.get(request.rank),
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
-                rows.append(_failure_row(request, exc))
+    render_kwargs: dict[str, Any] = {
+        "alignment_cells": alignment_cells,
+        "raw_dir": raw_dir,
+        "dll_dir": dll_dir,
+        "output_dir": output_dir,
+        "max_highlight_rescued": max_highlight_rescued,
+        "source_provenance": source_provenance,
+        "write_pdf": write_pdf,
+        "evidence_only": evidence_only,
+        "dpi": dpi,
+    }
+    if workers > 1 and pending_requests:
+        payloads = [
+            (
+                request,
+                {**render_kwargs, "trace_rows": fast_trace_rows.get(request.rank)},
+            )
+            for request in pending_requests
+        ]
+        rendered_by_rank: dict[int, dict[str, Any]] = {}
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            for request, row in zip(
+                pending_requests,
+                executor.map(_render_family_job, payloads),
+                strict=True,
+            ):
+                rendered_by_rank[request.rank] = row
+        for request in requests:
+            rows.append(
+                existing_by_rank[request.rank]
+                if request.rank in existing_by_rank
+                else rendered_by_rank[request.rank]
+            )
         if write_incremental:
             _write_outputs(output_dir, rows)
+    else:
+        for request in requests:
+            if request.rank in existing_by_rank:
+                rows.append(existing_by_rank[request.rank])
+            else:
+                try:
+                    rows.append(
+                        _render_family(
+                            request,
+                            **render_kwargs,
+                            trace_rows=fast_trace_rows.get(request.rank),
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
+                    rows.append(_failure_row(request, exc))
+            if write_incremental:
+                _write_outputs(output_dir, rows)
     if metrics is not None:
         metrics.update(
             {
                 "selected_row_count": len(requests),
                 "pending_row_count": len(pending_requests),
                 "reused_existing_row_count": reused_existing_count,
+                "render_workers": workers,
+                "render_dpi": dpi,
                 "failed_existing_probe_count": sum(
                     1
                     for row in existing_by_rank.values()
@@ -315,6 +353,7 @@ def _render_family(
     write_pdf: bool,
     evidence_only: bool,
     trace_rows: Sequence[overlay_plot.TraceOverlayRow] | None = None,
+    dpi: int = 140,
 ) -> dict[str, Any]:
     if trace_rows is None:
         cells = overlay_plot.load_family_cells(alignment_cells, request.family_id)
@@ -370,6 +409,7 @@ def _render_family(
             family_center_rt=request.family_center_rt,
             provenance=provenance,
             write_pdf=write_pdf,
+            dpi=dpi,
         )
     evidence = overlay_plot.build_family_ms1_evidence_summary(trace_rows)
     return _success_row_from_evidence(
@@ -378,6 +418,16 @@ def _render_family(
         evidence=evidence,
         evidence_only=evidence_only,
     )
+
+
+def _render_family_job(
+    payload: tuple[OverlayBatchRequest, Mapping[str, Any]],
+) -> dict[str, Any]:
+    request, kwargs = payload
+    try:
+        return _render_family(request, **dict(kwargs))
+    except Exception as exc:  # noqa: BLE001 - diagnostic batch must continue.
+        return _failure_row(request, exc)
 
 
 def _batch_trace_rows_for_requests(
@@ -1348,6 +1398,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--start-rank", type=int, default=1)
     parser.add_argument("--ppm", type=float, default=10.0)
     parser.add_argument("--max-highlight-rescued", type=int, default=8)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Parallel render worker processes (1 = serial).",
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=140,
+        help="Overlay PNG render DPI (lower = faster/smaller; default 140).",
+    )
     parser.add_argument(
         "--reuse-existing",
         action="store_true",

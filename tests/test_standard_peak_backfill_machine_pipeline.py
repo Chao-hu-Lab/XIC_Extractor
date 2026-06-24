@@ -25,6 +25,9 @@ def test_machine_pipeline_wires_post_overlay_steps(
                     str(kwargs["start_rank"]),
                     str(kwargs["limit"]),
                     str(kwargs["reuse_existing"]),
+                    str(kwargs["source_family_by_family_sample"]),
+                    str(kwargs["workers"]),
+                    str(kwargs["dpi"]),
                 ],
             ),
         )
@@ -110,12 +113,17 @@ def test_machine_pipeline_wires_post_overlay_steps(
         write_gallery=True,
         reuse_existing=True,
         limit=5,
+        render_workers=3,
+        render_dpi=111,
+        source_family_by_family_sample={"FAM001": {"SampleA_DNA": "FAM001"}},
     )
 
     assert summary_path.is_file()
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["status"] == "pass"
     assert summary["min_shape_r"] == 0.95
+    assert summary["render_workers"] == 3
+    assert summary["render_dpi"] == 111
     assert summary["overlay_source_mode"] == "existing_overlay_summary"
     assert summary["overlay_selected_row_count"] == 1
     assert summary["shift_aware_successful_row_count"] == 1
@@ -128,11 +136,112 @@ def test_machine_pipeline_wires_post_overlay_steps(
         "projection",
         "productization",
     ]
+    assert calls[0][1][-3:] == [
+        "{'FAM001': {'SampleA_DNA': 'FAM001'}}",
+        "3",
+        "111",
+    ]
     pack_args = dict(zip(calls[1][1][::2], calls[1][1][1::2], strict=False))
     assert pack_args["--min-shape-r"] == "0.95"
     product_args = calls[-1][1]
     assert "--write-gallery" in product_args
     assert "--shift-aware-standard-peak-gate-tsv" in product_args
+
+
+def test_machine_pipeline_can_defer_projection_to_consolidation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    inputs = _write_inputs(tmp_path)
+    calls: list[str] = []
+
+    def fake_shift_batch(**kwargs):
+        kwargs["output_dir"].mkdir(parents=True, exist_ok=True)
+        calls.append("shift_batch")
+        return (
+            [
+                {
+                    "rank": "1",
+                    "feature_family_id": "FAM001",
+                    "seed_group_id": "seed::FAM001",
+                    "overlay_status": "success",
+                    "alignment_status": "rendered",
+                    "output_prefix": "001_fam001_shift_aware",
+                    "trace_data_json": str(inputs["trace"]),
+                    "source_best_shift_summary_tsv": str(
+                        kwargs["output_dir"]
+                        / "001_fam001_shift_aware_source_family_best_shift_summary.tsv",
+                    ),
+                    "source_best_shift_png": "",
+                    "failure_reason": "",
+                }
+            ],
+            {
+                "selected_row_count": 1,
+                "status_counts": {"rendered": 1},
+                "successful_shift_aware_row_count": 1,
+            },
+        )
+
+    def fake_step(name: str):
+        def _fake(argv):
+            calls.append(name)
+            _write_step_outputs(name, tmp_path / "out", list(argv))
+            return 0
+
+        return _fake
+
+    monkeypatch.setattr(
+        pipeline.family_ms1_alignment_experiment_batch,
+        "run_alignment_experiment_batch",
+        fake_shift_batch,
+    )
+    monkeypatch.setattr(
+        pipeline.shift_aware_backfill_calibration_pack,
+        "main",
+        fake_step("pack"),
+    )
+    monkeypatch.setattr(
+        pipeline.shift_aware_standard_peak_gate_calibration,
+        "main",
+        fake_step("gate"),
+    )
+    monkeypatch.setattr(
+        pipeline.standard_peak_ms1_authority_bundle,
+        "main",
+        fake_step("authority"),
+    )
+    monkeypatch.setattr(
+        pipeline.shadow_production_projection,
+        "main",
+        fake_step("projection"),
+    )
+    monkeypatch.setattr(
+        pipeline.standard_peak_backfill_productization,
+        "main",
+        fake_step("productization"),
+    )
+
+    summary_path = pipeline.run_machine_pipeline(
+        overlay_batch_summary_tsv=inputs["overlay"],
+        alignment_review_tsv=inputs["review"],
+        alignment_cells_tsv=inputs["cells"],
+        alignment_matrix_tsv=inputs["matrix"],
+        alignment_matrix_identity_tsv=inputs["identity"],
+        retained_gate_tsv=inputs["gate"],
+        reconciliation_groups_tsv=inputs["groups"],
+        output_dir=tmp_path / "out",
+        source_run_id="unit-run",
+        defer_projection=True,
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "pass"
+    assert summary["projection_mode"] == "deferred_to_consolidation"
+    assert summary["shadow_projection_cells_tsv"] == ""
+    assert Path(summary["productization_summary_json"]).exists()
+    assert Path(summary["authorized_ms1_pattern_tsv"]).exists()
+    assert calls == ["shift_batch", "pack", "gate", "authority"]
 
 
 def test_machine_pipeline_can_render_overlays_and_build_reconciliation_groups(
@@ -150,6 +259,8 @@ def test_machine_pipeline_can_render_overlays_and_build_reconciliation_groups(
                     f"limit={kwargs['limit']}",
                     f"reuse_existing={kwargs['reuse_existing']}",
                     f"write_pdf={kwargs['write_pdf']}",
+                    f"workers={kwargs['workers']}",
+                    f"dpi={kwargs['dpi']}",
                 ],
             )
         )
@@ -189,6 +300,8 @@ def test_machine_pipeline_can_render_overlays_and_build_reconciliation_groups(
                 [
                     str(kwargs["overlay_batch_summary_tsv"]),
                     str(kwargs["reuse_existing"]),
+                    str(kwargs["workers"]),
+                    str(kwargs["dpi"]),
                 ],
             ),
         )
@@ -272,6 +385,8 @@ def test_machine_pipeline_can_render_overlays_and_build_reconciliation_groups(
         source_run_id="unit-run",
         reuse_existing=True,
         write_overlay_pdf=False,
+        render_workers=4,
+        render_dpi=123,
     )
 
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -302,7 +417,10 @@ def test_machine_pipeline_can_render_overlays_and_build_reconciliation_groups(
         "limit=2",
         "reuse_existing=True",
         "write_pdf=False",
+        "workers=4",
+        "dpi=123",
     ]
+    assert calls[2][1][-2:] == ["4", "123"]
     overlay_metrics = json.loads(
         (
             tmp_path
@@ -582,6 +700,25 @@ def _write_inputs(tmp_path: Path) -> dict[str, Path]:
     )
     paths["queue"].write_text(
         "feature_family_id\nFAM001\nFAM002\n",
+        encoding="utf-8",
+    )
+    paths["review"].write_text(
+        "\t".join(["feature_family_id", "neutral_loss_tag"]) + "\n"
+        "FAM001\tNL-A\n"
+        "FAM002\tNL-B\n",
+        encoding="utf-8",
+    )
+    paths["cells"].write_text(
+        "\t".join(["feature_family_id", "sample_stem", "reason"]) + "\n"
+        "FAM001\tSampleA_DNA\tsource_family=FAM001\n"
+        "FAM002\tSampleB_DNA\tsource_family=FAM002\n",
+        encoding="utf-8",
+    )
+    paths["gate"].write_text(
+        "\t".join(["feature_family_id", "seed_group_id", "seed_source_samples"])
+        + "\n"
+        "FAM001\tseed::FAM001\tSampleA_DNA\n"
+        "FAM002\tseed::FAM002\tSampleB_DNA\n",
         encoding="utf-8",
     )
     return paths

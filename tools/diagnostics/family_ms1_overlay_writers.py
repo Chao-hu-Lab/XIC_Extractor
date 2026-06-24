@@ -44,6 +44,7 @@ def write_family_ms1_overlay_outputs(
     provenance: Mapping[str, object] | None = None,
     drift_lookup: DriftLookupProtocol | None = None,
     write_pdf: bool = True,
+    dpi: int = 140,
 ) -> FamilyMs1OverlayOutputs:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_tsv = output_dir / f"{output_prefix}_trace_summary.tsv"
@@ -78,6 +79,7 @@ def write_family_ms1_overlay_outputs(
         rt_max=rt_max,
         family_center_rt=family_center_rt,
         drift_lookup=drift_lookup,
+        dpi=dpi,
     )
     render_hypothesis_ms1_overlay(
         rows=rows,
@@ -89,6 +91,7 @@ def write_family_ms1_overlay_outputs(
         rt_min=rt_min,
         rt_max=rt_max,
         family_center_rt=family_center_rt,
+        dpi=dpi,
     )
     return FamilyMs1OverlayOutputs(
         png_path=png_path,

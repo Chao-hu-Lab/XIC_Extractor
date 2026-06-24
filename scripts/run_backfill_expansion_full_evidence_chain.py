@@ -99,6 +99,31 @@ def _named_path(directory: Path, default_path: Path) -> Path:
     return directory / default_path.name
 
 
+def _standard_peak_pre_publish_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.pre_standard_peak_backfill{path.suffix}")
+
+
+def _cid_nl_activation_baseline_pair(
+    *,
+    alignment_dir: Path,
+) -> tuple[Path, Path]:
+    matrix_tsv = alignment_dir / "alignment_matrix.tsv"
+    identity_tsv = alignment_dir / "alignment_matrix_identity.tsv"
+    pre_matrix_tsv = _standard_peak_pre_publish_path(matrix_tsv)
+    pre_identity_tsv = _standard_peak_pre_publish_path(identity_tsv)
+    has_pre_matrix = pre_matrix_tsv.exists()
+    has_pre_identity = pre_identity_tsv.exists()
+    if has_pre_matrix != has_pre_identity:
+        missing = pre_identity_tsv if has_pre_matrix else pre_matrix_tsv
+        raise FileNotFoundError(
+            "standard-peak pre-publication alignment snapshot is incomplete: "
+            f"{missing}",
+        )
+    if has_pre_matrix:
+        return pre_matrix_tsv, pre_identity_tsv
+    return matrix_tsv, identity_tsv
+
+
 def run_backfill_expansion_full_evidence_chain(
     *,
     raw_dir: Path | None = None,
@@ -663,8 +688,9 @@ def run_backfill_expansion_clean_target_selective_preset_from_alignment(
     docs_root = preset_dir / "docs"
     output_root = preset_dir / "output"
 
-    input_quant_matrix_tsv = alignment_dir / "alignment_matrix.tsv"
-    input_matrix_identity_tsv = alignment_dir / "alignment_matrix_identity.tsv"
+    input_quant_matrix_tsv, input_matrix_identity_tsv = (
+        _cid_nl_activation_baseline_pair(alignment_dir=alignment_dir)
+    )
     alignment_backfill_cell_evidence_tsv = (
         alignment_dir / "alignment_backfill_cell_evidence.tsv"
     )

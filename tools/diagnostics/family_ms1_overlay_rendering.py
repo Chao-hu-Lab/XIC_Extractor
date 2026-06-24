@@ -49,6 +49,7 @@ def render_family_ms1_overlay(
     rt_max: float,
     family_center_rt: float | None,
     drift_lookup: DriftLookupProtocol | None = None,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -107,7 +108,7 @@ def render_family_ms1_overlay(
             f"{len(focus_rows)} selected-peak membership traces"
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     if pdf_path is not None:
         fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
@@ -124,6 +125,7 @@ def render_hypothesis_ms1_overlay(
     rt_min: float,
     rt_max: float,
     family_center_rt: float | None,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -174,7 +176,7 @@ def render_hypothesis_ms1_overlay(
             f"{_single_anchor_review_note(focus_detected)}"
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     if pdf_path is not None:
         fig.savefig(pdf_path, bbox_inches="tight", facecolor="white")
     plt.close(fig)

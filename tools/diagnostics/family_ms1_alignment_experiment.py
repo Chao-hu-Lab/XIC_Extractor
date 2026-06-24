@@ -90,6 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         targeted_workbook=args.targeted_workbook,
         sample_info=args.sample_info,
         render_images=not args.no_images,
+        dpi=args.dpi,
     )
     if not args.no_images and "png_path" in outputs:
         print(f"Alignment experiment PNG: {outputs['png_path']}")
@@ -125,6 +126,7 @@ def run_alignment_experiment(
     targeted_workbook: Path | None = None,
     sample_info: Path | None = None,
     render_images: bool = True,
+    dpi: int = 140,
 ) -> dict[str, Path]:
     bundle = load_trace_data_bundle(trace_data_json)
     resolved_output_prefix = (
@@ -165,6 +167,7 @@ def run_alignment_experiment(
             family_center_rt=bundle.family_center_rt,
             drift_lookup=drift_lookup,
             evidence_summary=bundle.evidence_summary,
+            dpi=dpi,
         )
     write_alignment_experiment_summary(
         summary_tsv,
@@ -195,6 +198,7 @@ def run_alignment_experiment(
                 ppm=bundle.ppm,
                 rt_min=bundle.rt_min,
                 rt_max=bundle.rt_max,
+                dpi=dpi,
             )
         write_source_family_summary(
             source_summary_tsv,
@@ -216,6 +220,7 @@ def run_alignment_experiment(
                 ppm=bundle.ppm,
                 rt_min=bundle.rt_min,
                 rt_max=bundle.rt_max,
+                dpi=dpi,
             )
         write_source_family_shift_summary(
             source_shift_summary_tsv,
@@ -239,6 +244,7 @@ def run_alignment_experiment(
                 ppm=bundle.ppm,
                 rt_min=bundle.rt_min,
                 rt_max=bundle.rt_max,
+                dpi=dpi,
             )
         write_source_family_shift_summary(
             source_best_shift_summary_tsv,
@@ -323,6 +329,7 @@ def render_alignment_experiment(
     family_center_rt: float | None,
     drift_lookup: "DriftLookupProtocol | None" = None,
     evidence_summary: dict[str, object] | None = None,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -398,7 +405,7 @@ def render_alignment_experiment(
             "coordinate interpretation."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -412,6 +419,7 @@ def render_source_family_split(
     ppm: float,
     rt_min: float,
     rt_max: float,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -456,7 +464,7 @@ def render_source_family_split(
             "Rows are split by source_family provenance before visual review."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -585,6 +593,7 @@ def render_source_family_shift_alignment(
     ppm: float,
     rt_min: float,
     rt_max: float,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -643,7 +652,7 @@ def render_source_family_shift_alignment(
             "alignment is used."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -2003,6 +2012,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Write machine-readable summary TSVs without rendering PNG review "
             "images."
         ),
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=140,
+        help="Render DPI for review PNGs (default 140).",
     )
     return parser.parse_args(argv)
 

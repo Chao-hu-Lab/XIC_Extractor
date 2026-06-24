@@ -18,6 +18,7 @@ from xic_extractor.diagnostics.diagnostic_io import (
 )
 from xic_extractor.diagnostics.shadow_production_projection import (
     SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+    run_shadow_production_projection,
 )
 from xic_extractor.diagnostics.standard_peak_backfill_productization import (
     StandardPeakBackfillProductizationOutputs,
@@ -126,16 +127,6 @@ def run_standard_peak_backfill_chunk_consolidation(
                 "chunk_not_pass:" + text_value(chunk.get("_summary_json")),
             )
 
-    merged_shadow_tsv = output_dir / "consolidated_shadow_projection_cells.tsv"
-    shadow_rows = _merge_shadow_projection_rows(chunk_summaries)
-    write_tsv(
-        merged_shadow_tsv,
-        shadow_rows,
-        SHADOW_PRODUCTION_PROJECTION_COLUMNS,
-        formatter=format_diagnostic_value,
-        lineterminator="\n",
-    )
-
     overlay_tsvs = tuple(
         Path(text_value(chunk.get("overlay_batch_summary_tsv")))
         for chunk in chunk_summaries
@@ -146,6 +137,65 @@ def run_standard_peak_backfill_chunk_consolidation(
         for chunk in chunk_summaries
         if text_value(chunk.get("shift_aware_standard_peak_gate_tsv"))
     )
+    authority_tsvs = tuple(
+        Path(text_value(chunk.get("authorized_ms1_pattern_tsv")))
+        for chunk in chunk_summaries
+        if text_value(chunk.get("authorized_ms1_pattern_tsv"))
+    )
+    merged_shadow_tsv = output_dir / "consolidated_shadow_projection_cells.tsv"
+    if authority_tsvs and len(authority_tsvs) == len(chunk_summaries):
+        if retained_backfill_gate_tsv is None:
+            status_reasons.append("global_shadow_projection_requires_retained_gate")
+            shadow_rows = ()
+            write_tsv(
+                merged_shadow_tsv,
+                shadow_rows,
+                SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+                formatter=format_diagnostic_value,
+                lineterminator="\n",
+            )
+        elif alignment_cells_tsv is None:
+            status_reasons.append("global_shadow_projection_requires_alignment_cells")
+            shadow_rows = ()
+            write_tsv(
+                merged_shadow_tsv,
+                shadow_rows,
+                SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+                formatter=format_diagnostic_value,
+                lineterminator="\n",
+            )
+        else:
+            shadow_outputs = run_shadow_production_projection(
+                alignment_review_tsv=alignment_review_tsv,
+                alignment_cells_tsv=alignment_cells_tsv,
+                retained_gate_tsv=retained_backfill_gate_tsv,
+                output_dir=output_dir / "global_shadow_projection",
+                alignment_matrix_tsv=alignment_matrix_tsv,
+                alignment_matrix_identity_tsv=alignment_matrix_identity_tsv,
+                overlay_batch_summary_tsvs=overlay_tsvs,
+                ms1_pattern_coherence_tsvs=authority_tsvs,
+                source_run_id=source_run_id,
+            )
+            shadow_rows = read_tsv_required(
+                shadow_outputs.tsv,
+                SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+            )
+            write_tsv(
+                merged_shadow_tsv,
+                shadow_rows,
+                SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+                formatter=format_diagnostic_value,
+                lineterminator="\n",
+            )
+    else:
+        shadow_rows = _merge_shadow_projection_rows(chunk_summaries)
+        write_tsv(
+            merged_shadow_tsv,
+            shadow_rows,
+            SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+            formatter=format_diagnostic_value,
+            lineterminator="\n",
+        )
     productization_dir = output_dir / "standard_peak_productization"
     productization = run_standard_peak_backfill_productization(
         shadow_projection_cells_tsv=merged_shadow_tsv,
@@ -576,8 +626,11 @@ def _load_chunk_summary(path: Path) -> dict[str, object]:
         "status",
         "start_rank",
         "overlay_selected_row_count",
-        "shadow_projection_cells_tsv",
     )
+    if text_value(summary.get("projection_mode")) == "deferred_to_consolidation":
+        required = (*required, "authorized_ms1_pattern_tsv")
+    else:
+        required = (*required, "shadow_projection_cells_tsv")
     missing = [key for key in required if not text_value(summary.get(key))]
     if missing:
         raise ValueError(f"{path}: missing summary fields: {', '.join(missing)}")

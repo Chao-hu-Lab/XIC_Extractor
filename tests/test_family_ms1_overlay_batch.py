@@ -8,6 +8,43 @@ from tools.diagnostics import family_ms1_overlay_batch as batch
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
 
 
+def test_render_family_job_returns_failure_row_instead_of_raising(
+    tmp_path: Path,
+) -> None:
+    request = batch.OverlayBatchRequest(
+        rank=1,
+        family_id="FAM001",
+        seed_group_id="",
+        mz=251.0,
+        ppm=10.0,
+        rt_min=1.0,
+        rt_max=1.2,
+        family_center_rt=1.1,
+        output_prefix="fam001",
+    )
+    payload = (
+        request,
+        {
+            "alignment_cells": tmp_path / "missing.tsv",
+            "raw_dir": tmp_path,
+            "dll_dir": tmp_path,
+            "output_dir": tmp_path / "out",
+            "max_highlight_rescued": 8,
+            "source_provenance": {},
+            "write_pdf": False,
+            "evidence_only": False,
+            "trace_rows": None,
+            "dpi": 140,
+        },
+    )
+
+    row = batch._render_family_job(payload)
+
+    assert row["status"] == "failed"
+    assert row["failure_reason"]
+    assert row["feature_family_id"] == "FAM001"
+
+
 def test_batch_uses_structured_queue_columns_and_limit(
     tmp_path: Path,
     monkeypatch,
@@ -30,6 +67,7 @@ def test_batch_uses_structured_queue_columns_and_limit(
         ],
     )
     calls: list[dict[str, object]] = []
+    write_calls: list[dict[str, object]] = []
 
     def fake_load_family_cells(_alignment_cells: Path, family_id: str) -> list[str]:
         return [family_id]
@@ -39,6 +77,7 @@ def test_batch_uses_structured_queue_columns_and_limit(
         return ["trace-row"]
 
     def fake_write_family_ms1_overlay_outputs(**kwargs):
+        write_calls.append(dict(kwargs))
         prefix = kwargs["output_prefix"]
         for suffix in (".png", ".pdf", "_trace_summary.tsv", "_trace_data.json"):
             (output_dir / f"{prefix}{suffix}").write_text("ok", encoding="utf-8")
@@ -109,6 +148,7 @@ def test_batch_uses_structured_queue_columns_and_limit(
     assert calls[0]["ppm"] == 10.0
     assert calls[0]["rt_min"] == 1.0
     assert calls[0]["rt_max"] == 1.2
+    assert write_calls[0]["dpi"] == 140
     summary_tsv = output_dir / "family_ms1_overlay_batch_summary.tsv"
     _assert_summary_tsv_contract(summary_tsv)
     summary = _read_tsv(summary_tsv)

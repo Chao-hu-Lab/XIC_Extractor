@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,6 +75,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             min_shape_r=args.min_shape_r,
             publication_mode=args.publication_mode,
             evidence_only=args.evidence_only,
+            render_workers=args.workers,
+            render_dpi=args.dpi,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -113,8 +115,14 @@ def run_machine_pipeline(
     ),
     publication_mode: str = "deep-audit",
     evidence_only: bool = False,
+    defer_projection: bool = False,
+    render_workers: int = 1,
+    render_dpi: int = 140,
     timing_recorder: TimingRecorder | None = None,
+    source_family_by_family_sample: Mapping[str, Mapping[str, str]] | None = None,
 ) -> Path:
+    if render_workers < 1:
+        raise ValueError("render_workers must be >= 1")
     output_dir.mkdir(parents=True, exist_ok=True)
     recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
     with recorder.stage(
@@ -141,6 +149,8 @@ def run_machine_pipeline(
             max_highlight_rescued=max_highlight_rescued,
             write_overlay_pdf=write_overlay_pdf,
             evidence_only=evidence_only,
+            workers=render_workers,
+            dpi=render_dpi,
         )
         scope.metrics["overlay_source_mode"] = overlay_source.mode
         scope.metrics["evidence_source_mode"] = overlay_source.evidence_source_mode
@@ -189,6 +199,9 @@ def run_machine_pipeline(
                 reuse_existing=reuse_existing,
                 render_images=render_shift_aware_images,
                 timing_recorder=recorder,
+                source_family_by_family_sample=source_family_by_family_sample,
+                workers=render_workers,
+                dpi=render_dpi,
             )
         )
         scope.metrics["selected_row_count"] = shift_summary.get("selected_row_count", 0)
@@ -270,74 +283,95 @@ def run_machine_pipeline(
     authorized_ms1_tsv = authority_dir / (
         "shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv"
     )
-    with recorder.stage("standard_peak.shadow_projection"):
-        _run_step(
-            "shadow production projection",
-            shadow_production_projection.main(
-                [
-                    "--alignment-review-tsv",
-                    str(alignment_review_tsv),
-                    "--alignment-cells-tsv",
-                    str(alignment_cells_tsv),
-                    "--retained-gate-tsv",
-                    str(retained_gate_tsv),
-                    "--alignment-matrix-tsv",
-                    str(alignment_matrix_tsv),
-                    "--alignment-matrix-identity-tsv",
-                    str(alignment_matrix_identity_tsv),
-                    "--overlay-batch-summary-tsv",
-                    str(overlay_batch_summary_tsv),
-                    "--ms1-pattern-coherence-tsv",
-                    str(authorized_ms1_tsv),
-                    "--source-run-id",
-                    source_run_id,
-                    "--output-dir",
-                    str(projection_dir),
-                ],
-            ),
-        )
     projection_cells_tsv = projection_dir / "shadow_production_projection_cells.tsv"
-    product_args = [
-        "--shadow-projection-cells-tsv",
-        str(projection_cells_tsv),
-        "--alignment-matrix-tsv",
-        str(alignment_matrix_tsv),
-        "--alignment-matrix-identity-tsv",
-        str(alignment_matrix_identity_tsv),
-        "--alignment-review-tsv",
-        str(alignment_review_tsv),
-        "--alignment-cells-tsv",
-        str(alignment_cells_tsv),
-        "--overlay-batch-summary-tsv",
-        str(overlay_batch_summary_tsv),
-        "--shift-aware-standard-peak-gate-tsv",
-        str(gate_tsv),
-        "--retained-backfill-evidence-gate-tsv",
-        str(retained_gate_tsv),
-        "--source-run-id",
-        source_run_id,
-        "--output-dir",
-        str(productization_dir),
-    ]
-    if backfill_seed_audit_tsv is not None:
-        product_args.extend(["--backfill-seed-audit-tsv", str(backfill_seed_audit_tsv)])
-    if write_gallery:
-        product_args.append("--write-gallery")
-        product_args.extend(["--gallery-output-dir", str(gallery_dir)])
-    with recorder.stage("standard_peak.productization"):
-        _run_step(
-            "standard-peak productization",
-            standard_peak_backfill_productization.main(product_args),
+    if defer_projection:
+        productization_summary: dict[str, Any] = {
+            "status": "deferred_to_consolidation",
+            "activation_acceptance_status": "deferred",
+            "activation_application_status": "deferred",
+            "selected_activation_row_count": 0,
+            "matrix_cells_written": 0,
+            "activation_value_delta_written_count": 0,
+            "product_behavior_changed": "FALSE",
+        }
+        productization_dir.mkdir(parents=True, exist_ok=True)
+        (
+            productization_dir / "standard_peak_backfill_productization_summary.json"
+        ).write_text(
+            json.dumps(productization_summary, indent=2, sort_keys=True),
+            encoding="utf-8",
         )
-    productization_summary = _load_json_mapping(
-        productization_dir / "standard_peak_backfill_productization_summary.json",
-    )
+    else:
+        with recorder.stage("standard_peak.shadow_projection"):
+            _run_step(
+                "shadow production projection",
+                shadow_production_projection.main(
+                    [
+                        "--alignment-review-tsv",
+                        str(alignment_review_tsv),
+                        "--alignment-cells-tsv",
+                        str(alignment_cells_tsv),
+                        "--retained-gate-tsv",
+                        str(retained_gate_tsv),
+                        "--alignment-matrix-tsv",
+                        str(alignment_matrix_tsv),
+                        "--alignment-matrix-identity-tsv",
+                        str(alignment_matrix_identity_tsv),
+                        "--overlay-batch-summary-tsv",
+                        str(overlay_batch_summary_tsv),
+                        "--ms1-pattern-coherence-tsv",
+                        str(authorized_ms1_tsv),
+                        "--source-run-id",
+                        source_run_id,
+                        "--output-dir",
+                        str(projection_dir),
+                    ],
+                ),
+            )
+        product_args = [
+            "--shadow-projection-cells-tsv",
+            str(projection_cells_tsv),
+            "--alignment-matrix-tsv",
+            str(alignment_matrix_tsv),
+            "--alignment-matrix-identity-tsv",
+            str(alignment_matrix_identity_tsv),
+            "--alignment-review-tsv",
+            str(alignment_review_tsv),
+            "--alignment-cells-tsv",
+            str(alignment_cells_tsv),
+            "--overlay-batch-summary-tsv",
+            str(overlay_batch_summary_tsv),
+            "--shift-aware-standard-peak-gate-tsv",
+            str(gate_tsv),
+            "--retained-backfill-evidence-gate-tsv",
+            str(retained_gate_tsv),
+            "--source-run-id",
+            source_run_id,
+            "--output-dir",
+            str(productization_dir),
+        ]
+        if backfill_seed_audit_tsv is not None:
+            product_args.extend(
+                ["--backfill-seed-audit-tsv", str(backfill_seed_audit_tsv)],
+            )
+        if write_gallery:
+            product_args.append("--write-gallery")
+            product_args.extend(["--gallery-output-dir", str(gallery_dir)])
+        with recorder.stage("standard_peak.productization"):
+            _run_step(
+                "standard-peak productization",
+                standard_peak_backfill_productization.main(product_args),
+            )
+        productization_summary = _load_json_mapping(
+            productization_dir / "standard_peak_backfill_productization_summary.json",
+        )
 
     summary_path = output_dir / "standard_peak_backfill_machine_pipeline_summary.json"
     status, status_reasons = _pipeline_status(
         overlay_summary=overlay_summary,
         shift_summary=shift_summary,
         productization_summary=productization_summary,
+        projection_deferred=defer_projection,
     )
     summary: dict[str, Any] = {
         "schema_version": "standard_peak_backfill_machine_pipeline_v0",
@@ -345,6 +379,11 @@ def run_machine_pipeline(
         "status_reasons": status_reasons,
         "source_run_id": source_run_id,
         "publication_mode": publication_mode,
+        "projection_mode": (
+            "deferred_to_consolidation" if defer_projection else "per_chunk"
+        ),
+        "render_workers": render_workers,
+        "render_dpi": render_dpi,
         "min_shape_r": min_shape_r,
         "overlay_batch_summary_tsv": str(overlay_batch_summary_tsv),
         "overlay_source_mode": overlay_source.mode,
@@ -370,7 +409,9 @@ def run_machine_pipeline(
         "shift_aware_calibration_pack_tsv": str(pack_tsv),
         "shift_aware_standard_peak_gate_tsv": str(gate_tsv),
         "authorized_ms1_pattern_tsv": str(authorized_ms1_tsv),
-        "shadow_projection_cells_tsv": str(projection_cells_tsv),
+        "shadow_projection_cells_tsv": (
+            "" if defer_projection else str(projection_cells_tsv)
+        ),
         "productization_summary_json": str(
             productization_dir / "standard_peak_backfill_productization_summary.json",
         ),
@@ -430,6 +471,8 @@ def _resolve_overlay_batch_summary_tsv(
     max_highlight_rescued: int,
     write_overlay_pdf: bool,
     evidence_only: bool,
+    workers: int,
+    dpi: int,
 ) -> OverlaySourceResolution:
     if overlay_batch_summary_tsv is not None:
         conflicting = [
@@ -495,6 +538,8 @@ def _resolve_overlay_batch_summary_tsv(
         reuse_existing=reuse_existing,
         write_pdf=write_overlay_pdf,
         evidence_only=evidence_only,
+        workers=workers,
+        dpi=dpi,
         metrics=overlay_metrics,
     )
     family_ms1_overlay_batch._write_outputs(
@@ -577,6 +622,7 @@ def _pipeline_status(
     overlay_summary: dict[str, Any],
     shift_summary: dict[str, Any],
     productization_summary: dict[str, Any],
+    projection_deferred: bool = False,
 ) -> tuple[str, list[str]]:
     reasons: list[str] = []
     if int(overlay_summary.get("selected_row_count", 0) or 0) <= 0:
@@ -593,16 +639,22 @@ def _pipeline_status(
             reasons.append("shift_aware_skipped_rows")
     if int(shift_summary.get("successful_shift_aware_row_count", 0) or 0) <= 0:
         reasons.append("shift_aware_no_success_rows")
-    if text_value(productization_summary.get("status")) != "pass":
-        reasons.append("productization_not_pass")
-    if text_value(productization_summary.get("activation_acceptance_status")) != "pass":
-        reasons.append("activation_acceptance_not_pass")
-    if text_value(productization_summary.get("activation_application_status")) not in {
-        "applied",
-        "not_requested",
-        "",
-    }:
-        reasons.append("activation_application_not_applied")
+    if not projection_deferred:
+        if text_value(productization_summary.get("status")) != "pass":
+            reasons.append("productization_not_pass")
+        if (
+            text_value(productization_summary.get("activation_acceptance_status"))
+            != "pass"
+        ):
+            reasons.append("activation_acceptance_not_pass")
+        if text_value(
+            productization_summary.get("activation_application_status"),
+        ) not in {
+            "applied",
+            "not_requested",
+            "",
+        }:
+            reasons.append("activation_application_not_applied")
     return ("pass" if not reasons else "incomplete", reasons)
 
 
@@ -689,6 +741,21 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--write-gallery", action="store_true")
     parser.add_argument("--gallery-output-dir", type=Path)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "Render overlay + shift-aware families across N processes "
+            "(default 1 = serial)."
+        ),
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=140,
+        help="Render DPI for overlay + shift-aware review PNGs (default 140).",
+    )
     return parser.parse_args(argv)
 
 
