@@ -77,6 +77,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             evidence_only=args.evidence_only,
             render_workers=args.workers,
             render_dpi=args.dpi,
+            evidence_cache_dir=args.evidence_cache_dir,
         )
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
@@ -118,6 +119,7 @@ def run_machine_pipeline(
     defer_projection: bool = False,
     render_workers: int = 1,
     render_dpi: int = 140,
+    evidence_cache_dir: Path | None = None,
     timing_recorder: TimingRecorder | None = None,
     source_family_by_family_sample: Mapping[str, Mapping[str, str]] | None = None,
 ) -> Path:
@@ -151,6 +153,7 @@ def run_machine_pipeline(
             evidence_only=evidence_only,
             workers=render_workers,
             dpi=render_dpi,
+            evidence_cache_dir=evidence_cache_dir,
         )
         scope.metrics["overlay_source_mode"] = overlay_source.mode
         scope.metrics["evidence_source_mode"] = overlay_source.evidence_source_mode
@@ -471,6 +474,7 @@ def render_overlay_batch_summary_from_review_queue(
     evidence_only: bool = False,
     workers: int = 1,
     dpi: int = 140,
+    evidence_cache_dir: Path | None = None,
 ) -> OverlaySourceResolution:
     queue_rows = read_tsv_required(
         review_queue_tsv,
@@ -499,6 +503,7 @@ def render_overlay_batch_summary_from_review_queue(
         evidence_only=evidence_only,
         workers=workers,
         dpi=dpi,
+        evidence_cache_dir=evidence_cache_dir,
         metrics=overlay_metrics,
     )
     family_ms1_overlay_batch._write_outputs(
@@ -578,6 +583,7 @@ def _resolve_overlay_batch_summary_tsv(
     evidence_only: bool,
     workers: int,
     dpi: int,
+    evidence_cache_dir: Path | None,
 ) -> OverlaySourceResolution:
     if overlay_batch_summary_tsv is not None:
         conflicting = [
@@ -633,6 +639,7 @@ def _resolve_overlay_batch_summary_tsv(
         evidence_only=evidence_only,
         workers=workers,
         dpi=dpi,
+        evidence_cache_dir=evidence_cache_dir,
     )
 
 
@@ -835,6 +842,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=int,
         default=140,
         help="Render DPI for overlay + shift-aware review PNGs (default 140).",
+    )
+    parser.add_argument(
+        "--evidence-cache-dir",
+        type=Path,
+        help=(
+            "Optional content-keyed cache for evidence-only family MS1 overlay "
+            "trace TSV/JSON artifacts."
+        ),
     )
     return parser.parse_args(argv)
 

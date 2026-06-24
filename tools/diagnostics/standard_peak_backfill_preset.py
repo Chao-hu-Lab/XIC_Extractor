@@ -72,6 +72,7 @@ def run_standard_peak_backfill_preset(
     render_workers: int = 1,
     chunk_workers: int = 1,
     render_dpi: int = 140,
+    evidence_cache_dir: Path | None = None,
     timing_recorder: TimingRecorder | None = None,
     machine_pipeline_runner: MachinePipelineRunner = run_machine_pipeline,
     consolidation_runner: ConsolidationRunner = (
@@ -240,6 +241,7 @@ def run_standard_peak_backfill_preset(
                 evidence_only=evidence_only,
                 workers=render_workers,
                 dpi=render_dpi,
+                evidence_cache_dir=evidence_cache_dir,
             )
             global_overlay_batch_summary_tsv = global_overlay_source.summary_tsv
             scope.metrics["overlay_batch_summary_tsv"] = str(
