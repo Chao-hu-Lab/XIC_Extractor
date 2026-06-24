@@ -218,7 +218,56 @@ def test_batch_no_images_writes_best_shift_summary_without_png(
     assert rows[0]["alignment_status"] == "rendered"
     assert rows[0]["source_best_shift_png"] == ""
     assert Path(rows[0]["source_best_shift_summary_tsv"]).is_file()
+    assert (out_dir / "001_fam001_shift_aware_summary.tsv").is_file()
+    assert (out_dir / "001_fam001_shift_aware_source_family_summary.tsv").is_file()
+    assert (
+        out_dir / "001_fam001_shift_aware_source_family_shift_summary.tsv"
+    ).is_file()
     assert not list(out_dir.glob("*.png"))
+
+
+def test_batch_best_shift_only_skips_auxiliary_summaries(
+    tmp_path: Path,
+) -> None:
+    trace_json = _write_trace_json(tmp_path, family_id="FAM001")
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n"
+        "FAM001\tFAM001-detected\tsource_family=FAM000001\n"
+        "FAM001\tFAM001-rescued\tsource_family=FAM000002\n",
+        encoding="utf-8",
+    )
+    overlay_summary = tmp_path / "family_ms1_overlay_batch_summary.tsv"
+    overlay_summary.write_text(
+        "rank\tfeature_family_id\tseed_group_id\toutput_prefix\tstatus\t"
+        "trace_data_json\n"
+        f"1\tFAM001\tseed::FAM001\t001_fam001\tsuccess\t{trace_json}\n",
+        encoding="utf-8",
+    )
+    out_dir = tmp_path / "shift"
+
+    code = batch.main(
+        [
+            "--overlay-batch-summary-tsv",
+            str(overlay_summary),
+            "--cell-evidence-tsv",
+            str(cell_evidence),
+            "--output-dir",
+            str(out_dir),
+            "--no-images",
+            "--best-shift-only",
+        ],
+    )
+
+    assert code == 0
+    rows = _read_tsv(out_dir / "family_ms1_alignment_experiment_batch_summary.tsv")
+    assert rows[0]["alignment_status"] == "rendered"
+    assert Path(rows[0]["source_best_shift_summary_tsv"]).is_file()
+    assert not (out_dir / "001_fam001_shift_aware_summary.tsv").exists()
+    assert not (out_dir / "001_fam001_shift_aware_source_family_summary.tsv").exists()
+    assert not (
+        out_dir / "001_fam001_shift_aware_source_family_shift_summary.tsv"
+    ).exists()
 
 
 def test_batch_preloads_cell_evidence_once_for_selected_families(
@@ -492,6 +541,7 @@ def test_render_or_reuse_row_job_runs_in_process(tmp_path: Path) -> None:
             "output_dir": tmp_path / "shift",
             "reuse_existing": False,
             "render_images": False,
+            "write_auxiliary_summaries": True,
             "source_family_by_sample": {
                 "FAM001-detected": "FAM000001",
                 "FAM001-rescued": "FAM000002",

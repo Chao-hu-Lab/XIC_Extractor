@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import csv
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +27,11 @@ from xic_extractor.alignment.product_matrix import (
     formatted_identity_rows,
     product_matrix_tsv_rows,
 )
-from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.alignment.production_decisions import (
+    ProductionDecisionSet,
+    build_production_decisions,
+)
 from xic_extractor.peak_detection.baseline import LINEAR_EDGE_RETIRED_MESSAGE
-from xic_extractor.tabular_io import write_tsv
 
 ALIGNMENT_REVIEW_COLUMNS = (
     "feature_family_id",
@@ -264,12 +267,17 @@ def write_alignment_review_tsv(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> Path:
     config = alignment_config or AlignmentConfig()
     return _write_tsv(
         path,
         ALIGNMENT_REVIEW_COLUMNS,
-        _review_rows(matrix, alignment_config=config),
+        _review_rows(
+            matrix,
+            alignment_config=config,
+            production_decisions=production_decisions,
+        ),
     )
 
 
@@ -278,12 +286,17 @@ def write_alignment_matrix_tsv(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> Path:
     columns = ("Mz", "RT", *matrix.sample_order)
     return _write_tsv(
         path,
         columns,
-        product_matrix_tsv_rows(matrix, alignment_config=alignment_config),
+        product_matrix_tsv_rows(
+            matrix,
+            alignment_config=alignment_config,
+            production_decisions=production_decisions,
+        ),
     )
 
 
@@ -292,11 +305,16 @@ def write_alignment_matrix_identity_tsv(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> Path:
     return _write_tsv(
         path,
         ALIGNMENT_MATRIX_IDENTITY_COLUMNS,
-        formatted_identity_rows(matrix, alignment_config=alignment_config),
+        formatted_identity_rows(
+            matrix,
+            alignment_config=alignment_config,
+            production_decisions=production_decisions,
+        ),
     )
 
 
@@ -455,61 +473,61 @@ def write_alignment_backfill_cell_evidence_tsv(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> Path:
     """Write the compact cell ledger needed by backfill evidence review surfaces."""
 
     config = alignment_config or AlignmentConfig()
     clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
-    decisions = build_production_decisions(matrix, config)
+    decisions = production_decisions or build_production_decisions(matrix, config)
     backfill_family_ids = _backfill_evidence_family_ids(matrix, decisions)
-    rows: list[dict[str, object]] = []
-    for cell in matrix.cells:
-        if cell.cluster_id not in backfill_family_ids:
-            continue
-        cluster = clusters_by_id[cell.cluster_id]
-        row_decision = decisions.row(cell.cluster_id)
-        cell_decision = decisions.cell(cell.cluster_id, cell.sample_stem)
-        if not _include_backfill_evidence_cell(cell, cell_decision):
-            continue
-        rows.append(
-            {
-                "schema_version": ALIGNMENT_BACKFILL_CELL_EVIDENCE_SCHEMA_VERSION,
-                "feature_family_id": cell.cluster_id,
-                "group_hypothesis_id": cell.group_hypothesis_id,
-                "public_family_id": cell.public_family_id,
-                "sample_stem": cell.sample_stem,
-                "status": cell.status,
-                "production_cell_status": cell_decision.production_status,
-                "rescue_tier": cell_decision.rescue_tier,
-                "write_matrix_value": cell_decision.write_matrix_value,
-                "include_in_primary_matrix": row_decision.include_in_primary_matrix,
-                "identity_decision": row_decision.identity_decision,
-                "row_flags": ";".join(row_decision.row_flags),
-                "area": format_value(cell.area),
-                "primary_matrix_area": format_value(cell.matrix_area),
-                "primary_matrix_area_source": cell.matrix_area_source,
-                "primary_matrix_area_reason": cell.matrix_area_missing_reason,
-                "apex_rt": format_value(cell.apex_rt),
-                "height": format_value(cell.height),
-                "peak_start_rt": format_value(cell.peak_start_rt),
-                "peak_end_rt": format_value(cell.peak_end_rt),
-                "rt_delta_sec": format_value(cell.rt_delta_sec),
-                "trace_quality": cell.trace_quality,
-                "scan_support_score": format_value(cell.scan_support_score),
-                "gap_fill_state": cell.gap_fill_state,
-                "gap_fill_reason": cell.gap_fill_reason,
-                "backfill_evidence_reason": cell.backfill_evidence_reason,
-                "source_candidate_id": cell.source_candidate_id or "",
-                "source_raw_file": str(cell.source_raw_file or ""),
-                "neutral_loss_tag": cluster.neutral_loss_tag,
-                "family_center_mz": format_value(_family_center_mz(cluster)),
-                "family_center_rt": format_value(_family_center_rt(cluster)),
-                "region_shadow_verdict": cell.region_shadow_verdict,
-                "reason": cell.reason,
-            },
-        )
-    return _write_tsv(path, ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS, rows)
 
+    def rows() -> Iterable[tuple[object, ...]]:
+        for cell in matrix.cells:
+            if cell.cluster_id not in backfill_family_ids:
+                continue
+            cluster = clusters_by_id[cell.cluster_id]
+            row_decision = decisions.row(cell.cluster_id)
+            cell_decision = decisions.cell(cell.cluster_id, cell.sample_stem)
+            if not _include_backfill_evidence_cell(cell, cell_decision):
+                continue
+            yield (
+                ALIGNMENT_BACKFILL_CELL_EVIDENCE_SCHEMA_VERSION,
+                cell.cluster_id,
+                cell.group_hypothesis_id,
+                cell.public_family_id,
+                cell.sample_stem,
+                cell.status,
+                cell_decision.production_status,
+                cell_decision.rescue_tier,
+                cell_decision.write_matrix_value,
+                row_decision.include_in_primary_matrix,
+                row_decision.identity_decision,
+                ";".join(row_decision.row_flags),
+                format_value(cell.area),
+                format_value(cell.matrix_area),
+                cell.matrix_area_source,
+                cell.matrix_area_missing_reason,
+                format_value(cell.apex_rt),
+                format_value(cell.height),
+                format_value(cell.peak_start_rt),
+                format_value(cell.peak_end_rt),
+                format_value(cell.rt_delta_sec),
+                cell.trace_quality,
+                format_value(cell.scan_support_score),
+                cell.gap_fill_state,
+                cell.gap_fill_reason,
+                cell.backfill_evidence_reason,
+                cell.source_candidate_id or "",
+                str(cell.source_raw_file or ""),
+                cluster.neutral_loss_tag,
+                format_value(_family_center_mz(cluster)),
+                format_value(_family_center_rt(cluster)),
+                cell.region_shadow_verdict,
+                cell.reason,
+            )
+
+    return _write_tsv_sequences(path, ALIGNMENT_BACKFILL_CELL_EVIDENCE_COLUMNS, rows())
 
 def write_alignment_cell_integration_audit_tsv(
     path: Path,
@@ -687,11 +705,15 @@ def _review_rows(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     grouped_cells = cells_by_cluster(matrix)
     sample_count = len(matrix.sample_order)
-    decisions = build_production_decisions(matrix, alignment_config)
+    decisions = production_decisions or build_production_decisions(
+        matrix,
+        alignment_config,
+    )
     for cluster in matrix.clusters:
         cluster_id = row_id(cluster)
         cells = grouped_cells.get(cluster_id, ())
@@ -837,22 +859,32 @@ def _include_backfill_evidence_cell(cell: AlignedCell, decision: Any) -> bool:
 def _write_tsv(
     path: Path,
     fieldnames: tuple[str, ...],
-    rows: list[dict[str, object]],
+    rows: Iterable[Mapping[str, object]],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     column_map = tuple((column, escape_excel_formula(column)) for column in fieldnames)
-    write_tsv(
-        path,
-        [
-            {
-                escaped_column: format_value(row.get(column, ""))
-                for column, escaped_column in column_map
-            }
-            for row in rows
-        ],
-        tuple(escaped_column for _, escaped_column in column_map),
-        lineterminator="\n",
-    )
+    with path.open("w", newline="", encoding="utf-8", buffering=1024 * 1024) as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        writer.writerow([escaped_column for _, escaped_column in column_map])
+        for row in rows:
+            writer.writerow(
+                [format_value(row.get(column, "")) for column, _ in column_map],
+            )
+    return path
+
+
+def _write_tsv_sequences(
+    path: Path,
+    fieldnames: tuple[str, ...],
+    rows: Iterable[Sequence[object]],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    escaped_fieldnames = [escape_excel_formula(column) for column in fieldnames]
+    with path.open("w", newline="", encoding="utf-8", buffering=1024 * 1024) as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        writer.writerow(escaped_fieldnames)
+        for row in rows:
+            writer.writerow([format_value(value) for value in row])
     return path
 
 

@@ -985,7 +985,7 @@ def _standard_peak_backfill_requires_full_cells(
 
 
 def _standard_peak_render_workers(raw_workers: int) -> int:
-    return max(1, min(raw_workers, os.cpu_count() or 1, 8))
+    return max(1, min(raw_workers, os.cpu_count() or 1, 3))
 
 
 def _standard_peak_chunk_workers(raw_workers: int) -> int:

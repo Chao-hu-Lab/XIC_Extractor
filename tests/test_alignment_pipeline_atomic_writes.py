@@ -32,7 +32,13 @@ def test_pipeline_keeps_stale_output_pair_when_requested_write_fails(
 
     _patch_owner_pipeline_to_matrix(monkeypatch)
 
-    def fail_matrix_writer(path, matrix, *, alignment_config=None):
+    def fail_matrix_writer(
+        path,
+        matrix,
+        *,
+        alignment_config=None,
+        production_decisions=None,
+    ):
         Path(path).write_text("partial matrix", encoding="utf-8")
         raise RuntimeError("matrix failed")
 
@@ -223,12 +229,24 @@ def test_pipeline_passes_alignment_config_to_production_writers(monkeypatch, tmp
         path.write_text("xlsx", encoding="utf-8")
         return path
 
-    def fake_matrix_tsv(path, matrix_arg, *, alignment_config=None):
+    def fake_matrix_tsv(
+        path,
+        matrix_arg,
+        *,
+        alignment_config=None,
+        production_decisions=None,
+    ):
         seen["matrix_tsv"] = alignment_config
         path.write_text("matrix", encoding="utf-8")
         return path
 
-    def fake_review_tsv(path, matrix_arg, *, alignment_config=None):
+    def fake_review_tsv(
+        path,
+        matrix_arg,
+        *,
+        alignment_config=None,
+        production_decisions=None,
+    ):
         seen["review_tsv"] = alignment_config
         path.write_text("review", encoding="utf-8")
         return path

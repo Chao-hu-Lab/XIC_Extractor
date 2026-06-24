@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -318,12 +318,12 @@ def read_family_allowlist_tsv(
 
 def write_skipped_evidence_ledger_tsv(
     path: Path,
-    rows: Sequence[SkippedEvidenceRecord],
+    rows: Iterable[SkippedEvidenceRecord],
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     write_tsv(
         path,
-        [asdict(row) for row in rows],
+        (asdict(row) for row in rows),
         SKIPPED_EVIDENCE_LEDGER_COLUMNS,
         extrasaction="raise",
         formatter=_format_skipped_evidence_ledger_value,

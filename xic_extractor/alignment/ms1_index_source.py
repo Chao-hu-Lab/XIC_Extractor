@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -13,6 +14,7 @@ OwnerBackfillXicBackend = Literal["raw", "ms1_index", "ms1_index_hybrid"]
 MS1IndexIntensityMode = Literal["max", "sum"]
 
 _WindowedRequest = tuple[int, XICRequest, tuple[int, int]]
+MS1_INDEX_CACHE_SCHEMA_VERSION = "ms1_scan_index_npz_v1"
 
 
 @dataclass(frozen=True)
@@ -222,6 +224,92 @@ def build_ms1_scan_index(source: Any) -> tuple[MS1Scan, ...]:
                 masses=masses,
                 intensities=intensities,
             )
+        )
+    return tuple(scans)
+
+
+def write_ms1_scan_index_npz(
+    path: Path,
+    index: tuple[MS1Scan, ...],
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    offsets: NDArray[np.int64] = np.zeros(len(index) + 1, dtype=np.int64)
+    scan_numbers: NDArray[np.int64] = np.empty(len(index), dtype=np.int64)
+    rts: NDArray[np.float64] = np.empty(len(index), dtype=np.float64)
+    mass_arrays: list[NDArray[np.float64]] = []
+    intensity_arrays: list[NDArray[np.float64]] = []
+    position = 0
+    for scan_index, scan in enumerate(index):
+        scan_numbers[scan_index] = scan.scan_number
+        rts[scan_index] = scan.rt
+        masses = np.asarray(scan.masses, dtype=np.float64)
+        intensities = np.asarray(scan.intensities, dtype=np.float64)
+        if (
+            masses.ndim != 1
+            or intensities.ndim != 1
+            or masses.shape != intensities.shape
+        ):
+            raise ValueError("MS1 scan cache arrays must be matching 1D arrays")
+        mass_arrays.append(masses)
+        intensity_arrays.append(intensities)
+        position += int(masses.size)
+        offsets[scan_index + 1] = position
+    masses_concat = (
+        np.concatenate(mass_arrays)
+        if mass_arrays
+        else np.asarray([], dtype=np.float64)
+    )
+    intensities_concat = (
+        np.concatenate(intensity_arrays)
+        if intensity_arrays
+        else np.asarray([], dtype=np.float64)
+    )
+    np.savez(
+        path,
+        schema_version=np.asarray([MS1_INDEX_CACHE_SCHEMA_VERSION]),
+        scan_number=scan_numbers,
+        rt=rts,
+        offsets=offsets,
+        masses=masses_concat,
+        intensities=intensities_concat,
+    )
+    return path
+
+
+def read_ms1_scan_index_npz(path: Path) -> tuple[MS1Scan, ...]:
+    with np.load(path, allow_pickle=False) as payload:
+        schema_version = str(payload["schema_version"][0])
+        if schema_version != MS1_INDEX_CACHE_SCHEMA_VERSION:
+            raise ValueError(
+                "unsupported MS1 index cache schema version: "
+                f"{schema_version}",
+            )
+        scan_numbers = np.asarray(payload["scan_number"], dtype=np.int64)
+        rts = np.asarray(payload["rt"], dtype=np.float64)
+        offsets = np.asarray(payload["offsets"], dtype=np.int64)
+        masses = np.asarray(payload["masses"], dtype=np.float64)
+        intensities = np.asarray(payload["intensities"], dtype=np.float64)
+    if scan_numbers.ndim != 1 or rts.ndim != 1 or scan_numbers.shape != rts.shape:
+        raise ValueError("MS1 index cache scan metadata is malformed")
+    if offsets.ndim != 1 or len(offsets) != len(scan_numbers) + 1:
+        raise ValueError("MS1 index cache offsets are malformed")
+    if masses.ndim != 1 or intensities.ndim != 1 or masses.shape != intensities.shape:
+        raise ValueError("MS1 index cache intensity arrays are malformed")
+    if len(offsets) and (offsets[0] != 0 or offsets[-1] != len(masses)):
+        raise ValueError("MS1 index cache offsets do not match payload length")
+    scans: list[MS1Scan] = []
+    for index, scan_number in enumerate(scan_numbers):
+        start = int(offsets[index])
+        end = int(offsets[index + 1])
+        if start > end:
+            raise ValueError("MS1 index cache offsets are not monotonic")
+        scans.append(
+            MS1Scan(
+                scan_number=int(scan_number),
+                rt=float(rts[index]),
+                masses=masses[start:end],
+                intensities=intensities[start:end],
+            ),
         )
     return tuple(scans)
 

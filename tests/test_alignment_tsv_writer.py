@@ -1458,6 +1458,16 @@ def test_private_write_tsv_preserves_lf_formula_and_format_contract(
     assert empty_path.read_text(encoding="utf-8") == "family_id\tvalue\n"
 
 
+def test_private_write_tsv_accepts_generator_rows(tmp_path: Path) -> None:
+    from xic_extractor.alignment import tsv_writer
+
+    rows = ({"name": f"row-{index}", "value": index} for index in range(3))
+
+    path = tsv_writer._write_tsv(tmp_path / "streamed.tsv", ("name", "value"), rows)
+
+    assert path.read_bytes() == b"name\tvalue\nrow-0\t0\nrow-1\t1\nrow-2\t2\n"
+
+
 def _read_tsv(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))

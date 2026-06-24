@@ -72,9 +72,10 @@ def build_product_matrix_rows(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> tuple[ProductMatrixRow, ...]:
     config = alignment_config or AlignmentConfig()
-    decisions = build_production_decisions(matrix, config)
+    decisions = production_decisions or build_production_decisions(matrix, config)
     grouped_cells = cells_by_cluster(matrix)
     rows: list[ProductMatrixRow] = []
     seen_source_candidates: dict[str, str] = {}
@@ -171,12 +172,14 @@ def product_matrix_tsv_rows(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> list[dict[str, object]]:
     return [
         {"Mz": row.mz, "RT": row.rt, **row.sample_values}
         for row in build_product_matrix_rows(
             matrix,
             alignment_config=alignment_config,
+            production_decisions=production_decisions,
         )
     ]
 
@@ -185,12 +188,14 @@ def product_matrix_identity_rows(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> list[dict[str, object]]:
     return [
         row.identity
         for row in build_product_matrix_rows(
             matrix,
             alignment_config=alignment_config,
+            production_decisions=production_decisions,
         )
     ]
 
@@ -649,8 +654,13 @@ def formatted_identity_rows(
     matrix: AlignmentMatrix,
     *,
     alignment_config: AlignmentConfig | None = None,
+    production_decisions: ProductionDecisionSet | None = None,
 ) -> list[dict[str, object]]:
-    rows = product_matrix_identity_rows(matrix, alignment_config=alignment_config)
+    rows = product_matrix_identity_rows(
+        matrix,
+        alignment_config=alignment_config,
+        production_decisions=production_decisions,
+    )
     return [
         {
             column: format_value(row.get(column, ""))

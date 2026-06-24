@@ -30,6 +30,30 @@ def test_audit_requests_compares_max_and_sum_against_vendor() -> None:
     assert examples[0]["mode"] == "max"
 
 
+def test_audit_requests_reports_warm_cache_economics(tmp_path: Path) -> None:
+    summary, _examples = audit.audit_requests_for_sample(
+        sample_stem="sample-a",
+        raw=FakeRawHandle(),
+        requests=(
+            XICRequest(mz=100.0, rt_min=1.0, rt_max=7.0, ppm_tol=10000.0),
+        ),
+        peak_config=_peak_config(),
+        example_limit=0,
+        index_cache_path=tmp_path / "sample-a.ms1_index.npz",
+        raw_path=tmp_path / "sample-a.raw",
+        cache_warm_repeats=2,
+    )
+
+    assert summary["cache_write_sec"] is not None
+    assert summary["cache_path"].endswith("sample-a.ms1_index.npz")
+    assert summary["cache_manifest"]["ms1_scan_count"] == 7
+    assert (tmp_path / "sample-a.ms1_index.npz").is_file()
+    assert (tmp_path / "sample-a.ms1_index.manifest.json").is_file()
+    assert summary["modes"]["sum"]["warm_cache_load_repeat_count"] == 2
+    assert summary["modes"]["sum"]["warm_cache_matches_cold_index"] is True
+    assert summary["modes"]["sum"]["warm_cache_total_sec"] >= 0.0
+
+
 def test_write_outputs_preserves_dynamic_tsv_contract(tmp_path: Path) -> None:
     outputs = audit.AuditOutputs(
         summary_tsv=tmp_path / "nested" / "summary.tsv",
@@ -83,7 +107,10 @@ def test_write_outputs_preserves_dynamic_tsv_contract(tmp_path: Path) -> None:
         "request_count",
         "area_relative_delta_median",
         "vendor_extract_sec",
+        "vendor_extraction_mode",
         "index_build_sec",
+        "cache_write_sec",
+        "cache_path",
         "ms1_scan_count",
         "sample_only_metric",
     )

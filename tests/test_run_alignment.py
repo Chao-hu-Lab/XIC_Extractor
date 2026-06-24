@@ -1301,8 +1301,8 @@ def test_run_alignment_cli_passes_raw_workers(
 @pytest.mark.parametrize(
     ("raw_workers", "cpu_count", "expected"),
     [
-        (11, 32, 8),
-        (11, 4, 4),
+        (11, 32, 3),
+        (11, 4, 3),
         (11, None, 1),
         (3, 32, 3),
     ],

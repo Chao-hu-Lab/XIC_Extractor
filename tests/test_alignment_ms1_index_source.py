@@ -7,7 +7,9 @@ from xic_extractor.alignment.ms1_index_source import (
     RawSuperWindowSource,
     build_ms1_scan_index,
     extract_index_xic,
+    read_ms1_scan_index_npz,
     source_for_owner_build_backend,
+    write_ms1_scan_index_npz,
 )
 from xic_extractor.xic_models import XICRequest, XICTrace
 
@@ -45,6 +47,25 @@ def test_extract_index_xic_can_sum_mass_window_intensities() -> None:
         intensity_mode="sum",
     )
 
+    assert trace.intensity.tolist() == [35.0, 85.0]
+
+
+def test_ms1_scan_index_npz_roundtrips_without_pickle(tmp_path) -> None:
+    raw = FakeRawHandle()
+    index = build_ms1_scan_index(raw)
+    cache_path = write_ms1_scan_index_npz(tmp_path / "sample.ms1_index.npz", index)
+
+    loaded = read_ms1_scan_index_npz(cache_path)
+    trace = extract_index_xic(
+        raw,
+        loaded,
+        XICRequest(mz=100.0, rt_min=1.0, rt_max=3.0, ppm_tol=10000.0),
+        intensity_mode="sum",
+    )
+
+    assert len(loaded) == len(index)
+    assert [scan.scan_number for scan in loaded] == [1, 3]
+    assert [scan.rt for scan in loaded] == [1.0, 3.0]
     assert trace.intensity.tolist() == [35.0, 85.0]
 
 

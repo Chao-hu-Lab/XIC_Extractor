@@ -48,6 +48,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             limit=args.limit,
             reuse_existing=args.reuse_existing,
             render_images=not args.no_images,
+            write_auxiliary_summaries=not args.best_shift_only,
             write_incremental=True,
             workers=args.workers,
             dpi=args.dpi,
@@ -76,6 +77,7 @@ def run_alignment_experiment_batch(
     limit: int | None = None,
     reuse_existing: bool = False,
     render_images: bool = True,
+    write_auxiliary_summaries: bool = True,
     write_incremental: bool = False,
     timing_recorder: TimingRecorder | None = None,
     source_family_by_family_sample: Mapping[str, Mapping[str, str]] | None = None,
@@ -144,6 +146,7 @@ def run_alignment_experiment_batch(
                     "output_dir": output_dir,
                     "reuse_existing": reuse_existing,
                     "render_images": render_images,
+                    "write_auxiliary_summaries": write_auxiliary_summaries,
                     "source_family_by_sample": source_family_by_family.get(
                         text_value(row.get("feature_family_id")),
                         {},
@@ -191,6 +194,7 @@ def run_alignment_experiment_batch(
                     output_dir=output_dir,
                     reuse_existing=reuse_existing,
                     render_images=render_images,
+                    write_auxiliary_summaries=write_auxiliary_summaries,
                     source_family_by_sample=source_family_by_family.get(family, {}),
                     dpi=dpi,
                 )
@@ -237,6 +241,7 @@ def _render_or_reuse_row(
     output_dir: Path,
     reuse_existing: bool,
     render_images: bool,
+    write_auxiliary_summaries: bool,
     source_family_by_sample: Mapping[str, str],
     dpi: int = 140,
 ) -> dict[str, str]:
@@ -289,6 +294,7 @@ def _render_or_reuse_row(
             cell_evidence_tsv=cell_evidence_tsv,
             source_family_by_sample=source_family_by_sample,
             render_images=render_images,
+            write_auxiliary_summaries=write_auxiliary_summaries,
             dpi=dpi,
         )
     except Exception:  # noqa: BLE001 - preserve batch failure semantics.
@@ -366,6 +372,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--no-images",
         action="store_true",
         help="Write shift-aware summary TSVs without rendering PNG review images.",
+    )
+    parser.add_argument(
+        "--best-shift-only",
+        action="store_true",
+        help=(
+            "Skip per-row auxiliary summaries and write only the best-shift "
+            "summary TSVs consumed by the calibration pack."
+        ),
     )
     parser.add_argument(
         "--workers",

@@ -30,6 +30,7 @@ from xic_extractor.alignment.output_levels import (
 )
 from xic_extractor.alignment.owner_backfill import OwnerBackfillCandidateAuditRow
 from xic_extractor.alignment.ownership import OwnershipBuildResult
+from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_backfill_cell_evidence_tsv,
     write_alignment_cell_integration_audit_tsv,
@@ -245,6 +246,14 @@ def write_outputs_atomic(
     baseline_audit_method: str = "",
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
+    production_decisions = None
+    if (
+        outputs.review_tsv is not None
+        or outputs.matrix_tsv is not None
+        or outputs.matrix_identity_tsv is not None
+        or outputs.backfill_cell_evidence_tsv is not None
+    ):
+        production_decisions = build_production_decisions(matrix, alignment_config)
     if outputs.workbook is not None:
         output_paths_and_writers.append(
             (
@@ -272,6 +281,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -283,6 +293,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -294,6 +305,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -309,6 +321,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
