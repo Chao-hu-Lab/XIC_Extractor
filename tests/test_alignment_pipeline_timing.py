@@ -62,6 +62,7 @@ def test_pipeline_records_alignment_timing_stages(
     assert records_by_stage["alignment.run_config"].metrics == {
         "raw_workers": 1,
         "raw_xic_batch_size": 1,
+        "owner_build_xic_backend": "raw",
         "owner_backfill_xic_backend": "raw",
         "owner_backfill_window_strategy": "exact",
         "owner_backfill_superwindow_span_factor": 2,

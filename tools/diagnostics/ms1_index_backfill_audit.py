@@ -15,8 +15,11 @@ from scripts import analyze_xic_request_locality as locality
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.ms1_index_source import (
     MS1IndexIntensityMode,
+    RawSuperWindowSource,
     build_ms1_scan_index,
     extract_index_xic,
+    read_ms1_scan_index_npz,
+    write_ms1_scan_index_npz,
 )
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.raw_reader import open_raw
@@ -26,6 +29,7 @@ from xic_extractor.tabular_io import write_tsv
 from xic_extractor.xic_models import XICRequest, XICTrace
 
 _MODES: tuple[MS1IndexIntensityMode, ...] = ("max", "sum")
+_VENDOR_EXTRACTION_MODES = ("direct", "raw-superwindow")
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_rt_sec=args.max_rt_sec,
         preferred_ppm=args.preferred_ppm,
         owner_backfill_min_detected_samples=args.owner_backfill_min_detected_samples,
+        index_cache_dir=args.index_cache_dir,
+        cache_warm_repeats=args.cache_warm_repeats,
+        vendor_extraction_mode=args.vendor_extraction_mode,
     )
     print(f"Summary TSV: {outputs.summary_tsv}")
     print(f"Examples TSV: {outputs.examples_tsv}")
@@ -72,6 +79,9 @@ def run_backfill_audit(
     max_rt_sec: float = AlignmentConfig().max_rt_sec,
     preferred_ppm: float = AlignmentConfig().preferred_ppm,
     owner_backfill_min_detected_samples: int = 1,
+    index_cache_dir: Path | None = None,
+    cache_warm_repeats: int = 1,
+    vendor_extraction_mode: str = "direct",
 ) -> tuple[AuditOutputs, dict[str, Any]]:
     batch = locality.read_batch_index(discovery_batch_index, raw_dir)
     records = locality.collect_owner_backfill_requests(
@@ -108,12 +118,21 @@ def run_backfill_audit(
             for record in sample_records
         )
         with open_raw(raw_path, dll_dir) as raw:
+            index_cache_path = (
+                _index_cache_path(index_cache_dir, sample_stem)
+                if index_cache_dir is not None
+                else None
+            )
             summary, sample_examples = audit_requests_for_sample(
                 sample_stem=sample_stem,
                 raw=raw,
                 requests=requests,
                 peak_config=peak_config,
                 example_limit=example_limit,
+                index_cache_path=index_cache_path,
+                raw_path=raw_path,
+                cache_warm_repeats=cache_warm_repeats,
+                vendor_extraction_mode=vendor_extraction_mode,
             )
         sample_summaries.append(summary)
         examples.extend(sample_examples)
@@ -134,6 +153,9 @@ def run_backfill_audit(
             "owner_backfill_min_detected_samples": (
                 owner_backfill_min_detected_samples
             ),
+            "index_cache_dir": str(index_cache_dir) if index_cache_dir else "",
+            "cache_warm_repeats": cache_warm_repeats,
+            "vendor_extraction_mode": vendor_extraction_mode,
         },
         "aggregate": aggregate,
         "samples": [_public_sample_summary(sample) for sample in sample_summaries],
@@ -155,18 +177,47 @@ def audit_requests_for_sample(
     requests: tuple[XICRequest, ...],
     peak_config: ExtractionConfig,
     example_limit: int = 20,
+    index_cache_path: Path | None = None,
+    raw_path: Path | None = None,
+    cache_warm_repeats: int = 1,
+    vendor_extraction_mode: str = "direct",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if cache_warm_repeats < 1:
+        raise ValueError("cache_warm_repeats must be >= 1")
     vendor_started = time.perf_counter()
-    vendor_traces = _extract_vendor_traces(raw, requests)
+    vendor_traces = _extract_vendor_traces(
+        raw,
+        requests,
+        extraction_mode=vendor_extraction_mode,
+    )
     vendor_extract_sec = time.perf_counter() - vendor_started
 
     index_started = time.perf_counter()
     index = build_ms1_scan_index(raw)
     index_build_sec = time.perf_counter() - index_started
+    cache_write_sec: float | None = None
+    cache_load_secs: list[float] = []
+    warm_index: tuple[Any, ...] | None = None
+    cache_manifest: dict[str, Any] | None = None
+    if index_cache_path is not None:
+        write_started = time.perf_counter()
+        write_ms1_scan_index_npz(index_cache_path, index)
+        cache_write_sec = time.perf_counter() - write_started
+        cache_manifest = _write_index_cache_manifest(
+            index_cache_path,
+            sample_stem=sample_stem,
+            raw_path=raw_path,
+            index=index,
+        )
+        for _repeat in range(cache_warm_repeats):
+            load_started = time.perf_counter()
+            warm_index = read_ms1_scan_index_npz(index_cache_path)
+            cache_load_secs.append(time.perf_counter() - load_started)
 
     mode_summaries: dict[str, dict[str, Any]] = {}
     examples: list[dict[str, Any]] = []
     mode_extract_sec: dict[str, float] = {}
+    warm_mode_extract_sec: dict[str, float] = {}
     for mode in _MODES:
         local_started = time.perf_counter()
         local_traces = tuple(
@@ -174,6 +225,14 @@ def audit_requests_for_sample(
             for request in requests
         )
         mode_extract_sec[mode] = time.perf_counter() - local_started
+        warm_local_traces: tuple[XICTrace, ...] | None = None
+        if warm_index is not None:
+            warm_started = time.perf_counter()
+            warm_local_traces = tuple(
+                extract_index_xic(raw, warm_index, request, intensity_mode=mode)
+                for request in requests
+            )
+            warm_mode_extract_sec[mode] = time.perf_counter() - warm_started
         comparisons = tuple(
             _compare_request(
                 vendor,
@@ -190,6 +249,21 @@ def audit_requests_for_sample(
         )
         summary = _summarize_comparisons(comparisons)
         summary["local_extract_sec"] = mode_extract_sec[mode]
+        summary["cold_index_total_sec"] = index_build_sec + mode_extract_sec[mode]
+        if cache_load_secs:
+            warm_load_median = _percentile(cache_load_secs, 50) or 0.0
+            summary["warm_cache_load_sec_median"] = warm_load_median
+            summary["warm_cache_load_sec_min"] = min(cache_load_secs)
+            summary["warm_cache_load_repeat_count"] = len(cache_load_secs)
+            summary["warm_cache_local_extract_sec"] = warm_mode_extract_sec[mode]
+            summary["warm_cache_total_sec"] = (
+                warm_load_median + warm_mode_extract_sec[mode]
+            )
+            summary["warm_cache_matches_cold_index"] = (
+                _traces_equal(local_traces, warm_local_traces)
+                if warm_local_traces is not None
+                else False
+            )
         mode_summaries[mode] = summary
         examples.extend(
             _example_rows(
@@ -204,7 +278,11 @@ def audit_requests_for_sample(
             "sample_stem": sample_stem,
             "request_count": len(requests),
             "vendor_extract_sec": vendor_extract_sec,
+            "vendor_extraction_mode": vendor_extraction_mode,
             "index_build_sec": index_build_sec,
+            "cache_write_sec": cache_write_sec,
+            "cache_path": str(index_cache_path) if index_cache_path else "",
+            "cache_manifest": cache_manifest or {},
             "ms1_scan_count": len(index),
             "modes": mode_summaries,
         },
@@ -215,7 +293,13 @@ def audit_requests_for_sample(
 def _extract_vendor_traces(
     raw: Any,
     requests: tuple[XICRequest, ...],
+    *,
+    extraction_mode: str = "direct",
 ) -> tuple[XICTrace, ...]:
+    if extraction_mode == "raw-superwindow":
+        return RawSuperWindowSource(raw).extract_xic_many(requests)
+    if extraction_mode != "direct":
+        raise ValueError(f"unsupported vendor extraction mode: {extraction_mode}")
     if hasattr(raw, "extract_xic_many"):
         return tuple(raw.extract_xic_many(requests))
     traces: list[XICTrace] = []
@@ -340,6 +424,9 @@ def _aggregate_sample_summaries(samples: list[dict[str, Any]]) -> dict[str, Any]
             float(item["vendor_extract_sec"]) for item in samples
         ),
         "index_build_sec": sum(float(item["index_build_sec"]) for item in samples),
+        "cache_write_sec": sum(
+            float(item.get("cache_write_sec") or 0.0) for item in samples
+        ),
         "modes": {},
     }
     for mode in _MODES:
@@ -362,6 +449,24 @@ def _aggregate_mode_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         key: sum(int(row.get(key) or 0) for row in rows) for key in sum_keys
     }
     result["local_extract_sec"] = sum(float(row["local_extract_sec"]) for row in rows)
+    result["cold_index_total_sec"] = sum(
+        float(row.get("cold_index_total_sec") or 0.0) for row in rows
+    )
+    result["warm_cache_load_sec_median"] = sum(
+        float(row.get("warm_cache_load_sec_median") or 0.0) for row in rows
+    )
+    result["warm_cache_load_sec_min"] = sum(
+        float(row.get("warm_cache_load_sec_min") or 0.0) for row in rows
+    )
+    result["warm_cache_local_extract_sec"] = sum(
+        float(row.get("warm_cache_local_extract_sec") or 0.0) for row in rows
+    )
+    result["warm_cache_total_sec"] = sum(
+        float(row.get("warm_cache_total_sec") or 0.0) for row in rows
+    )
+    result["warm_cache_matches_cold_index_count"] = sum(
+        1 for row in rows if row.get("warm_cache_matches_cold_index") is True
+    )
     apex_deltas = [
         value
         for row in rows
@@ -472,7 +577,10 @@ def _write_summary_tsv(path: Path, result: dict[str, Any]) -> None:
             "scope": "sample",
             "sample_stem": sample["sample_stem"],
             "vendor_extract_sec": sample["vendor_extract_sec"],
+            "vendor_extraction_mode": sample.get("vendor_extraction_mode", ""),
             "index_build_sec": sample["index_build_sec"],
+            "cache_write_sec": sample.get("cache_write_sec"),
+            "cache_path": sample.get("cache_path", ""),
             "ms1_scan_count": sample["ms1_scan_count"],
         }
         for mode, summary in sample["modes"].items():
@@ -494,6 +602,52 @@ def _format_tsv_value(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def _index_cache_path(index_cache_dir: Path, sample_stem: str) -> Path:
+    safe_sample = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in sample_stem
+    )
+    return index_cache_dir / f"{safe_sample}.ms1_index.npz"
+
+
+def _write_index_cache_manifest(
+    index_cache_path: Path,
+    *,
+    sample_stem: str,
+    raw_path: Path | None,
+    index: tuple[Any, ...],
+) -> dict[str, Any]:
+    manifest_path = index_cache_path.with_suffix(".manifest.json")
+    raw_stat = raw_path.stat() if raw_path is not None and raw_path.exists() else None
+    manifest = {
+        "schema_version": "ms1_index_cache_manifest_v1",
+        "sample_stem": sample_stem,
+        "cache_path": str(index_cache_path),
+        "raw_path": str(raw_path) if raw_path is not None else "",
+        "raw_size_bytes": raw_stat.st_size if raw_stat is not None else "",
+        "raw_mtime_ns": raw_stat.st_mtime_ns if raw_stat is not None else "",
+        "ms1_scan_count": len(index),
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _traces_equal(
+    left: tuple[XICTrace, ...],
+    right: tuple[XICTrace, ...] | None,
+) -> bool:
+    if right is None or len(left) != len(right):
+        return False
+    return all(
+        np.array_equal(left_trace.rt, right_trace.rt)
+        and np.array_equal(left_trace.intensity, right_trace.intensity)
+        for left_trace, right_trace in zip(left, right, strict=True)
+    )
 
 
 def _peak_config(raw_dir: Path, dll_dir: Path) -> ExtractionConfig:
@@ -558,6 +712,18 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--owner-backfill-min-detected-samples",
         type=int,
         default=1,
+    )
+    parser.add_argument("--index-cache-dir", type=Path)
+    parser.add_argument("--cache-warm-repeats", type=int, default=1)
+    parser.add_argument(
+        "--vendor-extraction-mode",
+        choices=_VENDOR_EXTRACTION_MODES,
+        default="direct",
+        help=(
+            "Vendor trace oracle. Use raw-superwindow to compare against the "
+            "current owner_backfill locality strategy instead of exact-window "
+            "batch extraction."
+        ),
     )
     return parser.parse_args(argv)
 

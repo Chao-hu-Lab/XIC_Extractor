@@ -115,6 +115,76 @@ def test_pipeline_applies_single_worker_hybrid_owner_backfill_backend(
     )
 
 
+def test_pipeline_applies_single_worker_owner_build_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_index = _write_batch(tmp_path, ("Sample_A",))
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "Sample_A.raw").write_text("raw", encoding="utf-8")
+    calls: dict[str, object] = {}
+
+    def fake_source_for_owner_build_backend(source, backend):
+        calls["backend"] = backend
+        return SimpleNamespace(kind="owner-build-index", source=source)
+
+    def fake_build_owners(candidates, *, raw_sources, **kwargs):
+        calls["build_raw_sources"] = raw_sources
+        return SimpleNamespace(
+            owners=("owner",),
+            assignments=(),
+            ambiguous_records=(),
+        )
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "source_for_owner_build_backend",
+        fake_source_for_owner_build_backend,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_sample_local_owners",
+        fake_build_owners,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "cluster_sample_local_owners",
+        lambda owners, *, config, drift_lookup=None, edge_evidence_sink=None: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "review_only_features_from_ambiguous_records",
+        lambda records, *, start_index: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_backfill_cells",
+        lambda features, *, sample_order, raw_sources, **kwargs: (),
+    )
+    monkeypatch.setattr(
+        pipeline_module,
+        "build_owner_alignment_matrix",
+        lambda features, *, sample_order, **kwargs: _matrix(sample_order),
+    )
+
+    pipeline_module.run_alignment(
+        discovery_batch_index=batch_index,
+        raw_dir=raw_dir,
+        dll_dir=tmp_path / "dll",
+        output_dir=tmp_path / "out",
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        raw_opener=FakeRawOpener(),
+        owner_build_xic_backend="ms1_index",
+    )
+
+    assert calls["backend"] == "ms1_index"
+    build_sources = calls["build_raw_sources"]
+    assert set(build_sources) == {"Sample_A"}
+    assert build_sources["Sample_A"]._source.kind == "owner-build-index"
+
+
 def test_pipeline_preconsolidates_owner_families_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -280,6 +350,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
         peak_config=_peak_config(),
         raw_opener=opener,
         raw_workers=2,
+        owner_build_xic_backend="ms1_index",
         owner_backfill_xic_backend="ms1_index",
         timing_recorder=recorder,
     )
@@ -292,6 +363,7 @@ def test_pipeline_uses_process_owner_backfill_when_raw_workers_requested(
     assert calls["owner_backfill_xic_backend"] == "ms1_index"
     assert calls["emit_region_audit"] is False
     assert calls["build_kwargs"]["raw_xic_batch_size"] == 1
+    assert calls["build_kwargs"]["owner_build_xic_backend"] == "ms1_index"
     assert "owner_backfill_xic_backend" not in calls["build_kwargs"]
     records_by_stage_sample = {
         (record.stage, record.sample_stem): record for record in recorder.records
@@ -398,7 +470,13 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     assert opener.handles[0].entered is True
     assert opener.handles[0].closed is True
 
-    def fail_matrix_writer(path, matrix, *, alignment_config=None):
+    def fail_matrix_writer(
+        path,
+        matrix,
+        *,
+        alignment_config=None,
+        production_decisions=None,
+    ):
         raise RuntimeError("writer failed")
 
     monkeypatch.setattr(

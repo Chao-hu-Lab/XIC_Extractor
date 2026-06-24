@@ -47,6 +47,35 @@ def test_claim_registry_hot_path_many_samples_single_claim(
     )
 
 
+def test_claim_registry_reuses_family_stats_across_sample_cells(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix = _matrix(
+        clusters=(_feature("FAM000001"),),
+        cells=tuple(
+            _cell(f"sample-{index:02d}", "FAM000001", "detected")
+            for index in range(12)
+        ),
+    )
+    original_count_status = claim_registry_module.count_status
+    count_status_calls = 0
+
+    def count_status(cells: Any, status: str) -> int:
+        nonlocal count_status_calls
+        count_status_calls += 1
+        return original_count_status(cells, status)
+
+    monkeypatch.setattr(claim_registry_module, "count_status", count_status)
+
+    result = claim_registry_module.apply_ms1_peak_claim_registry(
+        matrix,
+        AlignmentConfig(),
+    )
+
+    assert result is matrix
+    assert count_status_calls == 1
+
+
 def test_claim_registry_hot_path_one_sample_many_compatible_claims(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

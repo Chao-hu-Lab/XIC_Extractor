@@ -222,6 +222,11 @@ def test_owner_backfill_process_reports_payload_economics_without_deepening_payl
     )
 
 
+def test_process_job_payload_size_still_rejects_callable_leaf() -> None:
+    with pytest.raises(TypeError, match="contains callable value"):
+        process_job_payload_size_bytes({"callback": lambda: None})
+
+
 def test_owner_backfill_process_per_sample_features_match_legacy_scan(
     tmp_path: Path,
 ) -> None:
@@ -432,6 +437,7 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
         alignment_config=AlignmentConfig(),
         peak_config=_peak_config(tmp_path, baseline_audit_method="asls"),
         max_workers=2,
+        owner_build_xic_backend="ms1_index",
         emit_region_audit=True,
         region_audit_family_ids=frozenset({"sample-a@F0001"}),
         runner=fake_runner,
@@ -439,6 +445,7 @@ def test_owner_build_process_builds_pickleable_sample_jobs_and_merges_output(
 
     assert [job.sample_stem for job in captured_jobs] == ["sample-a", "sample-b"]
     assert [len(job.candidates) for job in captured_jobs] == [1, 1]
+    assert {job.owner_build_xic_backend for job in captured_jobs} == {"ms1_index"}
     assert {job.emit_region_audit for job in captured_jobs} == {True}
     assert {job.region_audit_family_ids for job in captured_jobs} == {
         frozenset({"sample-a@F0001"})

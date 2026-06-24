@@ -6,10 +6,13 @@ from types import SimpleNamespace
 
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
+from xic_extractor.alignment.output_rows import cells_by_cluster, row_id
 from xic_extractor.alignment.owner_clustering import OwnerAlignedFeature
 from xic_extractor.alignment.ownership_models import IdentityEvent, SampleLocalMS1Owner
 from xic_extractor.alignment.primary_consolidation import (
     _connected_components,
+    _family_stats,
+    _near_duplicate_candidate_pairs,
     consolidate_primary_family_rows,
 )
 from xic_extractor.alignment.production_decisions import build_production_decisions
@@ -357,6 +360,54 @@ def test_near_duplicate_rescue_heavy_primary_family_is_demoted_to_audit():
         for cell in consolidated.cells
         if cell.cluster_id == "FAM_RESCUE"
     ] == ["s1", "s2", "s3", "s4"]
+
+
+def test_near_duplicate_candidate_pairs_prune_impossible_pairs() -> None:
+    matrix = AlignmentMatrix(
+        clusters=(
+            _feature("FAM_STRONG", rt=10.00),
+            _feature("FAM_RESCUE", rt=10.50),
+            _feature("FAM_FAR_RT", rt=20.00),
+            _feature("FAM_OTHER_NL", rt=10.40, neutral_loss_tag="DNA_R"),
+            _feature("FAM_LOW_STATS", rt=10.40),
+        ),
+        sample_order=("s1", "s2", "s3"),
+        cells=(
+            _cell("s1", "FAM_STRONG", "detected", 1000.0, apex=10.00),
+            _cell("s2", "FAM_STRONG", "detected", 900.0, apex=10.01),
+            _cell("s3", "FAM_STRONG", "rescued", 800.0, apex=10.02),
+            _cell("s1", "FAM_RESCUE", "detected", 100.0, apex=10.50),
+            _cell("s2", "FAM_RESCUE", "rescued", 90.0, apex=10.51),
+            _cell("s3", "FAM_RESCUE", "rescued", 80.0, apex=10.52),
+            _cell("s1", "FAM_FAR_RT", "detected", 100.0, apex=20.00),
+            _cell("s2", "FAM_FAR_RT", "rescued", 90.0, apex=20.01),
+            _cell("s3", "FAM_FAR_RT", "rescued", 80.0, apex=20.02),
+            _cell("s1", "FAM_OTHER_NL", "detected", 100.0, apex=10.40),
+            _cell("s2", "FAM_OTHER_NL", "rescued", 90.0, apex=10.41),
+            _cell("s3", "FAM_OTHER_NL", "rescued", 80.0, apex=10.42),
+            _cell("s1", "FAM_LOW_STATS", "detected", 100.0, apex=10.40),
+        ),
+    )
+    grouped_cells = cells_by_cluster(matrix)
+    clusters_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
+    stats_by_id = {
+        cluster_id: _family_stats(grouped_cells.get(cluster_id, ()))
+        for cluster_id in clusters_by_id
+    }
+
+    pairs = set(
+        _near_duplicate_candidate_pairs(
+            matrix,
+            clusters_by_id=clusters_by_id,
+            stats_by_id=stats_by_id,
+            config=AlignmentConfig(),
+        ),
+    )
+
+    assert ("FAM_RESCUE", "FAM_STRONG") in pairs
+    assert ("FAM_FAR_RT", "FAM_STRONG") not in pairs
+    assert ("FAM_OTHER_NL", "FAM_STRONG") not in pairs
+    assert ("FAM_LOW_STATS", "FAM_STRONG") not in pairs
 
 
 def test_consolidated_winner_carries_source_family_seed_events():

@@ -58,6 +58,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     standard_peak_backfill_enabled = bool(
         preset_runtime_options.get("standard_peak_backfill", False),
     )
+    backfill_expansion_productization_mode = str(
+        preset_runtime_options.get("backfill_expansion_productization", "off"),
+    )
     if args.standard_peak_backfill_publication_mode is not None:
         if not standard_peak_backfill_enabled:
             print(
@@ -86,6 +89,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
     raw_workers, raw_xic_batch_size = _resolve_raw_execution_settings(args)
+    owner_build_xic_backend = _effective_owner_build_xic_backend(
+        args,
+        preset_runtime_options,
+    )
     identity_coherence_output_dir = (
         args.identity_coherence_output_dir.resolve()
         if args.identity_coherence_output_dir is not None
@@ -209,6 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=output_dir,
             raw_workers=raw_workers,
             raw_xic_batch_size=raw_xic_batch_size,
+            owner_build_xic_backend=owner_build_xic_backend,
         )
         return 0
 
@@ -230,6 +238,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         else {}
     )
     standard_peak_outputs = None
+    backfill_expansion_outputs = None
+    product_ready_publication_check_outputs = None
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
@@ -278,6 +288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
+            "owner_build_xic_backend": owner_build_xic_backend,
             "owner_backfill_xic_backend": _owner_backfill_xic_backend(
                 args.owner_backfill_xic_backend
             ),
@@ -336,8 +347,55 @@ def main(argv: Sequence[str] | None = None) -> int:
                         preset_runtime_options,
                         "standard_peak_backfill_min_shape_r",
                     ),
+                    render_workers=_standard_peak_render_workers(raw_workers),
+                    chunk_workers=_standard_peak_chunk_workers(raw_workers),
                     timing_recorder=timing_recorder,
                 )
+            if backfill_expansion_productization_mode == "clean-target-selective":
+                backfill_expansion_outputs = (
+                    run_backfill_expansion_clean_target_selective_preset_from_alignment(
+                        alignment_dir=output_dir,
+                        raw_dir=raw_dir,
+                        dll_dir=dll_dir,
+                        output_dir=(
+                            output_dir / "backfill_expansion_productization_preset"
+                        ),
+                        reuse_existing_raw_overlay=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_reuse_existing_raw_overlay"
+                            ],
+                        ),
+                        reuse_existing_shift_aware=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_reuse_existing_shift_aware"
+                            ],
+                        ),
+                        render_shift_aware_images=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_render_shift_aware_images"
+                            ],
+                        ),
+                        min_shape_r=_runtime_float_option(
+                            preset_runtime_options,
+                            "backfill_expansion_min_shape_r",
+                        ),
+                        timing_recorder=timing_recorder,
+                        activation_scope_expected_diff_tsv=(
+                            _clean_target_selective_activation_expected_diff_tsv()
+                        ),
+                    )
+                )
+            if _is_builtin_product_ready_preset(preset):
+                product_ready_publication_check_outputs = (
+                    check_product_ready_preset_publication(
+                        alignment_dir=output_dir,
+                    )
+                )
+                if product_ready_publication_check_outputs.status != "pass":
+                    raise ValueError(
+                        "Product-ready preset publication check failed: "
+                        f"{product_ready_publication_check_outputs.summary_json}",
+                    )
         finally:
             if profiler is not None:
                 _write_cprofile_outputs(
@@ -408,6 +466,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         gallery_html = getattr(standard_peak_outputs, "gallery_html", None)
         if gallery_html is not None:
             print(f"Standard-peak backfill gallery HTML: {gallery_html}")
+    if product_ready_publication_check_outputs is not None:
+        print(
+            "Product-ready preset publication summary JSON: "
+            f"{product_ready_publication_check_outputs.summary_json}"
+        )
+        print(
+            "Product-ready preset publication checks TSV: "
+            f"{product_ready_publication_check_outputs.checks_tsv}"
+        )
+    if backfill_expansion_outputs is not None:
+        print(
+            "Backfill expansion productization summary JSON: "
+            f"{backfill_expansion_outputs.summary_json}"
+        )
+        print(
+            "Backfill expansion clean-target activation summary JSON: "
+            f"{backfill_expansion_outputs.clean_target_activation_summary_json}"
+        )
+        print(
+            "Backfill expansion product authority scope: "
+            f"{backfill_expansion_outputs.product_authority_scope}"
+        )
     if timing_recorder is not None:
         if args.timing_live_output is not None:
             print(f"Timing live JSON: {args.timing_live_output.resolve()}")
@@ -540,6 +620,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Only run owner-centered MS1 backfill for features detected in at "
             "least this many samples. Default 1 preserves full backfill."
+        ),
+    )
+    parser.add_argument(
+        "--owner-build-xic-backend",
+        choices=("raw", "raw-super-window", "ms1-index"),
+        default=None,
+        help=(
+            "Experimental XIC backend for sample-local owner building. "
+            "Default uses the active preset value or 'raw'. "
+            "'raw-super-window' merges overlapping vendor scan windows and "
+            "crops back to request windows. 'ms1-index' is an explicit "
+            "approximate fast mode and may change owner peaks, areas, "
+            "feature rows, and matrix values."
         ),
     )
     parser.add_argument(
@@ -891,12 +984,52 @@ def _standard_peak_backfill_requires_full_cells(
     return output_level != "validation-minimal"
 
 
+def _standard_peak_render_workers(raw_workers: int) -> int:
+    return max(1, min(raw_workers, os.cpu_count() or 1, 3))
+
+
+def _standard_peak_chunk_workers(raw_workers: int) -> int:
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(raw_workers, max(1, cpu_count // 4), 2))
+
+
 def run_standard_peak_backfill_preset(**kwargs):
     from tools.diagnostics.standard_peak_backfill_preset import (
         run_standard_peak_backfill_preset as runner,
     )
 
     return runner(**kwargs)
+
+
+def run_backfill_expansion_clean_target_selective_preset_from_alignment(**kwargs):
+    from scripts.run_backfill_expansion_full_evidence_chain import (
+        run_backfill_expansion_clean_target_selective_preset_from_alignment as runner,
+    )
+
+    return runner(**kwargs)
+
+
+def check_product_ready_preset_publication(**kwargs):
+    from xic_extractor.diagnostics.product_ready_preset_publication_check import (
+        check_product_ready_preset_publication as checker,
+    )
+
+    return checker(**kwargs)
+
+
+def _is_builtin_product_ready_preset(preset: Preset | None) -> bool:
+    return preset is not None and preset.source == "builtin:dna_dr_product_ready"
+
+
+def _clean_target_selective_activation_expected_diff_tsv() -> Path:
+    from scripts import (
+        build_backfill_expansion_clean_target_selective_product_activation,
+    )
+
+    return (
+        build_backfill_expansion_clean_target_selective_product_activation
+        .DEFAULT_FILTERED_EXPECTED_DIFF_TSV
+    )
 
 
 def _expect_arg(
@@ -940,6 +1073,7 @@ def _print_preflight_summary(
     output_dir: Path,
     raw_workers: int,
     raw_xic_batch_size: int,
+    owner_build_xic_backend: str,
 ) -> None:
     sample_count = len(discovery_batch.sample_order)
     print("Alignment launch preflight OK (diagnostic_only; no validation completed)")
@@ -969,6 +1103,7 @@ def _print_preflight_summary(
     print(f"Performance profile: {args.performance_profile or '<none>'}")
     print(f"RAW workers: {raw_workers}")
     print(f"RAW XIC batch size: {raw_xic_batch_size}")
+    print(f"Owner build XIC backend: {owner_build_xic_backend}")
     print(f"Owner backfill window strategy: {args.owner_backfill_window_strategy}")
     print(
         "Owner backfill superwindow span factor: "
@@ -1080,6 +1215,24 @@ def _owner_backfill_xic_backend(value: str) -> str:
         return "ms1_index"
     if value == "ms1-index-hybrid":
         return "ms1_index_hybrid"
+    return value
+
+
+def _effective_owner_build_xic_backend(
+    args: argparse.Namespace,
+    preset_runtime_options: dict[str, object],
+) -> str:
+    value = args.owner_build_xic_backend
+    if value is None:
+        value = str(preset_runtime_options.get("owner_build_xic_backend", "raw"))
+    return _owner_build_xic_backend(value)
+
+
+def _owner_build_xic_backend(value: str) -> str:
+    if value == "raw-super-window":
+        return "raw_superwindow"
+    if value == "ms1-index":
+        return "ms1_index"
     return value
 
 

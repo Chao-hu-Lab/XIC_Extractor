@@ -3,8 +3,8 @@ from __future__ import annotations
 import math
 import re
 from collections import defaultdict, deque
+from collections.abc import Iterator
 from dataclasses import dataclass, fields, is_dataclass, replace
-from itertools import combinations
 from statistics import mean, median
 from types import SimpleNamespace
 from typing import Any
@@ -199,8 +199,12 @@ def _near_duplicate_primary_graph(
         cluster_id: _family_stats(grouped_cells.get(cluster_id, ()))
         for cluster_id in clusters_by_id
     }
-    family_ids = tuple(row_id(cluster) for cluster in matrix.clusters)
-    for left_id, right_id in combinations(family_ids, 2):
+    for left_id, right_id in _near_duplicate_candidate_pairs(
+        matrix,
+        clusters_by_id=clusters_by_id,
+        stats_by_id=stats_by_id,
+        config=config,
+    ):
         left = clusters_by_id[left_id]
         right = clusters_by_id[right_id]
         left_stats = stats_by_id[left_id]
@@ -216,6 +220,62 @@ def _near_duplicate_primary_graph(
         graph[left_id].add(right_id)
         graph[right_id].add(left_id)
     return graph
+
+
+def _near_duplicate_candidate_pairs(
+    matrix: AlignmentMatrix,
+    *,
+    clusters_by_id: dict[str, Any],
+    stats_by_id: dict[str, _FamilyStats],
+    config: AlignmentConfig,
+) -> Iterator[tuple[str, str]]:
+    rt_window_min = config.identity_rt_candidate_window_sec / 60.0
+    finite_by_tag: dict[str, list[tuple[float, str]]] = defaultdict(list)
+    nonfinite_by_tag: dict[str, list[str]] = defaultdict(list)
+
+    for cluster in matrix.clusters:
+        cluster_id = row_id(cluster)
+        stats = stats_by_id[cluster_id]
+        if _review_only_or_loser(cluster):
+            continue
+        if not (stats.rescue_heavy or stats.detected_count >= 2):
+            continue
+        tag = str(cluster.neutral_loss_tag)
+        rt = _family_center_rt(cluster)
+        if math.isfinite(rt):
+            finite_by_tag[tag].append((rt, cluster_id))
+        else:
+            nonfinite_by_tag[tag].append(cluster_id)
+
+    emitted: set[tuple[str, str]] = set()
+    for tag in sorted(set(finite_by_tag) | set(nonfinite_by_tag)):
+        finite = sorted(finite_by_tag.get(tag, ()))
+        for left_index, (left_rt, left_id) in enumerate(finite):
+            right_index = left_index + 1
+            while right_index < len(finite):
+                right_rt, right_id = finite[right_index]
+                if right_rt - left_rt > rt_window_min:
+                    break
+                pair = _ordered_pair(left_id, right_id)
+                emitted.add(pair)
+                yield pair
+                right_index += 1
+
+        all_ids = [cluster_id for _rt, cluster_id in finite]
+        all_ids.extend(nonfinite_by_tag.get(tag, ()))
+        for nonfinite_id in sorted(nonfinite_by_tag.get(tag, ())):
+            for other_id in sorted(all_ids):
+                if other_id == nonfinite_id:
+                    continue
+                pair = _ordered_pair(nonfinite_id, other_id)
+                if pair in emitted:
+                    continue
+                emitted.add(pair)
+                yield pair
+
+
+def _ordered_pair(left_id: str, right_id: str) -> tuple[str, str]:
+    return (left_id, right_id) if left_id < right_id else (right_id, left_id)
 
 
 def _near_duplicate_primary_competition(

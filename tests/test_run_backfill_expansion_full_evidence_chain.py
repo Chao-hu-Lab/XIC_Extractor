@@ -373,3 +373,173 @@ def test_alignment_preset_wrapper_uses_current_alignment_artifacts(
         outputs.product_authority_scope
         == "backfill_expansion_clean_target_selective_activation_84_cells"
     )
+
+
+def test_alignment_preset_wrapper_uses_pre_standard_peak_baseline_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    for name in (
+        "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
+        "alignment_matrix.pre_standard_peak_backfill.tsv",
+        "alignment_matrix_identity.pre_standard_peak_backfill.tsv",
+        "alignment_backfill_cell_evidence.tsv",
+        "alignment_review.tsv",
+    ):
+        (alignment_dir / name).write_text("x\n", encoding="utf-8")
+    output_dir = tmp_path / "backfill_expansion_productization_preset"
+    captured_cid: dict[str, object] = {}
+    captured_chain: dict[str, object] = {}
+
+    def fake_cid_activation(**kwargs):
+        captured_cid.update(kwargs)
+        return {}
+
+    def fake_chain(**kwargs):
+        captured_chain.update(kwargs)
+        return {
+            "clean_target_selective_activation_summary_json": str(
+                kwargs["docs_root"]
+                / "backfill_expansion_clean_target_selective_product_activation_v1"
+                / (
+                    "backfill_expansion_clean_target_selective_product_activation_"
+                    "summary.json"
+                )
+            ),
+            "product_authority_scope": (
+                "backfill_expansion_clean_target_selective_activation_84_cells"
+            ),
+            "active_backfill_cell_count": 84,
+        }
+
+    monkeypatch.setattr(
+        runner.cid_nl_activation,
+        "build_cid_nl_default_product_activation",
+        fake_cid_activation,
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_backfill_expansion_full_evidence_chain",
+        fake_chain,
+    )
+
+    runner.run_backfill_expansion_clean_target_selective_preset_from_alignment(
+        alignment_dir=alignment_dir,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+    )
+
+    assert captured_cid["input_quant_matrix_tsv"] == (
+        alignment_dir / "alignment_matrix.pre_standard_peak_backfill.tsv"
+    )
+    assert captured_cid["input_matrix_identity_tsv"] == (
+        alignment_dir / "alignment_matrix_identity.pre_standard_peak_backfill.tsv"
+    )
+    assert captured_chain["input_matrix_identity_tsv"] == (
+        alignment_dir / "alignment_matrix_identity.pre_standard_peak_backfill.tsv"
+    )
+
+
+def test_alignment_preset_wrapper_rejects_incomplete_pre_standard_peak_baseline(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    for name in (
+        "alignment_matrix.tsv",
+        "alignment_matrix_identity.tsv",
+        "alignment_matrix.pre_standard_peak_backfill.tsv",
+        "alignment_backfill_cell_evidence.tsv",
+        "alignment_review.tsv",
+    ):
+        (alignment_dir / name).write_text("x\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="snapshot is incomplete"):
+        runner.run_backfill_expansion_clean_target_selective_preset_from_alignment(
+            alignment_dir=alignment_dir,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            output_dir=tmp_path / "backfill_expansion_productization_preset",
+        )
+
+
+def test_alignment_preset_wrapper_rejects_activation_scope_samples_missing_from_matrix(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    write_tsv(
+        alignment_dir / "alignment_matrix.tsv",
+        [{"Mz": "100.0", "RT": "1.0", "SampleA_DNA": ""}],
+        ("Mz", "RT", "SampleA_DNA"),
+        extrasaction="raise",
+    )
+    for name in (
+        "alignment_matrix_identity.tsv",
+        "alignment_backfill_cell_evidence.tsv",
+        "alignment_review.tsv",
+    ):
+        (alignment_dir / name).write_text("x\n", encoding="utf-8")
+    activation_scope = tmp_path / "activation_expected_diff.tsv"
+    write_tsv(
+        activation_scope,
+        [
+            {
+                "schema_version": "quant_matrix_version_expected_diff_v1",
+                "peak_hypothesis_id": "FAM001",
+                "sample_stem": "SampleB_DNA",
+                "baseline_value": "",
+                "activated_value": "123",
+                "expected_matrix_effect": "write_accepted_backfill",
+                "expected_reason": "unit",
+            }
+        ],
+        runner.EXPECTED_DIFF_COLUMNS,
+        extrasaction="raise",
+    )
+
+    def fail_cid_activation(**_kwargs):
+        raise AssertionError("scope preflight should run before CID activation")
+
+    def fail_chain(**_kwargs):
+        raise AssertionError("scope preflight should run before evidence chain")
+
+    monkeypatch.setattr(
+        runner.cid_nl_activation,
+        "build_cid_nl_default_product_activation",
+        fail_cid_activation,
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_backfill_expansion_full_evidence_chain",
+        fail_chain,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="activation scope is incompatible.*SampleB_DNA",
+    ):
+        runner.run_backfill_expansion_clean_target_selective_preset_from_alignment(
+            alignment_dir=alignment_dir,
+            raw_dir=raw_dir,
+            dll_dir=dll_dir,
+            output_dir=tmp_path / "backfill_expansion_productization_preset",
+            activation_scope_expected_diff_tsv=activation_scope,
+        )

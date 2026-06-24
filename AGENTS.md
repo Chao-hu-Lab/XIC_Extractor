@@ -65,15 +65,6 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   `docs/agent-parameter-settings.md` and use documented runners and paths.
 - Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
   diagnostic output groups need a summary or index.
-- Before splitting, retargeting, or merge-repairing stacked PRs, build a stack
-  map first: base/head per PR, repeated global ledger files, tracked vs
-  externalized artifacts, and CI assumptions about local outputs. If multiple
-  PRs own the same ledger or CI needs ignored `output/` /
-  `local_validation_artifacts/`, stop and create a prerequisite boundary or
-  rollup PR instead of patching red checks one by one.
-- Default CI must not require ignored local output/cache artifacts. Track small
-  schemas, summaries, and fixtures; make rendered HTML/PNG, RAW-derived bulk
-  TSVs, and externalized local files opt-in local checks.
 - Keep active handoffs as short current-state snapshots, not logs. Use archive
   for completed phase summaries, notes for long scratch details, and prune
   around the 200-line target before substantial continuation.
@@ -97,6 +88,16 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   shards, subagents, plugins, or long runs must name the product evidence or
   decision they add; dataset-specific slices are staging evidence, not durable
   product policy.
+- Before adding a new validation, fixture, retention, diagnostic,
+  productization, or artifact-index workflow, search for an existing owner of
+  the same responsibility. If a wheel exists, deepen and reuse that module
+  before creating a parallel workflow; a new sibling workflow must state why the
+  existing interface is wrong for this case.
+- Treat the third instance of the same mechanical responsibility as a refactor
+  trigger. Shared mechanics such as artifact path resolution, inventory parsing,
+  hashing, externalized-artifact checks, schema checks, replay checks, and stale
+  result detection should move behind a small reusable interface while
+  phase-specific policy and domain authority statements stay local.
 - Treat `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, hook
   scripts, execpolicy, and subagent TOML as execution-affecting config. Changes
   need docs/handoff review, smoke check, and secret/local-path scan.
@@ -161,10 +162,14 @@ approval instead of substituting a narrower check.
   repeatedly drifting work. It must name one objective, context, constraints,
   verification, done condition, stop rule, and handoff expectation. Active
   runtime goals still require explicit user request.
-- Before non-trivial diagnostics, RAW-backed evidence, preset performance,
-  matrix activation, or evidence-provider work, use `xic-architecture-preflight`
-  and name owner/helper reuse, call-cost model, public contract risk, validation
-  gate, and stop rule.
+- Before non-trivial diagnostics, RAW-backed evidence, matrix activation, or
+  evidence-provider work, use `xic-architecture-preflight` and name owner/helper
+  reuse, call-cost model, public contract risk, validation gate, and stop rule.
+- Before XIC preset/runtime performance work, use `xic-performance-diagnosis` to
+  inspect timing artifacts, rank bottlenecks, classify call cost and workload,
+  and define correctness gates; then use `xic-architecture-preflight` before code
+  edits. This does not replace `xic-raw-validation` before launching or accepting
+  RAW-backed validation.
 - For broad audits, workflow-rule changes, structural questions, PR/CI work, or
   requested review gates, use the relevant available capabilities instead of
   self-limiting: repo skills, subagents, CodeGraph, GitHub/gh, diagnostics

@@ -88,7 +88,7 @@ def require_fields(
 
 def write_tsv(
     path: Path,
-    rows: Sequence[Mapping[str, Any]],
+    rows: Iterable[Mapping[str, Any]],
     fieldnames: Sequence[str],
     *,
     encoding: str = "utf-8",
@@ -110,7 +110,7 @@ def write_tsv(
 
 def write_delimited_rows(
     path: Path,
-    rows: Sequence[Mapping[str, Any]],
+    rows: Iterable[Mapping[str, Any]],
     fieldnames: Sequence[str],
     *,
     delimiter: str = ",",
@@ -119,7 +119,12 @@ def write_delimited_rows(
     formatter: Callable[[Any], str] | None = None,
     lineterminator: str | None = None,
 ) -> None:
-    with path.open("w", newline="", encoding=encoding) as handle:
+    with path.open(
+        "w",
+        newline="",
+        encoding=encoding,
+        buffering=1024 * 1024,
+    ) as handle:
         writer = csv.DictWriter(
             handle,
             **_delimited_writer_kwargs(
@@ -188,7 +193,7 @@ def _delimited_writer_kwargs(
 
 def _write_formatted_delimited_rows(
     writer: Any,
-    rows: Sequence[Mapping[str, Any]],
+    rows: Iterable[Mapping[str, Any]],
     fieldnames: Sequence[str],
     *,
     extrasaction: Literal["ignore", "raise"],

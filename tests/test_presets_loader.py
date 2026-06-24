@@ -34,6 +34,21 @@ def test_list_presets_works_outside_repo_cwd(
     monkeypatch.chdir(tmp_path)
 
     assert "dna_dr" in list_presets()
+    assert "dna_dr_product_ready" in list_presets()
+
+
+def test_load_builtin_dna_dr_product_ready_preset_stays_sample_universe_safe() -> None:
+    preset = load_preset("dna_dr_product_ready")
+
+    assert preset.name == "DNA dR Product Ready"
+    assert preset.combine_mode == "single"
+    assert preset.tags[0].name == "DNA_dR"
+    assert preset.alignment_overrides == {
+        "standard_peak_backfill": True,
+        "standard_peak_backfill_chunk_size": 240,
+        "standard_peak_backfill_publication_mode": "matrix-only",
+        "owner_build_xic_backend": "raw-super-window",
+    }
 
 
 def test_existing_path_toml_loads_supported_alignment_options(tmp_path: Path) -> None:
@@ -57,6 +72,8 @@ standard_peak_backfill = true
 standard_peak_backfill_chunk_size = 24
 standard_peak_backfill_publication_mode = "review-gallery"
 standard_peak_backfill_min_shape_r = 0.97
+owner_build_xic_backend = "raw-super-window"
+backfill_expansion_productization = "clean-target-selective"
 """.strip(),
         encoding="utf-8",
     )
@@ -70,6 +87,8 @@ standard_peak_backfill_min_shape_r = 0.97
         "standard_peak_backfill_chunk_size": 24,
         "standard_peak_backfill_publication_mode": "review-gallery",
         "standard_peak_backfill_min_shape_r": 0.97,
+        "owner_build_xic_backend": "raw-super-window",
+        "backfill_expansion_productization": "clean-target-selective",
     }
 
 
@@ -97,5 +116,5 @@ preferred_ppm = 10.0
 
 
 def test_missing_builtin_error_lists_available_presets() -> None:
-    with pytest.raises(PresetError, match="available built-in presets: dna_dr"):
+    with pytest.raises(PresetError, match="dna_dr_product_ready"):
         load_preset("missing")

@@ -42,7 +42,13 @@ from tools.diagnostics import (
     shift_aware_standard_peak_gate_calibration,
     standard_peak_ms1_authority_bundle,
 )
-from xic_extractor.tabular_io import read_tsv_required, text_value, write_tsv
+from xic_extractor.alignment.quant_matrix_version import EXPECTED_DIFF_COLUMNS
+from xic_extractor.tabular_io import (
+    read_tsv_required,
+    read_tsv_with_header,
+    text_value,
+    write_tsv,
+)
 
 clean_activation = build_backfill_expansion_clean_target_selective_product_activation
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,6 +103,74 @@ def _scoped_dir(root: Path | None, default_dir: Path) -> Path:
 
 def _named_path(directory: Path, default_path: Path) -> Path:
     return directory / default_path.name
+
+
+def _standard_peak_pre_publish_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.pre_standard_peak_backfill{path.suffix}")
+
+
+def _cid_nl_activation_baseline_pair(
+    *,
+    alignment_dir: Path,
+) -> tuple[Path, Path]:
+    matrix_tsv = alignment_dir / "alignment_matrix.tsv"
+    identity_tsv = alignment_dir / "alignment_matrix_identity.tsv"
+    pre_matrix_tsv = _standard_peak_pre_publish_path(matrix_tsv)
+    pre_identity_tsv = _standard_peak_pre_publish_path(identity_tsv)
+    has_pre_matrix = pre_matrix_tsv.exists()
+    has_pre_identity = pre_identity_tsv.exists()
+    if has_pre_matrix != has_pre_identity:
+        missing = pre_identity_tsv if has_pre_matrix else pre_matrix_tsv
+        raise FileNotFoundError(
+            "standard-peak pre-publication alignment snapshot is incomplete: "
+            f"{missing}",
+        )
+    if has_pre_matrix:
+        return pre_matrix_tsv, pre_identity_tsv
+    return matrix_tsv, identity_tsv
+
+
+def _quant_matrix_sample_columns(matrix_header: Sequence[str]) -> tuple[str, ...]:
+    header = tuple(matrix_header)
+    if len(header) < 3 or header[:2] != ("Mz", "RT"):
+        raise ValueError("quant matrix header must start with Mz, RT")
+    return tuple(column for column in header if column not in {"Mz", "RT"})
+
+
+def _require_activation_scope_samples_in_matrix(
+    *,
+    input_quant_matrix_tsv: Path,
+    activation_scope_expected_diff_tsv: Path | None,
+) -> None:
+    if activation_scope_expected_diff_tsv is None:
+        return
+    if not activation_scope_expected_diff_tsv.exists():
+        return
+
+    matrix_header, _matrix_rows = read_tsv_with_header(input_quant_matrix_tsv)
+    matrix_samples = set(_quant_matrix_sample_columns(matrix_header))
+    expected_rows = read_tsv_required(
+        activation_scope_expected_diff_tsv,
+        EXPECTED_DIFF_COLUMNS,
+    )
+    expected_samples = {
+        sample
+        for row in expected_rows
+        if (sample := text_value(row.get("sample_stem")))
+    }
+    missing = sorted(expected_samples - matrix_samples)
+    if not missing:
+        return
+    preview = ", ".join(missing[:8])
+    suffix = "" if len(missing) <= 8 else f", ... +{len(missing) - 8} more"
+    raise ValueError(
+        "Backfill expansion activation scope is incompatible with the current "
+        "alignment matrix sample set: "
+        f"{len(missing)} expected-diff sample(s) are absent from "
+        f"{input_quant_matrix_tsv.name}: {preview}{suffix}. "
+        "Use an alignment matrix from the matching activation sample universe "
+        "or build a separate activation packet for this validation subset.",
+    )
 
 
 def run_backfill_expansion_full_evidence_chain(
@@ -649,6 +723,7 @@ def run_backfill_expansion_clean_target_selective_preset_from_alignment(
     render_shift_aware_images: bool = False,
     min_shape_r: float = DEFAULT_MIN_SHAPE_R,
     timing_recorder: Any | None = None,
+    activation_scope_expected_diff_tsv: Path | None = None,
 ) -> BackfillExpansionPresetOutputs:
     """Run the bounded productization chain from a completed alignment output."""
 
@@ -663,8 +738,9 @@ def run_backfill_expansion_clean_target_selective_preset_from_alignment(
     docs_root = preset_dir / "docs"
     output_root = preset_dir / "output"
 
-    input_quant_matrix_tsv = alignment_dir / "alignment_matrix.tsv"
-    input_matrix_identity_tsv = alignment_dir / "alignment_matrix_identity.tsv"
+    input_quant_matrix_tsv, input_matrix_identity_tsv = (
+        _cid_nl_activation_baseline_pair(alignment_dir=alignment_dir)
+    )
     alignment_backfill_cell_evidence_tsv = (
         alignment_dir / "alignment_backfill_cell_evidence.tsv"
     )
@@ -676,6 +752,10 @@ def run_backfill_expansion_clean_target_selective_preset_from_alignment(
         ("alignment review", alignment_review_tsv),
     ):
         _require_file(path, label)
+    _require_activation_scope_samples_in_matrix(
+        input_quant_matrix_tsv=input_quant_matrix_tsv,
+        activation_scope_expected_diff_tsv=activation_scope_expected_diff_tsv,
+    )
 
     cid_docs = _scoped_dir(docs_root, cid_nl_activation.DEFAULT_DOCS_DIR)
     cid_output = _scoped_dir(output_root, cid_nl_activation.DEFAULT_OUTPUT_DIR)

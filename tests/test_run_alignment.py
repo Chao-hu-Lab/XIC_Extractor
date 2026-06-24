@@ -104,6 +104,7 @@ def test_run_alignment_cli_passes_paths_settings_and_debug_flags(
     assert captured["emit_alignment_status_matrix"] is True
     assert captured["raw_workers"] == 1
     assert captured["raw_xic_batch_size"] == 1
+    assert captured["owner_build_xic_backend"] == "raw"
     assert captured["owner_backfill_window_strategy"] == "exact"
     assert captured["owner_backfill_superwindow_span_factor"] == 2
     assert captured["backfill_scope"] == "full-audit"
@@ -732,7 +733,405 @@ def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
     assert captured_preset["publication_mode"] == "matrix-only"
     assert captured_preset["write_gallery"] is False
     assert captured_preset["reuse_existing"] is False
+    assert captured_preset["render_workers"] == 1
+    assert captured_preset["chunk_workers"] == 1
     assert captured_preset["min_shape_r"] == pytest.approx(0.95)
+
+
+def test_run_alignment_cli_product_ready_preset_does_not_run_fixed_backfill_replay(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment: dict[str, object] = {}
+    captured_standard_peak: dict[str, object] = {}
+    captured_product_ready_check: dict[str, object] = {}
+    call_order: list[str] = []
+
+    def fake_run_alignment(**kwargs):
+        call_order.append("alignment")
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "review_tsv": output_dir / "alignment_review.tsv",
+            "matrix_tsv": output_dir / "alignment_matrix.tsv",
+            "matrix_identity_tsv": output_dir / "alignment_matrix_identity.tsv",
+            "backfill_cell_evidence_tsv": (
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            "backfill_seed_audit_tsv": (
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        }
+        for path in paths.values():
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(**paths)
+
+    def fake_standard_peak_runner(**kwargs):
+        call_order.append("standard_peak")
+        captured_standard_peak.update(kwargs)
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        )
+
+    def fail_backfill_expansion_runner(**_kwargs):
+        raise AssertionError("builtin product-ready preset must not run fixed replay")
+
+    def fake_product_ready_check(**kwargs):
+        call_order.append("product_ready_check")
+        captured_product_ready_check.update(kwargs)
+        return SimpleNamespace(
+            status="pass",
+            summary_json=output_dir / "product_ready_check_summary.json",
+            checks_tsv=output_dir / "product_ready_check_checks.tsv",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "run_backfill_expansion_clean_target_selective_preset_from_alignment",
+        fail_backfill_expansion_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "check_product_ready_preset_publication",
+        fake_product_ready_check,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr_product_ready",
+            "--output-level",
+            "validation-minimal",
+        ]
+    )
+
+    assert code == 0
+    assert call_order == ["alignment", "standard_peak", "product_ready_check"]
+    assert captured_alignment["emit_alignment_backfill_seed_audit"] is True
+    assert captured_alignment["emit_alignment_cells"] is False
+    assert captured_alignment["owner_build_xic_backend"] == "raw_superwindow"
+    assert captured_standard_peak["chunk_size"] == 240
+    assert captured_standard_peak["publication_mode"] == "matrix-only"
+    assert captured_standard_peak["render_workers"] == 1
+    assert captured_standard_peak["chunk_workers"] == 1
+    assert captured_product_ready_check["alignment_dir"] == output_dir.resolve()
+    stdout = capsys.readouterr().out
+    assert "Backfill expansion productization summary JSON:" not in stdout
+    assert "Product-ready preset publication summary JSON:" in stdout
+
+
+def test_run_alignment_cli_can_override_product_ready_owner_build_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment = {}
+
+    def fake_run_alignment(**kwargs):
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return AlignmentRunOutputs(
+            review_tsv=output_dir / "alignment_review.tsv",
+            matrix_tsv=output_dir / "alignment_matrix.tsv",
+            matrix_identity_tsv=output_dir / "alignment_matrix_identity.tsv",
+            backfill_cell_evidence_tsv=(
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            backfill_seed_audit_tsv=(
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        )
+
+    def fake_standard_peak_runner(**_kwargs):
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=(
+                output_dir / "standard_peak_default_matrix_manifest.json"
+            ),
+            gallery_html=None,
+        )
+
+    def fake_product_ready_check(**_kwargs):
+        return SimpleNamespace(
+            status="pass",
+            summary_json=output_dir / "product_ready_check_summary.json",
+            checks_tsv=output_dir / "product_ready_check_checks.tsv",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "check_product_ready_preset_publication",
+        fake_product_ready_check,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr_product_ready",
+            "--owner-build-xic-backend",
+            "raw",
+        ]
+    )
+
+    assert code == 0
+    assert captured_alignment["owner_build_xic_backend"] == "raw"
+
+
+def test_run_alignment_cli_product_ready_preset_fails_when_publication_check_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+
+    def fake_run_alignment(**_kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "review_tsv": output_dir / "alignment_review.tsv",
+            "matrix_tsv": output_dir / "alignment_matrix.tsv",
+            "matrix_identity_tsv": output_dir / "alignment_matrix_identity.tsv",
+            "backfill_cell_evidence_tsv": (
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            "backfill_seed_audit_tsv": (
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        }
+        for path in paths.values():
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(**paths)
+
+    def fake_standard_peak_runner(**_kwargs):
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        )
+
+    def fake_product_ready_check(**_kwargs):
+        return SimpleNamespace(
+            status="fail",
+            summary_json=output_dir / "product_ready_check_summary.json",
+            checks_tsv=output_dir / "product_ready_check_checks.tsv",
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "check_product_ready_preset_publication",
+        fake_product_ready_check,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr_product_ready",
+            "--output-level",
+            "validation-minimal",
+        ]
+    )
+
+    assert code == 2
+    assert "Product-ready preset publication check failed" in capsys.readouterr().err
+
+
+def test_run_alignment_cli_explicit_backfill_replay_preset_runs_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    preset_path = tmp_path / "explicit_replay.toml"
+    preset_path.write_text(
+        """
+name = "Explicit replay"
+description = "Explicit retained clean-target replay"
+combine_mode = "single"
+
+[[tag]]
+strategy = "neutral_loss"
+name = "DNA_dR"
+value = 116.0474
+
+[alignment]
+standard_peak_backfill = true
+standard_peak_backfill_publication_mode = "matrix-only"
+backfill_expansion_productization = "clean-target-selective"
+""".strip(),
+        encoding="utf-8",
+    )
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_backfill_expansion: dict[str, object] = {}
+    call_order: list[str] = []
+
+    def fake_run_alignment(**_kwargs):
+        call_order.append("alignment")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "review_tsv": output_dir / "alignment_review.tsv",
+            "matrix_tsv": output_dir / "alignment_matrix.tsv",
+            "matrix_identity_tsv": output_dir / "alignment_matrix_identity.tsv",
+            "backfill_cell_evidence_tsv": (
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            "backfill_seed_audit_tsv": (
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        }
+        for path in paths.values():
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(**paths)
+
+    def fake_standard_peak_runner(**_kwargs):
+        call_order.append("standard_peak")
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        )
+
+    def fake_backfill_expansion_runner(**kwargs):
+        call_order.append("backfill_expansion")
+        captured_backfill_expansion.update(kwargs)
+        return SimpleNamespace(
+            summary_json=(
+                output_dir
+                / "backfill_expansion_productization_preset"
+                / "backfill_expansion_productization_preset_summary.json"
+            ),
+            clean_target_activation_summary_json=(
+                output_dir
+                / "backfill_expansion_productization_preset"
+                / "docs"
+                / "backfill_expansion_clean_target_selective_product_activation_v1"
+                / (
+                    "backfill_expansion_clean_target_selective_product_activation_"
+                    "summary.json"
+                )
+            ),
+            product_authority_scope=(
+                "backfill_expansion_clean_target_selective_activation_84_cells"
+            ),
+        )
+
+    def fail_product_ready_check(**_kwargs):
+        raise AssertionError("custom explicit replay preset is not built-in")
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "run_backfill_expansion_clean_target_selective_preset_from_alignment",
+        fake_backfill_expansion_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "check_product_ready_preset_publication",
+        fail_product_ready_check,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            str(preset_path),
+            "--output-level",
+            "validation-minimal",
+        ]
+    )
+
+    assert code == 0
+    assert call_order == ["alignment", "standard_peak", "backfill_expansion"]
+    assert captured_backfill_expansion["alignment_dir"] == output_dir.resolve()
+    assert captured_backfill_expansion["output_dir"] == (
+        output_dir.resolve() / "backfill_expansion_productization_preset"
+    )
+    assert (
+        Path(captured_backfill_expansion["activation_scope_expected_diff_tsv"]).name
+        == "expected_diff.tsv"
+    )
+    stdout = capsys.readouterr().out
+    assert "Backfill expansion productization summary JSON:" in stdout
+    assert "backfill_expansion_clean_target_selective_activation_84_cells" in stdout
 
 
 def test_run_alignment_cli_publication_mode_overrides_preset(
@@ -899,6 +1298,48 @@ def test_run_alignment_cli_passes_raw_workers(
     assert captured["raw_workers"] == 4
 
 
+@pytest.mark.parametrize(
+    ("raw_workers", "cpu_count", "expected"),
+    [
+        (11, 32, 3),
+        (11, 4, 3),
+        (11, None, 1),
+        (3, 32, 3),
+    ],
+)
+def test_standard_peak_render_workers_uses_conservative_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_workers: int,
+    cpu_count: int | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(run_alignment.os, "cpu_count", lambda: cpu_count)
+
+    assert run_alignment._standard_peak_render_workers(raw_workers) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw_workers", "cpu_count", "expected"),
+    [
+        (11, 32, 2),
+        (11, 8, 2),
+        (11, 4, 1),
+        (11, None, 1),
+        (2, 32, 2),
+        (1, 32, 1),
+    ],
+)
+def test_standard_peak_chunk_workers_uses_conservative_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_workers: int,
+    cpu_count: int | None,
+    expected: int,
+) -> None:
+    monkeypatch.setattr(run_alignment.os, "cpu_count", lambda: cpu_count)
+
+    assert run_alignment._standard_peak_chunk_workers(raw_workers) == expected
+
+
 def test_run_alignment_cli_passes_raw_xic_batch_size(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -967,6 +1408,76 @@ def test_run_alignment_cli_passes_owner_backfill_xic_backend(
 
     assert code == 0
     assert captured["owner_backfill_xic_backend"] == "ms1_index"
+
+
+def test_run_alignment_cli_passes_owner_build_xic_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-build-xic-backend",
+            "ms1-index",
+        ],
+    )
+
+    assert code == 0
+    assert captured["owner_build_xic_backend"] == "ms1_index"
+
+
+def test_run_alignment_cli_passes_raw_superwindow_owner_build_xic_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    captured = {}
+
+    def fake_run_alignment(**kwargs):
+        captured.update(kwargs)
+        return AlignmentRunOutputs()
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--owner-build-xic-backend",
+            "raw-super-window",
+        ],
+    )
+
+    assert code == 0
+    assert captured["owner_build_xic_backend"] == "raw_superwindow"
 
 
 def test_run_alignment_cli_passes_owner_backfill_window_strategy(

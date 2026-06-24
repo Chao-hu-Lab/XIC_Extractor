@@ -223,6 +223,125 @@ def test_build_sample_local_owners_uses_batch_source_when_available() -> None:
     assert len(result.assignments) == 2
 
 
+def test_build_sample_local_owners_keeps_same_scan_window_in_one_batch() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class ScanWindowBatchSource:
+        def __init__(self) -> None:
+            self.batch_windows: list[list[tuple[int, int]]] = []
+
+        def scan_window_for_request(self, request):
+            return int(request.rt_min * 100), int(request.rt_max * 100)
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_windows.append(
+                [self.scan_window_for_request(request) for request in requests]
+            )
+            return tuple(
+                XICTrace.from_arrays(
+                    [request.rt_min, request.rt_max],
+                    [100.0, 100.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = ScanWindowBatchSource()
+    candidates = (
+        _candidate(
+            "s1#same-window-a",
+            seed_rt=2.0,
+            ms1_search_rt_min=1.0,
+            ms1_search_rt_max=3.0,
+        ),
+        _candidate(
+            "s1#other-window",
+            seed_rt=11.0,
+            ms1_search_rt_min=10.0,
+            ms1_search_rt_max=12.0,
+        ),
+        _candidate(
+            "s1#same-window-b",
+            mz=243.114,
+            seed_rt=2.1,
+            ms1_search_rt_min=1.0,
+            ms1_search_rt_max=3.0,
+        ),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        peak_resolver=_always_peak_at_seed,
+        raw_xic_batch_size=2,
+    )
+
+    assert source.batch_windows == [
+        [(100, 300), (100, 300)],
+        [(1000, 1200)],
+    ]
+    assert {assignment.candidate_id for assignment in result.assignments} == {
+        "s1#same-window-a",
+        "s1#other-window",
+        "s1#same-window-b",
+    }
+
+
+def test_build_sample_local_owners_deduplicates_identical_xic_requests() -> None:
+    from xic_extractor.xic_models import XICTrace
+
+    class DedupBatchSource:
+        def __init__(self) -> None:
+            self.batch_sizes: list[int] = []
+
+        def extract_xic_many(self, requests):
+            requests = tuple(requests)
+            self.batch_sizes.append(len(requests))
+            return tuple(
+                XICTrace.from_arrays(
+                    [request.rt_min, request.rt_max],
+                    [100.0, 100.0],
+                )
+                for request in requests
+            )
+
+        def extract_xic(self, mz, rt_min, rt_max, ppm_tol):
+            raise AssertionError("batch-capable source should not call extract_xic")
+
+    source = DedupBatchSource()
+    candidates = (
+        _candidate(
+            "s1#duplicate-a",
+            seed_rt=2.0,
+            ms1_search_rt_min=1.0,
+            ms1_search_rt_max=3.0,
+        ),
+        _candidate(
+            "s1#duplicate-b",
+            seed_rt=2.0,
+            ms1_search_rt_min=1.0,
+            ms1_search_rt_max=3.0,
+        ),
+    )
+
+    result = build_sample_local_owners(
+        candidates,
+        raw_sources={"s1": source},
+        alignment_config=AlignmentConfig(),
+        peak_config=_peak_config(),
+        peak_resolver=_always_peak_at_seed,
+        raw_xic_batch_size=64,
+    )
+
+    assert source.batch_sizes == [1]
+    assert len(result.assignments) == 2
+
+
 def test_sample_local_owner_uses_candidate_anchored_quantitation_context() -> None:
     candidate = _candidate(
         "s1#bounded",

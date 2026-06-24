@@ -145,7 +145,7 @@ def test_allowlist_reader_and_ledger_writer(tmp_path: Path) -> None:
     )
     path = write_skipped_evidence_ledger_tsv(
         tmp_path / "skipped_evidence_ledger.tsv",
-        result.skipped,
+        (row for row in result.skipped),
     )
     raw = path.read_bytes()
     assert b"\r\n" not in raw

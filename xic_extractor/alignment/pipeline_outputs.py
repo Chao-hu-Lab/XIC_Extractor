@@ -20,13 +20,17 @@ from xic_extractor.alignment.debug_writer import (
 from xic_extractor.alignment.edge_scoring import OwnerEdgeEvidence
 from xic_extractor.alignment.html_report import write_alignment_review_html
 from xic_extractor.alignment.matrix import AlignmentMatrix
-from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    OwnerBuildXicBackend,
+)
 from xic_extractor.alignment.output_levels import (
     AlignmentOutputLevel,
     artifact_names_for_output_level,
 )
 from xic_extractor.alignment.owner_backfill import OwnerBackfillCandidateAuditRow
 from xic_extractor.alignment.ownership import OwnershipBuildResult
+from xic_extractor.alignment.production_decisions import build_production_decisions
 from xic_extractor.alignment.tsv_writer import (
     write_alignment_backfill_cell_evidence_tsv,
     write_alignment_cell_integration_audit_tsv,
@@ -169,6 +173,7 @@ def alignment_metadata(
     raw_dir: Path,
     dll_dir: Path,
     owner_backfill_xic_backend: OwnerBackfillXicBackend,
+    owner_build_xic_backend: OwnerBuildXicBackend = "raw",
     output_level: AlignmentOutputLevel,
     peak_config: ExtractionConfig,
     owner_backfill_window_strategy: str = "exact",
@@ -190,6 +195,7 @@ def alignment_metadata(
         "discovery_batch_index": str(discovery_batch_index),
         "raw_dir": str(raw_dir),
         "dll_dir": str(dll_dir),
+        "owner_build_xic_backend": owner_build_xic_backend,
         "owner_backfill_xic_backend": owner_backfill_xic_backend,
         "owner_backfill_window_strategy": owner_backfill_window_strategy,
         "owner_backfill_superwindow_span_factor": str(
@@ -240,6 +246,14 @@ def write_outputs_atomic(
     baseline_audit_method: str = "",
 ) -> None:
     output_paths_and_writers: list[tuple[Path, Callable[[Path], Path]]] = []
+    production_decisions = None
+    if (
+        outputs.review_tsv is not None
+        or outputs.matrix_tsv is not None
+        or outputs.matrix_identity_tsv is not None
+        or outputs.backfill_cell_evidence_tsv is not None
+    ):
+        production_decisions = build_production_decisions(matrix, alignment_config)
     if outputs.workbook is not None:
         output_paths_and_writers.append(
             (
@@ -267,6 +281,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -278,6 +293,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -289,6 +305,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )
@@ -304,6 +321,7 @@ def write_outputs_atomic(
                     path,
                     matrix,
                     alignment_config=alignment_config,
+                    production_decisions=production_decisions,
                 ),
             ),
         )

@@ -17,7 +17,7 @@ from xic_extractor.presets.models import (
 )
 
 _BUILTIN_PACKAGE = "xic_extractor.presets.data"
-_BUILTIN_PRESETS = ("dna_dr",)
+_BUILTIN_PRESETS = ("dna_dr", "dna_dr_product_ready")
 
 _TOP_LEVEL_KEYS = frozenset(
     {
@@ -55,6 +55,12 @@ ALIGNMENT_RUNTIME_OVERRIDE_KEYS = frozenset(
         "standard_peak_backfill_write_gallery",
         "standard_peak_backfill_reuse_existing",
         "standard_peak_backfill_min_shape_r",
+        "owner_build_xic_backend",
+        "backfill_expansion_productization",
+        "backfill_expansion_reuse_existing_raw_overlay",
+        "backfill_expansion_reuse_existing_shift_aware",
+        "backfill_expansion_render_shift_aware_images",
+        "backfill_expansion_min_shape_r",
     }
 )
 

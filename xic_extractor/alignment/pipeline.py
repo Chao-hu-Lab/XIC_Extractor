@@ -28,7 +28,11 @@ from xic_extractor.alignment.edge_scoring import (
 from xic_extractor.alignment.identity_coherence_adapter import (
     run_identity_coherence_diagnostic,
 )
-from xic_extractor.alignment.ms1_index_source import OwnerBackfillXicBackend
+from xic_extractor.alignment.ms1_index_source import (
+    OwnerBackfillXicBackend,
+    OwnerBuildXicBackend,
+    source_for_owner_build_backend,
+)
 from xic_extractor.alignment.output_levels import AlignmentOutputLevel
 from xic_extractor.alignment.owner_backfill import (
     OwnerBackfillCandidateAuditRow,
@@ -111,6 +115,7 @@ def run_alignment(
     raw_opener: RawOpener | None = None,
     raw_workers: int = 1,
     raw_xic_batch_size: int = 1,
+    owner_build_xic_backend: OwnerBuildXicBackend = "raw",
     owner_backfill_xic_backend: OwnerBackfillXicBackend = "raw",
     owner_backfill_window_strategy: OwnerBackfillWindowStrategy = "exact",
     owner_backfill_superwindow_span_factor: int = 2,
@@ -139,6 +144,7 @@ def run_alignment(
         metrics={
             "raw_workers": raw_workers,
             "raw_xic_batch_size": raw_xic_batch_size,
+            "owner_build_xic_backend": owner_build_xic_backend,
             "owner_backfill_xic_backend": owner_backfill_xic_backend,
             "owner_backfill_window_strategy": owner_backfill_window_strategy,
             "owner_backfill_superwindow_span_factor": (
@@ -229,6 +235,7 @@ def run_alignment(
                     peak_config=peak_config,
                     max_workers=raw_workers,
                     raw_xic_batch_size=raw_xic_batch_size,
+                    owner_build_xic_backend=owner_build_xic_backend,
                     emit_region_audit=emit_cell_region_audit,
                     region_audit_family_ids=region_audit_family_ids,
                     audit_evidence_mode=resolved_audit_evidence_mode,
@@ -253,8 +260,15 @@ def run_alignment(
                         },
                     )
             else:
+                owner_build_raw_sources = {
+                    sample_stem: source_for_owner_build_backend(
+                        source,
+                        owner_build_xic_backend,
+                    )
+                    for sample_stem, source in raw_sources.items()
+                }
                 timed_raw_sources_ = timed_raw_sources(
-                    raw_sources,
+                    owner_build_raw_sources,
                     stage="alignment.build_owners.extract_xic",
                 )
                 ownership = build_sample_local_owners(
@@ -498,6 +512,7 @@ def run_alignment(
                     discovery_batch_index=discovery_batch_index,
                     raw_dir=raw_dir,
                     dll_dir=dll_dir,
+                    owner_build_xic_backend=owner_build_xic_backend,
                     owner_backfill_xic_backend=owner_backfill_xic_backend,
                     owner_backfill_window_strategy=owner_backfill_window_strategy,
                     owner_backfill_superwindow_span_factor=(

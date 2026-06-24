@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol, TypeAlias, cast
@@ -40,6 +41,8 @@ CrossSamplePeakGroupConstructionRole: TypeAlias = Literal[
     "owner_aligned_feature_shadow",
     "successor_constructor",
 ]
+
+_PRECURSOR_BUCKET_WIDTH_DA = 1.0
 
 
 class OwnerEdgeEvaluator(Protocol):
@@ -471,10 +474,19 @@ def _complete_link_groups(
 ) -> tuple[tuple[SampleLocalMS1Owner, ...], ...]:
     groups: list[list[SampleLocalMS1Owner]] = []
     envelopes: list[_GroupHardGateEnvelope] = []
+    group_indexes_by_tag: dict[str, list[int]] = {}
+    group_indexes_by_precursor_bucket: dict[tuple[str, int], list[int]] = {}
     for owner in owners:
+        candidate_group_indexes = _candidate_group_indexes_for_owner(
+            owner,
+            group_indexes_by_tag=group_indexes_by_tag,
+            group_indexes_by_precursor_bucket=group_indexes_by_precursor_bucket,
+            config=config,
+        )
         compatible_group_indexes = [
             index
-            for index, group in enumerate(groups)
+            for index in candidate_group_indexes
+            for group in (groups[index],)
             if _group_can_pass_hard_gates(owner, envelopes[index], config)
             and all(
                 _edge_for_pair(
@@ -491,8 +503,18 @@ def _complete_link_groups(
             )
         ]
         if not compatible_group_indexes:
+            group_index = len(groups)
+            envelope = _group_envelope_for_owner(owner)
             groups.append([owner])
-            envelopes.append(_group_envelope_for_owner(owner))
+            envelopes.append(envelope)
+            group_indexes_by_tag.setdefault(envelope.neutral_loss_tag, []).append(
+                group_index,
+            )
+            _add_group_precursor_bucket_index(
+                group_index,
+                envelope,
+                group_indexes_by_precursor_bucket,
+            )
             continue
         best_index = min(
             compatible_group_indexes,
@@ -500,7 +522,60 @@ def _complete_link_groups(
         )
         groups[best_index].append(owner)
         envelopes[best_index] = _extend_group_envelope(envelopes[best_index], owner)
+        _add_group_precursor_bucket_index(
+            best_index,
+            envelopes[best_index],
+            group_indexes_by_precursor_bucket,
+        )
     return tuple(tuple(group) for group in groups)
+
+
+def _candidate_group_indexes_for_owner(
+    owner: SampleLocalMS1Owner,
+    *,
+    group_indexes_by_tag: dict[str, list[int]],
+    group_indexes_by_precursor_bucket: dict[tuple[str, int], list[int]],
+    config: AlignmentConfig,
+) -> tuple[int, ...]:
+    if not owner.neutral_loss_tag:
+        return ()
+    tag_group_indexes = group_indexes_by_tag.get(owner.neutral_loss_tag, [])
+    if (
+        not tag_group_indexes
+        or not math.isfinite(owner.precursor_mz)
+        or owner.precursor_mz <= 0.0
+        or config.max_ppm < 0.0
+    ):
+        return tuple(tag_group_indexes)
+
+    tolerance_fraction = config.max_ppm / 1_000_000.0
+    lower = owner.precursor_mz * (1.0 - tolerance_fraction)
+    upper = owner.precursor_mz * (1.0 + tolerance_fraction)
+    if lower > upper:
+        lower, upper = upper, lower
+
+    candidates: set[int] = set()
+    tag = owner.neutral_loss_tag
+    for bucket in range(_precursor_bucket(lower), _precursor_bucket(upper) + 1):
+        candidates.update(group_indexes_by_precursor_bucket.get((tag, bucket), ()))
+    return tuple(sorted(candidates))
+
+
+def _add_group_precursor_bucket_index(
+    group_index: int,
+    envelope: _GroupHardGateEnvelope,
+    group_indexes_by_precursor_bucket: dict[tuple[str, int], list[int]],
+) -> None:
+    if not math.isfinite(envelope.precursor_mz_min):
+        return
+    key = (envelope.neutral_loss_tag, _precursor_bucket(envelope.precursor_mz_min))
+    bucket_indexes = group_indexes_by_precursor_bucket.setdefault(key, [])
+    if group_index not in bucket_indexes:
+        bucket_indexes.append(group_index)
+
+
+def _precursor_bucket(value: float) -> int:
+    return math.floor(value / _PRECURSOR_BUCKET_WIDTH_DA)
 
 
 def _group_can_pass_hard_gates(
@@ -515,27 +590,42 @@ def _group_can_pass_hard_gates(
         or owner.neutral_loss_tag != envelope.neutral_loss_tag
     ):
         return False
-    if _range_exceeds_ppm(
-        owner.precursor_mz,
-        envelope.precursor_mz_min,
-        envelope.precursor_mz_max,
-        config.max_ppm,
+    precursor_denominator = max(abs(owner.precursor_mz), 1e-12)
+    if (
+        abs(owner.precursor_mz - envelope.precursor_mz_min)
+        / precursor_denominator
+        * 1_000_000.0
+        > config.max_ppm
+        or abs(owner.precursor_mz - envelope.precursor_mz_max)
+        / precursor_denominator
+        * 1_000_000.0
+        > config.max_ppm
     ):
         return False
 
     event = owner.primary_identity_event
-    if _range_exceeds_ppm(
-        event.product_mz,
-        envelope.product_mz_min,
-        envelope.product_mz_max,
-        config.product_mz_tolerance_ppm,
+    product_denominator = max(abs(event.product_mz), 1e-12)
+    if (
+        abs(event.product_mz - envelope.product_mz_min)
+        / product_denominator
+        * 1_000_000.0
+        > config.product_mz_tolerance_ppm
+        or abs(event.product_mz - envelope.product_mz_max)
+        / product_denominator
+        * 1_000_000.0
+        > config.product_mz_tolerance_ppm
     ):
         return False
-    return not _range_exceeds_ppm(
-        event.observed_neutral_loss_da,
-        envelope.observed_loss_min,
-        envelope.observed_loss_max,
-        config.observed_loss_tolerance_ppm,
+    observed_loss_denominator = max(abs(event.observed_neutral_loss_da), 1e-12)
+    return (
+        abs(event.observed_neutral_loss_da - envelope.observed_loss_min)
+        / observed_loss_denominator
+        * 1_000_000.0
+        <= config.observed_loss_tolerance_ppm
+        and abs(event.observed_neutral_loss_da - envelope.observed_loss_max)
+        / observed_loss_denominator
+        * 1_000_000.0
+        <= config.observed_loss_tolerance_ppm
     )
 
 
@@ -545,7 +635,10 @@ def _range_exceeds_ppm(
     upper: float,
     max_ppm: float,
 ) -> bool:
-    return _ppm(reference, lower) > max_ppm or _ppm(reference, upper) > max_ppm
+    denominator = max(abs(reference), 1e-12)
+    if abs(reference - lower) / denominator * 1_000_000.0 > max_ppm:
+        return True
+    return abs(reference - upper) / denominator * 1_000_000.0 > max_ppm
 
 
 def _group_envelope_for_owner(

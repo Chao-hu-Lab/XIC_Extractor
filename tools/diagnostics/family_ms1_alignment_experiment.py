@@ -90,6 +90,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         targeted_workbook=args.targeted_workbook,
         sample_info=args.sample_info,
         render_images=not args.no_images,
+        dpi=args.dpi,
     )
     if not args.no_images and "png_path" in outputs:
         print(f"Alignment experiment PNG: {outputs['png_path']}")
@@ -125,6 +126,8 @@ def run_alignment_experiment(
     targeted_workbook: Path | None = None,
     sample_info: Path | None = None,
     render_images: bool = True,
+    write_auxiliary_summaries: bool = True,
+    dpi: int = 140,
 ) -> dict[str, Path]:
     bundle = load_trace_data_bundle(trace_data_json)
     resolved_output_prefix = (
@@ -165,13 +168,15 @@ def run_alignment_experiment(
             family_center_rt=bundle.family_center_rt,
             drift_lookup=drift_lookup,
             evidence_summary=bundle.evidence_summary,
+            dpi=dpi,
         )
-    write_alignment_experiment_summary(
-        summary_tsv,
-        rows=bundle.rows,
-        drift_lookup=drift_lookup,
-        evidence_summary=bundle.evidence_summary,
-    )
+    if write_auxiliary_summaries:
+        write_alignment_experiment_summary(
+            summary_tsv,
+            rows=bundle.rows,
+            drift_lookup=drift_lookup,
+            evidence_summary=bundle.evidence_summary,
+        )
     resolved_source_family_by_sample = dict(
         source_family_by_sample
         if source_family_by_sample is not None
@@ -195,33 +200,38 @@ def run_alignment_experiment(
                 ppm=bundle.ppm,
                 rt_min=bundle.rt_min,
                 rt_max=bundle.rt_max,
+                dpi=dpi,
             )
-        write_source_family_summary(
-            source_summary_tsv,
-            rows=bundle.rows,
-            source_family_by_sample=resolved_source_family_by_sample,
-        )
-        shifts = build_source_family_shift_plan(
-            bundle.rows,
-            source_family_by_sample=resolved_source_family_by_sample,
-            reference_source_family=reference_source_family,
-        )
-        if render_images:
-            render_source_family_shift_alignment(
+        if write_auxiliary_summaries:
+            write_source_family_summary(
+                source_summary_tsv,
                 rows=bundle.rows,
-                shifts=shifts,
-                png_path=source_shift_png,
-                family_id=bundle.family_id,
-                mz=bundle.mz,
-                ppm=bundle.ppm,
-                rt_min=bundle.rt_min,
-                rt_max=bundle.rt_max,
+                source_family_by_sample=resolved_source_family_by_sample,
             )
-        write_source_family_shift_summary(
-            source_shift_summary_tsv,
-            family_id=bundle.family_id,
-            shifts=shifts,
-        )
+        if render_images or write_auxiliary_summaries:
+            shifts = build_source_family_shift_plan(
+                bundle.rows,
+                source_family_by_sample=resolved_source_family_by_sample,
+                reference_source_family=reference_source_family,
+            )
+            if render_images:
+                render_source_family_shift_alignment(
+                    rows=bundle.rows,
+                    shifts=shifts,
+                    png_path=source_shift_png,
+                    family_id=bundle.family_id,
+                    mz=bundle.mz,
+                    ppm=bundle.ppm,
+                    rt_min=bundle.rt_min,
+                    rt_max=bundle.rt_max,
+                    dpi=dpi,
+                )
+            if write_auxiliary_summaries:
+                write_source_family_shift_summary(
+                    source_shift_summary_tsv,
+                    family_id=bundle.family_id,
+                    shifts=shifts,
+                )
         best_shifts = build_source_family_best_shift_plan(
             bundle.rows,
             source_family_by_sample=resolved_source_family_by_sample,
@@ -239,19 +249,21 @@ def run_alignment_experiment(
                 ppm=bundle.ppm,
                 rt_min=bundle.rt_min,
                 rt_max=bundle.rt_max,
+                dpi=dpi,
             )
         write_source_family_shift_summary(
             source_best_shift_summary_tsv,
             family_id=bundle.family_id,
             shifts=best_shifts,
         )
-        outputs.update(
-            {
-                "source_summary_tsv": source_summary_tsv,
-                "source_shift_summary_tsv": source_shift_summary_tsv,
-                "source_best_shift_summary_tsv": source_best_shift_summary_tsv,
-            },
-        )
+        outputs["source_best_shift_summary_tsv"] = source_best_shift_summary_tsv
+        if write_auxiliary_summaries:
+            outputs.update(
+                {
+                    "source_summary_tsv": source_summary_tsv,
+                    "source_shift_summary_tsv": source_shift_summary_tsv,
+                },
+            )
         if render_images:
             outputs.update(
                 {
@@ -323,6 +335,7 @@ def render_alignment_experiment(
     family_center_rt: float | None,
     drift_lookup: "DriftLookupProtocol | None" = None,
     evidence_summary: dict[str, object] | None = None,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -398,7 +411,7 @@ def render_alignment_experiment(
             "coordinate interpretation."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -412,6 +425,7 @@ def render_source_family_split(
     ppm: float,
     rt_min: float,
     rt_max: float,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -456,7 +470,7 @@ def render_source_family_split(
             "Rows are split by source_family provenance before visual review."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -585,6 +599,7 @@ def render_source_family_shift_alignment(
     ppm: float,
     rt_min: float,
     rt_max: float,
+    dpi: int = 140,
 ) -> None:
     import matplotlib
 
@@ -643,7 +658,7 @@ def render_source_family_shift_alignment(
             "alignment is used."
         ),
     )
-    fig.savefig(png_path, dpi=220, bbox_inches="tight", facecolor="white")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
@@ -742,7 +757,11 @@ def write_source_family_shift_summary(
         "shift_to_reference_sec",
         "shape_similarity_to_reference_after_group_shift",
     )
-    similarities = _source_family_shift_similarity(shifts)
+    similarities = (
+        {}
+        if all(shift.shape_similarity_to_reference is not None for shift in shifts)
+        else _source_family_shift_similarity(shifts)
+    )
     _write_rows_tsv(
         path,
         fields,
@@ -1377,7 +1396,7 @@ def _source_family_shifted_median_curve_matrix_from_normalized_traces(
     shifts: np.ndarray,
     grid: np.ndarray,
 ) -> np.ndarray:
-    out = np.full((shifts.size, grid.size), np.nan, dtype=float)
+    out: np.ndarray = np.full((shifts.size, grid.size), np.nan, dtype=float)
     if not traces or shifts.size == 0:
         return out
     if len(traces) == 1:
@@ -2003,6 +2022,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "Write machine-readable summary TSVs without rendering PNG review "
             "images."
         ),
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=140,
+        help="Render DPI for review PNGs (default 140).",
     )
     return parser.parse_args(argv)
 

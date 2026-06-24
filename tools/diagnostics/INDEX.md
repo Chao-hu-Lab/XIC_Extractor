@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-21
-**Total entry-points:** 96
-**Total files (incl. helpers):** 175 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-23
+**Total entry-points:** 99
+**Total files (incl. helpers):** 178 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`
 **Count method:** top-level `### *.py` entry headings for entry-points;
 top-level `tools/diagnostics/*.py` files for total files.
@@ -23,14 +23,14 @@ top-level `tools/diagnostics/*.py` files for total files.
 
 ## Table of Contents
 
-1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 6 tools
+1. [Phase Gates (P1/P7)](#phase-gates-p1p7) — 7 tools
 2. [Evidence Consistency](#evidence-consistency) — 8 tools
 3. [Alignment Diagnostics](#alignment-diagnostics) — 6 tools
-4. [Backfill Reviews](#backfill-reviews) — 40 tools
+4. [Backfill Reviews](#backfill-reviews) — 42 tools
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
-8. [Family / Overlay Visualization](#family--overlay-visualization) — 6 tools
+8. [Family / Overlay Visualization](#family--overlay-visualization) — 7 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
 
@@ -636,6 +636,9 @@ standard-peak values into the default alignment matrix outputs.
 **Topic group**: `family_ms1_overlay_batch.py`, `family_ms1_alignment_experiment_batch.py`, `backfill_evidence_reconciliation_gallery.py`, `shift_aware_backfill_calibration_pack.py`, `shift_aware_standard_peak_gate_calibration.py`, `standard_peak_ms1_authority_bundle.py`, `shadow_production_projection.py`, `standard_peak_backfill_productization.py`
 **Originating spec/goal/plan**: `goals/standard-peak-backfill-productization`
 **Status note**: This orchestrator can start from an existing `family_ms1_overlay_batch_summary.tsv` or from `alignment_retained_backfill_overlay_review_queue.tsv` plus RAW/DLL paths. The two source modes are mutually exclusive so stale overlay evidence is not silently reused when RAW queue inputs are supplied. In queue mode it runs `family_ms1_overlay_batch.py` with resumable PNG-only defaults unless `--evidence-only` is supplied; evidence-only writes compact trace TSV/JSON plus summary rows with blank PNG/PDF paths and is the default path used by the `dna_dr` matrix-only publication mode. Omitting `--limit` processes all remaining queue rows from `--start-rank` instead of inheriting the overlay-batch default top-N chunk size. It builds a fresh reconciliation group index when `--reconciliation-groups-tsv` is omitted, runs shift-aware source-family best-shift evidence, builds the calibration pack with the product default `min_shape_r=0.95`, evaluates the standard-peak machine gate, creates the machine-gate MS1 authority bundle, regenerates shadow projection grounded in `alignment_matrix.tsv` + `alignment_matrix_identity.tsv`, applies matrix-only product activation, and optionally writes the activation-synced gallery. In `publication_mode=matrix-only`, shift-aware evidence writes the machine summary TSVs needed by downstream gates without rendering PNG review images; review image rendering remains enabled for `review-gallery` and `deep-audit`. It writes `standard_peak_backfill_machine_pipeline_summary.json` plus subdirectories for each stage. The final summary records `publication_mode`, evidence source mode, rendered image count, queue row count, start rank, requested/effective limit, whether shift-aware images were rendered, overlay/shift status counts, activation counts, and `status_reasons`; `status=pass` is reserved for the requested scope with successful RAW-backed evidence, shift-aware evidence, and productization. Full 85RAW use remains intentionally chunkable with `--start-rank`, `--limit`, and `--reuse-existing` so expensive RAW-backed evidence generation can resume without hand-splicing downstream inputs.
+It can pass an opt-in `--evidence-cache-dir` to the overlay batch producer for
+`evidence-only` runs; this reuses exact cached trace TSV/JSON evidence and does
+not authorize stale overlay summaries or bypass matrix/publication checks.
 
 ---
 
@@ -670,8 +673,48 @@ standard-peak review queue, dispatches chunked machine-pipeline runs, and then
 calls chunk consolidation to publish the final matrix-only standard-peak output.
 It writes `standard_peak_backfill_preset_summary.json` and records whether the
 run skipped because no review rows were present or published a consolidated
-matrix. It does not replace base alignment; it executes only after the base
-alignment artifacts exist.
+matrix. The preset can also pass an explicit overlay `evidence_cache_dir` to
+the global matrix-only overlay evidence step; cached evidence remains a
+performance reuse layer and does not change the retained-gate queue, chunk
+rank/order, matrix authority, or publication checker requirement. It does not
+replace base alignment; it executes only after the base alignment artifacts
+exist.
+
+---
+
+### `dna_dr_product_ready_stage_replay.py`
+
+**Purpose**: Replay a single expensive `dna_dr_product_ready` post-alignment
+stage from an existing alignment output directory for timing/parity validation.
+**Topic group**: `standard_peak_backfill_preset.py` +
+`scripts.check_product_ready_preset_publication`
+**Status note**: Currently supports `--stage standard_peak`. It copies the
+required source alignment artifacts into a fresh output directory, records input
+artifact SHA/size/row-counts in
+`dna_dr_product_ready_stage_replay_manifest.json`, reruns the standard-peak
+publication preset, and then runs the product-ready publication checker. The
+runner is diagnostic/incremental validation infrastructure: it is not a second
+preset runner, does not alter default CLI behavior, and any public artifact hash
+diff must be treated as a failed exact-safe replay unless an expected-diff plan
+approved it.
+
+---
+
+### `dna_dr_product_ready_fast_mode_expected_diff.py`
+
+**Purpose**: Compare explicit fast-mode candidate outputs against an exact
+`dna_dr_product_ready` output and write an expected-diff packet.
+**Topic group**: `scripts.run_alignment` fast-mode backend candidates,
+`validate_ms1_scan_index_xic.py`
+**Status note**: Writes
+`dna_dr_product_ready_fast_mode_expected_diff.json/tsv` with public artifact
+hash parity, matrix/key coverage, selected cell/status/numeric drift,
+matrix-identity drift, timing deltas, and optional MS1-index audit summaries.
+It can classify a candidate as `fast_mode_candidate` only when the candidate is
+explicitly supplied and the packet supports that decision; otherwise results
+remain `diagnostic_only_do_not_wire_to_default`. This tool never mutates exact
+outputs and cannot promote an approximate backend into the default preset by
+itself.
 
 ---
 
@@ -1397,6 +1440,29 @@ multiple MS1 peak modes.
 **Topic group**: shares helpers with `family_ms1_overlay_plot`
 **Pairs with**: `family_ms1_backfill_review_report.py` (produces the queue, this consumes it)
 **Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported for legacy family context, but seed-specific retained-backfill gates treat them as insufficient and request an exact `seed_group_id` overlay before using visual support/blockers. The CLI writes summary/Markdown incrementally after each row and supports `--reuse-existing`, which rebuilds summary rows from completed trace artifacts and, in rendered mode, completed PNG/PDF bundles without re-reading RAW; this makes large 85RAW queues resumable after timeout. In-process preset callers use the same renderer without incremental summary rewrites, then write final batch outputs once. RAW trace extraction is sample-batched and uses bounded scan-window super-window grouping before cropping traces back to their original request windows; `family_ms1_overlay_batch_summary.json` records selected rows, RAW opens, XIC requests, exact scan windows, super-window groups, chromatogram calls, and trace point counts. `--evidence-only` keeps the same trace TSV/JSON and summary schema while leaving `png_path` / `pdf_path` blank for image-free publication runs.
+`--evidence-cache-dir` is an opt-in evidence-only accelerator for repeated
+modeling validation. Cache keys bind the alignment-cell hash, RAW/DLL paths,
+overlay source, rank/output prefix, family/sample/seed request, mz/ppm/RT
+window, and family center RT. Warm hits reuse cached trace TSV/JSON evidence
+without opening RAW files only after the cached trace payload and stable
+provenance still match the current request; misses fall back to normal RAW
+extraction and can store exact evidence for future runs. Rendered PNG/PDF runs
+ignore the evidence cache. Cache rows remain evidence-provider inputs only and
+must still flow through the retained gate, shift-aware gate, consolidation, and
+publication checker before any matrix output is accepted.
+
+---
+
+### `family_ms1_overlay_evidence_cache_seed.py`
+
+**Purpose**: Seed a `family_ms1_overlay_batch.py` evidence cache from an
+already-reviewed overlay summary and its trace TSV/JSON artifacts.
+**Topic group**: `family_ms1_overlay_batch.py`
+**Status note**: This is a no-RAW cache warm-up helper for repeated
+8RAW/85RAW validation loops. It verifies the same request/key inputs as the
+overlay batch cache, copies trace summaries, writes normalized trace JSON
+provenance into the cache, and writes the shared cache index. It does not render
+overlays, re-extract RAW, modify source summaries, or prove product readiness.
 
 ---
 

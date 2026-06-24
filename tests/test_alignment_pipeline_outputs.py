@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import xic_extractor.alignment.pipeline as pipeline_module
+import xic_extractor.alignment.pipeline_outputs as pipeline_outputs_module
 from tests.alignment_pipeline_helpers import FakeRawOpener
 from tests.alignment_pipeline_helpers import matrix as _matrix
 from tests.alignment_pipeline_helpers import owner_edge_evidence as _edge_evidence
@@ -52,10 +53,25 @@ def test_alignment_metadata_records_baseline_audit_method() -> None:
         == "gaussian15_positive_asls_residual_primary"
     )
     assert metadata["baseline_audit_method"] == "asls"
+    assert metadata["owner_build_xic_backend"] == "raw"
     assert metadata["backfill_scope"] == "full-audit"
     assert metadata["output_scope"] == "full-audit"
     assert metadata["selected_family_source"] == ""
     assert metadata["scope_warning"] == ""
+
+
+def test_alignment_metadata_records_owner_build_xic_backend() -> None:
+    metadata = alignment_metadata(
+        discovery_batch_index=Path("batch.csv"),
+        raw_dir=Path("raw"),
+        dll_dir=Path("dll"),
+        owner_build_xic_backend="ms1_index",
+        owner_backfill_xic_backend="raw",
+        output_level="validation",
+        peak_config=_peak_config(),
+    )
+
+    assert metadata["owner_build_xic_backend"] == "ms1_index"
 
 
 def test_alignment_metadata_records_baseline_integration_method() -> None:
@@ -151,6 +167,51 @@ def test_validation_minimal_outputs_keep_gate_artifacts_without_debug_surfaces(
         outputs.skipped_evidence_ledger_tsv == tmp_path / "skipped_evidence_ledger.tsv"
     )
     assert outputs.run_metadata_json == tmp_path / "alignment_run_metadata.json"
+
+
+def test_write_outputs_reuses_production_decisions(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    original = pipeline_outputs_module.build_production_decisions
+    calls = 0
+
+    def counted_build_production_decisions(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        pipeline_outputs_module,
+        "build_production_decisions",
+        counted_build_production_decisions,
+    )
+    outputs = output_paths(
+        tmp_path,
+        output_level="validation-minimal",
+        emit_alignment_cells=False,
+        emit_alignment_status_matrix=False,
+    )
+
+    pipeline_outputs_module.write_outputs_atomic(
+        outputs,
+        _matrix(("Sample_A", "Sample_B")),
+        metadata={},
+        ownership=SimpleNamespace(assignments=(), ambiguous_records=()),
+        alignment_config=AlignmentConfig(),
+    )
+
+    assert calls == 1
+    assert outputs.matrix_tsv is not None and outputs.matrix_tsv.exists()
+    assert (
+        outputs.matrix_identity_tsv is not None
+        and outputs.matrix_identity_tsv.exists()
+    )
+    assert outputs.review_tsv is not None and outputs.review_tsv.exists()
+    assert (
+        outputs.backfill_cell_evidence_tsv is not None
+        and outputs.backfill_cell_evidence_tsv.exists()
+    )
 
 
 def test_pipeline_debug_flags_write_optional_outputs(

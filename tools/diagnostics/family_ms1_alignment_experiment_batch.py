@@ -8,6 +8,7 @@ import re
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +48,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             limit=args.limit,
             reuse_existing=args.reuse_existing,
             render_images=not args.no_images,
+            write_auxiliary_summaries=not args.best_shift_only,
             write_incremental=True,
+            workers=args.workers,
+            dpi=args.dpi,
         )
     except Exception as exc:  # noqa: BLE001 - diagnostic CLI reports failure.
         print(f"error: {exc}")
@@ -73,13 +77,19 @@ def run_alignment_experiment_batch(
     limit: int | None = None,
     reuse_existing: bool = False,
     render_images: bool = True,
+    write_auxiliary_summaries: bool = True,
     write_incremental: bool = False,
     timing_recorder: TimingRecorder | None = None,
+    source_family_by_family_sample: Mapping[str, Mapping[str, str]] | None = None,
+    workers: int = 1,
+    dpi: int = 140,
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     if start_rank < 1:
         raise ValueError("--start-rank must be >= 1")
     if limit is not None and limit < 1:
         raise ValueError("--limit must be >= 1 when supplied")
+    if workers < 1:
+        raise ValueError("--workers must be >= 1")
     recorder = timing_recorder or TimingRecorder.disabled("standard_peak")
     with recorder.stage("standard_peak.shift_aware_batch.read_overlay"):
         overlay_rows = list(
@@ -108,36 +118,55 @@ def run_alignment_experiment_batch(
         "standard_peak.shift_aware_batch.read_cell_evidence",
         metrics={"family_count": len(selected_family_ids)},
     ) as scope:
-        source_family_by_family = (
-            family_ms1_alignment_experiment.load_source_family_by_family_sample(
-                cell_evidence_tsv,
-                family_ids=selected_family_ids,
+        if source_family_by_family_sample is not None:
+            source_family_by_family = {
+                family: dict(source_family_by_family_sample.get(family, {}))
+                for family in selected_family_ids
+            }
+            source_family_map_source = "preloaded"
+        else:
+            source_family_by_family = (
+                family_ms1_alignment_experiment.load_source_family_by_family_sample(
+                    cell_evidence_tsv,
+                    family_ids=selected_family_ids,
+                )
+                if selected_family_ids
+                else {}
             )
-            if selected_family_ids
-            else {}
-        )
+            source_family_map_source = "cell_evidence_tsv"
+        scope.metrics["source_family_map_source"] = source_family_map_source
         scope.metrics["mapped_family_count"] = len(source_family_by_family)
     rows: list[dict[str, str]] = []
-    for row in selected_rows:
-        family = text_value(row.get("feature_family_id"))
-        with recorder.stage(
-            "standard_peak.shift_aware_batch.row",
-            metrics={
-                "rank": text_value(row.get("rank")),
-                "feature_family_id": family,
-                "render_images": render_images,
-            },
-        ) as scope:
-            result = _render_or_reuse_row(
-                row,
-                cell_evidence_tsv=cell_evidence_tsv,
-                output_dir=output_dir,
-                reuse_existing=reuse_existing,
-                render_images=render_images,
-                source_family_by_sample=source_family_by_family.get(family, {}),
+    if workers > 1 and selected_rows:
+        payloads = [
+            (
+                dict(row),
+                {
+                    "cell_evidence_tsv": cell_evidence_tsv,
+                    "output_dir": output_dir,
+                    "reuse_existing": reuse_existing,
+                    "render_images": render_images,
+                    "write_auxiliary_summaries": write_auxiliary_summaries,
+                    "source_family_by_sample": source_family_by_family.get(
+                        text_value(row.get("feature_family_id")),
+                        {},
+                    ),
+                    "dpi": dpi,
+                },
             )
-            scope.metrics["alignment_status"] = result["alignment_status"]
-            rows.append(result)
+            for row in selected_rows
+        ]
+        with recorder.stage(
+            "standard_peak.shift_aware_batch.rows_parallel",
+            metrics={
+                "row_count": len(selected_rows),
+                "workers": workers,
+                "render_images": render_images,
+                "dpi": dpi,
+            },
+        ):
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                rows = list(executor.map(_render_or_reuse_row_job, payloads))
         if write_incremental:
             with recorder.stage(
                 "standard_peak.shift_aware_batch.write_incremental_summary",
@@ -148,6 +177,40 @@ def run_alignment_experiment_batch(
                     rows,
                     SUMMARY_COLUMNS,
                 )
+    else:
+        for row in selected_rows:
+            family = text_value(row.get("feature_family_id"))
+            with recorder.stage(
+                "standard_peak.shift_aware_batch.row",
+                metrics={
+                    "rank": text_value(row.get("rank")),
+                    "feature_family_id": family,
+                    "render_images": render_images,
+                },
+            ) as scope:
+                result = _render_or_reuse_row(
+                    row,
+                    cell_evidence_tsv=cell_evidence_tsv,
+                    output_dir=output_dir,
+                    reuse_existing=reuse_existing,
+                    render_images=render_images,
+                    write_auxiliary_summaries=write_auxiliary_summaries,
+                    source_family_by_sample=source_family_by_family.get(family, {}),
+                    dpi=dpi,
+                )
+                scope.metrics["alignment_status"] = result["alignment_status"]
+                rows.append(result)
+            if write_incremental:
+                with recorder.stage(
+                    "standard_peak.shift_aware_batch.write_incremental_summary",
+                    metrics={"row_count": len(rows)},
+                ):
+                    write_tsv(
+                        output_dir
+                        / "family_ms1_alignment_experiment_batch_summary.tsv",
+                        rows,
+                        SUMMARY_COLUMNS,
+                    )
     status_counts = Counter(row["alignment_status"] for row in rows)
     summary: dict[str, Any] = {
         "schema_version": "family_ms1_alignment_experiment_batch_v0",
@@ -157,7 +220,10 @@ def run_alignment_experiment_batch(
         "limit": "" if limit is None else limit,
         "selected_row_count": len(rows),
         "render_images": render_images,
+        "render_workers": workers,
+        "render_dpi": dpi,
         "write_incremental": write_incremental,
+        "source_family_map_source": source_family_map_source,
         "status_counts": dict(sorted(status_counts.items())),
         "successful_shift_aware_row_count": sum(
             1
@@ -175,7 +241,9 @@ def _render_or_reuse_row(
     output_dir: Path,
     reuse_existing: bool,
     render_images: bool,
+    write_auxiliary_summaries: bool,
     source_family_by_sample: Mapping[str, str],
+    dpi: int = 140,
 ) -> dict[str, str]:
     rank = text_value(row.get("rank"))
     family = text_value(row.get("feature_family_id"))
@@ -226,6 +294,8 @@ def _render_or_reuse_row(
             cell_evidence_tsv=cell_evidence_tsv,
             source_family_by_sample=source_family_by_sample,
             render_images=render_images,
+            write_auxiliary_summaries=write_auxiliary_summaries,
+            dpi=dpi,
         )
     except Exception:  # noqa: BLE001 - preserve batch failure semantics.
         return {
@@ -240,6 +310,13 @@ def _render_or_reuse_row(
             "failure_reason": "missing_source_family_best_shift_summary",
         }
     return {**base, "alignment_status": "rendered", "failure_reason": ""}
+
+
+def _render_or_reuse_row_job(
+    payload: tuple[Mapping[str, str], Mapping[str, Any]],
+) -> dict[str, str]:
+    row, kwargs = payload
+    return _render_or_reuse_row(row, **dict(kwargs))
 
 
 def _select_rows(
@@ -295,6 +372,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--no-images",
         action="store_true",
         help="Write shift-aware summary TSVs without rendering PNG review images.",
+    )
+    parser.add_argument(
+        "--best-shift-only",
+        action="store_true",
+        help=(
+            "Skip per-row auxiliary summaries and write only the best-shift "
+            "summary TSVs consumed by the calibration pack."
+        ),
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Parallel render worker processes (1 = serial).",
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=140,
+        help="Render DPI for shift-aware PNGs (default 140).",
     )
     return parser.parse_args(argv)
 

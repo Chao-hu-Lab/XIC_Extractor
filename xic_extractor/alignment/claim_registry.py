@@ -34,12 +34,20 @@ class _ClaimGroup:
     winner_sort_key: tuple[object, ...] | None = None
 
 
+@dataclass(frozen=True)
+class _ClusterClaimStats:
+    detected_count: int
+    event_member_count: int
+    event_cluster_count: int
+
+
 def apply_ms1_peak_claim_registry(
     matrix: AlignmentMatrix,
     config: AlignmentConfig,
 ) -> AlignmentMatrix:
     cluster_by_id = {row_id(cluster): cluster for cluster in matrix.clusters}
     grouped_cells = cells_by_cluster(matrix)
+    stats_by_cluster: dict[str, _ClusterClaimStats] = {}
     candidates_by_sample: dict[str, list[_ClaimCandidate]] = {}
     for index, cell in enumerate(matrix.cells):
         if cell.status not in {"detected", "rescued"}:
@@ -50,7 +58,15 @@ def apply_ms1_peak_claim_registry(
         family_mz = _family_center_mz(cluster)
         if not _finite(family_mz):
             continue
-        cluster_cells = grouped_cells.get(cell.cluster_id, ())
+        stats = stats_by_cluster.get(cell.cluster_id)
+        if stats is None:
+            cluster_cells = grouped_cells.get(cell.cluster_id, ())
+            stats = _ClusterClaimStats(
+                detected_count=count_status(cluster_cells, "detected"),
+                event_member_count=_event_member_count(cluster),
+                event_cluster_count=len(_event_cluster_ids(cluster)),
+            )
+            stats_by_cluster[cell.cluster_id] = stats
         candidates_by_sample.setdefault(cell.sample_stem, []).append(
             _ClaimCandidate(
                 index=index,
@@ -58,9 +74,9 @@ def apply_ms1_peak_claim_registry(
                 cluster=cluster,
                 cluster_id=cell.cluster_id,
                 family_mz=family_mz,
-                detected_count=count_status(cluster_cells, "detected"),
-                event_member_count=_event_member_count(cluster),
-                event_cluster_count=len(_event_cluster_ids(cluster)),
+                detected_count=stats.detected_count,
+                event_member_count=stats.event_member_count,
+                event_cluster_count=stats.event_cluster_count,
                 review_only=bool(getattr(cluster, "review_only", False)),
             ),
         )

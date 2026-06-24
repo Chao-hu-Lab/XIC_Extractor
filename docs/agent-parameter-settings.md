@@ -270,9 +270,17 @@ matrix publication:
   --timing-live-output <task-specific-output-dir>\timing.live.json
 ```
 
-`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`. Its alignment
-section enables the standard-peak backfill publication runner after the base
-alignment finishes. The preset forces the lightweight seed audit and uses
+Use `--preset dna_dr_product_ready` for the current-run safe DNA dR product
+path. It runs the same base alignment and standard-peak publication path as
+`dna_dr`, but it must not depend on the fixed 85RAW-derived 84-cell Backfill
+expansion activation packet. That retained packet is an authority replay /
+regression artifact only; invoke the Backfill expansion clean-target selective
+wrapper or an explicit custom preset only when the current alignment matrix
+sample universe matches the packet expected-diff sample universe.
+
+`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`; it also stops
+after the standard-peak publication runner. Both built-in presets force the
+lightweight seed audit and use
 `alignment_backfill_cell_evidence.tsv` on `validation-minimal`; non-minimal
 output levels may still emit `alignment_cells.tsv` for debug/deep-audit review.
 The built-in `dna_dr` preset defaults to
@@ -289,15 +297,33 @@ review surface without changing the standard-peak acceptance policy.
 Non-standard peaks remain outside this preset's automatic publication policy.
 
 When `--timing-output` or `--timing-live-output` is supplied, timing spans include
-the base alignment plus the post-alignment standard-peak preset stages. Use this
-shape for HEARTBEAT monitoring; older artifacts may only contain the base
-`pipeline: alignment` timing and therefore under-report preset-tail bottlenecks.
+the base alignment plus the post-alignment preset stages. Backfill expansion
+productization is included only for an explicit clean-target replay/custom
+preset, not for the built-in sample-universe-safe `dna_dr_product_ready` path.
+Use this shape for HEARTBEAT monitoring; older artifacts may only contain the base `pipeline:
+alignment` timing and therefore under-report preset-tail bottlenecks.
 Timing JSON now keeps the raw `records` list and also emits derived
 `summaries.stage_summary` and `summaries.raw_xic_locality_summary` sections.
 Use those derived summaries for no-RAW bottleneck triage before changing RAW
 batching/cache code: `raw_xic_locality_summary` reports stage-level
 `extract_xic_count`, `extract_xic_batch_count`, `raw_chromatogram_call_count`,
 `point_count`, and per-XIC/per-batch ratios without re-reading RAW files.
+
+The built-in `dna_dr_product_ready` alignment preset automatically runs the
+current-run publication checker before returning success. To re-check an
+existing output directory manually, run:
+
+```powershell
+.venv\Scripts\python.exe -m scripts.check_product_ready_preset_publication `
+  --alignment-dir <task-specific-output-dir>
+```
+
+This checker reads `standard_peak_backfill_preset_summary.json` and
+`standard_peak_default_matrix_manifest.json`, confirms manifest coverage and
+published matrix paths, and fails if `backfill_expansion_productization_preset`
+exists in the built-in run output. It is a verifier only: it writes compact
+checks/summary sidecars and does not read RAW, change matrix values, or grant
+Backfill expansion replay authority.
 
 Before starting 85RAW, verify the batch index actually contains 85 samples. Do
 not reuse the historical 8RAW index by path similarity. Prefer the CLI preflight
