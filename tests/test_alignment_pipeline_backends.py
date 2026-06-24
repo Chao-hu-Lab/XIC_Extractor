@@ -470,7 +470,13 @@ def test_pipeline_enters_and_closes_raw_handles_on_success_and_write_failure(
     assert opener.handles[0].entered is True
     assert opener.handles[0].closed is True
 
-    def fail_matrix_writer(path, matrix, *, alignment_config=None):
+    def fail_matrix_writer(
+        path,
+        matrix,
+        *,
+        alignment_config=None,
+        production_decisions=None,
+    ):
         raise RuntimeError("writer failed")
 
     monkeypatch.setattr(
