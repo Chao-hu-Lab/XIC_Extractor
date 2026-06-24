@@ -735,6 +735,124 @@ def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
     assert captured_preset["min_shape_r"] == pytest.approx(0.95)
 
 
+def test_run_alignment_cli_product_ready_preset_runs_backfill_expansion(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+    output_dir = tmp_path / "alignment"
+    captured_alignment: dict[str, object] = {}
+    captured_standard_peak: dict[str, object] = {}
+    captured_backfill_expansion: dict[str, object] = {}
+    call_order: list[str] = []
+
+    def fake_run_alignment(**kwargs):
+        call_order.append("alignment")
+        captured_alignment.update(kwargs)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        paths = {
+            "review_tsv": output_dir / "alignment_review.tsv",
+            "matrix_tsv": output_dir / "alignment_matrix.tsv",
+            "matrix_identity_tsv": output_dir / "alignment_matrix_identity.tsv",
+            "backfill_cell_evidence_tsv": (
+                output_dir / "alignment_backfill_cell_evidence.tsv"
+            ),
+            "backfill_seed_audit_tsv": (
+                output_dir / "alignment_owner_backfill_seed_audit.tsv"
+            ),
+        }
+        for path in paths.values():
+            path.write_text("x\n", encoding="utf-8")
+        return AlignmentRunOutputs(**paths)
+
+    def fake_standard_peak_runner(**kwargs):
+        call_order.append("standard_peak")
+        captured_standard_peak.update(kwargs)
+        return SimpleNamespace(
+            summary_json=output_dir / "standard_peak_summary.json",
+            published_alignment_manifest_json=None,
+            gallery_html=None,
+        )
+
+    def fake_backfill_expansion_runner(**kwargs):
+        call_order.append("backfill_expansion")
+        captured_backfill_expansion.update(kwargs)
+        return SimpleNamespace(
+            summary_json=(
+                output_dir
+                / "backfill_expansion_productization_preset"
+                / "backfill_expansion_productization_preset_summary.json"
+            ),
+            clean_target_activation_summary_json=(
+                output_dir
+                / "backfill_expansion_productization_preset"
+                / "docs"
+                / "backfill_expansion_clean_target_selective_product_activation_v1"
+                / (
+                    "backfill_expansion_clean_target_selective_product_activation_"
+                    "summary.json"
+                )
+            ),
+            product_authority_scope=(
+                "backfill_expansion_clean_target_selective_activation_84_cells"
+            ),
+        )
+
+    monkeypatch.setattr(run_alignment, "run_alignment", fake_run_alignment)
+    monkeypatch.setattr(
+        run_alignment,
+        "run_standard_peak_backfill_preset",
+        fake_standard_peak_runner,
+    )
+    monkeypatch.setattr(
+        run_alignment,
+        "run_backfill_expansion_clean_target_selective_preset_from_alignment",
+        fake_backfill_expansion_runner,
+    )
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--output-dir",
+            str(output_dir),
+            "--preset",
+            "dna_dr_product_ready",
+            "--output-level",
+            "validation-minimal",
+        ]
+    )
+
+    assert code == 0
+    assert call_order == ["alignment", "standard_peak", "backfill_expansion"]
+    assert captured_alignment["emit_alignment_backfill_seed_audit"] is True
+    assert captured_alignment["emit_alignment_cells"] is False
+    assert captured_standard_peak["publication_mode"] == "matrix-only"
+    assert captured_backfill_expansion["alignment_dir"] == output_dir.resolve()
+    assert captured_backfill_expansion["raw_dir"] == raw_dir.resolve()
+    assert captured_backfill_expansion["dll_dir"] == dll_dir.resolve()
+    assert captured_backfill_expansion["output_dir"] == (
+        output_dir.resolve() / "backfill_expansion_productization_preset"
+    )
+    assert captured_backfill_expansion["reuse_existing_raw_overlay"] is False
+    assert captured_backfill_expansion["reuse_existing_shift_aware"] is False
+    assert captured_backfill_expansion["render_shift_aware_images"] is False
+    assert captured_backfill_expansion["min_shape_r"] == pytest.approx(0.95)
+    stdout = capsys.readouterr().out
+    assert "Backfill expansion productization summary JSON:" in stdout
+    assert "backfill_expansion_clean_target_selective_activation_84_cells" in stdout
+
+
 def test_run_alignment_cli_publication_mode_overrides_preset(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

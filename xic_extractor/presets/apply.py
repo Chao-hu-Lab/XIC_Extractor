@@ -30,6 +30,12 @@ STANDARD_PEAK_PUBLICATION_MODES = frozenset(
         "deep-audit",
     }
 )
+BACKFILL_EXPANSION_PRODUCTIZATION_MODES = frozenset(
+    {
+        "off",
+        "clean-target-selective",
+    }
+)
 
 
 def apply_to_discovery(
@@ -133,6 +139,38 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
         minimum=0.0,
         maximum=1.0,
     )
+    backfill_expansion_productization = _enum_str_setting(
+        overrides,
+        "backfill_expansion_productization",
+        "off",
+        BACKFILL_EXPANSION_PRODUCTIZATION_MODES,
+    )
+    backfill_expansion_reuse_existing_raw_overlay = _bool_setting(
+        overrides,
+        "backfill_expansion_reuse_existing_raw_overlay",
+        False,
+    )
+    backfill_expansion_reuse_existing_shift_aware = _bool_setting(
+        overrides,
+        "backfill_expansion_reuse_existing_shift_aware",
+        False,
+    )
+    backfill_expansion_render_shift_aware_images = _bool_setting(
+        overrides,
+        "backfill_expansion_render_shift_aware_images",
+        False,
+    )
+    backfill_expansion_min_shape_r = _range_float_setting(
+        overrides,
+        "backfill_expansion_min_shape_r",
+        min_shape_r,
+        minimum=0.0,
+        maximum=1.0,
+    )
+    if backfill_expansion_productization != "off" and not standard_peak:
+        raise PresetError(
+            "backfill_expansion_productization requires standard_peak_backfill"
+        )
     if not standard_peak:
         return AlignmentConfig(), {"standard_peak_backfill": False}
 
@@ -143,6 +181,17 @@ def apply_to_alignment(preset: Preset) -> tuple[AlignmentConfig, dict[str, objec
         "standard_peak_backfill_write_gallery": write_gallery,
         "standard_peak_backfill_reuse_existing": reuse_existing,
         "standard_peak_backfill_min_shape_r": min_shape_r,
+        "backfill_expansion_productization": backfill_expansion_productization,
+        "backfill_expansion_reuse_existing_raw_overlay": (
+            backfill_expansion_reuse_existing_raw_overlay
+        ),
+        "backfill_expansion_reuse_existing_shift_aware": (
+            backfill_expansion_reuse_existing_shift_aware
+        ),
+        "backfill_expansion_render_shift_aware_images": (
+            backfill_expansion_render_shift_aware_images
+        ),
+        "backfill_expansion_min_shape_r": backfill_expansion_min_shape_r,
     }
 
 
@@ -194,6 +243,19 @@ def _publication_mode_setting(
             "standard_peak_backfill_publication_mode must be one of: "
             f"{modes}"
         )
+    return value
+
+
+def _enum_str_setting(
+    overrides: Mapping[str, object],
+    field: str,
+    default: str,
+    choices: frozenset[str],
+) -> str:
+    value = overrides.get(field, default)
+    if not isinstance(value, str) or value not in choices:
+        supported = ", ".join(sorted(choices))
+        raise PresetError(f"{field} must be one of: {supported}")
     return value
 
 

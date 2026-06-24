@@ -270,9 +270,19 @@ matrix publication:
   --timing-live-output <task-specific-output-dir>\timing.live.json
 ```
 
-`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`. Its alignment
-section enables the standard-peak backfill publication runner after the base
-alignment finishes. The preset forces the lightweight seed audit and uses
+Use `--preset dna_dr_product_ready` when the current 85RAW product gate should
+continue past standard-peak publication into the bounded Backfill expansion
+clean-target selective activation. It runs the same base alignment and
+standard-peak publication path, then writes the Backfill expansion productization
+packet under `<output-dir>\backfill_expansion_productization_preset\`.
+The registered Backfill expansion authority remains limited to the existing
+84-cell scope; the preset does not promote the 666-cell replay packet, the
+491-cell selective diagnostic set, or the held clean-target cells.
+
+`--preset dna_dr` loads `xic_extractor.presets.data\dna_dr.toml`; it stops after
+the standard-peak publication runner. Its alignment section enables the
+standard-peak backfill publication runner after the base alignment finishes.
+Both presets force the lightweight seed audit and use
 `alignment_backfill_cell_evidence.tsv` on `validation-minimal`; non-minimal
 output levels may still emit `alignment_cells.tsv` for debug/deep-audit review.
 The built-in `dna_dr` preset defaults to
@@ -289,9 +299,10 @@ review surface without changing the standard-peak acceptance policy.
 Non-standard peaks remain outside this preset's automatic publication policy.
 
 When `--timing-output` or `--timing-live-output` is supplied, timing spans include
-the base alignment plus the post-alignment standard-peak preset stages. Use this
-shape for HEARTBEAT monitoring; older artifacts may only contain the base
-`pipeline: alignment` timing and therefore under-report preset-tail bottlenecks.
+the base alignment plus the post-alignment preset stages, including Backfill
+expansion productization when `dna_dr_product_ready` is used. Use this shape for
+HEARTBEAT monitoring; older artifacts may only contain the base `pipeline:
+alignment` timing and therefore under-report preset-tail bottlenecks.
 Timing JSON now keeps the raw `records` list and also emits derived
 `summaries.stage_summary` and `summaries.raw_xic_locality_summary` sections.
 Use those derived summaries for no-RAW bottleneck triage before changing RAW

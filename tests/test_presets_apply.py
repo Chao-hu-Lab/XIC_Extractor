@@ -57,7 +57,30 @@ def test_apply_to_alignment_returns_runtime_standard_peak_options() -> None:
         "standard_peak_backfill_write_gallery": False,
         "standard_peak_backfill_reuse_existing": False,
         "standard_peak_backfill_min_shape_r": pytest.approx(0.95),
+        "backfill_expansion_productization": "off",
+        "backfill_expansion_reuse_existing_raw_overlay": False,
+        "backfill_expansion_reuse_existing_shift_aware": False,
+        "backfill_expansion_render_shift_aware_images": False,
+        "backfill_expansion_min_shape_r": pytest.approx(0.95),
     }
+
+
+def test_apply_to_alignment_returns_product_ready_runtime_options() -> None:
+    preset = load_preset("dna_dr_product_ready")
+
+    alignment_config, run_overrides = apply_to_alignment(preset)
+
+    assert alignment_config == AlignmentConfig()
+    assert run_overrides["standard_peak_backfill"] is True
+    assert run_overrides["standard_peak_backfill_publication_mode"] == "matrix-only"
+    assert (
+        run_overrides["backfill_expansion_productization"]
+        == "clean-target-selective"
+    )
+    assert run_overrides["backfill_expansion_reuse_existing_raw_overlay"] is False
+    assert run_overrides["backfill_expansion_reuse_existing_shift_aware"] is False
+    assert run_overrides["backfill_expansion_render_shift_aware_images"] is False
+    assert run_overrides["backfill_expansion_min_shape_r"] == pytest.approx(0.95)
 
 
 def test_apply_to_alignment_maps_legacy_gallery_to_deep_audit() -> None:
@@ -141,6 +164,31 @@ def test_apply_to_alignment_review_gallery_keeps_gallery_surface_enabled() -> No
             "gallery",
             "standard_peak_backfill_publication_mode",
         ),
+        (
+            "backfill_expansion_productization",
+            "all",
+            "backfill_expansion_productization",
+        ),
+        (
+            "backfill_expansion_reuse_existing_raw_overlay",
+            "yes",
+            "backfill_expansion_reuse_existing_raw_overlay",
+        ),
+        (
+            "backfill_expansion_reuse_existing_shift_aware",
+            "yes",
+            "backfill_expansion_reuse_existing_shift_aware",
+        ),
+        (
+            "backfill_expansion_render_shift_aware_images",
+            "yes",
+            "backfill_expansion_render_shift_aware_images",
+        ),
+        (
+            "backfill_expansion_min_shape_r",
+            -0.1,
+            "backfill_expansion_min_shape_r",
+        ),
     ],
 )
 def test_apply_to_alignment_rejects_invalid_runtime_options(
@@ -159,4 +207,21 @@ def test_apply_to_alignment_rejects_invalid_runtime_options(
     )
 
     with pytest.raises(PresetError, match=message):
+        apply_to_alignment(preset)
+
+
+def test_apply_to_alignment_requires_standard_peak_for_backfill_expansion() -> None:
+    preset = Preset(
+        name="Invalid backfill expansion",
+        description="Invalid backfill expansion",
+        tags=(PresetTag(strategy="neutral_loss", name="DNA_dR", value=116.0474),),
+        combine_mode="single",
+        discovery_overrides={},
+        alignment_overrides={
+            "backfill_expansion_productization": "clean-target-selective",
+        },
+        source="test",
+    )
+
+    with pytest.raises(PresetError, match="requires standard_peak_backfill"):
         apply_to_alignment(preset)

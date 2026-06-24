@@ -58,6 +58,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     standard_peak_backfill_enabled = bool(
         preset_runtime_options.get("standard_peak_backfill", False),
     )
+    backfill_expansion_productization_mode = str(
+        preset_runtime_options.get("backfill_expansion_productization", "off"),
+    )
     if args.standard_peak_backfill_publication_mode is not None:
         if not standard_peak_backfill_enabled:
             print(
@@ -230,6 +233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else {}
     )
     standard_peak_outputs = None
+    backfill_expansion_outputs = None
     try:
         drift_lookup = (
             read_targeted_istd_drift_evidence(
@@ -338,6 +342,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                     timing_recorder=timing_recorder,
                 )
+            if backfill_expansion_productization_mode == "clean-target-selective":
+                backfill_expansion_outputs = (
+                    run_backfill_expansion_clean_target_selective_preset_from_alignment(
+                        alignment_dir=output_dir,
+                        raw_dir=raw_dir,
+                        dll_dir=dll_dir,
+                        output_dir=(
+                            output_dir / "backfill_expansion_productization_preset"
+                        ),
+                        reuse_existing_raw_overlay=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_reuse_existing_raw_overlay"
+                            ],
+                        ),
+                        reuse_existing_shift_aware=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_reuse_existing_shift_aware"
+                            ],
+                        ),
+                        render_shift_aware_images=bool(
+                            preset_runtime_options[
+                                "backfill_expansion_render_shift_aware_images"
+                            ],
+                        ),
+                        min_shape_r=_runtime_float_option(
+                            preset_runtime_options,
+                            "backfill_expansion_min_shape_r",
+                        ),
+                        timing_recorder=timing_recorder,
+                    )
+                )
         finally:
             if profiler is not None:
                 _write_cprofile_outputs(
@@ -408,6 +443,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         gallery_html = getattr(standard_peak_outputs, "gallery_html", None)
         if gallery_html is not None:
             print(f"Standard-peak backfill gallery HTML: {gallery_html}")
+    if backfill_expansion_outputs is not None:
+        print(
+            "Backfill expansion productization summary JSON: "
+            f"{backfill_expansion_outputs.summary_json}"
+        )
+        print(
+            "Backfill expansion clean-target activation summary JSON: "
+            f"{backfill_expansion_outputs.clean_target_activation_summary_json}"
+        )
+        print(
+            "Backfill expansion product authority scope: "
+            f"{backfill_expansion_outputs.product_authority_scope}"
+        )
     if timing_recorder is not None:
         if args.timing_live_output is not None:
             print(f"Timing live JSON: {args.timing_live_output.resolve()}")
@@ -894,6 +942,14 @@ def _standard_peak_backfill_requires_full_cells(
 def run_standard_peak_backfill_preset(**kwargs):
     from tools.diagnostics.standard_peak_backfill_preset import (
         run_standard_peak_backfill_preset as runner,
+    )
+
+    return runner(**kwargs)
+
+
+def run_backfill_expansion_clean_target_selective_preset_from_alignment(**kwargs):
+    from scripts.run_backfill_expansion_full_evidence_chain import (
+        run_backfill_expansion_clean_target_selective_preset_from_alignment as runner,
     )
 
     return runner(**kwargs)
