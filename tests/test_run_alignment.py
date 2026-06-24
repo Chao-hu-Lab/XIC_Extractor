@@ -1321,7 +1321,7 @@ def test_standard_peak_render_workers_uses_conservative_cap(
 @pytest.mark.parametrize(
     ("raw_workers", "cpu_count", "expected"),
     [
-        (11, 32, 3),
+        (11, 32, 2),
         (11, 8, 2),
         (11, 4, 1),
         (11, None, 1),

@@ -990,7 +990,7 @@ def _standard_peak_render_workers(raw_workers: int) -> int:
 
 def _standard_peak_chunk_workers(raw_workers: int) -> int:
     cpu_count = os.cpu_count() or 1
-    return max(1, min(raw_workers, max(1, cpu_count // 4), 3))
+    return max(1, min(raw_workers, max(1, cpu_count // 4), 2))
 
 
 def run_standard_peak_backfill_preset(**kwargs):
