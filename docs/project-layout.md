@@ -52,6 +52,9 @@
 ### `docs/` source-of-truth 與歷程邊界
 
 `docs/` 可以放正式 source-of-truth 文件，但不是所有開發歷程都應該留在 repo。
+把 repo 當公開文件面：留下可公開、可審查、可被下一個 agent 執行的正式規則與
+sanitized summary；把 Obsidian 當私人工作筆記：保存長篇推理、開發歷程、命令
+diary、分支過程、私人 local context。
 Obsidian-backed migration and repo-stub rules live in
 `docs/agent/obsidian-handoff-contract.md`.
 歷史 notes 要升格前，先把穩定 claim 分流到既有 owner：
@@ -70,6 +73,15 @@ layout、sample-level investigation、obsolete PR sequencing，預設進私人
 Obsidian / ignored artifact，不直接當 repo source-of-truth。若 keep-repo 檔案仍
 引用該歷史 note，先新增或更新 repo 內正式摘要 / sanitized stub，再考慮移出原文。
 不要把 repo referrer 改成只能在私人 Obsidian 才能讀懂。
+
+新增文件時先判斷公開面：
+
+- 會改 public behavior、schema、validation policy、product authority、agent
+  workflow rule 的內容，寫進上表 canonical owner。
+- 只是探索、開發日誌、review 細節、命令 transcript、私人資料位置，寫進
+  Obsidian 或 ignored artifact。
+- 如果私人筆記對接手有幫助，repo 只保留短 stub：現在狀態、正式 owner、已跑驗證、
+  blocker、下一步。stub 不能要求讀者一定要有私人 vault 才能理解下一步。
 
 ### 第一層子目錄（忽略）
 

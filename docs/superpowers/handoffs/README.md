@@ -35,6 +35,12 @@ title or alias, but it must contain enough current objective, decisions,
 validation, blockers, and next actions for an agent to resume without private
 vault access. See `docs/agent/obsidian-handoff-contract.md`.
 
+Repo handoffs are public-summary surfaces, not private lab notebooks. Do not
+copy private Obsidian reasoning, command transcripts, local absolute paths,
+sample-level investigation detail, or private data placement into a current
+handoff, archive, or PR body. Distill the approved public decision and leave the
+long reasoning in Obsidian.
+
 ## Maintenance
 
 - Current handoff should stay short enough to read every time, normally under
@@ -54,7 +60,7 @@ Current handoff is an input to closeout, not the durable endpoint.
    the goal, PR workflow, or `current/<branch-slug>-<topic>.md`.
 2. When opening or updating a PR, condense the current handoff into the PR body:
    problem, solution, verification actually run, residual risk, and next
-   action. Do not paste the whole handoff.
+   action. Do not paste the whole handoff or private Obsidian-only context.
 3. If the completed phase must remain in repo history after PR closeout, write a
    compact archive summary under `archive/`.
 4. After the PR is closed or merged, stop maintaining that branch current

@@ -36,22 +36,31 @@ verified pilot and explicit file-management approval.
 - Long scratch history, raw development narrative, command transcripts, and
   private/local context belong in Obsidian or ignored artifacts, not public repo
   history.
+- Treat repo docs as the public documentation surface: publish formal rules,
+  compact decisions, and sanitized stubs; keep the full private development
+  history in Obsidian like a lab notebook.
 - Any repo stub that points to Obsidian must still support the next 1-3 safe
   actions when Obsidian is unavailable.
 - If a tracked file is still exact-path referenced, do not remove it merely
-  because the long note moved to Obsidian. Keep a sanitized same-path stub or
-  update every repo referrer to a formal owner first.
+  because the long detail was copied or routed to Obsidian. Keep a sanitized
+  same-path stub or update every repo referrer to a formal owner first.
 - PR body should be the durable closeout surface after merge preparation; do
   not paste raw handoff or private Obsidian-only context into it.
 
 ## Obsidian Pilot
 
 - `Get-Command obsidian` found an Obsidian CLI shim on `PATH`.
-- `obsidian help` failed because the CLI could not find a running Obsidian app.
+- Sandboxed CLI calls could not reach Obsidian IPC, but approved external CLI
+  execution can read the running app and a user-approved private vault.
 - No callable Obsidian MCP tool was available in this Codex session; only local
   Obsidian skills were available as instructions.
-- Vault write/readback is therefore not verified. Future migration must start
-  with a user-approved vault target and a 1-3 note pilot.
+- Pilot note `[[XIC Docs Cleanup Hybrid Handoff]]` was created in the
+  confirmed private vault, linked from `[[XIC Extractor Handoffs Index]]`,
+  overwritten once to fix PowerShell escaping, and read back through the
+  Obsidian CLI.
+- Vault write/readback is `readback_verified` for this one-note pilot. Bulk
+  migration and repo file removal remain blocked until a concrete migration
+  batch is approved.
 
 ## Review Status
 
@@ -64,9 +73,25 @@ verified pilot and explicit file-management approval.
   stub/referrer-update requirement.
 - Handoff/docs review flagged that new canonical docs were still untracked and
   that the productization control plane did not list the Obsidian contract.
-  The control plane now lists `docs/agent/obsidian-handoff-contract.md`. The
-  three new docs remain untracked until the user explicitly asks to stage/commit,
-  but they are part of this branch's intended PR scope.
+  The control plane now lists `docs/agent/obsidian-handoff-contract.md`, and
+  those branch docs were included in commit `b89850ed`.
+- Cleanup review batch 1 manually checked five
+  `needs_link_update_or_stub_before_repo_removal` rows against repo source,
+  Obsidian copies, exact referrers, and current authority owners. Four remain
+  `repo_stub_plus_obsidian`; `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
+  stays `keep_repo` because the status index and authority manifest still point
+  to it as a hashed decision packet. The vault note is
+  `[[XIC Cleanup Review Batch 1 Link Stub Rows]]`. No repo files were removed.
+- The public/private publication boundary is now explicit in
+  `docs/agent/obsidian-handoff-contract.md`, `docs/project-layout.md`,
+  `docs/agent/communication-review.md`, and `docs/superpowers/handoffs/README.md`.
+  This is documentation-governance only. It does not change productization
+  maturity tier, active lane, writer authority, validation verdict, workbook
+  schema, or output behavior; therefore the productization control plane does
+  not need a state update for this patch.
+- Read-only reviewer found no blocking issue in the docs-governance patch. The
+  only non-blocking privacy finding was public repo exposure of the private
+  vault name; repo text now uses generic private-vault wording instead.
 
 ## Important Touched Surfaces
 
@@ -91,24 +116,24 @@ verified pilot and explicit file-management approval.
 
 ## Validation
 
-Latest closeout checks passed on 2026-06-25 with `pwsh` 7:
+Latest focused documentation checks passed on 2026-06-25 with `pwsh` 7 after
+the public/private boundary update and reviewer privacy wording fix:
 
 - `python .codex\hooks\fixtures\assert_hook_outputs.py`
 - `python -m scripts.check_productization_state`
 - `python -m scripts.check_productization_authority`
-- `python -m pytest tests\test_agent_sandbox_doctor.py -q`
 - `git diff --check`
-- added-line secret/local-path scan including untracked branch docs
+- added-line secret/local-path/private-vault scan over the current diff
 
 `git diff --check` and the secret/local-path scan emitted Git LF/CRLF warnings
 only; the scan found no secret, API key, private key, absolute user path, or
-absolute vault path in added lines or untracked branch docs.
+absolute vault path/private vault name in added lines.
 
 Not run for this documentation phase:
 
 - PR CI-equivalent full gate;
 - RAW-backed validation;
-- Obsidian vault write/readback.
+- bulk Obsidian migration or repo file removal.
 
 Known unrelated residual:
 

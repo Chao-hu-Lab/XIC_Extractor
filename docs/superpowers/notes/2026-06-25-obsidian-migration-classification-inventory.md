@@ -23,7 +23,7 @@ Disposition vocabulary is defined in
 | `docs/agent/product-validation-contract.md` | `keep_repo` | product validation language and public-surface discipline | low | high | none | keep as repo source-of-truth | no |
 | `docs/lcms-msms-evidence-rules.md` | `keep_repo` | LC-MS/MS evidence rule source-of-truth | medium | high | none | keep formal evidence contract | no |
 | `docs/diagnostic-ledger.md` | `keep_repo` | compact known diagnostic conclusions | medium | high | none | keep compact conclusions only | no |
-| `docs/deepresearch/Backfill Production Gate.md` | `formalize_repo` | formal Backfill production gate summary | medium | medium | optional `[[XIC Backfill Production Gate Deep Notes]]` | ensure stable claims are reflected in product-validation/evidence owners | no |
+| `docs/deepresearch/Backfill Production Gate.md` | `repo_stub_plus_obsidian` | control plane and evidence rules for current Backfill gate semantics | medium | medium | optional `[[XIC Backfill Production Gate Deep Notes]]` | stable claims are reflected in formal owners; keep same-path research stub or update exact referrers before full removal | no |
 | `docs/superpowers/handoffs/README.md` | `keep_repo` | handoff lifecycle rules | low | high | none | keep branch-scoped handoff rules current | no |
 | `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md` | `repo_stub_plus_obsidian` | active branch handoff stub | low | high | `[[XIC Docs Cleanup Hybrid Handoff]]` after pilot | keep stub self-sufficient before any Obsidian pointer is required | no |
 | `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` | `keep_repo` | productization status anchor | low | high | none | keep anchor phrases for checkers; not a branch handoff | no |
@@ -50,23 +50,69 @@ Disposition vocabulary is defined in
 | `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md` | `move_to_obsidian_after_stub` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Critical Review]]` | retain no-auto-write / truth-boundary decision in formal owners, then keep same-path stub or update exact-path referrers | no |
 | `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md` | `move_to_obsidian_after_stub` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Strategy]]` | retain strategy decision in formal owners, then keep same-path stub or update exact-path referrers | no |
 | `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md` | `move_to_obsidian_after_stub` | control plane / active roadmap for current objective | medium | low | `[[XIC Backfill Productization Reset History]]` | preserve any active objective in roadmap/control plane, then keep same-path stub or update exact-path referrers | no |
-| `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md` | `move_to_obsidian_after_stub` | control plane for broad Backfill parked state | medium | medium | `[[XIC Broad Backfill Autowrite Feasibility Gate]]` | preserve parked-state decision in control plane/status index, then keep same-path stub or update exact-path referrers | no |
+| `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md` | `keep_repo` | current status-index artifact and authority-manifest decision packet for broad Backfill parked state | medium | high | optional deep notes only | do not move until a compact replacement artifact updates status index, authority manifest, hashes, and exact referrers | no |
 
 ## Current Decision
 
 The current branch should not migrate files out of version control. It should
 land the contract, inventory, branch handoff stub, and review evidence first.
 
+Repo is the public documentation surface. It should keep formal source-of-truth
+docs, public contracts, compact sanitized decision records, and self-sufficient
+handoff stubs. Obsidian is the private notebook surface. It should keep long
+development history, research reasoning, command diaries, review detail, and
+local/private context.
+
+This policy does not change productization maturity tier, active lane, writer
+authority, workbook schema, output schema, selected peak/area behavior, or any
+matrix-writing contract.
+
+## Future File Intake Rule
+
+For every new documentation artifact, classify it before writing:
+
+| Intended content | Default destination | Repo requirement |
+| --- | --- | --- |
+| Public behavior, CLI/config/API/schema, workbook/report contract, validation policy, product authority, or agent workflow rule | Canonical repo owner | Formal wording, self-sufficient without Obsidian |
+| Long exploration, branch diary, command transcript, private review detail, local data layout, or sample-level investigation | Obsidian or ignored artifact | Optional repo stub only if needed for next actions |
+| Cross-turn branch state | Branch-scoped repo handoff stub plus optional Obsidian note | Stub must include current objective, decisions, validation, blocker, residual risk, and next 1-3 actions |
+| Historical tracked note with exact repo referrers | Same-path sanitized stub or formal owner update | Referrer scan before any removal |
+
+Before any cleanup patch, run a secret/local-path scan over added repo lines and
+an exact referrer scan over candidate paths. Destructive action remains `no`
+until the user explicitly approves the concrete file-management patch.
+
+## Cleanup Review Batch 1: Link/Stub Rows
+
+Date: 2026-06-25
+Status: reviewed, no destructive action authorized
+
+This batch reviewed five `needs_link_update_or_stub_before_repo_removal` rows
+against repo referrers and current authority owners.
+
+| Source path | Batch verdict | Why | Next safe action |
+| --- | --- | --- | --- |
+| `docs/deepresearch/Backfill Production Gate.md` | `repo_stub_plus_obsidian` | Control plane already extracts the stable claim that `height >= 2e6` is a rollout guardrail, not a product hard gate; exact repo referrers still exist. | Keep a same-path research stub or update exact referrers before full removal. |
+| `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the durable P2-entry/rerun conclusion, but fixture/spec/plan referrers still cite the exact note path. | Replace with a sanitized same-path stub after confirming referrers do not need the full run diary. |
+| `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the current target conclusion; fixture and older plan referrers still cite the exact note path. | Keep same-path stub unless all exact referrers are updated to the ledger. |
+| `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the rerun conclusion and `docs/agent-parameter-settings.md` owns the validated 85RAW command profile; exact refs still cite this note as evidence. | Keep same-path stub preserving validation tier, command-profile pointer, and Obsidian link. |
+| `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md` | `keep_repo` | `productization_status_index_v1.tsv` uses this exact file as `current_artifact` with hash, and the authority manifest uses it as the parked-lane decision packet. | Do not move or stub until a compact replacement artifact updates status index, authority manifest, hashes, and exact referrers. |
+
 ## Obsidian Pilot Status
 
 - CLI discovery: `Get-Command obsidian` found an Obsidian desktop CLI shim on
   `PATH`.
-- CLI preflight: `obsidian help` returned "The CLI is unable to find Obsidian.
-  Please make sure Obsidian is running and try again."
+- CLI preflight: sandboxed CLI calls cannot reach Obsidian IPC, but approved
+  external CLI execution can list vaults, read the user-approved private vault,
+  and write/read a one-note pilot.
 - MCP/tooling discovery: no callable Obsidian MCP tool was available in this
   Codex session; only local Obsidian skills were available as instructions.
-- Result: vault write/readback is not verified in this branch. Future migration
-  must start with a user-approved vault target and a 1-3 note pilot.
+- Pilot result: `[[XIC Docs Cleanup Hybrid Handoff]]` was created in
+  the confirmed private vault, linked from `[[XIC Extractor Handoffs Index]]`,
+  and read back through the Obsidian CLI with
+  `migration_status: readback_verified`.
+- Result: one-note vault write/readback is verified. Bulk migration remains
+  blocked until a concrete migration batch is approved.
 
 After the user approves a concrete migration batch, use this order:
 

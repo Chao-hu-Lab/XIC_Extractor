@@ -39,6 +39,11 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
 - When long context is moved to Obsidian, the repo handoff remains a
   self-sufficient stub. Obsidian links are optional deep context, not required
   for understanding the next safe action.
+- Treat repo handoffs and PR bodies as public-facing summaries. They may state
+  the approved decision, validation actually run, residual risk, and next
+  action, but they must not paste private Obsidian reasoning, raw command
+  transcripts, local absolute paths, sample-level investigation detail, or
+  private data placement back into the repo.
 - PR body is the normal durable closeout surface. Condense the branch handoff
   into the PR body instead of treating the current handoff as the final record;
   archive only compact completed phase summaries that must remain in repo.
