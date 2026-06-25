@@ -256,7 +256,7 @@ Key facts:
 - Reviewed identity-coherence controls passed V0.4 acceptance, and the
   hotfix-reviewed identity-family decisions were byte-identical to the
   pre-change baseline.
-- The same-surface `d3-N6-medA / NormalBC2312_DNA` probe reclassified the
+- The same-surface `d3-N6-medA` probe reclassified the
   apparent mismatch as a mixed-surface diagnostic artifact, not a standalone
   evidence-spine blocker.
 
@@ -361,10 +361,10 @@ Known facts:
   trend audit recorded target-only RT range `2.1538 min`,
   global-median absolute RT delta p95 `1.4571 min`, local rolling-median p95
   `0.0483 min`, and local moderate/severe drift rows `0 / 85`.
-- The `d3-N6-medA / NormalBC2312_DNA` evidence-spine mismatch was reclassified
-  as mixed-surface diagnostic artifact after same-surface probes. Same-surface
-  comparison had `8/8` non-missing rows consistent and reviewed row area ratio
-  about `1.000001375`.
+- The `d3-N6-medA` evidence-spine mismatch was reclassified as mixed-surface
+  diagnostic artifact after same-surface probes. Same-surface comparison had
+  `8/8` non-missing rows consistent and reviewed row area ratio about
+  `1.000001375`.
 - Area mismatch alone must not block P2B or handoff progression for this target
   when identity, local RT coherence, selected peak, boundary ownership, and
   matrix delivery are accepted.
@@ -379,16 +379,14 @@ Post-fix 8RAW primary-delivery conclusion:
   `DNA_dR`, `owner_complete_link`, `include_in_primary_matrix=TRUE`,
   `8/8 present`, `3 detected`, `5 MS1 backfilled`, `22` event clusters,
   and `24` event members.
-- `FAM000264` contains `NormalBC2312_DNA#22176` as detected and contains a
-  `TumorBC2312_DNA` rescued cell at RT `25.4204`, matching the strong
-  target-derived `TumorBC2312_DNA#21195` MS1 apex RT.
+- `FAM000264` contains a detected representative and a rescued companion cell
+  at RT `25.4204`, matching the strong target-derived MS1 apex RT.
 - `FAM000264` is now present in `alignment_matrix.tsv`; the row carries
   `row_flags=rescue_heavy;weak_seed_tolerated` so the warning remains visible.
-- The post-fix row-level gate has `GO blocker count: 0`. `TumorBC2312_DNA /
-  d3-N6-medA` resolves by an equivalent current artifact because the strong
-  source candidate `TumorBC2312_DNA#21195` was an ambiguous owner row, while the
-  primary `FAM000264` cell has the same sample, target m/z class, and apex RT
-  `25.4204`.
+- The post-fix row-level gate has `GO blocker count: 0`. The `d3-N6-medA`
+  representative resolves by an equivalent current artifact because the strong
+  source candidate was an ambiguous owner row, while the primary `FAM000264`
+  cell has the same sample class, target m/z class, and apex RT `25.4204`.
 - A broad rule that promotes every `weak_seed_backfill_dependency` row with
   `q_detected >= 3` remains unacceptable. The accepted fix promoted 13
   additional `DNA_dR` rows, all flagged `rescue_heavy;weak_seed_tolerated`, and

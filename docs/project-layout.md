@@ -9,6 +9,7 @@
 | [`README.md`](../README.md) | 使用者 | 下載、執行、Settings / Targets 欄位說明、輸出格式 |
 | [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 高頻開發 guardrails、canonical references、public contract 摘要 |
 | [`docs/agent/`](agent/) | 寫程式碼的人、reviewer、subagent | AGENTS 拆出的 nested contracts：communication、execution gates、planning、validation、architecture、Codex OS |
+| [`docs/product/`](product/) | 寫程式碼的人、reviewer、future agent | 可公開的 product-topic 代表文件；目前先收斂 Backfill、Discovery、Alignment、Presets，後續可擴充 |
 | [`docs/architecture-contract.md`](architecture-contract.md) | 做程式結構調整的人 | 設計原則、所有權地圖、依賴規則、重構紀律、測試結構規則 |
 | **本檔** | 想知道「檔案放哪」的人 | 目錄地圖、外部約束、新檔決策樹、暫存目錄清理規則、命名慣例 |
 
@@ -56,11 +57,20 @@
 sanitized summary；把 Obsidian 當私人工作筆記：保存長篇推理、開發歷程、命令
 diary、分支過程、私人 local context。
 Obsidian-backed migration and repo-stub rules live in
-`docs/agent/obsidian-handoff-contract.md`.
+`docs/agent/obsidian-handoff-contract.md`; that contract is the standing policy,
+not a one-branch experiment.
+
+跨越多份 dated plans/specs/validation 的產品主題，先收斂成
+`docs/product/` 下的小型代表文件。這不是完整 taxonomy；目前第一批 owner 是
+Backfill、Discovery、Alignment、Presets。之後若出現同等全局主題，新增
+`docs/product/<topic>.md`，不要讓 repo 讀者只能從私人 Obsidian 或一串歷史 note
+重建產品規則。
+
 歷史 notes 要升格前，先把穩定 claim 分流到既有 owner：
 
 | Claim 類型 | Repo owner |
 |------|------|
+| Backfill / Discovery / Alignment / Presets 等全局產品主題 | `docs/product/` 對應主題文件；實際 tier、writer authority、schema、validation verdict 仍查下列 owner |
 | 產品成熟度 tier、active lane、writer scope、promotion packet | `docs/superpowers/plans/2026-06-15-productization-control-plane.md`、`docs/superpowers/validation/productization_status_index_v1.tsv`、`docs/superpowers/specs/productization_authority_manifest.v1.json` |
 | LC-MS/MS evidence rule、Backfill evidence semantics、Gaussian15 area owner | `docs/lcms-msms-evidence-rules.md` |
 | product-readiness wording、public-surface discipline | `docs/agent/product-validation-contract.md` |
@@ -73,6 +83,10 @@ layout、sample-level investigation、obsolete PR sequencing，預設進私人
 Obsidian / ignored artifact，不直接當 repo source-of-truth。若 keep-repo 檔案仍
 引用該歷史 note，先新增或更新 repo 內正式摘要 / sanitized stub，再考慮移出原文。
 不要把 repo referrer 改成只能在私人 Obsidian 才能讀懂。
+
+如果歷史 note 內有重要但尚未整理的內容，先把穩定 public claim 寫進上表
+canonical owner，再把原文當 private context 移交 Obsidian。不能因為 Obsidian
+有完整原文，就讓 repo 只剩一個需要私人 vault 才能理解的引用。
 
 新增文件時先判斷公開面：
 

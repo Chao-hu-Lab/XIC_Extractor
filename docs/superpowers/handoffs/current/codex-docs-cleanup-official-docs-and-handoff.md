@@ -1,151 +1,194 @@
-# Docs cleanup official-docs and handoff snapshot
+# Docs cleanup current handoff
 
 Branch: `codex/docs-cleanup`
-Status: active branch-scoped handoff for documentation cleanup, Obsidian migration rules, and handoff mechanism repair
+Status: active branch-scoped handoff for documentation cleanup and Obsidian boundary work
 Validation status: `diagnostic_only`
 
 ## Current Objective
 
-Complete the safe documentation-management phase before any tracked-file
-removal: repo formal docs and branch handoff stubs stay self-sufficient, while
-long private development history can later move to Obsidian only after a
-verified pilot and explicit file-management approval.
+Finish the safe documentation-management phase without tracked-file removal:
+repo docs stay self-sufficient and public; long development history can live in
+Obsidian only after stable claims are represented by repo owners or sanitized
+same-path stubs.
 
 ## Current State
 
-- The repo now has a formal hybrid contract at
-  `docs/agent/obsidian-handoff-contract.md`.
-- `AGENTS.md`, `docs/project-layout.md`,
-  `docs/agent/communication-review.md`,
-  `docs/superpowers/handoffs/README.md`, and
-  `docs/superpowers/plans/2026-06-15-productization-control-plane.md` route
-  future agents back to the contract.
-- The working classification inventory is
+- Policy owner: `docs/agent/obsidian-handoff-contract.md`.
+- High-frequency rule: `AGENTS.md`.
+- Placement summary: `docs/project-layout.md`.
+- Product-topic representative docs:
+  `docs/product/README.md`. Current first-pass topics are Backfill, Discovery,
+  Alignment, and Presets; this layer is extensible and not a complete taxonomy.
+- Working inventory:
   `docs/superpowers/notes/2026-06-25-obsidian-migration-classification-inventory.md`.
-  It is not a deletion list; every row currently has
-  `Destructive allowed now = no`.
-- The productization status anchor remains
-  `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`.
-  It is not the current branch handoff.
-- This file is the branch-scoped handoff for `codex/docs-cleanup`.
+- Completed phase archive:
+  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_direction-lock-review.md`.
+- Productization status anchor remains
+  `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`;
+  it is not this branch handoff.
+- Optional private Obsidian indexes created and read back:
+  `[[XIC Docs Cleanup Direction Lock]]` and
+  `[[XIC File Management Patch 1 Repo Stubs]]`.
 
 ## Active Decisions
 
-- Formal source-of-truth docs, public contracts, validation policy, product
-  maturity state, and machine-checkable authority stay in repo.
-- Long scratch history, raw development narrative, command transcripts, and
-  private/local context belong in Obsidian or ignored artifacts, not public repo
-  history.
-- Treat repo docs as the public documentation surface: publish formal rules,
-  compact decisions, and sanitized stubs; keep the full private development
-  history in Obsidian like a lab notebook.
-- Any repo stub that points to Obsidian must still support the next 1-3 safe
-  actions when Obsidian is unavailable.
-- If a tracked file is still exact-path referenced, do not remove it merely
-  because the long detail was copied or routed to Obsidian. Keep a sanitized
-  same-path stub or update every repo referrer to a formal owner first.
-- PR body should be the durable closeout surface after merge preparation; do
-  not paste raw handoff or private Obsidian-only context into it.
+- Repo is the public source-of-truth surface: formal rules, validation policy,
+  product authority, compact decisions, machine-checkable state, and
+  self-sufficient branch stubs stay in repo.
+- Obsidian is the private lab notebook: long reasoning, command diaries,
+  discarded hypotheses, review detail, and local context stay private.
+- Important historical claims must be formalized into a canonical repo owner or
+  same-path sanitized stub before the long source note is treated as private
+  context.
+- Related global product topics should be grouped into small representative
+  repo docs when possible. Backfill, Discovery, Alignment, and Presets now have
+  first-pass owners under `docs/product/`; future global topics can be added
+  there instead of preserved as scattered dated notes.
+- Same-path stubs are temporary unless the exact path is deliberately bound by a
+  hash, checker, fixture, artifact contract, or compatibility reference.
+- No `git rm`, archive move, bulk migration, tracked-file deletion, staging,
+  commit, push, or PR action is authorized unless the user explicitly asks.
 
-## Obsidian Pilot
+## Current Patch
 
-- `Get-Command obsidian` found an Obsidian CLI shim on `PATH`.
-- Sandboxed CLI calls could not reach Obsidian IPC, but approved external CLI
-  execution can read the running app and a user-approved private vault.
-- No callable Obsidian MCP tool was available in this Codex session; only local
-  Obsidian skills were available as instructions.
-- Pilot note `[[XIC Docs Cleanup Hybrid Handoff]]` was created in the
-  confirmed private vault, linked from `[[XIC Extractor Handoffs Index]]`,
-  overwritten once to fix PowerShell escaping, and read back through the
-  Obsidian CLI.
-- Vault write/readback is `readback_verified` for this one-note pilot. Bulk
-  migration and repo file removal remain blocked until a concrete migration
-  batch is approved.
+File-management patch 1 replaced four long historical docs with self-sufficient
+same-path public stubs:
 
-## Review Status
+- `docs/deepresearch/Backfill Production Gate.md`
+- `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md`
+- `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md`
+- `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md`
 
-- Strategy review initially flagged over-aggressive movement for the current
-  capability inventory, exact-path referenced validation notes, and missing
-  authority-owner rows. The inventory now keeps the capability inventory in repo,
-  marks referenced historical notes as `repo_stub_plus_obsidian`, and includes
-  productization authority / mechanical adjudication owner artifacts. Backfill
-  history rows that can move only after a stub now also name the same-path
-  stub/referrer-update requirement.
-- Handoff/docs review flagged that new canonical docs were still untracked and
-  that the productization control plane did not list the Obsidian contract.
-  The control plane now lists `docs/agent/obsidian-handoff-contract.md`, and
-  those branch docs were included in commit `b89850ed`.
-- Cleanup review batch 1 manually checked five
-  `needs_link_update_or_stub_before_repo_removal` rows against repo source,
-  Obsidian copies, exact referrers, and current authority owners. Four remain
-  `repo_stub_plus_obsidian`; `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
-  stays `keep_repo` because the status index and authority manifest still point
-  to it as a hashed decision packet. The vault note is
-  `[[XIC Cleanup Review Batch 1 Link Stub Rows]]`. No repo files were removed.
-- The public/private publication boundary is now explicit in
-  `docs/agent/obsidian-handoff-contract.md`, `docs/project-layout.md`,
-  `docs/agent/communication-review.md`, and `docs/superpowers/handoffs/README.md`.
-  This is documentation-governance only. It does not change productization
-  maturity tier, active lane, writer authority, validation verdict, workbook
-  schema, or output behavior; therefore the productization control plane does
-  not need a state update for this patch.
-- Read-only reviewer found no blocking issue in the docs-governance patch. The
-  only non-blocking privacy finding was public repo exposure of the private
-  vault name; repo text now uses generic private-vault wording instead.
+The long diaries already exist in the private vault and were read back before
+the stubs were written. Existing repo referrers still point to these paths, so
+the stubs stay tracked for now.
 
-## Important Touched Surfaces
+File-management patch 4 replaced three Backfill strategy/reset diaries with
+self-sufficient same-path public stubs:
 
-- `.codex/hooks/xic_hook_policy.py`
-- `.codex/hooks/xic_prompt_router.py`
-- `.codex/hooks/xic_post_tool_guard.py`
-- `.codex/hooks/fixtures/assert_hook_outputs.py`
-- `.codex/skills/xic-goal-execution/SKILL.md`
-- `.codex/skills/xic-productization-pulse/SKILL.md`
-- `AGENTS.md`
-- `docs/agent/obsidian-handoff-contract.md`
-- `docs/agent/codex-operating-system.md`
-- `docs/agent/communication-review.md`
-- `docs/project-layout.md`
-- `docs/superpowers/handoffs/README.md`
-- `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
-- `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md`
-- `docs/superpowers/notes/2026-06-25-obsidian-migration-classification-inventory.md`
-- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-- `scripts/check_productization_state.py`
-- `scripts/check_cid_nl_discovery_release_slice.py`
+- `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`
+- `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`
+- `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`
 
-## Validation
+The stable Backfill claims are already owned by the control plane, status index,
+authority manifest, mechanical adjudication surfaces, and parked
+broad-autowrite decision packet. Existing repo referrers still point to these
+paths, so the stubs stay tracked for now.
 
-Latest focused documentation checks passed on 2026-06-25 with `pwsh` 7 after
-the public/private boundary update and reviewer privacy wording fix:
+Product-topic consolidation added `docs/product/` as the repo-readable entry
+layer for durable topic summaries. It currently covers Backfill, Discovery,
+Alignment, and Presets, while explicitly remaining extensible for other global
+product topics.
+
+Cleanup patch 2 reviewed those exact referrers. Active evidence owners,
+validated command-profile docs, retained fixtures, and historical plans still
+need the same paths as provenance/compatibility references. The patch records
+those retention reasons in the inventory and sanitizes directly related
+`d3-N6-medA` narrative sample-level details in `docs/diagnostic-ledger.md`.
+
+File-management patch 3 replaced four validation/closeout diaries with
+self-sufficient same-path public stubs:
+
+- `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md`
+- `docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md`
+- `docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md`
+- `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`
+
+The long diaries already exist in the private vault and were read back before
+the stubs were written. Existing repo referrers still point to these paths, so
+the stubs stay tracked for now.
+
+## Acceptance Review
+
+- `docs-handoff-reviewer` found one blocker: the resolver stub exposed a
+  concrete sample-level identifier. Fixed by keeping only sanitized
+  same-surface `d3-N6-medA` probe wording.
+- `strategy-challenger` found no blocker and recommended making same-path stubs
+  explicitly temporary unless exact-path retention is justified. The policy and
+  inventory now include that exit rule.
+- Original `docs-handoff-reviewer` re-check passed: the sample-level identifier
+  is gone from the resolver stub, current handoff, and archive summary; no
+  blocking finding remains.
+- Patch 3 `strategy-challenger` found no blocker. It accepted same-path stubs
+  while exact referrers remain and recommended tightening the replay stub status
+  to a single validation tier; fixed.
+- Patch 3 `docs-handoff-reviewer` found no blocker. Stubs are repo-readable
+  without private vault access, no destructive action is authorized, and no
+  control-plane tier/lane update is needed.
+- Patch 4 read-only docs/strategy review found no blocker. The Backfill
+  strategy stubs are self-contained, keep Obsidian optional, preserve the
+  current `park_broad_backfill` / 511-cell authority state, and do not need a
+  control-plane update.
+- Product-topic docs read-only review found no blocker. Two precision findings
+  were fixed: `alignment_run_metadata.json` is conditional provenance output,
+  not a fixed validation-minimal output; built-in preset TOML resources live
+  under `xic_extractor/presets/data/`.
+- Critical artifact review then found two document-quality blockers for the
+  new `docs/product/` layer: status wording mixed document status with product
+  evidence, and topic pages did not state what questions they answer. Fixed by
+  adding a topic-page contract and aligning Backfill, Discovery, Alignment, and
+  Presets to `Answers`, `Does Not Answer`, public surfaces, workflow,
+  verification gates, wrong moves, owners, and update triggers.
+
+## Productization Impact
+
+This patch does not change productization maturity tier, active lane, writer
+authority, validation verdict, workbook schema, output behavior, selected
+area/counting, or matrix authority. No productization control-plane state update
+is needed for this documentation-governance patch.
+
+Patch 4 also does not require a productization control-plane update: it only
+externalizes private strategy history and leaves the current `park_broad_backfill`
+decision, 511-cell authority, mechanical adjudication status, and Backfill lane
+state unchanged.
+
+The `docs/product/` additions also do not require a productization control-plane
+update: they are routing/source-of-truth summaries and do not replace the
+control plane, status index, authority manifest, evidence rules, architecture
+contract, or runner settings.
+
+The topic-page contract cleanup also does not require a productization
+control-plane update: it clarifies documentation status, evidence labels,
+question coverage, owner routing, and update triggers. It does not change
+maturity tier, active lane, writer authority, output schema, review/replay
+behavior, selected area/counting, matrix values, or matrix authority.
+
+## Verification
+
+Latest checks passed after the blocker fix and handoff prune:
 
 - `python .codex\hooks\fixtures\assert_hook_outputs.py`
 - `python -m scripts.check_productization_state`
 - `python -m scripts.check_productization_authority`
-- `git diff --check`
-- added-line secret/local-path/private-vault scan over the current diff
+- `git diff --check` with LF/CRLF warnings only
+- added-line secret/local-path/private-data/sample-id scan
+- sample-id scan for the fixed blocker
+- exact referrer scan for the four stubbed paths
+- Obsidian CLI write/readback for `[[XIC Docs Cleanup Direction Lock]]`
+- Obsidian CLI write/readback for `[[XIC Exact Referrer Review Patch 2]]`
+- Obsidian CLI readback for the four patch-3 private history notes
+- Obsidian CLI readback for the three patch-4 private history notes
+- read-only subagent review by `docs-handoff-reviewer` and
+  `strategy-challenger`
+- read-only subagent review for the `docs/product/` representative-doc layer
 
-`git diff --check` and the secret/local-path scan emitted Git LF/CRLF warnings
-only; the scan found no secret, API key, private key, absolute user path, or
-absolute vault path/private vault name in added lines.
+## Residual Risk
 
-Not run for this documentation phase:
-
-- PR CI-equivalent full gate;
-- RAW-backed validation;
-- bulk Obsidian migration or repo file removal.
-
-Known unrelated residual:
-
-- The release-slice checker still has a known source-hash mismatch for
-`docs/superpowers/validation/productization_status_index_v1.tsv`; this goal does
-not attempt to repair that unrelated source-hash mismatch.
+- Optional Obsidian note titles remain in repo text. Current policy allows
+  title/alias pointers, but they should remain optional and non-sensitive.
+- Full PR CI and RAW-backed validation are intentionally not run for this docs
+  governance phase.
+- Known unrelated residual: release-slice checker still has a source-hash
+  mismatch for `docs/superpowers/validation/productization_status_index_v1.tsv`.
+- Commit closeout note: the handoff references
+  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_direction-lock-review.md`,
+  which is currently untracked. If this patch is staged later, include that
+  archive file or remove the reference before committing.
 
 ## Next Actions
 
-1. Close this goal as a documentation and workflow phase after final status
-   inspection.
-2. When the user explicitly approves file management, run the pilot/migration
-   order in the classification inventory.
-3. Do not `git rm`, archive, bulk migrate, stage, commit, push, or open a PR
-   unless the user explicitly asks.
+1. Report acceptance status and leave the patch unstaged unless the
+   user asks to stage or commit.
+2. Continue future cleanup in small batches: read source note, formalize stable
+   claims, update exact referrers or justify same-path stub retention, then
+   update optional Obsidian metadata.

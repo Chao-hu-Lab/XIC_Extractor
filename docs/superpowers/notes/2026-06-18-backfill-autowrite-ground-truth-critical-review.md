@@ -1,187 +1,58 @@
-# Backfill Auto-Write Ground-Truth Critical Review - 2026-06-18
+# Backfill Auto-Write Ground-Truth Critical Review
 
-> Historical critical review: retained as evidence/provenance, not live
-> source-of-truth and not an implementation ticket. Current Backfill tier,
-> active lane, parked broad-autowrite decision, and writer authority live in
-> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
-> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
-> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
-> private-note migration requires an explicit removal approval plus a
-> repo-self-contained referrer pass.
+Status: `repo_stub_plus_obsidian`
+Validation status: `diagnostic_only`
+Original note date: 2026-06-18
 
-Status: strategy reset / implementation hold. This is not a new design program.
+This same-path public stub preserves the durable strategy decision and referrer
+compatibility for the historical critical review. The long critique and
+strategy-formation detail were moved to the private Obsidian note
+`[[XIC Backfill Autowrite Ground Truth Critical Review]]` and read back before
+this stub was written. Private vault access is optional and must not be required
+to understand the product decision.
 
-Decision challenged: can Backfill stop adding hand-carved writer slices without
-replacing them with another open-ended stack of design artifacts?
+## Public Decision
 
-## Verdict
+Broad Backfill auto-write must remain on implementation hold. The current
+decision is not to convert the 4613 candidate/audit rows into writable cells.
 
-The strategy reset is directionally correct, but it is not yet an
-implementation ticket for broader matrix writes.
+The stable product rule is:
 
-The correct product objective is:
+- mechanically adjudicate candidate rows before any write;
+- keep ProductWriter as the only matrix-writing authority;
+- write only rows with explicit `write_ready` authority and expected-diff pass;
+- keep current Backfill writer authority at the approved 511-cell scope unless
+  a future expected-diff-backed authority update says otherwise;
+- treat the 3015 trace-matched unresolved rows as truth/review/adjudication
+  targets, not an auto-write pool;
+- keep the 1087 `missing_overlay_path` rows blocked until trace evidence exists;
+- do not derive writer predicates from `quality_blockers` or the round-trip
+  reintegration oracle.
 
-1. mechanically adjudicate all 4613 candidate rows;
-2. keep ProductWriter as the only matrix-writing authority;
-3. write only rows with explicit `write_ready` authority and expected-diff pass;
-4. turn unresolved rows into review/evidence tasks with clear reasons.
+The later `backfill_broad_autowrite_feasibility_gate_v1` decision packet closes
+this branch as `park_broad_backfill`. Reopen broad Backfill only with a genuinely
+new independent evidence source for peak-choice / family identity plus an
+expected-diff-backed authority contract.
 
-The next Backfill step is one read-only gate packet,
-`backfill_ground_truth_gate_v1`. It is not another
-`quality_blockers`-derived evidence slice, not a ProductWriter expansion, and
-not a commitment to build a model.
+## Repo Sources Of Truth
 
-## Plain Language
+- Current Backfill tier, active lane, and writer authority:
+  `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
+- Machine-checkable parked broad-autowrite state:
+  `docs/superpowers/validation/productization_status_index_v1.tsv`
+- ProductWriter authority manifest:
+  `docs/superpowers/specs/productization_authority_manifest.v1.json`
+- Mechanical adjudication schema and index:
+  `docs/superpowers/specs/mechanical_adjudication_schema.v1.json`
+  and `docs/superpowers/validation/mechanical_adjudication_index_v1.tsv`
+- Current parked-lane decision packet:
+  `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
 
-`4613 rows` means candidate cells where the extractor already has a candidate
-MS1 morphology area. It does not mean 4613 approved writes.
+## Next Safe Action
 
-Current approved product writing is still 511 cells. The useful broadening
-target is the 3015 dirty-but-trace-matched cells, because they have stored trace
-provenance but no approved evidence class. The 1087 `missing_overlay_path` cells
-are not auto-writeable under the current evidence contract because there is no
-stored trace to verify.
+Do not start degradation/model work, add another broad Backfill diagnostic
+slice, or broaden ProductWriter authority from this historical review. Continue
+only existing scoped writer hardening or non-broad lanes unless a future product
+decision names a new independent truth source.
 
-The current heldout trace oracle mostly asks: if we reintegrate this stored
-trace, do we get nearly the same boundary and area? That is useful, but it does
-not by itself prove the original peak choice was biologically or chemically
-correct. The suspected hard failure is wrong-small-peak or family confusion,
-especially visible in ISTD behavior.
-
-## Fact Revalidation
-
-Confirmed in this review:
-
-- Backfill promotes the cell's own MS1 morphology area. In
-  `xic_extractor/alignment/shared_peak_identity_explanation/product_activation.py`,
-  `ACTIVE_PRIMARY_MATRIX_AREA_SOURCES` only includes
-  `MS1_MORPHOLOGY_PRIMARY_MATRIX_AREA_SOURCE`, and
-  `_matrix_value_for_activation()` returns `primary_matrix_area` only for those
-  sources.
-- Current 85RAW generated-policy replay remains 4613 policy rows, 511
-  `write_ready`, 0 `detected_flagged`, and 4102 `blocked`. The expected-diff
-  writer packet writes 511 cells and passes.
-- The six active ISTDs are mapped by `targeted_istd_benchmark` selected family
-  IDs, not by naive monoisotopic m/z grep. In the benchmark summary, all six
-  active ISTDs have 85/85 untargeted positives.
-- A small no-RAW matrix check over those six ISTD families found no sample above
-  3x median, while every family has low-side outliers. This supports the working
-  hypothesis that observed morphology/integration failures are mostly
-  under-estimation, not inflation.
-
-Facts that still need to be pinned before product implementation:
-
-- The under-estimation claim should be joined to targeted per-sample areas when
-  available. Current matrix evidence supports direction, but not a final
-  absolute error bound.
-- The 3015 dirty-but-traced rows need a current feature distribution summary so
-  degraded ISTD traces can be compared against real dirty rows. If synthetic
-  dirty traces do not cover the real dirty distribution, the labels are not
-  enough.
-- The 1087 missing-trace rows need trace regeneration or must remain blocked.
-  They cannot be rescued by a model trained on traced rows.
-
-## Minimal Gate
-
-Do not start with degradation code or a classifier. First make one small,
-auditable packet that can answer whether broad Backfill has a simple product
-gate or should stay parked.
-
-`backfill_ground_truth_gate_v1` must contain only these sections:
-
-1. `facts`: re-confirm the 4613 / 511 / 3015 / 1087 counts and input hashes.
-2. `ISTD truth`: selected-feature mapping, signed area error against an
-   independent reference where available, and low/high outlier direction.
-3. `dirty profile`: feature distribution for the 3015 dirty-but-traced rows
-   compared with the 511 approved rows.
-4. `acceptance table`: numeric pass/fail thresholds for any future gate,
-   including selection correctness, signed area error, leakage-free split unit,
-   family-confusion failure, and minimum coverage of the 3015 rows.
-
-The current round-trip oracle output must not become model training labels. It
-can test reintegration determinism, but it is blind to a wrong starting peak.
-
-If this packet cannot express a short, human-readable gate, broad Backfill
-should stay `blocked` / `parked` instead of accumulating more diagnostics.
-
-Do not treat 8RAW as an independent batch-transfer proof unless the packet
-justifies why it is independent enough for that claim; otherwise call it a
-smaller historical validation subset.
-
-## Edge Cases / Failure Modes
-
-Block broader writing until these are explicitly handled:
-
-- Family confusion or wrong-small-peak selection. Degrading one clean trace does
-  not reproduce an alignment/family-assignment mistake.
-- `isotope_shift` target mapping. ISTD family lookup must use
-  `targeted_istd_benchmark.selected_feature_id`.
-- Missing trace / overlay rows. These must stay `blocked` until trace evidence
-  exists.
-- Low signal where scan count, width, height, and apex delta interact. Avoid
-  another nested height/scan/shape rule unless it collapses into a tested
-  calibrated gate.
-- Batch transfer. A threshold tuned on the 85RAW fixture must be challenged on a
-  separate batch or a sealed lockbox before it claims product authority.
-
-## Dependency Chain / Self-Consistency
-
-The dependency chain should be:
-
-```text
-candidate row
-  -> mechanical adjudication
-  -> evidence grade / decision / write authority
-  -> ProductWriter expected-diff
-  -> matrix write
-```
-
-It must not become:
-
-```text
-quality blocker token
-  -> hand-written slice
-  -> direct matrix write
-```
-
-Quality sidecars remain explanation-only. They may create review questions or
-evidence tasks, but they do not create write authority.
-
-If an `authority_manifest` or candidate-adjudication schema is added, that is a
-public contract and needs docs plus focused tests before any ProductWriter
-behavior changes.
-
-## Required Next Artifact
-
-Before any code change that broadens Backfill writer authority, produce one
-small read-only artifact:
-
-`docs/superpowers/notes/backfill_ground_truth_gate_v1.md`
-
-That artifact should fit on one readable page plus tables/links. If it needs a
-large design tree to explain why rows are safe, it is not ready to feed
-ProductWriter.
-
-## Stop Rules
-
-Stop immediately if any broader Backfill plan does one of these:
-
-- trains or approves rows using only the existing round-trip reintegration
-  oracle;
-- treats `quality_blockers` as writer authority;
-- includes `missing_overlay_path` rows without regenerated trace evidence;
-- cannot explain each auto-written row with evidence grade, authority source,
-  threshold, and expected-diff status;
-- does not define numeric acceptance criteria strong enough to fail a bad
-  model;
-- cannot separate single-trace integration error from family-confusion error;
-- requires more diagnostic sidecars without changing the product decision;
-- changes selected peak, selected area, counted detection, workbook values, or
-  primary matrix values without a public expected-diff contract.
-
-## Placement
-
-This note belongs under `docs/superpowers/notes/` because it is a strategy
-review and implementation gate. The control plane remains the tier authority.
-The current handoff should point here as the first Backfill read for the next
-agent.
+No tracked-file removal is authorized by this stub.

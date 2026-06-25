@@ -17,6 +17,44 @@ Obsidian can deepen context, but the repo must still contain enough sanitized
 information for an agent to resume the next 1-3 actions after context
 compaction.
 
+## Final direction
+
+As of 2026-06-25, this is the standing documentation policy, not an experiment:
+
+1. The repo is the public product and agent operating record. It keeps formal
+   rules, product contracts, machine-checkable state, compact decision records,
+   and self-sufficient handoff stubs.
+2. Obsidian is the private lab notebook. It keeps long reasoning, command
+   diaries, exploratory review, abandoned sequencing, local context, and other
+   material that would be inappropriate or noisy in a public repo.
+3. Obsidian may deepen context, but it must never be the only source for repo
+   behavior, product authority, validation policy, or the next safe action.
+4. Historical tracked notes move by a stub-first workflow: extract the stable
+   public claim into a canonical repo owner, keep or create a same-path
+   sanitized stub while exact referrers exist, then move the long original
+   context to Obsidian.
+5. Destructive cleanup is a separate final step. `git rm`, archive moves, and
+   tracked-file deletion require explicit user approval after the concrete
+   paths, replacements, and referrer scan are known.
+
+## Source-of-truth promotion rule
+
+When a historical note contains important material that is not yet organized in
+a formal repo owner, do not move it directly to Obsidian and call the work done.
+First promote the stable public claim:
+
+1. Identify whether an existing owner already applies: productization control
+   plane, diagnostic ledger, evidence rules, product validation contract,
+   architecture contract, project layout, or a named spec.
+2. Rewrite only the durable claim into that owner: current decision, authority,
+   validation status, explicit non-change, and next safe action.
+3. Keep the historical file as `repo_stub_plus_obsidian` if exact-path repo
+   referrers still exist; otherwise update every referrer to the formal owner.
+4. Put the long chronology, discarded hypotheses, command transcript, and
+   private/local detail in Obsidian.
+5. Verify that a future agent can continue from repo files alone before any
+   removal is proposed.
+
 ## Public/private publication boundary
 
 Treat the public repo like the publication surface: it may disclose the
@@ -168,6 +206,11 @@ If a tracked file is still referenced by exact path from another repo file,
 sanitized stub at the same path or update every repo referrer to a formal owner
 that preserves the same decision. This referrer scan is mandatory even when the
 long original content has been copied to Obsidian.
+
+Same-path stubs are temporary unless the exact path is deliberately bound by a
+hash, checker, fixture, artifact contract, or compatibility reference. Each
+cleanup batch should either update exact referrers to the canonical owner or
+record why exact-path retention remains required.
 
 ## New docs after migration
 

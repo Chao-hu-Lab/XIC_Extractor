@@ -16,12 +16,11 @@ validated output artifacts.
   software backfill/reimport/rerun patterns. Main takeaway: robust backfill
   needs source discovery, input snapshots, idempotency, retry classes,
   resume/cache behavior, and execution artifacts.
-- [Backfill Production Gate.md](<Backfill Production Gate.md>): Backfill /
-  gap-filling product-gate research. Main takeaway: `height >= 2e6` is a
-  high-signal demonstrator or rollout guardrail, not a universal product hard
-  gate. Boundary stability, local evidence, cohort context, expected-diff
-  evidence, and provenance are the useful lessons; low detected support is an
-  interpretation risk, not a standalone accepted-value blocker.
+- [Backfill Production Gate.md](<Backfill Production Gate.md>): sanitized repo
+  stub for Backfill / gap-filling product-gate research. Main takeaway:
+  `height >= 2e6` is a high-signal demonstrator or rollout guardrail, not a
+  universal product hard gate. The full research diary lives in private
+  Obsidian; the repo stub keeps only the public decision and owner links.
 - [Compair.md](Compair.md): XIC Extractor compared with mature free/open LC-MS
   tools. Use it to separate the product floor XIC should catch up to from the
   assay-specific evidence-adjudication ceiling XIC should preserve.
