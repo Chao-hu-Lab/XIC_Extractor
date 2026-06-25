@@ -41,8 +41,10 @@ Use these inputs in this order:
 2. [productization control plane](2026-06-15-productization-control-plane.md)
    for tier, lane, writer authority, broad-Backfill parked state, and public
    contract boundaries.
-3. [current productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
-   for the short current-state snapshot.
+3. [productization status anchor](../handoffs/current/cc-framework-improvements-productization.md)
+   for shared productization status when this blueprint is the active
+   productization workflow. Other branches must resolve their own branch-scoped
+   current handoff from the active goal or PR workflow.
 4. This blueprint for phase order, stop rules, and goal contracts.
 5. Named validation/adjudication artifacts cited by the active phase.
 6. [deepresearch index](../../deepresearch/README.md) and its notes as design
@@ -344,7 +346,8 @@ Phase state vocabulary:
 Cadence rules:
 
 - Start every phase by reading this blueprint, the productization control plane,
-  the active handoff, and the source artifacts named by the phase.
+  the active branch or productization handoff, and the source artifacts named by
+  the phase.
 - Keep the active handoff as a short current-state snapshot, not a log.
 - If a phase discovers broader cleanup, record it as follow-up unless it blocks
   the current phase.
@@ -444,7 +447,9 @@ conflict with the blueprint, without changing product behavior.
 CONTEXT:
 - Read docs/superpowers/plans/2026-06-18-backfill-evidence-lifecycle-blueprint.md.
 - Read docs/superpowers/plans/2026-06-15-productization-control-plane.md.
-- Read docs/superpowers/handoffs/current/cc-framework-improvements-productization.md.
+- Read the productization status anchor only when this productization blueprint
+  is the active workflow; otherwise resolve the branch-scoped current handoff
+  named by the goal or PR workflow.
 - Inspect current git dirty scope before edits.
 
 CONSTRAINTS:
@@ -559,7 +564,8 @@ CONTEXT:
 - Read the Backfill Evidence Lifecycle Blueprint.
 - Read the control plane for current 511-cell authority and parked broad
   Backfill state.
-- Read the current handoff and named validation/adjudication artifacts.
+- Read the active branch or productization handoff and named
+  validation/adjudication artifacts.
 
 CONSTRAINTS:
 - No RAW/85RAW.

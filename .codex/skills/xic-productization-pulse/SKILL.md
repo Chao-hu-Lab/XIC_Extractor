@@ -17,7 +17,9 @@ default to `7d` for broad status and `24h` for launch-day or same-day checks.
 ## Read Order
 
 1. `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
-2. `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
+2. Productization status anchor or branch-specific current handoff named by the
+   user, goal, PR workflow, or control plane. Do not assume one fixed handoff is
+   current for every branch.
 3. `git status --short --branch`
 4. `git log --since="<window>" --oneline --decorate`
 5. Relevant specs, notes, and artifact summaries named by the control plane.

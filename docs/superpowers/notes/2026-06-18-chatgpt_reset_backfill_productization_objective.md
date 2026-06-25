@@ -1,5 +1,14 @@
 # Reset the Backfill Productization Objective
 
+> Historical strategy note: retained as evidence/provenance, not live
+> source-of-truth and not an implementation ticket. Current Backfill tier,
+> active lane, and writer authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 The goal is **NOT** to make all 4613 candidate rows writable.
 
 The goal is to mechanically adjudicate all 4613 candidate rows with auditable, non-black-box evidence, and to minimize human judgment by turning unresolved rows into explicit review items.

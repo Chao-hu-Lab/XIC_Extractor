@@ -9,11 +9,16 @@ import sys
 
 from xic_hook_policy import (
     CONTROL_PLANE_PATH,
+    HANDOFF_CURRENT_DIR,
     HANDOFF_MAX_LINES,
-    HANDOFF_PATH,
     PRODUCT_SURFACE_PATHS,
+    PRODUCTIZATION_STATUS_HANDOFF_PATH,
+    branch_slug,
+    is_productization_status_handoff,
     mentions_any_path,
     mentions_path,
+    normalize_path_text,
+    touched_handoff_paths,
     touches_control_plane,
     touches_handoff,
     touches_product_surface,
@@ -122,6 +127,28 @@ def repo_root(cwd: str) -> str:
     return result.stdout.strip() or cwd or "."
 
 
+def current_branch(cwd: str) -> str:
+    override = os.environ.get("XIC_POST_TOOL_GUARD_BRANCH")
+    if override:
+        return override
+    root = repo_root(cwd)
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    branch = result.stdout.strip()
+    if result.returncode != 0 or branch == "HEAD":
+        return ""
+    return branch
+
+
 def changed_paths(cwd: str) -> list[str]:
     # Fixture-only override for deterministic hook tests.
     override = os.environ.get("XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON")
@@ -154,6 +181,15 @@ def changed_paths(cwd: str) -> list[str]:
         if len(line) < 4:
             continue
         if line.startswith("??"):
+            path_text = line[3:].strip()
+            managed_untracked = (
+                touches_handoff([path_text])
+                or touches_product_surface([path_text])
+                or touches_control_plane([path_text])
+            )
+            if not managed_untracked:
+                continue
+            paths.append(path_text.replace("\\", "/"))
             continue
         path_text = line[3:].strip()
         if " -> " in path_text:
@@ -161,6 +197,47 @@ def changed_paths(cwd: str) -> list[str]:
         if path_text:
             paths.append(path_text.replace("\\", "/"))
     return paths
+
+
+def branch_header(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for _ in range(40):
+                line = handle.readline()
+                if not line:
+                    return ""
+                if line.lower().startswith("branch:"):
+                    return line.split(":", 1)[1].strip().strip("`").strip()
+    except OSError:
+        return ""
+    return ""
+
+
+def is_active_branch_handoff_path(path: str, root: str, branch: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./")
+    if is_productization_status_handoff(normalized) or not path_is_current_handoff(normalized):
+        return False
+    slug = branch_slug(branch)
+    filename = os.path.basename(normalized).lower()
+    if slug and filename.startswith(slug):
+        return True
+    header_branch = branch_header(os.path.join(root, normalized))
+    return bool(branch and header_branch == branch)
+
+
+def path_is_current_handoff(path: str) -> bool:
+    return normalize_path_text(path).lstrip("./").startswith(HANDOFF_CURRENT_DIR)
+
+
+def mentions_active_branch_handoff(text: str, branch: str) -> bool:
+    slug = branch_slug(branch)
+    if not slug:
+        return False
+    active_prefix = f"{HANDOFF_CURRENT_DIR}{slug}"
+    return any(
+        active_prefix in line and PRODUCTIZATION_STATUS_HANDOFF_PATH not in line
+        for line in normalize_path_text(text).splitlines()
+    )
 
 
 def line_count(path: str) -> int | None:
@@ -215,6 +292,9 @@ def main() -> int:
 
     if is_write_like(event, command):
         tool_input_text = text_from_value(event.get("tool_input"))
+        cwd = str(event.get("cwd", "."))
+        root = repo_root(cwd)
+        branch = current_branch(root)
         tool_mentions_product = mentions_any_path(
             tool_input_text,
             PRODUCT_SURFACE_PATHS,
@@ -225,19 +305,27 @@ def main() -> int:
         )
         tool_mentions_handoff = mentions_path(
             tool_input_text,
-            HANDOFF_PATH,
+            HANDOFF_CURRENT_DIR,
+        )
+        tool_mentions_active_handoff = mentions_active_branch_handoff(
+            tool_input_text,
+            branch,
         )
         tool_mentions_managed_surface = (
             tool_mentions_product or tool_mentions_control_plane or tool_mentions_handoff
         )
         paths = (
-            changed_paths(str(event.get("cwd", ".")))
+            changed_paths(root)
             if tool_mentions_managed_surface
             else []
         )
         paths_touch_product = touches_product_surface(paths)
         paths_touch_control_plane = touches_control_plane(paths)
         paths_touch_handoff = touches_handoff(paths)
+        paths_touch_active_handoff = any(
+            is_active_branch_handoff_path(path, root, branch)
+            for path in touched_handoff_paths(paths)
+        )
         worktree_needs_control_plane = paths_touch_product and not (
             paths_touch_control_plane or tool_mentions_control_plane
         )
@@ -252,15 +340,17 @@ def main() -> int:
 
         handoff_missing_from_tool = (
             tool_mentions_product or tool_mentions_control_plane
-        ) and not tool_mentions_handoff
+        ) and not (tool_mentions_active_handoff or paths_touch_active_handoff)
         handoff_missing_from_worktree = (
             paths_touch_product or paths_touch_control_plane
-        ) and not (paths_touch_handoff or tool_mentions_handoff)
+        ) and not (paths_touch_active_handoff or tool_mentions_active_handoff)
         if handoff_missing_from_tool or handoff_missing_from_worktree:
             contexts.append(
                 "Product/control-plane state may have changed, but the plain-language handoff "
-                "is not part of this update. Before closeout, rewrite and prune "
-                f"{HANDOFF_PATH} as a current-state snapshot, or explicitly state why the handoff remains current."
+                "is not part of this update. Before closeout, resolve the active branch handoff under "
+                f"{HANDOFF_CURRENT_DIR}<branch-slug>-<topic>.md and rewrite/prune that snapshot, "
+                "or explicitly state why no branch handoff update is needed. Productization status anchors do not satisfy "
+                "this branch handoff check. Do not update another branch's handoff."
             )
 
         should_check_handoff_size = (
@@ -269,19 +359,19 @@ def main() -> int:
             or paths_touch_control_plane
             or paths_touch_handoff
         )
-        handoff_lines = (
-            line_count(
-                os.path.join(
-                    repo_root(str(event.get("cwd", "."))),
-                    HANDOFF_PATH,
-                )
-            )
-            if should_check_handoff_size
-            else None
-        )
-        if handoff_lines is not None and handoff_lines > HANDOFF_MAX_LINES:
+        handoff_line_counts = [
+            (path, line_count(os.path.join(root, path)))
+            for path in touched_handoff_paths(paths)
+        ]
+        oversized = [
+            (path, count)
+            for path, count in handoff_line_counts
+            if count is not None and count > HANDOFF_MAX_LINES
+        ]
+        if should_check_handoff_size and oversized:
+            path, handoff_lines = oversized[0]
             contexts.append(
-                f"Active handoff is {handoff_lines} lines, above the {HANDOFF_MAX_LINES}-line target. "
+                f"Active handoff {path} is {handoff_lines} lines, above the {HANDOFF_MAX_LINES}-line target. "
                 "Before continuing substantial implementation, rewrite it as a compact current-state snapshot; "
                 "move completed phase summaries to archive and long logs to notes."
             )

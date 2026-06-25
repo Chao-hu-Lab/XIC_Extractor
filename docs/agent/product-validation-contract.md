@@ -3,6 +3,33 @@
 This file owns product-readiness language and LC-MS/MS evidence guardrails. The
 full domain evidence contract remains in `docs/lcms-msms-evidence-rules.md`.
 
+## Source-Of-Truth Boundaries
+
+Rewritten development notes may become repo source-of-truth only after their
+stable claims are routed to the correct owner. This file owns product-readiness
+language and product-surface discipline; it does not own active maturity tier,
+active lane, current writer counts, or promotion-packet status. Those live in
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+`docs/superpowers/validation/productization_status_index_v1.tsv`, and
+`docs/superpowers/specs/productization_authority_manifest.v1.json`.
+
+When converting a historical note into official documentation:
+
+- extract stable rules and remove local paths, command diaries, and sample-level
+  investigation detail;
+- state the validation tier behind the claim;
+- point product authority claims to the control plane, status index, authority
+  manifest, activation artifact, or expected-diff artifact that actually carries
+  the authority; cite validation notes only as evidence/provenance;
+- do not silently change selected peak, selected area, counted detection,
+  matrix authority, schema, CLI/config behavior, or replay semantics.
+
+Candidate rows, diagnostic sidecars, quality explanations, round-trip oracles,
+ISTD comparisons, and review packets are evidence or routing inputs. They do
+not create ProductWriter or matrix-writing authority unless a separate
+activation/export contract, expected-diff gate, and current control-plane entry
+say so.
+
 ## Product And Validation Discipline
 
 - P-specs, C-specs, and implementation plans must state whether they advance

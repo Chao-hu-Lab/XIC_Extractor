@@ -69,7 +69,7 @@ def main() -> int:
     }
     assert_contains(
         run_hook("xic_prompt_router.py", handoff_prompt_payload),
-        "cc-framework-improvements-productization.md",
+        "branch-scoped file",
     )
 
     pre_payload = {
@@ -321,11 +321,86 @@ def main() -> int:
         "tool_response": {"stdout": "", "stderr": ""},
     }
     assert_contains(
-        run_hook("xic_post_tool_guard.py", product_with_control_plane_payload),
-        "cc-framework-improvements-productization.md",
+        run_hook(
+            "xic_post_tool_guard.py",
+            product_with_control_plane_payload,
+            env_extra={
+                "XIC_POST_TOOL_GUARD_BRANCH": "codex/docs-cleanup",
+                "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
+                    [
+                        "xic_extractor/output/schema.py",
+                        "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
+                    ]
+                ),
+            },
+        ),
+        "active branch handoff",
     )
 
     product_with_control_plane_and_handoff_payload = {
+        "hook_event_name": "PostToolUse",
+        "turn_id": "fixture",
+        "tool_name": "apply_patch",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "patch": (
+                "*** Update File: xic_extractor/output/schema.py\n"
+                "*** Update File: docs/superpowers/plans/"
+                "2026-06-15-productization-control-plane.md\n"
+                "*** Update File: docs/superpowers/handoffs/current/"
+                "codex-example-branch-productization.md\n"
+            ),
+        },
+        "tool_response": {"stdout": "", "stderr": ""},
+    }
+    result = subprocess.run(
+        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
+        input=json.dumps(product_with_control_plane_and_handoff_payload),
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "40",
+            "XIC_POST_TOOL_GUARD_BRANCH": "codex/example-branch",
+            "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
+                [
+                    "xic_extractor/output/schema.py",
+                    "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
+                    "docs/superpowers/handoffs/current/codex-example-branch-productization.md",
+                ]
+            ),
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    if result.stdout.strip():
+        raise AssertionError(
+            "product/control-plane edit with handoff edit emitted warning"
+        )
+
+    assert_contains(
+        run_hook(
+            "xic_post_tool_guard.py",
+            product_with_control_plane_and_handoff_payload,
+            env_extra={
+                "XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "250",
+                "XIC_POST_TOOL_GUARD_BRANCH": "codex/example-branch",
+                "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
+                    [
+                        "xic_extractor/output/schema.py",
+                        "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
+                        "docs/superpowers/handoffs/current/codex-example-branch-productization.md",
+                    ]
+                ),
+            },
+        ),
+        "codex-example-branch-productization.md is 250 lines",
+    )
+
+    product_with_control_plane_and_anchor_payload = {
         "hook_event_name": "PostToolUse",
         "turn_id": "fixture",
         "tool_name": "apply_patch",
@@ -343,31 +418,22 @@ def main() -> int:
         },
         "tool_response": {"stdout": "", "stderr": ""},
     }
-    result = subprocess.run(
-        [sys.executable, str(HOOKS / "xic_post_tool_guard.py")],
-        input=json.dumps(product_with_control_plane_and_handoff_payload),
-        cwd=ROOT,
-        env={
-            **os.environ,
-            "XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "40",
-        },
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
-    if result.stdout.strip():
-        raise AssertionError(
-            "product/control-plane edit with handoff edit emitted warning"
-        )
-
     assert_contains(
         run_hook(
             "xic_post_tool_guard.py",
-            product_with_control_plane_and_handoff_payload,
-            env_extra={"XIC_POST_TOOL_GUARD_HANDOFF_LINE_COUNT": "250"},
+            product_with_control_plane_and_anchor_payload,
+            env_extra={
+                "XIC_POST_TOOL_GUARD_BRANCH": "codex/docs-cleanup",
+                "XIC_POST_TOOL_GUARD_CHANGED_PATHS_JSON": json.dumps(
+                    [
+                        "xic_extractor/output/schema.py",
+                        "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
+                        "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md",
+                    ]
+                ),
+            },
         ),
-        "Active handoff is 250 lines",
+        "Productization status anchors do not satisfy",
     )
 
     for path in (

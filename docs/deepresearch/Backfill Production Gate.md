@@ -1,5 +1,14 @@
 # XIC Backfill 的 Production Gate 應該怎麼設
 
+> Historical research note: retained as design evidence, not live
+> source-of-truth. Current Backfill writer authority and product tier live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`; durable
+> evidence semantics live in `docs/lcms-msms-evidence-rules.md`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 ## 白話結論
 
 我不建議把 `absolute peak height >= 2e6` 升格成 XIC backfill / gap filling / missing peak rescue 的**產品硬門檻**。成熟工具與方法普遍不是這樣做，而是用 **expected RT/m/z 視窗 + 局部峰證據 + 邊界穩定性 + 多證據整合** 來決定能不能補值。 citeturn14view3turn12view1turn15view0turn12view3turn23view0

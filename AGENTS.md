@@ -19,6 +19,8 @@ a required preflight.
   [`docs/agent/codex-operating-system.md`](docs/agent/codex-operating-system.md)
 - Communication and human review surfaces:
   [`docs/agent/communication-review.md`](docs/agent/communication-review.md)
+- Obsidian-backed docs retention and branch handoff stub contract:
+  [`docs/agent/obsidian-handoff-contract.md`](docs/agent/obsidian-handoff-contract.md)
 - Execution gates, PR gates, and local pitfalls:
   [`docs/agent/execution-gates.md`](docs/agent/execution-gates.md)
 - Planning, review routing, subagents, and owner migration:

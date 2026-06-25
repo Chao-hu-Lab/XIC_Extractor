@@ -5,7 +5,7 @@ import json
 import re
 import sys
 
-from xic_hook_policy import CONTROL_PLANE_PATH, HANDOFF_PATH
+from xic_hook_policy import CONTROL_PLANE_PATH, HANDOFF_CURRENT_DIR
 
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
@@ -121,11 +121,14 @@ def main() -> int:
 
     if any(re.search(pattern, prompt, re.IGNORECASE) for pattern in HANDOFF_PATTERNS):
         contexts.append(
-            "XIC handoff/closeout context detected: rewrite and prune the active handoff snapshot "
-            f"({HANDOFF_PATH} unless the goal names another file) when branch status, validation evidence, "
-            "productization tier, or next action changed. Do not append chronological notes; keep only current "
-            "objective/state, active decisions, validation, blockers, rejected paths still likely to recur, and next 1-3 actions. "
-            "If it is over about 200 lines, prune before continuing; move completed phase summaries to archive and long logs to notes. "
+            "XIC handoff/closeout context detected: first resolve the active branch handoff from the goal, PR workflow, "
+            f"or a branch-scoped file under {HANDOFF_CURRENT_DIR}<branch-slug>-<topic>.md. "
+            "Do not default to another branch's handoff; only update an existing handoff when its Branch/status matches this work. "
+            "Rewrite and prune that active snapshot when branch status, validation evidence, productization tier, or next action changed. "
+            "Do not append chronological notes; keep only current objective/state, active decisions, validation, blockers, "
+            "rejected paths still likely to recur, and next 1-3 actions. "
+            "For PR closeout, condense the current handoff into the PR body and archive only completed phase summaries that must remain in repo. "
+            "The global $handoff skill writes a temporary conversation handoff; it is not the repo branch handoff. "
             f"If productization tier or active lane changed, sync {CONTROL_PLANE_PATH} too. "
             "Hooks only remind; the executing agent owns the handoff rewrite."
         )

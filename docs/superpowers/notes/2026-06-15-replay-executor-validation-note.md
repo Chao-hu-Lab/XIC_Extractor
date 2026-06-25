@@ -1,5 +1,12 @@
 # Replay executor 8RAW validation note
 
+> Historical validation note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy for this replay gate lives in
+> `docs/diagnostic-ledger.md`; replay public-surface contract lives in
+> `docs/superpowers/specs/2026-06-15-method-manifest-v1-spec.md` and the active
+> control plane. Removal or private-note migration requires an explicit removal
+> approval plus a repo-self-contained referrer pass.
+
 日期: 2026-06-15
 狀態: `run_ok`, `gate_ok` for targeted 8RAW and 85RAW CSV/workbook replay parity; not full exact artifact replay
 

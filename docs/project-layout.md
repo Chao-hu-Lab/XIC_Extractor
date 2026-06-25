@@ -49,6 +49,28 @@
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
 | `.codex/` | Repo-local Codex skills, hooks, rules, and subagent profiles | 否 |
 
+### `docs/` source-of-truth 與歷程邊界
+
+`docs/` 可以放正式 source-of-truth 文件，但不是所有開發歷程都應該留在 repo。
+Obsidian-backed migration and repo-stub rules live in
+`docs/agent/obsidian-handoff-contract.md`.
+歷史 notes 要升格前，先把穩定 claim 分流到既有 owner：
+
+| Claim 類型 | Repo owner |
+|------|------|
+| 產品成熟度 tier、active lane、writer scope、promotion packet | `docs/superpowers/plans/2026-06-15-productization-control-plane.md`、`docs/superpowers/validation/productization_status_index_v1.tsv`、`docs/superpowers/specs/productization_authority_manifest.v1.json` |
+| LC-MS/MS evidence rule、Backfill evidence semantics、Gaussian15 area owner | `docs/lcms-msms-evidence-rules.md` |
+| product-readiness wording、public-surface discipline | `docs/agent/product-validation-contract.md` |
+| validation verdict、rerun policy、known target/failure conclusion | `docs/diagnostic-ledger.md` 或 compact validation artifact |
+| output/artifact placement、stub/retention hygiene | 本檔 |
+| architecture ownership、dependency direction | `docs/architecture-contract.md` |
+
+長篇開發 diary、探索性策略重置、命令 transcript、本機絕對路徑、私人 RAW
+layout、sample-level investigation、obsolete PR sequencing，預設進私人
+Obsidian / ignored artifact，不直接當 repo source-of-truth。若 keep-repo 檔案仍
+引用該歷史 note，先新增或更新 repo 內正式摘要 / sanitized stub，再考慮移出原文。
+不要把 repo referrer 改成只能在私人 Obsidian 才能讀懂。
+
 ### 第一層子目錄（忽略）
 
 | 目錄 | 用途 |

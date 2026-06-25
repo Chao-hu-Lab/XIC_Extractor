@@ -1,5 +1,14 @@
 # P2B Area Mismatch Triage Note
 
+> Historical validation note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy and stable target conclusions live in
+> `docs/diagnostic-ledger.md`; product tier and matrix authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 Date: 2026-05-26
 
 ## Verdict

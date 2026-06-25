@@ -1,5 +1,11 @@
 # P8b 85RAW Super-Window Acceptance Note
 
+> Historical validation note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy for this gate lives in
+> `docs/diagnostic-ledger.md`; canonical 85RAW command-shape rules live in
+> `docs/agent-parameter-settings.md`. Removal or private-note migration requires
+> an explicit removal approval plus a repo-self-contained referrer pass.
+
 ## Verdict
 
 `production_candidate` for opt-in `validation-minimal + super-window` 85RAW

@@ -1,5 +1,12 @@
 # Gaussian15 MS1 Peak-Group NL Scope Production-Ready Closeout
 
+> Historical closeout note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy for this gate lives in
+> `docs/diagnostic-ledger.md`; durable MS2/NL and Gaussian15 peak-group evidence
+> semantics live in `docs/lcms-msms-evidence-rules.md`. Removal or private-note
+> migration requires an explicit removal approval plus a repo-self-contained
+> referrer pass.
+
 **Date:** 2026-06-05
 **Verdict:** `production_ready` for targeted candidate MS2/NL evidence ownership
 under Gaussian15 MS1 peak-group scope.

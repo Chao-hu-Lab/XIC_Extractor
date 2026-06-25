@@ -1,5 +1,12 @@
 # Resolver Default Switch Real-Data Validation Note
 
+> Historical validation note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy and stable P2-entry gate summary live in
+> `docs/diagnostic-ledger.md`; product tier and matrix authority live in the
+> active control plane, status index, and authority manifest. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 **Date:** 2026-05-24
 **Branch:** codex/peak-pipeline-modernization
 **Worktree:** .worktrees/peak-pipeline-modernization

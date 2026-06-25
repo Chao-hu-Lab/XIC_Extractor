@@ -1,5 +1,12 @@
 # Output 完整度與可維護性重構 — 執行計畫
 
+> Historical implementation plan: retained as provenance, not live
+> source-of-truth. Current output/artifact placement rules live in
+> `docs/project-layout.md`; public contract and architecture boundaries live in
+> `docs/architecture-contract.md` and named current specs. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 **日期**：2026-05-03（v3，合併 phase 並補強 codex hand-off）
 **對應 spec**：`docs/superpowers/specs/2026-05-03-output-maintainability-design.md`
 **執行者**：Codex

@@ -1,5 +1,14 @@
 # Qualitative Selection Acceptance Gate Note
 
+> Historical validation note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy and stable Phase 1b gate summary live in
+> `docs/diagnostic-ledger.md`; current product tier and matrix authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 **Date:** 2026-05-28
 **Status:** `phase1b_go_after_owner_backfill_scan_support_fix`
 

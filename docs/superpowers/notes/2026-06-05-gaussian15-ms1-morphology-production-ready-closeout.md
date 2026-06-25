@@ -1,5 +1,11 @@
 # Gaussian15 MS1 Morphology Production-Ready Closeout
 
+> Historical closeout note: retained as evidence/provenance, not live
+> source-of-truth. Current rerun policy for this gate lives in
+> `docs/diagnostic-ledger.md`; durable MS1 morphology and area-owner semantics
+> live in `docs/lcms-msms-evidence-rules.md`. Removal or private-note migration
+> requires an explicit removal approval plus a repo-self-contained referrer pass.
+
 **Date:** 2026-06-05
 **Verdict:** `production_ready` for the Gaussian15 MS1 morphology ownership
 transition.

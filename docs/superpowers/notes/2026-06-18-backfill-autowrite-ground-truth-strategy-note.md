@@ -1,5 +1,14 @@
 # Backfill Auto-Write Ground-Truth Strategy - 2026-06-18
 
+> Historical strategy note: retained as evidence/provenance, not live
+> source-of-truth and not an implementation ticket. Current Backfill tier,
+> active lane, and writer authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 Purpose: code- and data-verified strategy for the Backfill **auto-write** north
 star (minimize manual review, stay auditable). Strategy/spec note meant to feed
 the two-round independent critique (Sonnet local + Opus fundamental) before any

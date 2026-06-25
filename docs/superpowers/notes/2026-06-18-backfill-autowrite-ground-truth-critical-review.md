@@ -1,5 +1,14 @@
 # Backfill Auto-Write Ground-Truth Critical Review - 2026-06-18
 
+> Historical critical review: retained as evidence/provenance, not live
+> source-of-truth and not an implementation ticket. Current Backfill tier,
+> active lane, parked broad-autowrite decision, and writer authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 Status: strategy reset / implementation hold. This is not a new design program.
 
 Decision challenged: can Backfill stop adding hand-carved writer slices without

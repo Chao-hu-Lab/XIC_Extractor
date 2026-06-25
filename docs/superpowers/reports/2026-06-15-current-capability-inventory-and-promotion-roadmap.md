@@ -1,5 +1,13 @@
 # XIC Extractor current capability inventory 與 promotion roadmap
 
+> Historical inventory report: retained as evidence/provenance, not live
+> source-of-truth. Current product tier, active lane, and writer authority live
+> in `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
+> `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`. Removal or
+> private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 日期: 2026-06-15
 狀態: `diagnostic_only`
 範圍: 只盤點現有 code/docs/tests 與前一輪 mature-tool 調研；不改 product code。

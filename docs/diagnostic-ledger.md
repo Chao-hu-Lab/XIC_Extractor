@@ -1,7 +1,7 @@
 # Diagnostic Ledger And Rerun Policy
 
 **Status:** maintained repo-local diagnostic memory
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-25
 
 This ledger records diagnostic conclusions that should survive branch and
 worktree changes. Use it before rerunning expensive RAW validation or treating a
@@ -10,6 +10,18 @@ known target as a new blocker.
 This file is not a replacement for task-specific validation notes. It is the
 small durable index that tells future agents which prior conclusions are already
 known, where the evidence lives, and when a rerun is justified.
+
+This file is also not the live productization tier board. Product maturity tier,
+active lane, current writer counts, promotion-packet status, and Backfill
+authority scopes are owned by
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`, the
+productization status index
+`docs/superpowers/validation/productization_status_index_v1.tsv`, and the
+authority manifest
+`docs/superpowers/specs/productization_authority_manifest.v1.json`. When this
+ledger cites a historical validation note, treat it as diagnostic/rerun memory
+unless the current control plane or a current authority artifact still promotes
+the same claim.
 
 ## Use Rules
 
@@ -25,6 +37,10 @@ known, where the evidence lives, and when a rerun is justified.
   Small diagnostic snapshots that must survive worktrees belong under
   `docs/superpowers/fixtures/` with a source note and hash.
 - If a rerun changes a durable conclusion, update this ledger in the same PR.
+- If a later control-plane or authority-manifest entry changes maturity tier,
+  writer scope, or product authority after a ledger entry was written, defer to
+  the later productization authority and update this ledger only when the
+  diagnostic/rerun conclusion itself changes.
 
 ## Stable Inputs
 
@@ -220,6 +236,120 @@ only after current code changes targeted candidate MS2/NL evidence ownership,
 chrom peak segment selection, candidate-table projection, or the cited artifacts
 are stale or contradictory.
 
+### 2026-05-24 Resolver Default Switch / P2 Entry Gate
+
+Verdict: `production_candidate` for P2 entry on the 8RAW method gate after the
+hotfix evidence-chain continuation. This is not an 85RAW clearance and not
+`production_ready`.
+
+Durable closeout:
+`docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md`
+
+Key facts:
+
+- The stale pre-hotfix artifact state was `NO-GO`; do not use it to block or
+  approve current P2 work.
+- The hotfix restored untargeted alignment production peak picking to
+  `local_minimum` while keeping `region_first_safe_merge` as audit context for
+  alignment runs.
+- The strict ISTD blocker on `15N5-8-oxodG` was resolved in hotfix artifacts.
+- Reviewed identity-coherence controls passed V0.4 acceptance, and the
+  hotfix-reviewed identity-family decisions were byte-identical to the
+  pre-change baseline.
+- The same-surface `d3-N6-medA / NormalBC2312_DNA` probe reclassified the
+  apparent mismatch as a mixed-surface diagnostic artifact, not a standalone
+  evidence-spine blocker.
+
+Do not rerun the P1/P2 resolver default gate just to re-prove P2 entry. Rerun
+only after current code changes resolver default routing, candidate selection,
+selected boundaries, strict ISTD benchmark behavior, identity-coherence
+decisions, or the cited artifacts become stale or contradictory.
+
+### 2026-05-26 P8b 85RAW Super-Window Acceptance
+
+Verdict: `production_candidate` for explicit opt-in
+`validation-minimal + production-equivalent + validation-fast + super-window`
+85RAW alignment validation. This is a validated runner/performance mode, not a
+new default behavior and not `production_ready` by itself.
+
+Durable closeout:
+`docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md`
+
+Key facts:
+
+- The 85RAW super-window run completed and emitted the expected machine
+  artifacts.
+- Matrix, cells, and review surfaces were byte-identical to the accepted
+  P8b exact-window reference for the checked contract.
+- No new RT, identity, or coverage failure was introduced by super-window.
+- The CLI default remained exact-window batching; super-window stayed explicit
+  opt-in.
+- Known targeted-benchmark warnings from the prior accepted surface remained
+  warning-class follow-up, not super-window regressions.
+
+Do not rerun 85RAW just to re-prove super-window acceptance. Rerun only after
+current code changes RAW locality, owner-backfill request grouping,
+super-window batching/cropping, validation-fast settings, output surfaces used
+by the gate, or the cited artifacts become stale or contradictory.
+
+### 2026-06-15 Replay Executor Validation
+
+Verdict: `run_ok` and `gate_ok` for targeted CLI CSV/workbook replay parity on
+the reviewed 8RAW and 85RAW replay surfaces. This validates replayed analytical
+output equivalence for the named contract; it is not a full exact artifact
+replay, GUI parity proof, or timestamped workbook hash guarantee.
+
+Durable closeout:
+`docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`
+
+Key facts:
+
+- CSV replay parity passed for the reviewed 8RAW and 85RAW surfaces.
+- Workbook analytical parity passed for the reviewed 8RAW and 85RAW surfaces.
+- Replay validation intentionally excluded full byte-identical artifact replay
+  where timestamped workbook metadata makes exact hashes unsuitable.
+- GUI replay parity was not part of the accepted gate.
+
+Do not rerun replay validation just to re-prove these surfaces. Rerun only after
+current code changes method-manifest binding, replay CLI behavior,
+settings/targets artifact resolution, CSV/workbook writer semantics, or the
+cited artifacts become stale or contradictory.
+
+### 2026-05-28 Qualitative Selection / Owner-Backfill Scan Support Gate
+
+Verdict: `production_candidate` for the Phase 1b qualitative selected-peak /
+Backfill promotion blocker on the current production-equivalent alignment path.
+This closes the qualitative promotion blocker for the next product-decision PR;
+it does not declare the whole product `production_ready`.
+
+Durable closeout:
+`docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md`
+
+Key facts:
+
+- The earlier `NO_GO` was valid, but the root cause was narrower than Backfill
+  itself: `owner_backfill` was used as a support label without emitting the
+  independent `scan_support_score` required by the shared promotion policy.
+- Owner-backfill cells now compute `scan_support_score` from the extracted XIC
+  trace and selected peak boundary.
+- `trace_quality=owner_backfill` remains insufficient as independent support by
+  itself.
+- High-backfill promotion requires either at least two detected identity cells
+  or one detected seed plus product-authorized same-peak rescue evidence; a
+  single detected seed cannot promote a mostly backfilled row from local MS1
+  peak presence alone.
+- Supported high-backfill rows are capped at medium confidence and marked with
+  `high_backfill_dependency_capped`.
+- The accepted 85RAW foreground run used the canonical
+  production-equivalent, audit-off, validation-fast, super-window, heartbeat
+  command shape and produced the cited durable fixture summaries.
+
+Do not rerun Phase 1b just to re-prove the owner-backfill scan-support fix.
+Rerun only after current code changes owner-backfill trace support emission,
+promotion-policy support semantics, selected peak boundaries, high-backfill
+confidence/flag projection, or the cited artifacts become stale or
+contradictory.
+
 ### d3-N6-medA
 
 **Current classification:** known RT-drift / same-surface case; not a standalone
@@ -289,7 +419,7 @@ hardening:
   for the production behavior as written. `d3-N6-medA` drift and area mismatch
   are not the blocker; the blocker is the weak-seed promotion contract.
 
-Authoritative notes and artifacts:
+Evidence notes and retained artifacts for this diagnostic conclusion:
 
 | Evidence | Path / fact |
 | --- | --- |
