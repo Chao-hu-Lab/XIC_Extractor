@@ -134,21 +134,42 @@ the stubs stay tracked for now.
 
 This patch does not change productization maturity tier, active lane, writer
 authority, validation verdict, workbook schema, output behavior, selected
-area/counting, or matrix authority. No productization control-plane state update
-is needed for this documentation-governance patch.
+area/counting, or matrix authority.
 
-Patch 4 also does not require a productization control-plane update: it only
+This branch does edit the following productization-adjacent files at the
+routing/wording level:
+
+- `docs/superpowers/plans/2026-06-15-productization-control-plane.md`: renamed
+  「白話交接」to「產品化狀態 anchor」, added `obsidian-handoff-contract.md` to
+  the enforceable handoff contract list, updated PostToolUse hook and
+  maintenance checklist wording to use branch-scoped handoff language.
+- `docs/superpowers/validation/productization_status_index_v1.tsv`: hash
+  updated for `broad_backfill_autowrite` row because
+  `backfill_broad_autowrite_feasibility_gate_v1.md` gained a provenance
+  blockquote header.
+- `scripts/check_productization_state.py`: renamed `DEFAULT_HANDOFF` to
+  `DEFAULT_PRODUCTIZATION_STATUS_ANCHOR` with backward-compatible alias.
+- `docs/lcms-msms-evidence-rules.md`: added a `## Matrix Authority Boundary`
+  section codifying the existing implicit rule that evidence providers do not
+  write the product matrix directly. This is owner content enrichment beyond
+  pure docs cleanup; the rule was already implicit in control-plane and
+  authority-manifest policy but is now explicitly stated in the evidence-rules
+  owner doc.
+
+None of these edits affect maturity tier, active lane, writer authority, output
+schema, selected values, matrix authority, or any machine-checkable
+productization state beyond the hash update noted above.
+
+Patch 4 does not require a productization tier/lane update: it only
 externalizes private strategy history and leaves the current `park_broad_backfill`
 decision, 511-cell authority, mechanical adjudication status, and Backfill lane
 state unchanged.
 
-The `docs/product/` additions also do not require a productization control-plane
-update: they are routing/source-of-truth summaries and do not replace the
-control plane, status index, authority manifest, evidence rules, architecture
-contract, or runner settings.
+The `docs/product/` additions are routing/source-of-truth summaries and do not
+replace the control plane, status index, authority manifest, evidence rules,
+architecture contract, or runner settings.
 
-The topic-page contract cleanup also does not require a productization
-control-plane update: it clarifies documentation status, evidence labels,
+The topic-page contract cleanup clarifies documentation status, evidence labels,
 question coverage, owner routing, and update triggers. It does not change
 maturity tier, active lane, writer authority, output schema, review/replay
 behavior, selected area/counting, matrix values, or matrix authority.
@@ -180,10 +201,12 @@ Latest checks passed after the blocker fix and handoff prune:
   governance phase.
 - Known unrelated residual: release-slice checker still has a source-hash
   mismatch for `docs/superpowers/validation/productization_status_index_v1.tsv`.
-- Commit closeout note: the handoff references
+- Commit closeout blocker: the handoff and inventory reference
   `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_direction-lock-review.md`,
-  which is currently untracked. If this patch is staged later, include that
-  archive file or remove the reference before committing.
+  which is currently untracked (`??` in `git status`). Before staging this
+  branch, either `git add` that archive file or remove every reference to it
+  from tracked files. Do not commit with a dangling reference to an untracked
+  path.
 
 ## Next Actions
 
