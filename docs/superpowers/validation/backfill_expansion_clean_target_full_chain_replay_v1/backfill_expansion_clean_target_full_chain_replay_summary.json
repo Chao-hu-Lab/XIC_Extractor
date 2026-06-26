@@ -6,12 +6,12 @@
       "size_bytes": 67329
     },
     "checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_clean_target_full_chain_replay_v1/backfill_expansion_clean_target_full_chain_replay_checks.tsv",
       "sha256": "316CA149E5C27B95CAEFBB3F049088A356420C83781A038DAAA5CDEFD499E18B",
       "size_bytes": 1020
     },
     "row_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_row_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_clean_target_full_chain_replay_v1/backfill_expansion_clean_target_full_chain_replay_row_manifest.tsv",
       "sha256": "968543697FD901579ACB5BC783CFD3ADB9A9DF7B803E4EDDF0406B7E9D7179D2",
       "size_bytes": 6564
     },
@@ -56,9 +56,9 @@
       "size_bytes": 205031
     },
     "full_chain_summary_json": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_summary.json",
-      "sha256": "56678EBD42C875A4C7CAF518A4F2E7BAB072545E2C4562F6A4876D78DAC990BC",
-      "size_bytes": 8280
+      "path": "docs/superpowers/validation/backfill_expansion_full_evidence_chain_v1/backfill_expansion_full_evidence_chain_summary.json",
+      "sha256": "644CC56FDB66D55BD54841E18A0B2B1FB71DE1FA3FAB58136131BF88C9C4D32B",
+      "size_bytes": 8097
     },
     "overlay_batch_summary_tsv": {
       "path": "output//validation//backfill_expansion_raw_overlay_trace_identity_v1//family_ms1_overlay_batch//family_ms1_overlay_batch_summary.tsv",
@@ -81,7 +81,7 @@
       "size_bytes": 6521
     },
     "split_decision_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
       "sha256": "60AC53342283179A116D49C4E3DD61A5CCCCE00A0E4B46A8A086C1C7EFBC2469",
       "size_bytes": 9229
     }

@@ -103,10 +103,10 @@
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
     "next_action_plan_sha256": "B894B23A115EDF7CE082C885C2D5E3F725FEF0D0E21490786E4A023F7FB7F9A0",
     "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
-    "next_action_summary_sha256": "2D42B1D3C02253BADE7E57068A847D4EA267CD0DDBCF38BD0D7381698BBBE270",
-    "shadow_case_manifest_sha256": "3C0183FEA19229D75A97C1FC5700595A30D91FB297F7238ED5F21050D93E4DB4",
+    "next_action_summary_sha256": "49423A7096E7C5619BCA5D9723D6123B64A63CCD821CC0E7653F30B08A16E6C4",
+    "shadow_case_manifest_sha256": "69E47F77B6BEFA250A46F1514883594B8543D5030717C4666EB33ED3F407A74B",
     "single_owner_gate": "docs/superpowers/validation/lockbox_single_owner_ai_challenge_gate_v1.json",
-    "single_owner_gate_sha256": "A10C8740C1009E05C44F280A05DF541E22F4DB1100B7F37CCD0F492AC9060585",
+    "single_owner_gate_sha256": "DC2DA087CF3DA7D8174B21B49A9712240306469B4B5B5D8033D4A28BBE9E194A",
     "source_case_manifest": "docs/superpowers/validation/lockbox_shadow_automation_cases_v1.tsv"
   },
   "upstream_decisions": {

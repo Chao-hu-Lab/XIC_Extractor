@@ -5,6 +5,15 @@ from pathlib import Path
 
 from tools.diagnostics.docs_management_audit import run_audit
 
+CURRENT_HANDOFF = (
+    "docs/superpowers/handoffs/current/"
+    "codex-docs-cleanup-official-docs-and-handoff.md"
+)
+CLOSEOUT_SUMMARY = (
+    "docs/superpowers/handoffs/archive/"
+    "2026-06-26_codex-docs-cleanup_branch-closeout-summary.md"
+)
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -13,13 +22,11 @@ def _write(path: Path, text: str) -> None:
 
 def _clean_repo(root: Path) -> None:
     _write(
-        root
-        / "docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md",
+        root / CURRENT_HANDOFF,
         "# Current handoff\n\nStatus: committed.\n",
     )
     _write(
-        root
-        / "docs/superpowers/handoffs/archive/2026-06-26_codex-docs-cleanup_branch-closeout-summary.md",
+        root / CLOSEOUT_SUMMARY,
         "# Closeout\n\nStatus: committed.\n\n## PR Body Seed\n\nProblem: x.\n",
     )
 
@@ -62,8 +69,7 @@ def test_stale_handoff_state_is_a_blocker(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _clean_vault(vault)
     _write(
-        root
-        / "docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md",
+        root / CURRENT_HANDOFF,
         "Status: batches are staged; no commit has been made.\n",
     )
 

@@ -6,12 +6,12 @@
       "size_bytes": 212052
     },
     "checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_selective_shift_aware_gate_v1/backfill_expansion_selective_shift_aware_gate_checks.tsv",
       "sha256": "C2CAFDD3F50D2BD0D53507C9C26FB23848D5723245C435A52AC3D7F6C4928D9D",
       "size_bytes": 871
     },
     "row_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_row_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_selective_shift_aware_gate_v1/backfill_expansion_selective_shift_aware_gate_row_manifest.tsv",
       "sha256": "CB9D7090A74DEE691415962485CD6D03598CB02A8A30BE722C8D284C77A68806",
       "size_bytes": 5452
     }

@@ -6,12 +6,12 @@
       "size_bytes": 205031
     },
     "checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_full_evidence_chain_v1/backfill_expansion_full_evidence_chain_checks.tsv",
       "sha256": "5ADCC7045AF68A90CD7813F2D0386AD3F2459C62E20BF627CA3D3CF830861BB7",
       "size_bytes": 1732
     },
     "row_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_row_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_full_evidence_chain_v1/backfill_expansion_full_evidence_chain_row_manifest.tsv",
       "sha256": "E4C1837CA2A24FB04DBA62D8DA1128ED0CAAC0AB3876084414E77543D23D373A",
       "size_bytes": 5487
     }
@@ -46,17 +46,17 @@
   "held_cell_count": 292,
   "input_artifacts": {
     "candidate_checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_default_product_activation_v1\\backfill_expansion_default_product_activation_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_checks.tsv",
       "sha256": "EC30141234B04DDCF3CDB88144D5DE7E0338277BB9798B416AE116FC10B3689C",
       "size_bytes": 1432
     },
     "candidate_compact_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_default_product_activation_v1\\backfill_expansion_default_product_activation_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_manifest.tsv",
       "sha256": "EF184939C50D7DBF3E8DFA10D16E837131DD7EDD28B61C324C15141798239511",
       "size_bytes": 3216
     },
     "candidate_summary_json": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_default_product_activation_v1\\backfill_expansion_default_product_activation_summary.json",
+      "path": "docs/superpowers/validation/backfill_expansion_default_product_activation_v1/backfill_expansion_default_product_activation_summary.json",
       "sha256": "3EE86EA844861868F233E3855B84F13BD616CDD6E4B0A2E6CC909512B07E66FF",
       "size_bytes": 7204
     },
@@ -86,17 +86,17 @@
       "size_bytes": 293592
     },
     "raw_trace_checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\backfill_expansion_raw_overlay_trace_identity_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_raw_overlay_trace_identity_v1/backfill_expansion_raw_overlay_trace_identity_checks.tsv",
       "sha256": "8357E92AA988D9FDCE1B811C497663B70F6D349E0811D815C24D16ECDA4CBB4D",
       "size_bytes": 1509
     },
     "raw_trace_row_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\backfill_expansion_raw_overlay_trace_identity_row_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_raw_overlay_trace_identity_v1/backfill_expansion_raw_overlay_trace_identity_row_manifest.tsv",
       "sha256": "3D7F4AF90FB745569B4100A58765FC0B9C4B30E9AAF888BBD9131F5C5F6F57F8",
       "size_bytes": 4722
     },
     "raw_trace_summary_json": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\backfill_expansion_raw_overlay_trace_identity_summary.json",
+      "path": "docs/superpowers/validation/backfill_expansion_raw_overlay_trace_identity_v1/backfill_expansion_raw_overlay_trace_identity_summary.json",
       "sha256": "85E524CD83B13B240474802D9BC1538E3140A7674421DD9129A2D40B2FDAD666",
       "size_bytes": 11953
     },

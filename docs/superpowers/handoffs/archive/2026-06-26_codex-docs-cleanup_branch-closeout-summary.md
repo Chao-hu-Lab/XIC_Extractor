@@ -2,203 +2,162 @@
 
 Branch: `codex/docs-cleanup`
 Date: 2026-06-26
-Status: committed baseline plus follow-up documentation-health hardening
+Status: PR gate passed; PR closeout seed ready
 Validation status: `diagnostic_only`
 
-## Purpose
+## Summary
 
-This branch changes the documentation model, not product behavior. The target
-shape is:
+This branch separates public repo documentation from private development
+history. The repo now keeps durable source-of-truth docs, public-safe migration
+evidence, checker-readable validation contracts, and compact branch handoffs.
+Obsidian keeps private diaries, long review rationale, branch sequencing, and
+local context. Ignored local artifact storage keeps bulky generated validation
+outputs.
 
-- repo keeps formal source-of-truth docs, public-safe migration indexes,
-  checker-readable fixtures, and compact active handoffs;
-- Obsidian keeps private development history, branch diaries, long review
-  rationale, research drafts, and local/private context;
-- ignored artifact storage keeps generated bulk validation outputs with repo
-  summaries, hashes, row counts, and regeneration metadata.
+This is workflow-only documentation governance. It does not change maturity
+tier, active lane, ProductWriter authority, output schema, review/replay
+behavior, selected values, selected area/counting, matrix values, or matrix
+authority. No productization control-plane tier update is required.
 
-The motivation is privacy and maintainability. A public repo should expose the
-durable method, contracts, validation policy, and reviewable migration evidence;
-it should not expose the full development diary, command narrative, local branch
-sequencing, or private reviewer reasoning.
+During PR-gate closeout, retained validation JSON summaries were normalized from
+invalid Windows-style JSON path escapes to repo-relative forward-slash paths.
+The resulting hash cascade was synchronized through the validation inventory,
+productization status index, bounded-lane acceptance packet, authority manifest,
+and lockbox summaries. This preserved existing authority decisions; it did not
+promote or demote any lane.
 
-## What Changed
+## Scope
 
-Formal repo docs were added or strengthened so removed private-history files do
-not leave product knowledge behind:
+- Added and strengthened formal source-of-truth docs under `docs/product/` and
+  `docs/agent/obsidian-handoff-contract.md`.
+- Updated layout/routing docs so plans, notes, deep research, handoffs,
+  Obsidian, and ignored artifacts have one placement model.
+- Added docs placement guardrails and docs-management audit tooling.
+- Rewrote public referrers away from private-history paths or toward formal repo
+  owners.
+- Removed approved no-referrer private-history batches and two later approved
+  validation full TSVs from git.
+- Externalized bulky validation artifacts while retaining clean-checkout
+  summaries, manifests, hashes, minimal fixtures, and contract provenance.
 
-- `docs/product/`: product-topic source-of-truth pages for Backfill, Discovery,
-  Alignment, Presets, Productization, Evidence Spine, Quant Matrix, Run
-  Provenance, Review Roundtrip, Sample Metadata/QC, Targeted Selection,
-  Quantitation Context, Instrument QC/Calibration, and Peak Model Selection.
-- `docs/agent/obsidian-handoff-contract.md`: public/private boundary,
-  handoff/Obsidian rules, placement marker taxonomy, validation/lockbox
-  handling, manifest fields, and future-doc classification rules.
-- `docs/project-layout.md`, `docs/deepresearch/README.md`, and
-  `docs/superpowers/README.md`: public-safe routing for long research,
-  superpowers history, artifact retention, and branch cleanup.
-- `tools/diagnostics/docs_placement_guard.py` and `.codex/hooks/*`: real
-  commit-time guardrail for staged Markdown placement. Shell `git add` reports
-  risky staged docs early, shell `git commit` blocks risky staged docs,
-  auto-stage/pathspec commit forms are blocked, formal owner docs pass, and
-  tracked deletions stay outside this checker.
-- `tools/diagnostics/docs_management_audit.py`: repeatable read-only
-  repo/vault health audit for stale post-commit wording, manifest drift,
-  pending vault intake, missing wiki metadata, approximate broken links, and
-  local-path exposure.
+Out of scope:
 
-Referrer hygiene was completed before deletion:
+- product behavior, RAW execution, matrix activation, writer authority, and
+  productization tier changes;
+- pushing, opening PR, merging, branch deletion, or local artifact cleanup.
 
-- public prose now points to formal repo owners;
-- diagnostic provenance and historical-only references use opaque
-  `retired-provenance:*` identifiers instead of readable private-history paths;
-- retained fixture provenance was rewritten away from exact retired note paths;
-- branch-story HTML links now target formal product docs rather than retired
-  private-history stubs.
+## Commit Split
 
-Obsidian was organized as the private notebook layer:
+- `b89850ed` to `e2bdcbe0`: define the public/private docs boundary and correct
+  productization-impact wording.
+- `634d568c`: establish the repo/Obsidian document flow and perform the two
+  explicitly approved no-referrer private-history removal batches.
+- `a1e43819`: harden docs-management health checks and staged-doc placement
+  guard behavior.
+- `ead777bf`, `4ebf3c2d`, `1ea1c69a`: review validation retention debt,
+  externalize exact approved full TSVs, and leave the validation inventory at
+  `249 retained`, `48 externalized`, `0 shrink_later`.
 
-- private archive subtree: `XIC/`;
-- compiled project wiki subtree: `projects/xic-extractor/`;
-- root imports were deduplicated into redirect stubs under
-  `XIC/00 Inbox/Root Import Review/Merged Redirects/`;
-- canonical curated notes remain in topic folders;
-- promoted project wiki pages live under `projects/xic-extractor/`.
+## Handoff Routing Demonstration
 
-## File-Management State
+This closeout intentionally routes handoff-related content once, so future
+agents can copy the pattern without inventing another system.
 
-The user authorized `git rm` only for two exact no-referrer manifest batches:
+| Source content | Routed to | Kept out of |
+| --- | --- | --- |
+| Branch objective, current status, stop rules, next 1-3 actions | `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md` | PR body, Obsidian-only notes |
+| Reviewer-readable problem, solution, verification, residual risk | This archive closeout summary, then PR body | Current handoff long history |
+| Completed file-management authorization evidence | Existing archive manifests and audits under `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_*` | Current handoff |
+| Private development diary, command narrative, branch sequencing, detailed review rationale | Obsidian private notebook layer | Repo and PR body |
+| Full generated validation TSVs not needed for clean checkout | `local_validation_artifacts/externalized_superpowers_validation/` | Git history |
+| Stable product/method claims | `docs/product/`, `docs/agent/`, validation summaries, and named specs | Handoff as authority |
 
-- original `removal_candidate_no_repo_referrers` batch: 254 paths;
-- refreshed `removal_candidate_no_repo_referrers` batch from
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`:
-  106 paths.
+Routing result for this branch:
 
-Those 360 tracked removals were included in commit `634d568c docs: establish
-repo and Obsidian document flow`. The 106-path batch required `git rm -f`
-because those candidate stubs had local cleanup modifications, but the path set
-remained exactly the manifest-scoped approved group.
-
-No further `git rm`, archive move, push, PR, merge, or commit is authorized by
-this closeout summary.
-
-## Evidence Map
-
-- Current-state handoff:
-  `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md`
-- File-management approval record:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_file-management-approval-plan.md`
-- Public-surface audit:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.md`
-- Git-rm candidate manifest:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`
-- Exact candidate TSV:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`
-- Obsidian dedup audit:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_obsidian-vault-dedup-audit.md`
-- Source-of-truth queue:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_source-of-truth-queue.md`
-- Docs placement guard:
-  `tools/diagnostics/docs_placement_guard.py`,
-  `.codex/hooks/xic_hook_policy.py`,
-  `.codex/hooks/xic_pre_tool_guard.py`,
-  `.codex/hooks/xic_post_tool_guard.py`
-- Docs management audit:
-  `tools/diagnostics/docs_management_audit.py`
-- Stub readiness and batch evidence:
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_phase2-stub-readiness.md`,
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_bulk-private-history-stub-batch.md`,
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_non-notes-formalized-stub-batch.md`,
-  `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_remaining-notes-plans-stub-batch.md`
+- The active handoff is now a compact resume stub.
+- This archive file is the PR-body seed and completed phase summary.
+- No new parallel `docs/product`-like handoff taxonomy was introduced.
+- Handoff is not treated as product authority; formal docs and validation
+  contracts remain the source of truth.
 
 ## Verification
 
-Commit `634d568c` was created after:
+Latest validation run for the current branch state:
 
 ```powershell
-$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -q tests/test_docs_placement_guard.py tests/test_handoff_phase_closeout_contract.py
-$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check tools/diagnostics/docs_placement_guard.py tests/test_docs_placement_guard.py tests/test_handoff_phase_closeout_contract.py .codex/hooks/xic_hook_policy.py .codex/hooks/xic_pre_tool_guard.py .codex/hooks/xic_post_tool_guard.py .codex/hooks/fixtures/assert_hook_outputs.py
-python .codex/hooks/fixtures/assert_hook_outputs.py
-python tools/diagnostics/docs_placement_guard.py --staged
-python output/codex-docs-cleanup/scan_added_lines_for_sensitive_paths.py
-git diff --cached --check
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+python -m scripts.check_validation_artifact_retention --require-externalized-local
+python -m scripts.check_productization_state
+python -m scripts.check_productization_authority
+python -m scripts.check_bounded_product_lanes
+python tools/diagnostics/docs_management_audit.py
 ```
 
-Recorded results: focused pytest 17 passed; focused ruff passed; hook fixture
-smoke passed; placement guard passed; added-line secret/local-path scan passed;
-diff whitespace check passed. After commit, `git status --short --branch`
-reported a clean worktree.
+Observed results:
 
-Subagent review found blocker guardrail gaps and the smallest fixes were
-applied:
-
-- auto-stage and pathspec commit forms could bypass a staged-only checker; these
-  forms are now blocked, including `--pathspec-from-file`;
-- the placement guard reads staged blobs from the index so unstaged marker edits
-  cannot make a bad staged doc pass;
-- raw regex command detection was replaced with shell-token parsing to reduce
-  false positives while preserving `git add` / `git commit` coverage;
-- `docs/superpowers/handoffs/archive/` is no longer broadly canonical; only
-  explicit public cleanup evidence filename patterns pass without placement
-  markers;
-- `docs/project-layout.md` routes active execution context to
-  `repo_active_stub`, while long reasoning and branch sequencing go to Obsidian
-  staged draft.
-
-## Productization Impact
-
-No productization control-plane tier or active-lane update is required. This
-branch does not change maturity tier, active lane, writer authority, output
-schema, review/replay behavior, selected values, selected area/counting, matrix
-values, or matrix authority. It changes documentation governance,
-public/private placement, migration evidence, and docs-health guardrails.
-
-## Residual Risk
-
-- The placement guard reduces obvious future mistakes but does not prove a
-  marker is semantically true. Human review, referrer audit, secret/local-path
-  scan, and explicit destructive approval remain required.
-- Validation local-path exposure still needs a focused retention/privacy review.
-  Some affected TSVs are checker-backed contracts, so they must not be
-  sanitized by blind global replacement.
-- Obsidian remains a private notebook. Its health metadata can improve
-  retrieval, but it must not become the only source for repo behavior,
-  validation policy, or next safe actions.
-- No long RAW validation was run because this branch does not change
-  extraction, alignment, scoring, matrix output, or product behavior.
+- ruff passed;
+- mypy reported `Success: no issues found in 359 source files`;
+- full pytest reported `4441 passed`, `2 skipped`;
+- retention checker passed with `249 retained`, `48 externalized`,
+  `0 shrink_later`;
+- productization state, authority, and bounded-lane checkers passed;
+- docs audit reported `0 blockers`, `0 warnings`;
+- manifest local-copy hash/size check passed.
 
 ## PR Body Seed
 
-Problem:
+### Summary
 
-The repository had accumulated private development diaries, superseded plans,
-review rationale, and branch-local research history as versioned docs. That made
-the public repo look transparent while mixing durable product knowledge with
-private process history.
+- Separates public source-of-truth documentation from private development
+  history and Obsidian-only notes.
+- Adds repo/Obsidian/handoff routing rules, staged Markdown placement guardrails,
+  and a repeatable docs-management audit.
+- Externalizes approved bulky validation artifacts while preserving
+  clean-checkout summaries, hashes, manifests, minimal fixtures, and provenance
+  contracts.
+- Readiness: `diagnostic_only`; workflow-only docs governance cleanup.
 
-Solution:
+### Scope
 
-This branch separates durable public docs from private history. It adds formal
-source-of-truth docs under `docs/product/`, defines the repo/Obsidian/handoff
-boundary and placement marker taxonomy, adds a real staged-doc placement guard
-for shell `git add` / `git commit`, blocks auto-stage/pathspec commit bypasses,
-organizes Obsidian as the private notebook layer, rewrites public referrers to
-formal owners or opaque retired-provenance IDs, includes the two explicitly
-approved no-referrer private-history cleanup batches in commit `634d568c`, and
-adds a read-only docs-management audit for future health checks.
+- Lane: `workflow-only`.
+- Product output change: no.
+- Public contracts at risk: documentation placement rules, validation artifact
+  retention metadata, and docs/handoff workflow only.
+- Preserved contracts: ProductWriter authority, matrix/workbook schema, selected
+  peak/area, counted detection, run metadata behavior, review/replay behavior,
+  and productization tiers.
 
-Verification:
+### Validation
 
-Focused docs/contract tests passed, focused docs-placement tests passed, focused
-ruff passed, hook fixture smoke passed, subagent blocker fixes were applied,
-added-line secret/local-path scan passed, and diff whitespace checks passed. The
-refreshed public-surface audit found 0 public, diagnostic-provenance, or
-historical blockers before the second approved deletion batch.
+- Focused tests/checkers passed:
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor`
+  - `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x`
+  - `python -m scripts.check_validation_artifact_retention --require-externalized-local`
+  - `python -m scripts.check_productization_state`
+  - `python -m scripts.check_productization_authority`
+  - `python -m scripts.check_bounded_product_lanes`
+  - `python tools/diagnostics/docs_management_audit.py`
+- Real-data/product validation was intentionally not run because this branch does
+  not change extraction, alignment, scoring, matrix output, or product behavior.
 
-Residual risk:
+### Authority Check
 
-This is docs governance cleanup, not product behavior validation. Review should
-focus on whether durable source-of-truth docs and migration evidence are
-sufficient, whether the approved 360 removals preserve public claims, and
-whether validation local-path exposure should be handled in a later focused
-retention/privacy cleanup.
+- This PR does not grant ProductWriter, workbook, or matrix authority from
+  diagnostics, sidecars, review packets, Obsidian notes, or handoffs.
+- Tracked deletion was limited to explicitly authorized path sets.
+- Handoff content is routed as resume/PR context only; formal docs and retained
+  validation artifacts remain authority.
+
+### Residual Risk
+
+- Placement markers and docs audits reduce common mistakes but do not prove that
+  future docs are semantically public-safe; human review and secret/local-path
+  scans remain required.
+- Obsidian is a private depth layer. Repo stubs must remain self-sufficient when
+  future work depends on private context.
+- The branch diff is large because it removes private-history documents and adds
+  formal replacement docs; review should focus on source-of-truth coverage,
+  retained evidence, and guard behavior rather than line count alone.

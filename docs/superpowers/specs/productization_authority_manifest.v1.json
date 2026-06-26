@@ -58,7 +58,7 @@
       "authority_scope": "backfill_expansion_clean_target_selective_activation_84_cells",
       "authority_source": "backfill_expansion_clean_target_selective_product_activation_v1",
       "artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_summary.json",
-      "artifact_sha256": "B6A0A988CD21ED42AD9DE2A3A16B0AE95EDB353E52CD7B2965AB847E6D05B2AE",
+      "artifact_sha256": "54E5BBB3C44038CF8710CCB1D2B358073C81D20ED2B69FC70F15FA0D0DCA2629",
       "acceptance_artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_checks.tsv",
       "acceptance_artifact_sha256": "F7F83B1352B6FBFA98C93B3E952A2E05096A1FD6D62B0D541AEBB5A90C30D0A5",
       "compact_manifest": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_manifest.tsv",

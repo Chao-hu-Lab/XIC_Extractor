@@ -6,22 +6,22 @@
       "size_bytes": 368253
     },
     "checks_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_checks.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/backfill_expansion_peak_mode_decomposition_checks.tsv",
       "sha256": "43DA85C1ABB9C03315E76795ABD7E6B53DA89BC0019EC41B3721120DEFB8F6AE",
       "size_bytes": 631
     },
     "row_manifest_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_row_manifest.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/backfill_expansion_peak_mode_decomposition_row_manifest.tsv",
       "sha256": "DB87FCE0B8DE0C376BC9AFAB330E406AE7F1F25F5718E9F8660507FE3EFF343A",
       "size_bytes": 8499
     },
     "split_decision_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
       "sha256": "60AC53342283179A116D49C4E3DD61A5CCCCE00A0E4B46A8A086C1C7EFBC2469",
       "size_bytes": 9229
     },
     "subtype_split_review_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_subtype_split_review.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/backfill_expansion_peak_mode_decomposition_subtype_split_review.tsv",
       "sha256": "F514683A617C88446850D878B5F47DEB0B4C4AC7C0E494CDABFE233C3BB79908",
       "size_bytes": 7839
     }
@@ -51,7 +51,7 @@
       "size_bytes": 128887
     },
     "manual_review_tsv": {
-      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\fam017098_peak_mode_manual_review.tsv",
+      "path": "docs/superpowers/validation/backfill_expansion_peak_mode_decomposition_v1/fam017098_peak_mode_manual_review.tsv",
       "sha256": "1B5B9935C77F7EBE1836E51D4D9E52DBF54C187932C7841604EAE9249EB04B58",
       "size_bytes": 1892
     },
