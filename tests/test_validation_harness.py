@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib
 
 import pytest
 
@@ -14,6 +15,66 @@ from scripts.validation_harness import (
 )
 from xic_extractor.config import ConfigError
 from xic_extractor.raw_reader import RawReaderError
+
+
+def test_validation_harness_defaults_use_env_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.validation_harness_core as core
+
+    manual_root = tmp_path / "manual_truth"
+    validation_root = tmp_path / "validation_8raw"
+    full_root = tmp_path / "tissue_85raw"
+    with monkeypatch.context() as env:
+        env.setenv("XIC_MANUAL_2RAW_ROOT", str(manual_root))
+        env.setenv("XIC_RAW_VALIDATION_DIR", str(validation_root))
+        env.setenv("XIC_RAW_ROOT", str(full_root))
+        importlib.reload(core)
+
+        specs = core.build_validation_specs(
+            suite_names=("manual-2raw", "tissue-8raw", "tissue-85raw"),
+            base_dir=Path("C:/repo/XIC_Extractor"),
+            output_root=tmp_path / "validation_harness",
+            run_id="env_defaults",
+            workers=4,
+            resolver_mode="region_first_safe_merge",
+            grid="quick",
+        )
+
+        assert str(manual_root) in core.command_to_powershell(specs[0].command)
+        assert str(validation_root) in core.command_to_powershell(specs[1].command)
+        assert str(full_root) in core.command_to_powershell(specs[2].command)
+    importlib.reload(core)
+
+
+def test_validation_harness_defaults_fall_back_to_repo_placeholders(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.validation_harness_core as core
+
+    with monkeypatch.context() as env:
+        env.delenv("XIC_MANUAL_2RAW_ROOT", raising=False)
+        env.delenv("XIC_RAW_VALIDATION_DIR", raising=False)
+        env.delenv("XIC_RAW_ROOT", raising=False)
+        importlib.reload(core)
+
+        specs = core.build_validation_specs(
+            suite_names=("manual-2raw", "tissue-8raw", "tissue-85raw"),
+            base_dir=Path("C:/repo/XIC_Extractor"),
+            output_root=tmp_path / "validation_harness",
+            run_id="fallback_defaults",
+            workers=4,
+            resolver_mode="region_first_safe_merge",
+            grid="quick",
+        )
+
+        commands = [core.command_to_powershell(spec.command) for spec in specs]
+        assert "local_validation_artifacts\\manual_2raw" in commands[0]
+        assert "local_validation_artifacts\\raw\\tissue_validation_8raw" in commands[1]
+        assert "local_validation_artifacts\\raw\\tissue_85raw" in commands[2]
+    importlib.reload(core)
 
 
 def test_build_validation_specs_freezes_tiers_commands_and_output_paths(

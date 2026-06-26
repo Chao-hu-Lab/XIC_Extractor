@@ -1,9 +1,9 @@
 # File-Management Approval Plan
 
-Status: `approved_no_referrer_batches_staged_no_commit`
+Status: `approved_no_referrer_batches_committed`
 
 This plan records the non-code file-management patch for private-history stubs.
-The two explicitly approved no-referrer batches have been staged for removal.
+The two explicitly approved no-referrer batches were committed in `634d568c`.
 This plan does not authorize any additional deletion or `git rm`.
 
 ## Objective
@@ -29,19 +29,19 @@ shape:
 ## Current Candidate Set
 
 The user approved the original `removal_candidate_no_repo_referrers` group of
-254 paths, and that exact group is staged for removal. After public,
-diagnostic-provenance, historical, fixture-provenance, and HTML-story referrer
-hygiene, the refreshed audit reported the candidates below. The user then
-explicitly approved the refreshed 106-path `removal_candidate_no_repo_referrers`
-group, and that exact group is also staged for removal. No commit has been made.
+254 paths. After public, diagnostic-provenance, historical,
+fixture-provenance, and HTML-story referrer hygiene, the refreshed audit
+reported the candidates below. The user then explicitly approved the refreshed
+106-path `removal_candidate_no_repo_referrers` group. Both exact approved
+groups were included in commit `634d568c`.
 
 | Candidate group | Count | Risk | Proposed handling |
 | --- | ---: | --- | --- |
-| `removal_candidate_no_repo_referrers` | 106 | Low | Approved by the user and staged with `git rm -f`; no further action before commit review. |
+| `removal_candidate_no_repo_referrers` | 106 | Low | Approved by the user and committed in `634d568c`; no further file-management action remains for this group. |
 | `removal_candidate_after_historical_referrer_cleanup` | 0 | n/a | Historical referrers were rewritten to formal owners or opaque retired-provenance identifiers. |
 | `diagnostic_provenance_only` | 0 | n/a | Diagnostic index provenance was rewritten to opaque retired-provenance identifiers. |
 
-The audit currently reports `keep_temporarily_update_public_referrers = 0`, so
+The audit reported `keep_temporarily_update_public_referrers = 0`, so
 no public, diagnostic-provenance, historical, or fixture-provenance referrer
 blocks the remaining candidate set.
 
@@ -59,8 +59,9 @@ Read-only review and referrer hygiene closed the previous risk lanes:
   reused historical oracle rows instead of exact private-history note paths.
 
 The exact refreshed approval set was the `removal_candidate_no_repo_referrers`
-group in the TSV manifest. It contained 106 paths and has been staged for
-deletion. Any additional deletion needs a new exact path set and user approval.
+group in the TSV manifest. It contained 106 paths and was included in commit
+`634d568c`. Any additional deletion needs a new exact path set and user
+approval.
 
 ## What Must Stay In Repo
 
@@ -96,14 +97,14 @@ themselves are not part of the current deletion candidate set.
 
 1. Review the TSV candidate list and spot-check representative paths in each
    group.
-2. First approved batch: staged removal of the original 254 no-referrer paths is
-   complete.
-3. Second approved batch: staged removal of the refreshed 106 no-referrer paths
-   is complete.
+2. First approved batch: removal of the original 254 no-referrer paths was
+   included in commit `634d568c`.
+3. Second approved batch: removal of the refreshed 106 no-referrer paths was
+   included in commit `634d568c`.
 4. Approve any further group or exact path subset separately before another
    `git rm`.
-5. Re-run the public-surface audit after removal if the manifest/report should
-   be refreshed for commit review.
+5. Re-run the public-surface audit only if reviewers need a post-commit
+   refreshed report.
 6. Re-run focused tests that consume docs or fixtures.
 7. Keep this plan and the audit report as the public explanation for why
    private-history files left version control.

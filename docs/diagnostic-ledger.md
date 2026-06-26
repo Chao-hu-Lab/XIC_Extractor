@@ -46,12 +46,12 @@ the same claim.
 
 | Purpose | Stable path |
 | --- | --- |
-| Accepted P8b 8RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv` |
-| Accepted P8b 85RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv` |
-| Targeted GT 8RAW default workbook | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\targeted_gt_workbooks\8raw\xic_results_20260512_1151.xlsx`, SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7` |
-| RAW root | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` |
-| Thermo DLL dir | `C:\Xcalibur\system\programs` |
-| RAW-capable Python | `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` |
+| Accepted P8b 8RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv` |
+| Accepted P8b 85RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv` |
+| Targeted GT 8RAW default workbook | `local_validation_artifacts/targeted_gt_workbooks/8raw/xic_results_20260512_1151.xlsx`, SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7` |
+| RAW root | `$env:XIC_RAW_ROOT` |
+| Thermo DLL dir | `$env:THERMO_RAWFILE_READER_DLL_DIR` |
+| RAW-capable Python | `"${env:XIC_REPO_ROOT}\.venv\Scripts\python.exe"` |
 
 ## Known Diagnostic Conclusions
 
@@ -112,8 +112,8 @@ Current auto-limited 85RAW smoke:
 Key facts:
 
 - Baseline and opt-in runs both used
-  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` for 8RAW and
-  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` for 85RAW; all runs used
+  `$env:XIC_RAW_VALIDATION_DIR` for 8RAW and
+  `$env:XIC_RAW_ROOT` for 85RAW; all runs used
   CSV-only output.
 - Opt-in runs used
   `output/ms1_rescue_5hmdc_own_max_similarity_20260616/targeted_ms1_shape_identity_v0.tsv`.

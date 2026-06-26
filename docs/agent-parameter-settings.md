@@ -22,7 +22,7 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 - 任務特定 output path、phase-specific discovery index、一次性 benchmark 結論
   留在 validation note；本檔只引用該 note 作為 evidence。
 - accepted reusable discovery inputs 若要跨分支使用，先複製到
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\...` 並重寫
+  `local_validation_artifacts/...` 並重寫
   `discovery_batch_index.csv` 裡的 `candidate_csv` / `review_csv` 絕對路徑。
 - 成功 run 要記錄「可重用的參數形狀」與 evidence note；失敗 run 要記錄
   「不可再用的啟動方式」與替代做法。
@@ -34,7 +34,7 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 
 | Runner | 用途 | 已觀察狀態 |
 | --- | --- | --- |
-| `python` | no-RAW 的窄範圍 pytest shard | `C:\Python314\python.exe`；有 `pytest`；沒有 `pythonnet` |
+| `python` | no-RAW 的窄範圍 pytest shard | Python 3.14 launcher；有 `pytest`；沒有 `pythonnet` |
 | `.venv\Scripts\python.exe` | Thermo RAW / RawFileReader / `pythonnet` run | Python 3.13.7；有 `pythonnet`；沒有 `pytest` |
 
 專案契約是 Python `>=3.11,<3.14`。Python 3.14 不是有效 RAW runtime，因為
@@ -51,28 +51,45 @@ artifact，例如某個 Phase 的 benchmark summary、一次性 gate output、pl
 - 在 worktree 內跑正式 85RAW 時，`scripts.run_alignment
   --expected-sample-count 85` 會要求 Python executable 位於該 worktree 的
   `.venv` 底下。不要用 root repo 的絕對路徑
-  `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` 直接啟動
+  `"${env:XIC_REPO_ROOT}\.venv\Scripts\python.exe"` 直接啟動
   worktree 的 85RAW；這會被 canonical guard 拒絕。
 - 若 active worktree 沒有 `.venv`，且 root repo `.venv` 是要共用的 RAW
   runtime，先確認沒有既有 `.venv` 後建立 junction：
 
 ```powershell
-New-Item -ItemType Junction -Path .venv -Target C:\Users\user\Desktop\XIC_Extractor\.venv
+New-Item -ItemType Junction -Path .venv -Target "${env:XIC_REPO_ROOT}\.venv"
 ```
 
   然後使用 `.venv\Scripts\python.exe` 啟動 preflight / validation。
 
 ## Stable Local Paths
 
+Exact machine-specific values must live in ignored local env files such as
+`.env.xic-local`; the public template is `.env.example`. Repo docs use env
+names so the repository can stay public-safe without losing the local execution
+contract.
+
+Load the local env before RAW-backed runs when the shell does not already have
+these values:
+
+```powershell
+Get-Content .env.xic-local |
+  Where-Object { $_ -match '^\s*[^#=]+=' } |
+  ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    Set-Item "Env:$name" $value
+  }
+```
+
 | 用途 | 路徑 | 備註 |
 | --- | --- | --- |
-| Thermo RAW root，85RAW tissue set | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` | Full tissue validation。 |
-| Thermo RAW validation subset | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` | Historical 8RAW validation subset。 |
-| Thermo RawFileReader DLL dir | `C:\Xcalibur\system\programs` | RAW commands 必須使用這個 DLL dir。 |
-| manual 2RAW truth data | `C:\Xcalibur\data\20251219_need process data\XIC test` | Resolver / manual-truth calibration。 |
-| accepted P8b 8RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；內部 `candidate_csv` / `review_csv` 已重寫到同一 artifact store。 |
-| accepted P8b 85RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv` | Cross-worktree reusable validation input；正式 85RAW 前仍需 `--expected-sample-count 85` preflight。 |
-| targeted GT 8RAW default workbook | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\targeted_gt_workbooks\8raw\xic_results_20260512_1151.xlsx` | SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7`；`targeted_gt_alignment_audit.py` 的 8RAW default positive checkpoint workbook；不要用 85-sample workbook 對 8RAW alignment，否則會產生 off-scope `MISS`。 |
+| Thermo RAW root，85RAW tissue set | `$env:XIC_RAW_ROOT` | Full tissue validation。 |
+| Thermo RAW validation subset | `$env:XIC_RAW_VALIDATION_DIR` | Historical 8RAW validation subset。 |
+| Thermo RawFileReader DLL dir | `$env:THERMO_RAWFILE_READER_DLL_DIR` | RAW commands 必須使用這個 DLL dir。 |
+| manual 2RAW truth data | `$env:XIC_MANUAL_2RAW_ROOT` | Resolver / manual-truth calibration。 |
+| accepted P8b 8RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv` | Cross-worktree reusable validation input；內部 `candidate_csv` / `review_csv` 已重寫到同一 artifact store。 |
+| accepted P8b 85RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv` | Cross-worktree reusable validation input；正式 85RAW 前仍需 `--expected-sample-count 85` preflight。 |
+| targeted GT 8RAW default workbook | `local_validation_artifacts/targeted_gt_workbooks/8raw/xic_results_20260512_1151.xlsx` | SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7`；`targeted_gt_alignment_audit.py` 的 8RAW default positive checkpoint workbook；不要用 85-sample workbook 對 8RAW alignment，否則會產生 off-scope `MISS`。 |
 
 實驗性 mzML 路徑不列為常用 setting。即使本機有 mzML，production premise 仍是
 直接讀 `.raw`，不轉檔。只有使用者明確要求 external-reference audit 時才查
@@ -87,8 +104,8 @@ Get-Command python | Select-Object -ExpandProperty Source
 python --version
 .venv\Scripts\python.exe --version
 .venv\Scripts\python.exe -c "import importlib.util; print('pythonnet', importlib.util.find_spec('pythonnet') is not None); print('pytest', importlib.util.find_spec('pytest') is not None)"
-Test-Path "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R"
-Test-Path "C:\Xcalibur\system\programs"
+Test-Path "$env:XIC_RAW_ROOT"
+Test-Path "$env:THERMO_RAWFILE_READER_DLL_DIR"
 ```
 
 如果本檔列出的 stable path 存在，就使用它。除非 `Test-Path` 失敗或使用者
@@ -111,7 +128,7 @@ python -m scripts.agent_sandbox_doctor --strict --command ".venv\Scripts\python.
 ## Sandbox Friction Playbook
 
 目前建議姿態是 `workspace-write + on-request`。這不是最順的模式，但對這個
-repo 是合理預設：agent 可以寫工作樹與 `C:\tmp`，讀外部 RAW / DLL / reference
+repo 是合理預設：agent 可以寫工作樹與 sandbox-provided temp dir，讀外部 RAW / DLL / reference
 data，遇到外部寫入、network、GUI、或高風險命令時才升權。
 
 ### Approval-First Commands
@@ -125,7 +142,7 @@ data，遇到外部寫入、network、GUI、或高風險命令時才升權。
 | --- | --- | --- |
 | `uv lock`、`uv sync --extra dev --group dev`、會下載 dependency 的 `uv run --with ...` | 任務需要更新 lock/env 時直接提權；保留 `$env:UV_CACHE_DIR='.uv-cache'`；prefix 只給 `uv lock` 或 `uv sync` 這種窄命令。本 repo 同時使用 optional `dev` extra 與 dependency group；需要完整 dev env 時用 `uv sync --extra dev --group dev` | 不要先在 sandbox 裡等 PyPI 被擋；不要只跑 `uv sync --group dev`，那會漏掉 optional dev extra 裡的 pytest stack；不要因為 `uv sync` 被擋就改成未 lock 的臨時安裝 |
 | `uv run python -m playwright install chromium`、browser binary install/update | 只有 browser binary 缺失時才提權安裝；gallery smoke 先用 `tools\diagnostics\gallery_browser_smoke.py`，它會 fallback 到 system Chrome/Edge | 不要用 MCP timeout 或 Chrome extension 狀態當作自動化 smoke 的唯一驗收 |
-| 會讀 `C:\Xcalibur\...` RAW 或載入 `C:\Xcalibur\system\programs` DLL 的命令 | 先跑本檔 Preflight 的 `Test-Path` 與 `.venv\Scripts\python.exe` runtime check；命令本身用 `.venv\Scripts\python.exe`；若 sandbox / DLL loading / external executable spawn 被擋，直接提權重跑同一條命令 | 不要先用 bare `python` 撞一次；不要掃 sibling directory 猜 RAW/DLL；不要把較窄 no-RAW pytest 當成 RAW 驗證替代 |
+| 會讀 `$env:XIC_RAW_ROOT` / `$env:XIC_RAW_VALIDATION_DIR` RAW 或載入 `$env:THERMO_RAWFILE_READER_DLL_DIR` DLL 的命令 | 先跑本檔 Preflight 的 `Test-Path` 與 `.venv\Scripts\python.exe` runtime check；命令本身用 `.venv\Scripts\python.exe`；若 sandbox / DLL loading / external executable spawn 被擋，直接提權重跑同一條命令 | 不要先用 bare `python` 撞一次；不要掃 sibling directory 猜 RAW/DLL；不要把較窄 no-RAW pytest 當成 RAW 驗證替代 |
 | GUI/browser 開啟、外部 terminal、`Start-Process` 類命令 | 只有使用者明確需要互動視窗或外部 terminal 時才提權；長 RAW run 優先用前景 heartbeat command，不用 GUI | 不要用背景 helper 隱性取代可審計的 foreground RAW run |
 | 寫入 `$CODEX_HOME` / `.codex` config、plugin/skill install、全域 hook/config | 只有使用者明確要求改 agent environment 時才提權；完成後寫 smoke / rollback note | 不要為了單次 repo 任務擴大成全域設定 |
 
@@ -139,7 +156,7 @@ python -m scripts.agent_sandbox_doctor --command "<command-to-check>"
 
 | 症狀 | 先做什麼 | 不要做什麼 |
 | --- | --- | --- |
-| 寫入 `C:\Xcalibur`、桌面資料夾、`$CODEX_HOME` / `%USERPROFILE%\.codex` 失敗 | 把 output / cache / sidecar 改到目前 worktree 的 `output\...` 或 `C:\tmp`；若真的要改全域 Codex 設定，先明確取得使用者要求 | 不要切 `danger-full-access` 或擴大 writable root 只為了省一次路徑修正 |
+| 寫入 RAW/DLL storage、桌面資料夾、`$CODEX_HOME` / `%USERPROFILE%\.codex` 失敗 | 把 output / cache / sidecar 改到目前 worktree 的 `output/...` 或 sandbox-provided temp dir；若真的要改全域 Codex 設定，先明確取得使用者要求 | 不要切 `danger-full-access` 或擴大 writable root 只為了省一次路徑修正 |
 | package install、`npx`、下載文件、GitHub/網路失敗 | 確認這是任務必要條件後，用 narrow approval / prefix；成功後記錄穩定命令或替代離線路徑 | 不要把 network access 永久打開當預設 |
 | pytest / Python 產生 cache 被擋 | 在 worktree 內跑；必要時加 `$env:PYTHONDONTWRITEBYTECODE='1'` 和 `-p no:cacheprovider`；tester role 可 workspace-write 只為 verification side effects，驗證後要回報 `git status` 是否只剩預期 side effects | 不要把 tester 當 implementation worker 讓它改 source |
 | pytest 回 `no tests ran` 或 `not found` | 先用 `rg -n "<test_name>|def test_" tests\...` 找實際名稱；必要時跑 `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest --collect-only -q <test-file>` 後再下精準 node id | 不要把 `no tests ran` 當成測試失敗或通過；不要猜 node id 一直重跑 |
@@ -147,7 +164,7 @@ python -m scripts.agent_sandbox_doctor --command "<command-to-check>"
 | PowerShell 語法錯誤 | 改成 PowerShell 語法；多行命令用 backtick；inline Python 用 `python -c` 或 PowerShell here-string pipe；不確定時先跑 `scripts.agent_sandbox_doctor` | 不要貼 Bash heredoc、`export`、`&&` |
 | 長時間 85RAW 卡住 | 用 foreground command + `--timing-live-output`；先看 heartbeat / timing artifact 再重跑 | 不要背景 `Start-Process` 後回來輪詢 |
 | `git add` / `git commit` / `git stash` / `git worktree add` 出現 `.git\index.lock`、ref-lock、或 permission denied | 先確認正確 worktree：`git worktree list`、`git -C <worktree> status`；若是必要 git index/ref 操作，用同一命令的 narrow approval 或 `git -C <repo> ...` 重跑 | 不要把 index/ref lock 誤判成程式碼問題；不要用 `git reset --hard`、`git clean` 或強制刪分支除非使用者明確要求 |
-| 要續接舊 worktree / 舊 artifact | 先 `git worktree list` 與 `Test-Path` exact artifact；若 worktree/output 不存在，改用 `local_validation_artifacts/` 或明確重建 smoke path | 不要假設上一輪 worktree 還存在；不要把 `.worktrees\<branch>\output\...` 當長期可重用 input |
+| 要續接舊 worktree / 舊 artifact | 先 `git worktree list` 與 `Test-Path` exact artifact；若 worktree/output 不存在，改用 `local_validation_artifacts/` 或明確重建 smoke path | 不要假設上一輪 worktree 還存在；不要把 `.worktrees/<branch>/output/...` 當長期可重用 input |
 | 遞迴掃描太慢、掃到 access denied、或 output/build/.worktrees 噪音 | 優先用 `git ls-files`、`rg --files`、targeted `rg`，再讀特定 range | 不要用 blanket `Get-ChildItem -Recurse` 掃整個 repo、`output/`、`.worktrees/`、或 build/cache 目錄 |
 | output / workbook overwrite `Permission denied` | 先假設檔案可能被 Excel/browser/previewer 鎖住；改寫到 timestamped 或 suffixed output，並回報原檔可能被鎖 | 不要強刪或反覆覆蓋；不要把 permission denied 當成 pipeline 邏輯失敗 |
 
@@ -192,8 +209,8 @@ timing heartbeat`:
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --expected-sample-count 85 `
   --output-level validation-minimal `
@@ -255,8 +272,8 @@ matrix publication:
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --preset dna_dr `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --expected-sample-count 85 `
   --output-level validation-minimal `
@@ -334,8 +351,8 @@ candidate CSV rows or opening RAW files:
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --expected-sample-count 85 `
   --output-level validation-minimal `
@@ -387,8 +404,8 @@ RAW / alignment commands:
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir>
 ```
 
@@ -397,8 +414,8 @@ Long RAW alignment runs should be observable while they are running:
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --timing-output <task-specific-output-dir>\timing.json `
   --timing-live-output <task-specific-output-dir>\timing.live.json
@@ -422,8 +439,8 @@ For micro-profiling, start with 8RAW or a scoped 85RAW diagnostic:
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <current-spec-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --profile cprofile `
   --profile-output-dir <task-specific-output-dir>\profile
@@ -480,7 +497,7 @@ emit the same minimal machine contract and heartbeat shape documented here.
 12. 85RAW 開跑前先檢查 discovery index sample count、candidate CSV path、
     RAW path；8RAW index 不可拿來跑 full tissue validation。正式 alignment
     run 用 `--expected-sample-count 85` 固化 sample-count 檢查。
-13. 不要把 `.worktrees\<branch>\output\...` 當成 reusable validation input。
+13. 不要把 `.worktrees/<branch>/output/...` 當成 reusable validation input。
     若只有某個 worktree 有 accepted discovery artifact，先移到
     `local_validation_artifacts/` 並重寫 index 內部絕對路徑，再跑 preflight。
 14. 不要用 Codex shell 的 background `Start-Process` 跑 85RAW 後就回來輪詢；

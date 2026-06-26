@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_cells.tsv",
+      "path": "output//validation//backfill_expansion_selective_shift_aware_gate_v1//backfill_expansion_selective_shift_aware_gate_cells.tsv",
       "sha256": "3306DA63C9902E506D6DFC81CF27B19B1E67543C4552FD1F6D791251EA77E55A",
       "size_bytes": 212052
     },
     "checks_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_checks.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_checks.tsv",
       "sha256": "C2CAFDD3F50D2BD0D53507C9C26FB23848D5723245C435A52AC3D7F6C4928D9D",
       "size_bytes": 871
     },
     "row_manifest_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_row_manifest.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_row_manifest.tsv",
       "sha256": "CB9D7090A74DEE691415962485CD6D03598CB02A8A30BE722C8D284C77A68806",
       "size_bytes": 5452
     }
@@ -34,32 +34,32 @@
   "held_cell_count": 175,
   "input_artifacts": {
     "expected_diff_tsv": {
-      "path": "output\\validation\\backfill_expansion_expected_diff_provenance_v1\\inputs\\expected_diff.tsv",
+      "path": "output//validation//backfill_expansion_expected_diff_provenance_v1//inputs//expected_diff.tsv",
       "sha256": "B2E755A368670D6D8DC34220D9AE7F002869DA2534C778166D34B0392221CD73",
       "size_bytes": 128887
     },
     "raw_trace_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\backfill_expansion_raw_overlay_trace_identity_cells.tsv",
+      "path": "output//validation//backfill_expansion_raw_overlay_trace_identity_v1//backfill_expansion_raw_overlay_trace_identity_cells.tsv",
       "sha256": "B6EE3E22FD002137B6ED9361B8A731F91B148D6A756FFE4A0CA1818A7D3C6E56",
       "size_bytes": 293592
     },
     "sample_local_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_sample_local_ms1_evidence_v1\\backfill_expansion_sample_local_ms1_evidence_cells.tsv",
+      "path": "output//validation//backfill_expansion_sample_local_ms1_evidence_v1//backfill_expansion_sample_local_ms1_evidence_cells.tsv",
       "sha256": "490B66DE0188315570F7201B572751308BFC6F2144FE27E13A2A3F2DEB9BAAD0",
       "size_bytes": 551217
     },
     "shift_aware_batch_summary_json": {
-      "path": "output\\validation\\backfill_expansion_full_evidence_chain_v1\\shift_aware_alignment_experiment\\family_ms1_alignment_experiment_batch_summary.json",
+      "path": "output//validation//backfill_expansion_full_evidence_chain_v1//shift_aware_alignment_experiment//family_ms1_alignment_experiment_batch_summary.json",
       "sha256": "398C78AE4A5FF89E61222FF735571DC3D46949B37F4C7E31A2A3D8FEC81F4833",
       "size_bytes": 674
     },
     "shift_aware_batch_summary_tsv": {
-      "path": "output\\validation\\backfill_expansion_full_evidence_chain_v1\\shift_aware_alignment_experiment\\family_ms1_alignment_experiment_batch_summary.tsv",
+      "path": "output//validation//backfill_expansion_full_evidence_chain_v1//shift_aware_alignment_experiment//family_ms1_alignment_experiment_batch_summary.tsv",
       "sha256": "6582BB0FD0A3EEEBC938F7F957143C66A5E0F08F67EDACA7F277CC466FC710AF",
       "size_bytes": 9158
     },
     "standard_peak_gate_tsv": {
-      "path": "output\\validation\\backfill_expansion_full_evidence_chain_v1\\shift_aware_standard_peak_gate\\shift_aware_standard_peak_gate_calibration.tsv",
+      "path": "output//validation//backfill_expansion_full_evidence_chain_v1//shift_aware_standard_peak_gate//shift_aware_standard_peak_gate_calibration.tsv",
       "sha256": "FB3E9F528F6A9AB1304012C63D6BDE5927A51BE810676A76228068054278D01A",
       "size_bytes": 6521
     }

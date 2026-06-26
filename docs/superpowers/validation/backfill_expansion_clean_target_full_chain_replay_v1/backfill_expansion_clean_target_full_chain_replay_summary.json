@@ -1,32 +1,32 @@
 {
   "artifacts": {
     "cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_cells.tsv",
+      "path": "output//validation//backfill_expansion_clean_target_full_chain_replay_v1//backfill_expansion_clean_target_full_chain_replay_cells.tsv",
       "sha256": "4E3EC2A97A415EEFB1B8C68BDF181F8F14BA3496C7B27ED60D79E996CE7B6A7F",
       "size_bytes": 67329
     },
     "checks_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_checks.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_checks.tsv",
       "sha256": "316CA149E5C27B95CAEFBB3F049088A356420C83781A038DAAA5CDEFD499E18B",
       "size_bytes": 1020
     },
     "row_manifest_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_row_manifest.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\backfill_expansion_clean_target_full_chain_replay_row_manifest.tsv",
       "sha256": "968543697FD901579ACB5BC783CFD3ADB9A9DF7B803E4EDDF0406B7E9D7179D2",
       "size_bytes": 6564
     },
     "selective_ms1_product_authority_audit_tsv": {
-      "path": "output\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\selective_source_family_ms1_authority_bundle\\backfill_ms1_pattern_product_authority_audit.tsv",
+      "path": "output//validation//backfill_expansion_clean_target_full_chain_replay_v1//selective_source_family_ms1_authority_bundle//backfill_ms1_pattern_product_authority_audit.tsv",
       "sha256": "E6AB5ED50811E995D099B4A146839C7B9BDF6178A72C0A79F89575E719448ED3",
       "size_bytes": 190661
     },
     "selective_ms1_product_authority_summary_json": {
-      "path": "output\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\selective_source_family_ms1_authority_bundle\\standard_peak_ms1_authority_bundle_summary.json",
+      "path": "output//validation//backfill_expansion_clean_target_full_chain_replay_v1//selective_source_family_ms1_authority_bundle//standard_peak_ms1_authority_bundle_summary.json",
       "sha256": "90F744D2C2E5F3C47D800E0538C2CA2650B516CE90B598E6EB84346D98E25CD0",
       "size_bytes": 1878
     },
     "selective_ms1_product_authority_tsv": {
-      "path": "output\\validation\\backfill_expansion_clean_target_full_chain_replay_v1\\selective_source_family_ms1_authority_bundle\\shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv",
+      "path": "output//validation//backfill_expansion_clean_target_full_chain_replay_v1//selective_source_family_ms1_authority_bundle//shared_peak_identity_ms1_pattern_coherence_product_authorized.tsv",
       "sha256": "66614D19292A7A4FF9CA10225E3AE2241D8BF104DD60D48BA99C4613F57FB327",
       "size_bytes": 439798
     }
@@ -51,37 +51,37 @@
   "held_cell_count": 61,
   "input_artifacts": {
     "full_chain_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_cells.tsv",
+      "path": "output//validation//backfill_expansion_full_evidence_chain_v1//backfill_expansion_full_evidence_chain_cells.tsv",
       "sha256": "D1226C10AFC00F3E99C30BE8971BC0808FC0D39383D027896069112DF2B96922",
       "size_bytes": 205031
     },
     "full_chain_summary_json": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_summary.json",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_full_evidence_chain_v1\\backfill_expansion_full_evidence_chain_summary.json",
       "sha256": "56678EBD42C875A4C7CAF518A4F2E7BAB072545E2C4562F6A4876D78DAC990BC",
       "size_bytes": 8280
     },
     "overlay_batch_summary_tsv": {
-      "path": "output\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\family_ms1_overlay_batch\\family_ms1_overlay_batch_summary.tsv",
+      "path": "output//validation//backfill_expansion_raw_overlay_trace_identity_v1//family_ms1_overlay_batch//family_ms1_overlay_batch_summary.tsv",
       "sha256": "89BBE7DC0B7655C98153E54F4675A51CA9D9C4D3C4951CC78BFAD0876E03F6DF",
       "size_bytes": 12997
     },
     "peak_mode_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_cells.tsv",
+      "path": "output//validation//backfill_expansion_peak_mode_decomposition_v1//backfill_expansion_peak_mode_decomposition_cells.tsv",
       "sha256": "D19310762CB96A34EB490E2CD1D37E365F9DC8E357D4896429C6DA56DE324628",
       "size_bytes": 368253
     },
     "selective_shift_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_selective_shift_aware_gate_v1\\backfill_expansion_selective_shift_aware_gate_cells.tsv",
+      "path": "output//validation//backfill_expansion_selective_shift_aware_gate_v1//backfill_expansion_selective_shift_aware_gate_cells.tsv",
       "sha256": "3306DA63C9902E506D6DFC81CF27B19B1E67543C4552FD1F6D791251EA77E55A",
       "size_bytes": 212052
     },
     "shift_aware_standard_peak_gate_tsv": {
-      "path": "output\\validation\\backfill_expansion_full_evidence_chain_v1\\shift_aware_standard_peak_gate\\shift_aware_standard_peak_gate_calibration.tsv",
+      "path": "output//validation//backfill_expansion_full_evidence_chain_v1//shift_aware_standard_peak_gate//shift_aware_standard_peak_gate_calibration.tsv",
       "sha256": "FB3E9F528F6A9AB1304012C63D6BDE5927A51BE810676A76228068054278D01A",
       "size_bytes": 6521
     },
     "split_decision_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
       "sha256": "60AC53342283179A116D49C4E3DD61A5CCCCE00A0E4B46A8A086C1C7EFBC2469",
       "size_bytes": 9229
     }

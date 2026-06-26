@@ -41,16 +41,16 @@ Alignment rerun:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
-  --discovery-batch-index output\discovery\cid_nl_product_ready_8raw_20260620_fix2\discovery_batch_index.csv `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation `
-  --dll-dir C:\Xcalibur\system\programs `
-  --output-dir output\discovery\cid_nl_product_ready_alignment_8raw_20260620_fix3 `
+  --discovery-batch-index output/discovery/cid_nl_product_ready_8raw_20260620_fix2/discovery_batch_index.csv `
+  --raw-dir <raw-data>/validation `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
+  --output-dir output/discovery/cid_nl_product_ready_alignment_8raw_20260620_fix3 `
   --expected-sample-count 8 `
   --output-level validation-minimal `
   --backfill-scope production-equivalent `
   --audit-evidence-mode none `
-  --timing-output output\discovery\cid_nl_product_ready_alignment_8raw_20260620_fix3\timing.json `
-  --timing-live-output output\discovery\cid_nl_product_ready_alignment_8raw_20260620_fix3\timing.live.json
+  --timing-output output/discovery/cid_nl_product_ready_alignment_8raw_20260620_fix3/timing.json `
+  --timing-live-output output/discovery/cid_nl_product_ready_alignment_8raw_20260620_fix3/timing.live.json
 ```
 
 Observed acceptance:
@@ -88,10 +88,10 @@ Alignment rerun:
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.run_alignment `
-  --discovery-batch-index output\discovery\cid_nl_product_ready_85raw_20260620_fix2\discovery_batch_index.csv `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
-  --output-dir output\discovery\cid_nl_product_ready_alignment_85raw_20260620_fix3 `
+  --discovery-batch-index output/discovery/cid_nl_product_ready_85raw_20260620_fix2/discovery_batch_index.csv `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
+  --output-dir output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3 `
   --expected-sample-count 85 `
   --output-level validation-minimal `
   --backfill-scope production-equivalent `
@@ -100,8 +100,8 @@ Alignment rerun:
   --raw-workers 11 `
   --owner-backfill-window-strategy super-window `
   --owner-backfill-superwindow-span-factor 2 `
-  --timing-output output\discovery\cid_nl_product_ready_alignment_85raw_20260620_fix3\timing.json `
-  --timing-live-output output\discovery\cid_nl_product_ready_alignment_85raw_20260620_fix3\timing.live.json
+  --timing-output output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3/timing.json `
+  --timing-live-output output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3/timing.live.json
 ```
 
 Observed acceptance:

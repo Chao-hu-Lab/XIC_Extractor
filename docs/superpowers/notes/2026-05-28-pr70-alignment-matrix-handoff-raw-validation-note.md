@@ -16,13 +16,13 @@ Phase2 cleanup readiness.
 ## Inputs
 
 - 8RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv`
+  `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv`
 - 85RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv`
+  `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv`
 - RAW root:
-  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R`
+  `$env:XIC_RAW_ROOT`
 - DLL dir:
-  `C:\Xcalibur\system\programs`
+  `$env:THERMO_RAWFILE_READER_DLL_DIR`
 - Python runtime:
   `.venv\Scripts\python.exe`
 
@@ -41,7 +41,7 @@ references. The hash parity results below are therefore valid for this PR, while
 the commands below document the stable rerun shape future branches should use.
 
 The current worktree uses a `.venv` junction to the existing repo runtime at
-`C:\Users\user\Desktop\XIC_Extractor\.venv`, so canonical 85RAW preflight sees
+`$env:XIC_REPO_ROOT/.venv`, so canonical 85RAW preflight sees
 the executable under the active worktree `.venv`.
 
 ## Stable Rerun Commands
@@ -49,13 +49,13 @@ the executable under the active worktree `.venv`.
 8RAW preflight and run shape:
 
 ```powershell
-.venv\Scripts\python.exe -m scripts.run_alignment --discovery-batch-index "C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv" --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R --dll-dir C:\Xcalibur\system\programs --output-dir output\pr70_alignment_matrix_handoff_validation\alignment\8raw_validation_minimal_superwindow --expected-sample-count 8 --output-level validation-minimal --resolver-mode region_first_safe_merge --backfill-scope production-equivalent --audit-evidence-mode none --performance-profile validation-fast --owner-backfill-window-strategy super-window --owner-backfill-superwindow-span-factor 2 --timing-output output\pr70_alignment_matrix_handoff_validation\alignment\8raw_validation_minimal_superwindow\timing.json --timing-live-output output\pr70_alignment_matrix_handoff_validation\alignment\8raw_validation_minimal_superwindow\timing.live.json
+.venv\Scripts\python.exe -m scripts.run_alignment --discovery-batch-index "local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv" --raw-dir $env:XIC_RAW_ROOT --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR --output-dir output/pr70_alignment_matrix_handoff_validation/alignment/8raw_validation_minimal_superwindow --expected-sample-count 8 --output-level validation-minimal --resolver-mode region_first_safe_merge --backfill-scope production-equivalent --audit-evidence-mode none --performance-profile validation-fast --owner-backfill-window-strategy super-window --owner-backfill-superwindow-span-factor 2 --timing-output output/pr70_alignment_matrix_handoff_validation/alignment/8raw_validation_minimal_superwindow\timing.json --timing-live-output output/pr70_alignment_matrix_handoff_validation/alignment/8raw_validation_minimal_superwindow\timing.live.json
 ```
 
 85RAW preflight and run shape:
 
 ```powershell
-.venv\Scripts\python.exe -m scripts.run_alignment --discovery-batch-index "C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv" --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R --dll-dir C:\Xcalibur\system\programs --output-dir output\pr70_alignment_matrix_handoff_validation\alignment\85raw_validation_minimal_superwindow --expected-sample-count 85 --output-level validation-minimal --resolver-mode region_first_safe_merge --backfill-scope production-equivalent --audit-evidence-mode none --performance-profile validation-fast --owner-backfill-window-strategy super-window --owner-backfill-superwindow-span-factor 2 --timing-output output\pr70_alignment_matrix_handoff_validation\alignment\85raw_validation_minimal_superwindow\timing.json --timing-live-output output\pr70_alignment_matrix_handoff_validation\alignment\85raw_validation_minimal_superwindow\timing.live.json
+.venv\Scripts\python.exe -m scripts.run_alignment --discovery-batch-index "local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv" --raw-dir $env:XIC_RAW_ROOT --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR --output-dir output/pr70_alignment_matrix_handoff_validation/alignment/85raw_validation_minimal_superwindow --expected-sample-count 85 --output-level validation-minimal --resolver-mode region_first_safe_merge --backfill-scope production-equivalent --audit-evidence-mode none --performance-profile validation-fast --owner-backfill-window-strategy super-window --owner-backfill-superwindow-span-factor 2 --timing-output output/pr70_alignment_matrix_handoff_validation/alignment/85raw_validation_minimal_superwindow\timing.json --timing-live-output output/pr70_alignment_matrix_handoff_validation/alignment/85raw_validation_minimal_superwindow\timing.live.json
 ```
 
 ## 8RAW Result
@@ -66,7 +66,7 @@ the executable under the active worktree `.venv`.
 - Sample count: `8`.
 - Candidate count: `3,343`.
 - Output dir:
-  `output\pr70_alignment_matrix_handoff_validation\alignment\8raw_validation_minimal_superwindow`
+  `output/pr70_alignment_matrix_handoff_validation/alignment/8raw_validation_minimal_superwindow`
 
 Primary artifact hash parity against accepted P8b 8RAW:
 
@@ -93,7 +93,7 @@ Key timing:
 - Sample count: `85`.
 - Candidate count: `30,289`.
 - Output dir:
-  `output\pr70_alignment_matrix_handoff_validation\alignment\85raw_validation_minimal_superwindow`
+  `output/pr70_alignment_matrix_handoff_validation/alignment/85raw_validation_minimal_superwindow`
 
 Primary artifact hash parity against accepted P8b 85RAW:
 

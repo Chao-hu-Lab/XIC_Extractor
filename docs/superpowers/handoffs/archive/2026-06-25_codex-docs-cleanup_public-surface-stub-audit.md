@@ -2,7 +2,10 @@
 
 Status: `audit_only`
 
-This report checks whether the repo has become a public-facing collection of empty private-history stubs. 254 previously approved paths are currently staged for removal. This report does not authorize any additional `git rm` beyond those staged deletions.
+This report checks whether the repo has become a public-facing collection of
+empty private-history stubs. At the time of the audit, 254 paths had already
+been approved for removal; the final approved 360 removals were later included
+in commit `634d568c`. This report does not authorize any additional `git rm`.
 
 ## Verdict
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,9 @@ from xic_extractor.settings_schema import (
 )
 from xic_extractor.tabular_io import write_delimited_rows
 
-DEFAULT_MANUAL_DIR = Path(r"C:\Xcalibur\data\20251219_need process data\XIC test")
+DEFAULT_MANUAL_DIR = Path(
+    os.environ.get("XIC_MANUAL_2RAW_ROOT", "local_validation_artifacts/manual_2raw")
+)
 DEFAULT_MANUAL_WORKBOOK = DEFAULT_MANUAL_DIR / "20260112 UPLC splitting_forXIC.xlsx"
 DEFAULT_NOSPLIT_RAW = (
     DEFAULT_MANUAL_DIR / "20251219_HESI_NoSplit_25ppb_ISTDs-1_60min_1_02.raw"
@@ -25,9 +28,14 @@ DEFAULT_SPLIT_RAW = (
 DEFAULT_NOSPLIT_TARGETS = DEFAULT_MANUAL_DIR / "combined_targets_file1.csv"
 DEFAULT_SPLIT_TARGETS = DEFAULT_MANUAL_DIR / "combined_targets_file2.csv"
 DEFAULT_TISSUE_VALIDATION_DIR = Path(
-    r"C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation"
+    os.environ.get(
+        "XIC_RAW_VALIDATION_DIR",
+        "local_validation_artifacts/raw/tissue_validation_8raw",
+    )
 )
-DEFAULT_FULL_TISSUE_DIR = Path(r"C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R")
+DEFAULT_FULL_TISSUE_DIR = Path(
+    os.environ.get("XIC_RAW_ROOT", "local_validation_artifacts/raw/tissue_85raw")
+)
 
 SUITE_CHOICES = ("manual-2raw", "tissue-8raw", "tissue-85raw")
 _RESERVED_SETTING_OVERRIDE_KEYS = {"resolver_mode"}

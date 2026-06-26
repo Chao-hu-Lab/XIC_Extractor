@@ -32,21 +32,21 @@
   "schema_version": "lockbox_second_review_summary_v1",
   "source_artifacts": {
     "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
-    "ai_challenge_result_summary_sha256": "3576FE4482F3C3F492538E4F52B5878B35A98C71FC326EC075FAFBAFB12BE99C",
+    "ai_challenge_result_summary_sha256": "1C529DDA3D6E3DFBD96DEA9D5A1EE2C8867D9366836B005525C2A6667B5A6DE2",
     "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
-    "label_log_sha256": "D2B26F04493DB9F910AC46D39746B5B3453ED03EA570C516DB69F421C41F9376",
+    "label_log_sha256": "066F3F76E304A481F5C4176DAAF285A5907BB581F25D7B09D131D7FBE9406910",
     "next_action_plan": "docs/superpowers/validation/lockbox_next_action_plan_v1.tsv",
     "next_action_plan_sha256": "B894B23A115EDF7CE082C885C2D5E3F725FEF0D0E21490786E4A023F7FB7F9A0",
     "next_action_summary": "docs/superpowers/validation/lockbox_next_action_summary_v1.json",
-    "next_action_summary_sha256": "2D42B1D3C02253BADE7E57068A847D4EA267CD0DDBCF38BD0D7381698BBBE270",
+    "next_action_summary_sha256": "49423A7096E7C5619BCA5D9723D6123B64A63CCD821CC0E7653F30B08A16E6C4",
     "second_review_index": "local_validation_artifacts/externalized_superpowers_validation/lockbox_second_review_v1/index.html",
     "second_review_index_sha256": "D7A6B7E9E15F236F24CB63CCA067AB158098B8ADA1432744EECD12AFBAB56125",
     "second_review_queue": "docs/superpowers/validation/lockbox_second_review_queue_v1.tsv",
-    "second_review_queue_sha256": "E40C15E341F81B172844CFED6447B72B9ECCCCAD68F1851F03D5D65C3D262BDF",
+    "second_review_queue_sha256": "B3A4AE5D37B65F29BB8694230552AD6FAF44F9CE04FC0623445E2810E8CADA33",
     "second_review_template": "docs/superpowers/validation/lockbox_second_review_template_v1.tsv",
-    "second_review_template_sha256": "6DF748875AC2ED27D6D44659196E7FDE485BC675A4B1209883BB20EB635A3E68",
+    "second_review_template_sha256": "A1FB184987929516DC74C3A7B3E4E8A8C4D0279A40BF8A5C035EA9474D061682",
     "static_review_bundle_index": "docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv",
-    "static_review_bundle_index_sha256": "F933862BD8EAB177D72263D87CEF0EFD5EA1277627F5A4C20BE1296987868D49"
+    "static_review_bundle_index_sha256": "B486F297FB6342995BC0E5E5211FFAFFFACF3CDC6C1DBB36F48E8B0D3AAD0D9A"
   },
   "source_next_action_counts": {
     "park_roundtrip_oracle_negative_as_nontruth": 12,

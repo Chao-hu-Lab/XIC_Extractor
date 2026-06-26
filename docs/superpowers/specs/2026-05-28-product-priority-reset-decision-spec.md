@@ -92,11 +92,11 @@ note and accepted by the user before it is used to start a behavior-changing PR.
 The gate scope is fixed to the current accepted validation surfaces:
 
 - 8RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv`
+  `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv`
 - 85RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv`
-- RAW root: `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R`
-- DLL dir: `C:\Xcalibur\system\programs`
+  `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv`
+- RAW root: `$env:XIC_RAW_ROOT`
+- DLL dir: `$env:THERMO_RAWFILE_READER_DLL_DIR`
 - Python runtime: `.venv\Scripts\python.exe` from the active worktree, after
   verifying that `.venv` exists or is a junction to the canonical repo runtime.
 - Machine delivery files: `alignment_matrix.tsv`, `alignment_review.tsv`,
@@ -157,8 +157,8 @@ Use the documented validation-minimal surface by default:
 Test-Path .venv\Scripts\python.exe
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <accepted-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --expected-sample-count <8-or-85> `
   --output-level validation-minimal `

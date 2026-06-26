@@ -14,13 +14,18 @@ before starting any RAW run.
 
 | Suite | Purpose | Default data | Output contract |
 | --- | --- | --- | --- |
-| `manual-2raw` | Manual truth area/RT comparison for resolver development | `C:\Xcalibur\data\20251219_need process data\XIC test` | `local_minimum_param_sweep_summary.xlsx` |
-| `tissue-8raw` | Targeted extraction workbook smoke / A-B comparison | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` | `xic_results_<mode>_w<workers>.xlsx` |
-| `tissue-85raw` | Full targeted extraction workbook gate, opt-in only | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` | `xic_results_<mode>_w<workers>.xlsx` |
+| `manual-2raw` | Manual truth area/RT comparison for resolver development | `$env:XIC_MANUAL_2RAW_ROOT` | `local_minimum_param_sweep_summary.xlsx` |
+| `tissue-8raw` | Targeted extraction workbook smoke / A-B comparison | `$env:XIC_RAW_VALIDATION_DIR` | `xic_results_<mode>_w<workers>.xlsx` |
+| `tissue-85raw` | Full targeted extraction workbook gate, opt-in only | `$env:XIC_RAW_ROOT` | `xic_results_<mode>_w<workers>.xlsx` |
 
 All suites write `validation_summary.csv` under the selected run directory. The
 8RAW and 85RAW suites validate the expected `.raw` count before running: 8 and
 85 respectively.
+
+If local env vars are not loaded, dry-run/spec construction falls back to
+repo-local `local_validation_artifacts/...` placeholders. Real RAW-backed runs
+should load `.env.xic-local` or equivalent environment variables first; the
+placeholders are for command inspection, not real data discovery.
 
 Use this harness when the decision depends on targeted extraction workbook
 behavior. Do not use it for alignment/downstream matrix acceptance. Alignment
@@ -34,7 +39,7 @@ Run the manual truth sweep plus the 8RAW targeted extraction subset:
 ```powershell
 .venv\Scripts\python.exe scripts\validation_harness.py `
   --run-id method_dev `
-  --output-root output\validation_harness
+  --output-root output/validation_harness
 ```
 
 Current defaults:
@@ -59,7 +64,7 @@ focused grid:
   --resolver-mode local_minimum `
   --grid calibration-v1 `
   --run-id local_minimum_calibration_v1 `
-  --output-root output\validation_harness
+  --output-root output/validation_harness
 ```
 
 `calibration-v1` keeps the sweep small and targets historical local-minimum
@@ -78,7 +83,7 @@ Dry-run prints exact commands without touching RAW files:
   --dry-run `
   --confirm-full-run `
   --run-id method_dev `
-  --output-root output\validation_harness
+  --output-root output/validation_harness
 ```
 
 Use dry-run before any full targeted extraction workbook gate. If the printed
@@ -95,7 +100,7 @@ Create a workbook baseline run once:
 .venv\Scripts\python.exe scripts\validation_harness.py `
   --suite tissue-8raw `
   --run-id current `
-  --output-root output\validation_baselines
+  --output-root output/validation_baselines
 ```
 
 Compare a later run against that baseline by keeping the same `run-id` and
@@ -105,14 +110,14 @@ pointing `--baseline-root` at the baseline root:
 .venv\Scripts\python.exe scripts\validation_harness.py `
   --suite tissue-8raw `
   --run-id current `
-  --output-root output\validation_harness `
-  --baseline-root output\validation_baselines
+  --output-root output/validation_harness `
+  --baseline-root output/validation_baselines
 ```
 
 The compare target is exact:
 
 ```text
-output\validation_baselines\<run-id>\tissue_8raw_<resolver>\xic_results_process_w4.xlsx
+output/validation_baselines\<run-id>\tissue_8raw_<resolver>\xic_results_process_w4.xlsx
 ```
 
 Workbook comparison uses `scripts\compare_workbooks.py`, which ignores runtime
@@ -173,7 +178,7 @@ extraction workbook release checks:
   --suite tissue-85raw `
   --confirm-full-run `
   --run-id full_tissue_workbook_gate `
-  --output-root output\validation_harness
+  --output-root output/validation_harness
 ```
 
 Do not use this suite for routine PR checks, and do not use it as the alignment

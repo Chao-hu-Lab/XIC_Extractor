@@ -1,27 +1,27 @@
 {
   "artifacts": {
     "cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_cells.tsv",
+      "path": "output//validation//backfill_expansion_peak_mode_decomposition_v1//backfill_expansion_peak_mode_decomposition_cells.tsv",
       "sha256": "D19310762CB96A34EB490E2CD1D37E365F9DC8E357D4896429C6DA56DE324628",
       "size_bytes": 368253
     },
     "checks_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_checks.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_checks.tsv",
       "sha256": "43DA85C1ABB9C03315E76795ABD7E6B53DA89BC0019EC41B3721120DEFB8F6AE",
       "size_bytes": 631
     },
     "row_manifest_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_row_manifest.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_row_manifest.tsv",
       "sha256": "DB87FCE0B8DE0C376BC9AFAB330E406AE7F1F25F5718E9F8660507FE3EFF343A",
       "size_bytes": 8499
     },
     "split_decision_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_split_decisions.tsv",
       "sha256": "60AC53342283179A116D49C4E3DD61A5CCCCE00A0E4B46A8A086C1C7EFBC2469",
       "size_bytes": 9229
     },
     "subtype_split_review_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_subtype_split_review.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\backfill_expansion_peak_mode_decomposition_subtype_split_review.tsv",
       "sha256": "F514683A617C88446850D878B5F47DEB0B4C4AC7C0E494CDABFE233C3BB79908",
       "size_bytes": 7839
     }
@@ -46,22 +46,22 @@
   },
   "input_artifacts": {
     "expected_diff_tsv": {
-      "path": "output\\validation\\backfill_expansion_expected_diff_provenance_v1\\inputs\\expected_diff.tsv",
+      "path": "output//validation//backfill_expansion_expected_diff_provenance_v1//inputs//expected_diff.tsv",
       "sha256": "B2E755A368670D6D8DC34220D9AE7F002869DA2534C778166D34B0392221CD73",
       "size_bytes": 128887
     },
     "manual_review_tsv": {
-      "path": "docs\\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\fam017098_peak_mode_manual_review.tsv",
+      "path": "docs/\superpowers\\validation\\backfill_expansion_peak_mode_decomposition_v1\\fam017098_peak_mode_manual_review.tsv",
       "sha256": "1B5B9935C77F7EBE1836E51D4D9E52DBF54C187932C7841604EAE9249EB04B58",
       "size_bytes": 1892
     },
     "overlay_batch_summary_tsv": {
-      "path": "output\\validation\\backfill_expansion_raw_overlay_trace_identity_v1\\family_ms1_overlay_batch\\family_ms1_overlay_batch_summary.tsv",
+      "path": "output//validation//backfill_expansion_raw_overlay_trace_identity_v1//family_ms1_overlay_batch//family_ms1_overlay_batch_summary.tsv",
       "sha256": "89BBE7DC0B7655C98153E54F4675A51CA9D9C4D3C4951CC78BFAD0876E03F6DF",
       "size_bytes": 12997
     },
     "sample_local_cells_tsv": {
-      "path": "output\\validation\\backfill_expansion_sample_local_ms1_evidence_v1\\backfill_expansion_sample_local_ms1_evidence_cells.tsv",
+      "path": "output//validation//backfill_expansion_sample_local_ms1_evidence_v1//backfill_expansion_sample_local_ms1_evidence_cells.tsv",
       "sha256": "490B66DE0188315570F7201B572751308BFC6F2144FE27E13A2A3F2DEB9BAAD0",
       "size_bytes": 551217
     }

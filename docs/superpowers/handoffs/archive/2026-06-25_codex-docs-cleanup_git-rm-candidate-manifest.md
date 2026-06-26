@@ -1,8 +1,10 @@
 # Git-Rm Candidate Manifest
 
-Status: `approval_required`
+Status: `committed_approved_removal_set`
 
-This manifest is an explicit review set only. 254 previously approved paths are currently staged for removal. This report does not authorize any additional `git rm` beyond those staged deletions.
+This manifest is a historical explicit review set. The approved 254-path and
+106-path no-referrer removals were included in commit `634d568c`. This report
+does not authorize any additional `git rm`.
 
 ## Approval Rule
 

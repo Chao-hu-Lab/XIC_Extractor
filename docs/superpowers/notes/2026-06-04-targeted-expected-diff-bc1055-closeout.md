@@ -140,7 +140,7 @@ Success: no issues found in 2 source files.
 8RAW targeted run:
 
 ```powershell
-.venv\Scripts\python.exe scripts\validation_harness.py --suite tissue-8raw --base-dir . --output-root output\target_pair_rt_production_ready_20260604 --run-id bc1055_row_approval_8raw_semantic_surface_final --resolver-mode region_first_safe_merge --parallel-mode serial --parallel-workers 1 --data-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation --setting emit_peak_candidates=true --setting target_pair_rt_calibration_path=C:\Users\user\Desktop\XIC_Extractor\output\target_pair_rt_false_positive_review_20260604\target_pair_rt_calibration_review_bootstrap.tsv --setting model_selection_expected_diff_approval_registry=C:\Users\user\Desktop\XIC_Extractor\output\target_pair_rt_production_ready_20260604\bc1055_row_approval\model_selection_expected_diff_approvals.tsv
+.venv\Scripts\python.exe scripts\validation_harness.py --suite tissue-8raw --base-dir . --output-root output/target_pair_rt_production_ready_20260604 --run-id bc1055_row_approval_8raw_semantic_surface_final --resolver-mode region_first_safe_merge --parallel-mode serial --parallel-workers 1 --data-dir $env:XIC_RAW_VALIDATION_DIR --setting emit_peak_candidates=true --setting target_pair_rt_calibration_path=output/target_pair_rt_false_positive_review_20260604/target_pair_rt_calibration_review_bootstrap.tsv --setting model_selection_expected_diff_approval_registry=output/target_pair_rt_production_ready_20260604/bc1055_row_approval\model_selection_expected_diff_approvals.tsv
 ```
 
 Observed:
