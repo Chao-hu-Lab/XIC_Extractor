@@ -3,8 +3,9 @@
 日期: 2026-06-15
 狀態: living plan / maintenance checklist
 目前 readiness: `diagnostic_only` for this control document
-主要依據: [current capability inventory](../reports/2026-06-15-current-capability-inventory-and-promotion-roadmap.md)
-白話交接: [current productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
+主要依據: [productization topic map](../../product/productization.md)
+歷史盤點: summarized in this control plane; original branch inventory is retired private-history context
+產品化狀態 anchor: [cc-framework-improvements productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
 可重用背景研究: [deepresearch notes](../../deepresearch/README.md)
 
 ## Authority
@@ -20,9 +21,13 @@ packet 的權威。白話 handoff 只負責讓下一個 agent/session 快速接�
 5. handoff 只做白話摘要、接手順序、下一步建議。
 
 Global skills such as `handoff` / `worktree-report` can remind agents how to
-write this handoff, but they are local environment helpers. XIC's enforceable
-handoff contract is the version-controlled combination of this document,
-`docs/agent/codex-operating-system.md`, `.codex/hooks/*`, and hook fixtures.
+write a handoff, but they are local environment helpers. The tracked handoff
+contract is branch-scoped: productization status anchors stay separate from
+branch/PR current handoffs. XIC's enforceable handoff contract is the
+version-controlled combination of this document,
+`docs/agent/obsidian-handoff-contract.md`,
+`docs/superpowers/handoffs/README.md`, `docs/agent/codex-operating-system.md`,
+`.codex/hooks/*`, and hook fixtures.
 
 ## Purpose
 
@@ -40,7 +45,7 @@ handoff contract is the version-controlled combination of this document,
 
 - `UserPromptSubmit`: prompt 提到產品化、promotion、正式功能、maturity tier、`method_manifest`、`review_roundtrip` 等詞時，自動把本文件拉回上下文。
 - `PreToolUse`: write-like 工具準備修改 product/public surface 時，提醒必須更新本文件，或明確說明沒有 maturity tier 變動。
-- `PostToolUse`: patch/write 類工具執行後，若工作樹已有 product/public surface diff 但本文件沒有變更，提醒 closeout 前補 board/log 或明確記錄 no-tier-change；若 product/control-plane 狀態可能變了但白話 handoff 沒有同步，也提醒 closeout 前補 handoff 或明確記錄 handoff 仍有效。
+- `PostToolUse`: patch/write 類工具執行後，若工作樹已有 product/public surface diff 但本文件沒有變更，提醒 closeout 前補 board/log 或明確記錄 no-tier-change；若 product/control-plane 狀態可能變了但 branch-scoped handoff 沒有同步，也提醒 closeout 前解析正確分支 handoff 或明確記錄不需要 handoff 更新。
 
 Hooks 是 guardrails，不是語意裁判。它們負責把你和 agent 拉回控制台；
 真正的 tier 判斷仍要寫在 promotion packet、spec closeout 或 maintenance
@@ -215,17 +220,14 @@ expected-diff pass. The policy summary now records
 The most common blocked bucket remains the 1087 rows with missing overlay path,
 and the remaining blocked rows mainly carry combined shape/height/width/scan/
 apex-delta blockers or still need a new approved evidence class/passing oracle.
-The Backfill Production Gate research input under `docs/deepresearch/` reviewed
-on 2026-06-17 reinforces that `height >= 2e6` is only a high-signal
-demonstrator / rollout guardrail, not a product hard gate. Low-height
-`19/20 pass + 1 boundary fail` should be treated as boundary/reintegration risk
-evidence. This research input is now background for future truth/review design,
-not a prompt to create another broad writer slice.
-The 2026-06-18 strategy reset under
-`docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md`,
-`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md`,
-and
-`docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`
+The retired private Backfill production-gate research input reviewed on
+2026-06-17 reinforces that `height >= 2e6` is only a high-signal demonstrator /
+rollout guardrail, not a product hard gate. Low-height `19/20 pass + 1 boundary
+fail` should be treated as boundary/reintegration risk evidence. Public
+takeaways live in `docs/product/backfill.md` and `docs/deepresearch/README.md`;
+the private research input is not a source-of-truth repo path.
+The 2026-06-18 Backfill strategy reset notes, summarized here and in
+`docs/product/backfill.md`,
 supersedes any next step that would choose another writer slice directly from
 `quality_blockers`. The Backfill north star is mechanical adjudication of all
 4613 candidates, not claiming all 4613 as writable. Current writer authority
@@ -648,8 +650,8 @@ not product writer authority.
 - [ ] 有沒有命名造成誤會，例如 `production_candidate_gate` 被誤認為 production promotion。
 - [ ] 有沒有 legacy name 應保留為 compatibility，而不是立刻 rename。
 - [ ] 是否需要把本週結論回寫到這份 control plane。
-- [ ] 是否已同步更新白話交接文件 `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`。
-- [ ] `git status --short -- docs/superpowers/handoffs/current/cc-framework-improvements-productization.md docs/superpowers/plans/2026-06-15-productization-control-plane.md` 是否符合預期；若 handoff 是接手必需品，必須 tracked/ staged/ committed，或明確標成 local-only/non-authoritative。
+- [ ] 若本次工作需要交接，是否已解析並同步更新正確的 branch-scoped handoff；不要覆寫其他分支的 handoff。
+- [ ] `git status --short -- docs/superpowers/handoffs/current/ docs/superpowers/plans/2026-06-15-productization-control-plane.md` 是否符合預期；若 handoff 是接手必需品，必須 tracked/staged/committed，或明確標成 local-only/non-authoritative。PR closeout 時，應把 current handoff 濃縮進 PR body。
 
 ## Pre-work checklist
 
@@ -801,7 +803,7 @@ lanes` and `Active productization board` above for current owner/tier decisions.
 Items below that say `primary lane` or `supporting lane` describe their status
 at that older checkpoint, not the latest release claim.
 
-依照 current capability inventory 與當時 replay executor closeout，當時順序為:
+依照當時的 current capability inventory 與 replay executor closeout，當時順序為:
 
 1. `method_manifest_v1` - done
    - Result: `production_ready` for targeted CLI replay parity.
@@ -853,11 +855,25 @@ at that older checkpoint, not the latest release claim.
 - Remaining blocker:
 ```
 
+### 2026-06-26 - docs-cleanup routing
+
+- Previous tier: unchanged
+- New tier: unchanged
+- Evidence: repo public-doc cleanup replacing retired private-history note/spec
+  path references with current public owner docs or opaque retired-provenance
+  identifiers.
+- Product surface changed: none. This does not change maturity tier, active
+  lane, writer authority, output schema, review/replay behavior, selected values,
+  selected area/counting, matrix values, or matrix authority.
+- Validation: public-surface stub audit only; no RAW or product behavior
+  validation required for this docs-only routing change.
+- Remaining blocker: no productization blocker created by this cleanup.
+
 ### 2026-06-15 - Control plane initialized
 
 - Previous tier: none
 - New tier: living maintenance checklist
-- Evidence: current capability inventory and five-area read-only review
+- Evidence: then-current capability inventory and five-area read-only review
 - Product surface changed: none
 - Validation: document smoke only
 - Remaining blocker: no active owner assigned to the first four June focus specs
@@ -866,7 +882,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `missing`
 - New tier: `production_ready` for targeted CLI replay parity; not full exact artifact replay
-- Evidence: `docs/superpowers/specs/2026-06-15-method-manifest-v1-spec.md`; `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`; `xic_extractor.output.method_manifest`; `xic-extractor-cli --replay-manifest`; focused manifest/output metadata/CLI replay tests; targeted 8RAW and 85RAW CSV/workbook replay parity; post-review test that replay rejects settings/targets artifact paths that do not bind to `invocation.config_dir`
+- Evidence: `docs/superpowers/specs/2026-06-15-method-manifest-v1-spec.md`; retired replay-validation private note summarized here; `xic_extractor.output.method_manifest`; `xic-extractor-cli --replay-manifest`; focused manifest/output metadata/CLI replay tests; targeted 8RAW and 85RAW CSV/workbook replay parity; post-review test that replay rejects settings/targets artifact paths that do not bind to `invocation.config_dir`
 - Product surface changed: additive `output/method_manifest.json`; additive workbook `Run Metadata` rows `method_manifest_schema`, `method_manifest_path`, `method_manifest_sha256`; additive `--replay-manifest` CLI mode
 - Validation: synthetic/focused unit, output contract, CLI replay tests, targeted 8RAW CSV-only replay byte parity, targeted 8RAW Excel-mode workbook compare, and one targeted 85RAW initial+replay sequence with CSV byte parity plus workbook compare
 - Remaining blocker: no timestamped workbook hash capture for full exact artifact replay; GUI parity intentionally skipped because GUI replay is not yet wired to mainline
@@ -991,7 +1007,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `diagnostic_only` for shared MS1 shape evidence; explicit opt-in workflow pending tier decision
 - New tier: `production_candidate` for explicit support-TSV workflow only
-- Evidence: `docs/superpowers/specs/2026-06-16-shared-target-untarget-peak-identity-spine-spec.md`; 8RAW expected-diff artifact `output/ms1_shape_identity_optin_8raw_20260616/expected_diff_summary.tsv`; 85RAW manual-support and generic-support artifacts under `output/ms1_shape_identity_optin_85raw_20260616/` and `output/ms1_shape_identity_generic_support_85raw_20260616/`
+- Evidence: `docs/product/evidence-spine.md`; 8RAW expected-diff artifact `output/ms1_shape_identity_optin_8raw_20260616/expected_diff_summary.tsv`; 85RAW manual-support and generic-support artifacts under `output/ms1_shape_identity_optin_85raw_20260616/` and `output/ms1_shape_identity_generic_support_85raw_20260616/`
 - Product surface changed: none this round; existing explicit config/CLI support path remains opt-in
 - Validation: reused existing 8RAW/85RAW artifacts; no new 85RAW run because the existing artifacts already answer the candidate-tier decision
 - Remaining blocker: default automatic support generation/consumption remains
@@ -1633,7 +1649,9 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `production_ready` for the headless explicit limited support-TSV workflow after support-required gate hardening.
 - New tier: unchanged; no product tier movement.
-- Evidence: subagent reviewer `Dirac` found one P3 docs drift in `docs/superpowers/specs/2026-06-16-shared-target-untarget-peak-identity-spine-spec.md` where the gate still used old output-only support-gate wording.
+- Evidence: subagent reviewer `Dirac` found one P3 docs drift in the retired
+  shared identity-spine private spec where the gate still used old output-only
+  support-gate wording; the current public owner is `docs/product/evidence-spine.md`.
 - Product surface changed: docs wording only; the spec now says the gate requires the actual support TSV.
 - Validation: `uv run pytest tests\test_targeted_ms1_shape_identity_expected_diff_gate.py -q` (`9 passed`); support-optional wording grep no longer finds Targeted MS1 support-TSV contract drift; `git diff --check` has only LF/CRLF warnings.
 - Remaining blocker: none for this docs drift. Unflagged normal-extraction rescue remained blocked separately at this checkpoint.
@@ -1728,8 +1746,8 @@ at that older checkpoint, not the latest release claim.
   probes remain `production_candidate`.
 - New tier: unchanged; this is design input and product-gate framing, not a
   behavior promotion.
-- Evidence: reviewed
-  `docs/deepresearch/Backfill Production Gate.md`. The conclusion is that
+- Evidence: reviewed the retired private Backfill production-gate research
+  input; public takeaways now live in `docs/product/backfill.md`. The conclusion is that
   absolute `height >= 2e6` should not become a universal Backfill product hard
   gate because LC-MS height depends on analyte response, matrix effect, batch
   state, local background, and co-elution. The low-height heldout result
@@ -3361,7 +3379,7 @@ at that older checkpoint, not the latest release claim.
 - New tier: unchanged. This is a Discovery contract/gate hardening and
   one-RAW validation artifact; it does not regenerate the default matrix,
   change active lane, or grant new matrix/Backfill/ProductWriter authority.
-- Evidence: `docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`
+- Evidence: `docs/product/discovery.md`
   now defines direct scan-precursor and product-plus-neutral-loss inferred
   seed bases; `discovery_candidates.csv` carries
   `neutral_loss_error_basis`, `precursor_mz_basis`, `scan_precursor_mz`,
@@ -3789,7 +3807,7 @@ at that older checkpoint, not the latest release claim.
   a strategy reset, not a product behavior change.
 - Evidence: reviewed the 2026-06-18 ChatGPT reset note and Backfill auto-write
   ground-truth strategy note, then recorded the blocking critique in
-  `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md`.
+  this maintenance log and `docs/product/backfill.md`.
   Revalidated key no-RAW facts: Backfill promotes only MS1 morphology
   `primary_matrix_area`; existing replay artifacts still report 4613 policy
   rows, 511 `write_ready`, 0 `detected_flagged`, 4102 `blocked`, and 511/511
@@ -3937,7 +3955,7 @@ the later low-height writer entry above as the current tier source.
 
 - Previous tier: `production_candidate` / wording drift in control plane
 - New tier: `production_surface` for output-level contract
-- Evidence: `docs/superpowers/specs/2026-05-11-untargeted-alignment-output-contract.md`; `xic_extractor.alignment.output_levels`; `scripts/run_alignment.py --output-level`; focused output-level tests
+- Evidence: `docs/product/alignment.md`; `xic_extractor.alignment.output_levels`; `scripts/run_alignment.py --output-level`; focused output-level tests
 - Product surface changed: docs wording only; production level is `alignment_results.xlsx`, `alignment_matrix_identity.tsv`, and `review_report.html`; `alignment_matrix.tsv` remains machine/validation
 - Validation: `python -m pytest tests\test_alignment_output_levels.py tests\test_alignment_pipeline_outputs.py::test_run_alignment_production_level_writes_user_artifacts_and_identity_tsv tests\test_alignment_pipeline_outputs.py::test_run_alignment_default_stays_machine_until_owner_validation_acceptance tests\test_run_alignment.py::test_run_alignment_cli_accepts_output_level_debug tests\test_run_alignment.py::test_run_alignment_cli_accepts_validation_minimal_output_level -q`
 - Remaining blocker: release gate should continue guarding production/machine/debug/validation artifact separation; this does not claim full untargeted scientific production readiness

@@ -16,25 +16,25 @@ The accepted run used the reviewed controls manifest and strict V0.4 acceptance:
 
 ```powershell
 uv run python scripts\validate_identity_coherence_8raw.py `
-  --discovery-batch-index output\discovery\timing_phase0_8raw\discovery_batch_index.csv `
-  --raw-dir "C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation" `
-  --dll-dir "C:\Xcalibur\system\programs" `
-  --output-root output\identity_coherence_8raw_validation_reviewed `
-  --controls-manifest output\identity_coherence_8raw_validation\identity_coherence_controls_manifest_8raw.reviewed.tsv `
+  --discovery-batch-index output/discovery/timing_phase0_8raw/discovery_batch_index.csv `
+  --raw-dir "<raw-data>/validation" `
+  --dll-dir "$env:THERMO_RAWFILE_READER_DLL_DIR" `
+  --output-root output/identity_coherence_8raw_validation_reviewed `
+  --controls-manifest output/identity_coherence_8raw_validation/identity_coherence_controls_manifest_8raw.reviewed.tsv `
   --require-v04-acceptance
 ```
 
 Observed terminal result:
 
 ```text
-PASS identity_coherence_sidecar_parity summary=output\identity_coherence_8raw_validation_reviewed\identity_coherence_8raw_validation_report.md
-PASS identity_coherence_v04_acceptance scope=8raw_method_review_only not_85raw_ready summary=output\identity_coherence_8raw_validation_reviewed\identity_coherence_v04_acceptance.md
+PASS identity_coherence_sidecar_parity summary=output/identity_coherence_8raw_validation_reviewed/identity_coherence_8raw_validation_report.md
+PASS identity_coherence_v04_acceptance scope=8raw_method_review_only not_85raw_ready summary=output/identity_coherence_8raw_validation_reviewed/identity_coherence_v04_acceptance.md
 ```
 
 ## Accepted Outputs
 
 ```text
-output\identity_coherence_8raw_validation_reviewed\
+output/identity_coherence_8raw_validation_reviewed/
   identity_coherence_8raw_validation_summary.tsv
   identity_coherence_8raw_validation_report.md
   identity_coherence_v04_acceptance.tsv
@@ -68,7 +68,7 @@ projected_85raw_identity_request_count = not_assessed
 Reviewed manifest:
 
 ```text
-output\identity_coherence_8raw_validation\identity_coherence_controls_manifest_8raw.reviewed.tsv
+output/identity_coherence_8raw_validation/identity_coherence_controls_manifest_8raw.reviewed.tsv
 ```
 
 Manifest provenance:
@@ -96,7 +96,7 @@ the `area-mismatch-production-fix` worktree.
 8RAW benchmark source:
 
 ```text
-C:\Users\user\Desktop\XIC_Extractor\.worktrees\area-mismatch-production-fix\output\diagnostics\untargeted_revalidation_after_targeted_fix_8raw\targeted_istd_benchmark\targeted_istd_benchmark_summary.tsv
+.worktrees/area-mismatch-production-fix/output/diagnostics/untargeted_revalidation_after_targeted_fix_8raw/targeted_istd_benchmark/targeted_istd_benchmark_summary.tsv
 rows = 7
 sha256 = 32B3F4B4BD544A780ACA56A7C5FEBDDAE0FEFD56C6235C8434207CA8D3DDAE4D
 ```
@@ -104,7 +104,7 @@ sha256 = 32B3F4B4BD544A780ACA56A7C5FEBDDAE0FEFD56C6235C8434207CA8D3DDAE4D
 85RAW benchmark reference:
 
 ```text
-C:\Users\user\Desktop\XIC_Extractor\.worktrees\area-mismatch-production-fix\output\diagnostics\untargeted_revalidation_after_targeted_fix_85raw\targeted_istd_benchmark\targeted_istd_benchmark_summary.tsv
+.worktrees/area-mismatch-production-fix/output/diagnostics/untargeted_revalidation_after_targeted_fix_85raw/targeted_istd_benchmark/targeted_istd_benchmark_summary.tsv
 rows = 7
 sha256 = 09D663F80ED26A2B22B50403A40E8A59A96323BAC103FAADFE5D0D230ACD6DC3
 ```

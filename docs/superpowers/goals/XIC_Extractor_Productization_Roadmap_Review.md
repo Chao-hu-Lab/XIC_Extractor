@@ -28,7 +28,7 @@ Use this roadmap with:
 
 - [Backfill Quant Matrix Product Blueprint](../plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
 - [productization control plane](../plans/2026-06-15-productization-control-plane.md)
-- [current handoff](../handoffs/current/cc-framework-improvements-productization.md)
+- [productization status anchor](../handoffs/current/cc-framework-improvements-productization.md)
 - [deepresearch index](../../deepresearch/README.md)
 
 The control plane remains the authority for current tier, active lane, and
@@ -97,8 +97,9 @@ classify conflicting docs/code/tests as `delete`, `downgrade`, `adapt`, or
 Done when:
 
 - active routing docs point to the 2026-06-19 blueprint;
-- Phase 0 handoff points to Phase 1 Shadow Adapter v1, and current handoff
-  advances to Phase 2 after Phase 1 closes;
+- Phase 0 handoff points to Phase 1 Shadow Adapter v1, and the active
+  productization or branch-scoped handoff advances to Phase 2 after Phase 1
+  closes;
 - old 2026-06-18 blueprint is superseded;
 - cleanup map exists;
 - no control-plane update is needed unless tier/lane/authority actually changed.

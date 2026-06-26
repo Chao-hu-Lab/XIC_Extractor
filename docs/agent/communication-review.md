@@ -29,9 +29,30 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
   purpose, verdict, important artifacts, validation commands/results, active
   blockers, rejected paths still likely to recur, and an explicit next-step
   recommendation. Keep it as current state, not a chronological log.
+- Handoffs are branch-scoped. Before editing a repo-tracked handoff, verify the
+  file name and its `Branch:` / `Status:` match the current branch or PR
+  workflow. If they do not match, create or update the correct
+  `docs/superpowers/handoffs/current/<branch-slug>-<topic>.md` instead.
 - Active handoffs should stay short enough to read every time, normally under
   about 200 lines. Completed phase summaries belong in archive; long logs,
   stack traces, and scratch analysis belong in notes only when still useful.
+- When long context is moved to Obsidian, the repo handoff remains a
+  self-sufficient stub. Obsidian links are optional deep context, not required
+  for understanding the next safe action.
+- Treat repo handoffs and PR bodies as public-facing summaries. They may state
+  the approved decision, validation actually run, residual risk, and next
+  action, but they must not paste private Obsidian reasoning, raw command
+  transcripts, local absolute paths, sample-level investigation detail, or
+  private data placement back into the repo.
+- PR body is the normal durable closeout surface. Condense the branch handoff
+  into the PR body instead of treating the current handoff as the final record;
+  archive only compact completed phase summaries that must remain in repo.
+- Handoff retention is inventory-driven. Any file added to
+  `docs/superpowers/handoffs/current/` or `docs/superpowers/handoffs/archive/`
+  must also be recorded in `docs/superpowers/handoffs/RETENTION.tsv`. Use
+  `tools/diagnostics/handoff_retention_audit.py` before PR closeout to find
+  stale current handoffs, Obsidian-transfer candidates, and tracked-removal
+  candidates. The audit is not deletion approval.
 - Status labels such as `[active]`, `[blocked]`, `[done]`, and `[superseded]`
   are useful in open-work sections. Remove `[done]` and `[superseded]` items
   from the active handoff during the next prune unless they prevent repeated

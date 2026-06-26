@@ -3,7 +3,7 @@
 **Date:** 2026-06-02
 **Status:** Reviewed implementation contract
 **Parent launch contract:** `2026-06-02-public-behavior-retirement-productization-design.md`
-**Foundation contract:** `2026-06-02-c6-cross-sample-peak-group-hypothesis-shadow-contract-design.md`
+**Foundation contract:** `retired-provenance:64de5836a40e`
 **Behavior label:** public behavior change
 
 ## Review Record

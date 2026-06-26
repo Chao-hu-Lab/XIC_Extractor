@@ -1,6 +1,6 @@
 ﻿key,value,description
 data_dir,C:/your/data/folder,資料來源資料夾（換批次只改這裡）
-dll_dir,C:\Xcalibur\system\programs,Xcalibur DLL 路徑（通常不需更改）
+dll_dir,<thermo-rawfile-reader-dll-dir>,Thermo RawFileReader DLL 路徑（本機設定用；不要提交真實路徑）
 smooth_window,15,Savitzky-Golay 平滑視窗長度（必須為奇數，建議 9-21）
 smooth_polyorder,3,Savitzky-Golay 多項式階數（通常 2-4）
 ms1_morphology_smoothing_window_points,15,MS1 morphology Gaussian15 smoothing 視窗點數（必須為奇數；預設 15）

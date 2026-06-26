@@ -151,9 +151,11 @@ While executing:
 Apply the global current-state handoff rule through this skill because XIC
 goals are usually launched via `$goal-execution`.
 
-Use the active handoff named by the goal, control plane, plan, or PR workflow,
-such as `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`;
-use `HANDOFF.md` only when the current goal establishes it as the active file.
+Use the active handoff named by the goal, plan, or PR workflow. If none is
+named and a repo-tracked handoff is needed, create or update a branch-scoped
+file under `docs/superpowers/handoffs/current/<branch-slug>-<topic>.md`; use
+`HANDOFF.md` only when the current goal establishes it as the active file.
+Never update a handoff whose `Branch:` / `Status:` belongs to another branch.
 The active handoff is a short continuation snapshot, not the productization
 tier authority. Tier history, per-round maintenance logs, and lane evidence
 belong in the control plane, named specs, validation notes, or archive.
@@ -178,7 +180,9 @@ Before each meaningful checkpoint, compact-risk pause, or closeout:
 4. Use `[active]`, `[blocked]`, `[done]`, and `[superseded]` labels where they
    make pruning easier. Remove `[done]` and `[superseded]` items during the next
    update unless they remain important rejected-path warnings.
-5. If the active handoff is over about 200 lines, prune it before continuing
+5. Near PR closeout, condense the current handoff into the PR body; archive only
+   compact completed phase summaries that need to remain in repo.
+6. If the active handoff is over about 200 lines, prune it before continuing
    unless the user explicitly asks for a longer handoff.
 
 Hooks may remind that the handoff is stale or missing from a productization

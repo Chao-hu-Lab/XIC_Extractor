@@ -472,13 +472,13 @@ def _hypothesis_path_from_overlay(overlay_path: str) -> str:
 
 
 def _existing_file(path_value: str) -> bool:
-    return bool(path_value) and Path(path_value).exists()
+    return bool(path_value) and _resolve_path(path_value).exists()
 
 
 def _hash_if_exists(path_value: str) -> str:
     if not _existing_file(path_value):
         return ""
-    return artifact_sha256(Path(path_value))
+    return artifact_sha256(_resolve_path(path_value))
 
 
 def _repo_relative(path: Path) -> str:
@@ -486,6 +486,13 @@ def _repo_relative(path: Path) -> str:
         return path.resolve().relative_to(ROOT).as_posix()
     except ValueError:
         return str(path)
+
+
+def _resolve_path(path_value: str) -> Path:
+    path = Path(path_value)
+    if path.is_absolute():
+        return path
+    return ROOT / path
 
 
 def main(argv: Sequence[str] | None = None) -> int:

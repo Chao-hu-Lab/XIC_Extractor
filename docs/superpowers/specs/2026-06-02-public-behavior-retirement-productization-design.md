@@ -26,11 +26,11 @@ prove the new behavior is intentional.
 - `AGENTS.md`
 - `docs/agent-subagent-routing.md`
 - `docs/agent-parameter-settings.md`
-- `docs/superpowers/notes/2026-06-02-c4-c6-region-foundation-closeout.md`
-- `docs/superpowers/specs/2026-06-01-c4-peak-scoring-evidence-decision-design.md`
-- `docs/superpowers/specs/2026-06-02-c6-cross-sample-peak-group-hypothesis-shadow-contract-design.md`
-- `docs/superpowers/specs/2026-06-02-region-boundary-decision-owner-design.md`
-- `docs/superpowers/specs/2026-06-02-mature-package-flow-reference-spec.md`
+- `retired-provenance:80511368b0a1`
+- `retired-provenance:af29f907f881`
+- `retired-provenance:64de5836a40e`
+- `retired-provenance:44f1b5db924b`
+- `retired-provenance:ebcb7b73c424`
 
 ## Subagent Review Record
 

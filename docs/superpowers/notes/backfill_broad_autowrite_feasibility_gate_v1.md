@@ -1,5 +1,14 @@
 # Backfill Broad Auto-Write Feasibility Gate v1
 
+> Historical decision packet: retained as evidence/provenance, not live
+> source-of-truth by itself. Its park decision is indexed by
+> `docs/superpowers/validation/productization_status_index_v1.tsv` and
+> `docs/superpowers/specs/productization_authority_manifest.v1.json`; current
+> Backfill tier and writer authority live in
+> `docs/superpowers/plans/2026-06-15-productization-control-plane.md`. Removal
+> or private-note migration requires an explicit removal approval plus a
+> repo-self-contained referrer pass.
+
 Status: read-only decision packet.
 
 Decision: `park_broad_backfill`.

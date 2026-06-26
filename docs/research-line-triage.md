@@ -12,10 +12,9 @@ inventory and from the numerical dual-system audit.
 > (Codex-driven) and notes lag code. Before deleting anything in Bucket B,
 > re-confirm the cited evidence still holds. Related docs:
 > `docs/diagnostic-ledger.md` (rerun policy),
-> `docs/superpowers/notes/2026-06-05-dual-system-and-retired-path-product-behavior-audit-note.md`
-> (which legacy paths still decide reported numbers),
-> `docs/superpowers/notes/2026-06-01-phase7-linear-edge-deletion-note.md` and
-> `2026-06-01-phase6b-final-retirement-go-note.md` (retirement authority).
+> `docs/product/quant-matrix.md` (which values write reported numbers), and
+> `docs/product/peak-model-selection.md` (current retirement authority for
+> legacy area-integration behavior).
 
 ## Anchor finding
 

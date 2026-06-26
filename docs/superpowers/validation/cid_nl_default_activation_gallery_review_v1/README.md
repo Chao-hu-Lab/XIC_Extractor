@@ -109,7 +109,7 @@ Generated location:
 Build or refresh the gallery packet:
 
 ```powershell
-python -m tools.diagnostics.cid_nl_default_activation_gallery_review --require-pass --overlay-batch-summary-tsv output\validation\cid_nl_default_activation_gallery_review_v1\overlays\family_ms1_overlay_batch_summary.tsv
+python -m tools.diagnostics.cid_nl_default_activation_gallery_review --require-pass --overlay-batch-summary-tsv output/validation/cid_nl_default_activation_gallery_review_v1/overlays/family_ms1_overlay_batch_summary.tsv
 ```
 
 `--require-pass` now means the packet is built and every overlay-queued row is
@@ -120,13 +120,13 @@ non-zero under `--require-pass` with `overall_status=needs_overlay_batch`.
 Generate RAW-backed overlays when the overlay summary is missing:
 
 ```powershell
-.venv\Scripts\python.exe -m tools.diagnostics.family_ms1_overlay_batch --review-queue-tsv output\validation\cid_nl_default_activation_gallery_review_v1\cid_nl_default_activation_overlay_review_queue.tsv --alignment-cells output\discovery\cid_nl_product_ready_alignment_85raw_20260620_fix3\alignment_backfill_cell_evidence.tsv --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R --dll-dir C:\Xcalibur\system\programs --output-dir output\validation\cid_nl_default_activation_gallery_review_v1\overlays --limit 85 --no-pdf --reuse-existing
+.venv\Scripts\python.exe -m tools.diagnostics.family_ms1_overlay_batch --review-queue-tsv output/validation/cid_nl_default_activation_gallery_review_v1/cid_nl_default_activation_overlay_review_queue.tsv --alignment-cells output/discovery/cid_nl_product_ready_alignment_85raw_20260620_fix3/alignment_backfill_cell_evidence.tsv --raw-dir $env:XIC_RAW_ROOT --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR --output-dir output/validation/cid_nl_default_activation_gallery_review_v1/overlays --limit 85 --no-pdf --reuse-existing
 ```
 
 Browser smoke the existing gallery:
 
 ```powershell
-uv run python tools\diagnostics\gallery_browser_smoke.py --html output\validation\cid_nl_default_activation_gallery_review_v1\backfill_evidence_reconciliation_gallery.html --output-dir output\validation\cid_nl_default_activation_gallery_review_v1\gallery_browser_smoke
+uv run python tools\diagnostics\gallery_browser_smoke.py --html output/validation/cid_nl_default_activation_gallery_review_v1/backfill_evidence_reconciliation_gallery.html --output-dir output/validation/cid_nl_default_activation_gallery_review_v1/gallery_browser_smoke
 ```
 
 Generate the paired differential overlay review for all 78 ready
@@ -140,7 +140,7 @@ Build the no-RAW feature-inclusion gate from the existing differential,
 paired-overlay, AI-triage artifacts, and versioned manual review verdicts:
 
 ```powershell
-uv run python -m tools.diagnostics.cid_nl_feature_inclusion_gate --manual-review-tsv docs\superpowers\validation\cid_nl_default_activation_gallery_review_v1\cid_nl_manual_feature_inclusion_review.tsv --require-pass
+uv run python -m tools.diagnostics.cid_nl_feature_inclusion_gate --manual-review-tsv docs/superpowers\validation\cid_nl_default_activation_gallery_review_v1\cid_nl_manual_feature_inclusion_review.tsv --require-pass
 ```
 
 Build the validation-only activated-copy candidate:

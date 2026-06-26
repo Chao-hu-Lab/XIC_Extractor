@@ -55,8 +55,8 @@
     "confusion_table": "docs/superpowers/validation/lockbox_truth_confusion_table_v1.tsv",
     "failure_modes": "docs/superpowers/validation/lockbox_failure_modes_v1.tsv",
     "label_log": "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv",
-    "label_log_sha256": "D2B26F04493DB9F910AC46D39746B5B3453ED03EA570C516DB69F421C41F9376",
+    "label_log_sha256": "066F3F76E304A481F5C4176DAAF285A5907BB581F25D7B09D131D7FBE9406910",
     "static_review_bundle_index": "docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv",
-    "static_review_bundle_index_sha256": "F933862BD8EAB177D72263D87CEF0EFD5EA1277627F5A4C20BE1296987868D49"
+    "static_review_bundle_index_sha256": "B486F297FB6342995BC0E5E5211FFAFFFACF3CDC6C1DBB36F48E8B0D3AAD0D9A"
   }
 }

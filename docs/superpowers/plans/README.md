@@ -10,8 +10,10 @@ plan is not active by default.
 
 1. `2026-06-15-productization-control-plane.md` for tier, active lane, writer
    authority, and current broad uncontracted Backfill parked state.
-2. `../handoffs/current/cc-framework-improvements-productization.md` for current
-   continuation state.
+2. The branch-specific current handoff named by the goal or PR workflow for
+   continuation state. Use
+   `../handoffs/current/cc-framework-improvements-productization.md` only when
+   working on that productization status-anchor branch.
 3. `2026-06-19-backfill-quant-matrix-product-blueprint.md` for Backfill /
    quant-matrix phase execution.
 4. Older dated plans only when the active goal names them as provenance.

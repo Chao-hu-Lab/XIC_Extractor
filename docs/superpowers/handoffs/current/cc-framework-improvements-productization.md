@@ -1,27 +1,19 @@
-# XIC productization handoff
+# XIC productization status anchor
 
-Updated: 2026-06-24
-Branch: `codex/pr07-row-completion-confidence-rebuild-20260624`
-Status: #88, #93, #94, #95, #96, and #91 are merged on `master`;
-#89 was closed as superseded by #95; #90 was closed as superseded by #96.
-#92 is the active remaining stack PR and has been rebuilt from current
-`master` so it no longer depends on the old stacked base or ignored local
-artifacts.
+Updated: 2026-06-25
+Kind: `productization_status_anchor`
+Branch: `n/a`
+Status: shared productization anchor for productization checks and older
+planning surfaces; not a branch current handoff.
 
-This is a compact current-state snapshot. Durable tier authority lives in
+This file is not the active handoff for every branch. Branch work must use a
+branch-scoped current handoff named by the active goal, PR workflow, or
+`docs/superpowers/handoffs/current/<branch-slug>-<topic>.md`.
+
+Durable tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
 `docs/superpowers/specs/productization_authority_manifest.v1.json`, and
 `docs/superpowers/validation/productization_status_index_v1.tsv`.
-
-## Current Objective
-
-Close #92 as an independently reviewable row-completion confidence shadow gate:
-
-- base it on current `master`;
-- keep only row-completion diagnostic code, tests, specs, and retained fixtures;
-- exclude stale stack commits and broad output/artifact/global-ledger refreshes;
-- retarget the PR to `master`;
-- merge only after CI is green and review is clear.
 
 ## Product State
 
@@ -33,7 +25,7 @@ Close #92 as an independently reviewable row-completion confidence shadow gate:
 - `backfill_expansion_clean_target_selective_product_activation_v1` remains the
   bounded 84-cell Backfill expansion authority from #96.
 - Broad Backfill auto-write remains parked.
-- #92 adds row-completion confidence product-gate mode as a non-mutating
+- Row-completion confidence product-gate mode remains a non-mutating
   `shadow_ready` gate only. It does not change matrix values, workbook/GUI
   behavior, selected peak, selected area, counted detection, ProductWriter
   authority, Backfill authority, active lane, default preset behavior, or
@@ -41,32 +33,13 @@ Close #92 as an independently reviewable row-completion confidence shadow gate:
 
 ## Boundary Decisions
 
-- Do not bring back the stale stacked #91/#92 history.
-- Do not merge the old `tests: refresh productization gate artifacts` commit as
-  a broad artifact refresh.
-- Keep only the two row-completion canonical panel inventory rows and the
-  matching retention-count test update required for a clean checkout.
-- Keep `.superpowers/sdd` task reports out of #92; they are execution notes, not
-  retained validation fixtures or product artifacts.
 - Do not expand CID-NL beyond 95 cells without a new expected-diff and
   authority update.
+- Do not grant broad Backfill auto-write without explicit authority.
+- Keep row-completion confidence evidence non-mutating unless a future
+  activation contract changes writer authority through the control plane.
 - Any CI red must be diagnosed from logs and stack boundary first, then fixed at
   the owner boundary.
-
-## Validation Status
-
-Local validation on the rebuilt #92 branch:
-
-- Row-completion focused suite: 52 passed.
-- Productization state checker: passed.
-- Productization authority checker: passed.
-- Validation artifact retention checker: passed with the existing 6
-  `shrink_later` warnings.
-- Diagnostics index checker: passed.
-- Hook fixture smoke: passed.
-- `uv run ruff check xic_extractor tests`: passed.
-- `uv run mypy xic_extractor`: passed with existing untyped-function notes.
-- `uv run pytest -v --tb=short -x`: 4418 passed, 1 skipped.
 
 ## Status Index Anchors
 
@@ -91,14 +64,3 @@ Retain these anchor phrases for productization state checks:
 - ReviewAction selected-candidate switch and manual-boundary area recompute remain parked
 - manual-boundary area recompute remain parked
 - classification and planning only
-
-## Next Actions
-
-1. Run subagent review on rebuilt #92.
-2. Fix any grounded findings and rerun the relevant gates.
-3. Publish the rebuilt #92 branch, retarget #92 to `master`, and update the PR
-   body with actual scope, verification, and residual risk.
-4. Wait for GitHub CI. If CI is red, diagnose logs and fix the root boundary
-   issue before committing.
-5. Normal-merge #92 only after CI is green and review is clear, then sync local
-   `master` and audit #88-#92 completion.

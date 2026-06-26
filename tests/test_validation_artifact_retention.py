@@ -10,10 +10,13 @@ def test_current_validation_retention_inventory_accepts_worktree() -> None:
     result = check_validation_artifact_retention()
 
     assert result.problems == ()
-    assert result.summary["inventory_rows"] == 296
+    assert result.summary["inventory_rows"] == 298
     assert result.summary["present_validation_files"] == 249
-    assert result.summary["externalized_count"] == 46
-    assert result.summary["shrink_later_count"] == 6
+    assert result.summary["externalized_count"] == 48
+    assert result.summary["shrink_later_count"] == 0
+    assert result.summary["shrink_later_tracked_count"] == 0
+    assert result.summary["shrink_later_tracked_bytes"] == 0
+    assert result.summary["shrink_later_files"] == []
 
 
 def test_checker_rejects_missing_inventory_row(tmp_path: Path) -> None:
@@ -133,6 +136,17 @@ def test_checker_warns_for_large_shrink_later_and_strict_fails(tmp_path: Path) -
     )
 
     assert result.problems == ()
+    assert result.summary["shrink_later_tracked_count"] == 1
+    assert result.summary["shrink_later_tracked_bytes"] == 20
+    assert result.summary["shrink_later_files"] == [
+        {
+            "path": path,
+            "size_bytes": 20,
+            "category": "full_result_tsv",
+            "required_by": "current checker",
+            "replacement_or_summary": "replace later with summary",
+        },
+    ]
     assert any("shrink_later remains tracked" in warning for warning in result.warnings)
     assert any(
         "shrink_later remains tracked" in problem

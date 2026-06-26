@@ -30,7 +30,7 @@ def test_builds_and_renders_raw85_overlay_gallery(tmp_path: Path) -> None:
         discovery_batch_rows=[
             {
                 "sample_stem": "Sample_A",
-                "raw_file": r"C:\Xcalibur\data\Sample_A.raw",
+                "raw_file": "raw-data/Sample_A.raw",
             },
         ],
         rt_padding_min=0.5,
@@ -40,7 +40,7 @@ def test_builds_and_renders_raw85_overlay_gallery(tmp_path: Path) -> None:
     assert len(requests) == 1
     request = requests[0]
     assert request.review_item_id == "HYPREV0001"
-    assert request.raw_file == Path(r"C:\Xcalibur\data\Sample_A.raw")
+    assert request.raw_file == Path("raw-data/Sample_A.raw")
     assert request.candidate_mz == 289.116
     assert request.candidate_anchor_rt == 13.0485
     assert request.winner_mz == 289.115
@@ -110,7 +110,7 @@ def test_machine_shape_uses_local_context_when_peak_bounds_are_too_narrow(
         discovery_batch_rows=[
             {
                 "sample_stem": "Sample_A",
-                "raw_file": r"C:\Xcalibur\data\Sample_A.raw",
+                "raw_file": "raw-data/Sample_A.raw",
             },
         ],
         rt_padding_min=0.5,
@@ -157,7 +157,7 @@ def test_machine_shape_blocks_multiple_peaks_in_local_context(
         discovery_batch_rows=[
             {
                 "sample_stem": "Sample_A",
-                "raw_file": r"C:\Xcalibur\data\Sample_A.raw",
+                "raw_file": "raw-data/Sample_A.raw",
             },
         ],
         rt_padding_min=0.5,

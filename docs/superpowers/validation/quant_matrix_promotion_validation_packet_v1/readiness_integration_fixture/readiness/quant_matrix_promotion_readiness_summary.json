@@ -5,11 +5,11 @@
   ],
   "contract_correctness_status": "pass",
   "input_artifacts": {
-    "cell_provenance_tsv": "docs\\superpowers\\validation\\quant_matrix_promotion_validation_packet_v1\\readiness_integration_fixture\\inputs\\cell_provenance.tsv",
-    "expected_diff_summary_tsv": "docs\\superpowers\\validation\\quant_matrix_promotion_validation_packet_v1\\readiness_integration_fixture\\inputs\\expected_diff_summary.tsv",
-    "review_summary_json": "docs\\superpowers\\validation\\quant_matrix_promotion_validation_packet_v1\\readiness_integration_fixture\\inputs\\quant_matrix_review_summary.json",
-    "row_summary_tsv": "docs\\superpowers\\validation\\quant_matrix_promotion_validation_packet_v1\\readiness_integration_fixture\\inputs\\row_summary.tsv",
-    "validation_evidence_json": "docs\\superpowers\\validation\\quant_matrix_promotion_validation_packet_v1\\quant_matrix_validation_evidence_v1.json"
+    "cell_provenance_tsv": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/readiness_integration_fixture/inputs/cell_provenance.tsv",
+    "expected_diff_summary_tsv": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/readiness_integration_fixture/inputs/expected_diff_summary.tsv",
+    "review_summary_json": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/readiness_integration_fixture/inputs/quant_matrix_review_summary.json",
+    "row_summary_tsv": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/readiness_integration_fixture/inputs/row_summary.tsv",
+    "validation_evidence_json": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/quant_matrix_validation_evidence_v1.json"
   },
   "may_promote_default_quant_matrix": false,
   "missing_science_evidence": [

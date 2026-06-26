@@ -56,6 +56,8 @@ COMPACT_MANIFEST_TSV = (
     DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_manifest.tsv"
 )
 ROADMAP = ROOT / "docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md"
+# This checker reads the shared productization status anchor. It is not a
+# default branch handoff target for unrelated work.
 HANDOFF = (
     ROOT
     / "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"

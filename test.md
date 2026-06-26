@@ -138,7 +138,7 @@ Contract tests 應該放在靠近現有 surface 的 test file，例如：
 
 ## 8. Real Data Validation
 
-真實資料驗證不是 unit test，不能讓一般測試 suite 依賴本機 `C:\Xcalibur\...` 路徑。
+真實資料驗證不是 unit test，不能讓一般測試 suite 依賴本機 RAW 路徑；請透過 `$env:XIC_RAW_ROOT`、`$env:XIC_RAW_VALIDATION_DIR` 或測試 fixture 注入。
 
 分級：
 

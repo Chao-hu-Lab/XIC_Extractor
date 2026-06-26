@@ -143,7 +143,7 @@
   "source_artifacts": {
     "activation_inputs_summary": {
       "path": "source_artifacts/standard_peak_activation_inputs.tsv",
-      "sha256": "7A117E1A0E21CBF89703CA589B7EF0713745CA68A77076CF8E244AB152D6CA29"
+      "sha256": "7725B1EE6443D61BD5197D48368684776F5A713EA82F4351C609DADF44846113"
     },
     "activation_value_delta": {
       "path": "source_artifacts/activation_value_delta.tsv",
@@ -155,7 +155,7 @@
     },
     "seed_guard_decisions": {
       "path": "source_artifacts/seed_guard_decisions.tsv",
-      "sha256": "6B8E692311619C32FA6DC9B0860D46D07066AEE39F3A0E821C90278F8268A95F"
+      "sha256": "7D4F7047D6B7219AB6709940B8CBEDEC23B7AC5FBA470FC51FBD50320ABA926D"
     }
   },
   "source_run_dir": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_policy_observed_oracle_no_raw_productization",

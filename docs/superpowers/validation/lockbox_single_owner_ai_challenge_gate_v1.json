@@ -42,13 +42,13 @@
   "schema_version": "lockbox_single_owner_ai_challenge_gate_v1",
   "source_artifacts": {
     "ai_challenge_result_summary": "docs/superpowers/validation/lockbox_ai_challenge_result_summary_v1.json",
-    "ai_challenge_result_summary_sha256": "3576FE4482F3C3F492538E4F52B5878B35A98C71FC326EC075FAFBAFB12BE99C",
+    "ai_challenge_result_summary_sha256": "1C529DDA3D6E3DFBD96DEA9D5A1EE2C8867D9366836B005525C2A6667B5A6DE2",
     "owner_boundary_confirmation": "docs/superpowers/validation/lockbox_owner_boundary_confirmation_v1.json",
-    "owner_boundary_confirmation_sha256": "AFAFC13CC21C802B8C69C2F9CCEA80ACA64306C8E3CA286E1C73348B6BC7A7EE",
+    "owner_boundary_confirmation_sha256": "EE88D1CA4B1F520C5B610FCE8B2AE67EBCA7B90043E270C200CBEDAC4E8B9FE7",
     "second_review_summary": "docs/superpowers/validation/lockbox_second_review_summary_v1.json",
-    "second_review_summary_sha256": "77A16A1294232777980AA3F3F3B402AC492125C26C3E2A84A748120428437D36",
+    "second_review_summary_sha256": "2FA3DB8249E49206D2AD65FBB868FEABE8E590EF25F26FF2265F6B213BEA37E5",
     "truth_summary": "docs/superpowers/validation/lockbox_truth_summary_v1.json",
-    "truth_summary_sha256": "DA20CB15440B509E0193BA2D75C4E9F8363D7984368E57B8742D45DB6B7D4D50"
+    "truth_summary_sha256": "7216A6E34008196FC4F45C978BC5D8F18ECF64F49C34B0E98FF12439FAA4F0D0"
   },
   "source_decisions": {
     "ai_challenge_result": "ai_challenge_no_owner_recheck_required",

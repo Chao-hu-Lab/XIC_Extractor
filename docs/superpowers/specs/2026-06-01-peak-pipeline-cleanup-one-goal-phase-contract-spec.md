@@ -3,9 +3,9 @@
 **Date:** 2026-06-01
 **Status:** Draft v0.1 - rules for a future one-goal cleanup execution
 **Readiness label:** `diagnostic_only`
-**Current-state input:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
-**Related roadmaps:** [Technical debt and dead-code cleanup roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md), [Peak pipeline cleanup roadmap overview](2026-05-24-peak-pipeline-cleanup-roadmap-overview-spec.md)
-**2026-06-02 foundation closeout:** [C4 / C6 / Region foundation closeout](../notes/2026-06-02-c4-c6-region-foundation-closeout.md)
+**Current-state input:** [Peak pipeline cleanup current-state reassessment](retired-provenance:2ae004032a4f)
+**Related roadmaps:** [Technical debt and dead-code cleanup roadmap v2](retired-provenance:f615da3d79d1), [Peak pipeline cleanup roadmap overview](retired-provenance:59c072e022f0)
+**2026-06-02 foundation closeout:** [C4 / C6 / Region foundation closeout](../retired-provenance:80511368b0a1)
 
 ## Verdict
 
@@ -33,9 +33,9 @@ Future goal execution reads sources in this order:
 2. `docs/agent-parameter-settings.md`
 3. `docs/agent-subagent-routing.md`
 4. this one-goal phase contract
-5. [mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
-6. [current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
-7. [technical-debt roadmap v2](2026-06-01-technical-debt-and-dead-code-cleanup-roadmap-v2-spec.md)
+5. [mature package flow reference](retired-provenance:ebcb7b73c424)
+6. [current-state reassessment](retired-provenance:2ae004032a4f)
+7. [technical-debt roadmap v2](retired-provenance:f615da3d79d1)
 8. current C4/C6 design updates when the phase reaches those surfaces, if they
    have landed in the branch
 9. older C2/C3/C4/C6 specs as historical rationale, file lists, and parity

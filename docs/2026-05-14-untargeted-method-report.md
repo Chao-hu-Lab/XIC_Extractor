@@ -2,7 +2,7 @@
 
 Date: 2026-05-14
 
-Worktree: `C:\Users\user\Desktop\XIC_Extractor\.worktrees\algorithm-performance-optimization`
+Worktree: `.worktrees/algorithm-performance-optimization`
 
 Branch: `codex/algorithm-performance-optimization`
 
@@ -431,7 +431,7 @@ uv run python scripts/run_xic.py validation-fast `
 
 ```powershell
 uv run python tools/diagnostics/targeted_istd_benchmark.py `
-  --targeted-workbook "C:\Users\user\Desktop\XIC_Extractor\output\xic_results_20260512_1200.xlsx" `
+  --targeted-workbook "output/xic_results_20260512_1200.xlsx" `
   --alignment-run-dir "<alignment output dir>" `
   --strict
 ```

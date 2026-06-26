@@ -108,10 +108,10 @@
       "sha256": "4E3EC2A97A415EEFB1B8C68BDF181F8F14BA3496C7B27ED60D79E996CE7B6A7F"
     },
     "clean_replay_summary_json": {
-      "bytes": 6884,
+      "bytes": 6743,
       "line_count": 125,
       "path": "docs/superpowers/validation/backfill_expansion_clean_target_full_chain_replay_v1/backfill_expansion_clean_target_full_chain_replay_summary.json",
-      "sha256": "D52A37CA014355E7AF0BED56B3BFF4F684A5F42CD52F97CB197D4BC40D5ACBD9"
+      "sha256": "1AE9CBF24A4CA0942C6AABD342BD99CEB95E2319D07386E80BB2F31D84BEC1DC"
     },
     "input_matrix_identity_tsv": {
       "bytes": 727392,

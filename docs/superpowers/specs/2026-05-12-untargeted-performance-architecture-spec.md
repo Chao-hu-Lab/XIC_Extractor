@@ -1,7 +1,7 @@
 # Untargeted Performance Architecture Spec
 
 > **For future agents:** This is the repo-local replacement for
-> `C:\Users\user\.claude\plans\untargeted-45-min-target-workers-tidy-phoenix.md`.
+> `<agent-private-plans>/untargeted-45-min-target-workers-tidy-phoenix.md`.
 > The Claude-local file mixed valid optimization direction with non-repo-native
 > ideas such as `.mzML` conversion and Parquet caching. This version is the
 > implementation contract for this repo.
@@ -9,7 +9,7 @@
 **Status:** Phase 0 timing implemented; alignment optimization follow-up active
 **Date:** 2026-05-12
 **Branch:** `codex/untargeted-discovery-v1-implementation`
-**Worktree:** `C:\Users\user\Desktop\XIC_Extractor\.worktrees\untargeted-discovery-v1-implementation`
+**Worktree:** `.worktrees/untargeted-discovery-v1-implementation`
 
 ---
 
@@ -41,7 +41,7 @@ adding Parquet caches, adding Polars, or introducing distributed frameworks.
 | Discovery RAW access | Thermo `.raw` via `raw_reader.open_raw()` | `xic_extractor/discovery/pipeline.py`, `xic_extractor/raw_reader.py` |
 | Discovery family grouping | Per-sample grouping only; not a cross-sample synchronization point | `xic_extractor/discovery/feature_family.py` requires same `raw_file` and `sample_stem` |
 | Alignment synchronization | Cross-sample work lives in alignment ownership/backfill/claim registry | `xic_extractor/alignment/pipeline.py`, `xic_extractor/alignment/claim_registry.py` |
-| `.mzML` policy | Existing plans explicitly avoid converting `.raw` to `.mzML` | `docs/superpowers/specs/2026-05-06-numofinder-inspired-ms2-evidence-and-discovery-spec.md` |
+| `.mzML` policy | Existing plans explicitly avoid converting `.raw` to `.mzML` | `retired-provenance:43ac0f54d103` |
 
 ## Boundary
 
@@ -252,7 +252,7 @@ surface before proving that the current bottleneck needs it.
 This spec does not fix duplicate activation, RT drift, or alignment family
 fragmentation. Those are correctness/modeling problems covered by:
 
-- `C:\Users\user\.claude\plans\spec-plan-untarget-alignment-local-mini-nested-mountain.md`
+- `<agent-private-plans>/spec-plan-untarget-alignment-local-mini-nested-mountain.md`
 
 The only alignment change in this spec is timing instrumentation. Optimizing
 or removing `claim_registry`, changing `_owner_relation`, or introducing
@@ -401,7 +401,7 @@ Two repeatable validation scripts now support the next decision:
 
 The 8-RAW locality report was written to:
 
-- `output\diagnostics\xic_request_locality_8raw.json`
+- `output/diagnostics/xic_request_locality_8raw.json`
 
 Measured locality:
 
@@ -417,7 +417,7 @@ usable scan-window locality after sorting, while `build_owners` has none.
 
 The single-RAW MS1-index validation report was written to:
 
-- `output\diagnostics\ms1_scan_index_validation_1raw.json`
+- `output/diagnostics/ms1_scan_index_validation_1raw.json`
 
 Measured against `BenignfatBC1055_DNA` with 377 requests:
 

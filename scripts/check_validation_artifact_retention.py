@@ -126,6 +126,29 @@ def check_validation_artifact_retention(
     category_counts = Counter(
         row.get("category", "") for row in inventory_by_path.values()
     )
+    shrink_later_rows = [
+        row
+        for path, row in inventory_by_path.items()
+        if row.get("retention_decision", "") == "shrink_later"
+        and path in present_paths
+    ]
+    shrink_later_bytes = sum(
+        _safe_int(row.get("size_bytes", "")) for row in shrink_later_rows
+    )
+    shrink_later_files = [
+        {
+            "path": row.get("path", ""),
+            "size_bytes": _safe_int(row.get("size_bytes", "")),
+            "category": row.get("category", ""),
+            "required_by": row.get("required_by", ""),
+            "replacement_or_summary": row.get("replacement_or_summary", ""),
+        }
+        for row in sorted(
+            shrink_later_rows,
+            key=lambda candidate: _safe_int(candidate.get("size_bytes", "")),
+            reverse=True,
+        )
+    ]
     summary: dict[str, Any] = {
         "inventory_rows": len(inventory_by_path),
         "present_validation_files": len(present_paths),
@@ -133,6 +156,9 @@ def check_validation_artifact_retention(
         "decision_counts": dict(sorted(decision_counts.items())),
         "category_counts": dict(sorted(category_counts.items())),
         "shrink_later_count": decision_counts.get("shrink_later", 0),
+        "shrink_later_tracked_count": len(shrink_later_rows),
+        "shrink_later_tracked_bytes": shrink_later_bytes,
+        "shrink_later_files": shrink_later_files,
         "externalized_count": decision_counts.get("externalize", 0),
         "problems": len(problems),
         "warnings": len(warnings),
@@ -305,6 +331,13 @@ def _check_numeric_metadata(
         return
     if actual != expected:
         problems.append(f"{path}: {field} is stale ({actual} != {expected})")
+
+
+def _safe_int(value: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _check_large_file_row(
@@ -497,6 +530,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     for warning in result.warnings:
         print("warning: " + warning, file=sys.stderr)
+    if result.summary["shrink_later_tracked_count"]:
+        print(
+            "Shrink-later debt: "
+            f"{result.summary['shrink_later_tracked_count']} tracked files, "
+            f"{result.summary['shrink_later_tracked_bytes']} bytes.",
+            file=sys.stderr,
+        )
+        for item in result.summary["shrink_later_files"][:10]:
+            print(
+                "shrink-later: "
+                f"{item['path']} "
+                f"({item['size_bytes']} bytes; required_by={item['required_by']})",
+                file=sys.stderr,
+            )
     if result.problems:
         for problem in result.problems:
             print(problem, file=sys.stderr)

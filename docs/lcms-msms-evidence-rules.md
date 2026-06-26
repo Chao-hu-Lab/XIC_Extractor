@@ -14,6 +14,26 @@ selected peak or matrix identity by itself.
 Any evidence source that changes production behavior needs explicit config or
 contract, machine-readable reason/status fields, and regression tests.
 
+## Matrix Authority Boundary
+
+Evidence providers do not write the product matrix directly. Backfill, MS2/NL,
+RT, morphology, standards, library matches, and future learned models are inputs
+to evidence, hypothesis, model-selection, audit, or activation contracts.
+
+For Backfill and other explicit matrix activations, current write authority is
+granted only through the active control-plane scope and its associated
+authority artifacts. In current terminology, a `ProductionAcceptanceManifest`
+can grant per-cell write authority only when the later activation path binds it
+to expected diff, provenance, and the current productization authority scope.
+`QuantMatrixVersion` / default activation outputs are the writer surface. A
+candidate row, `write_ready` label, quality blocker, sidecar, replay, or review
+packet outside that activation chain is not matrix authority by itself.
+
+This document owns durable evidence semantics, not live maturity tier, active
+lane, or current writer counts. Read those from the productization control
+plane, `docs/superpowers/validation/productization_status_index_v1.tsv`, and
+`docs/superpowers/specs/productization_authority_manifest.v1.json`.
+
 ## MS1 Morphology And Area Owner
 
 - The active MS1 morphology trace for peak shape, noise-shape, paired area-ratio
@@ -64,6 +84,11 @@ contract, machine-readable reason/status fields, and regression tests.
   diagnostics, but high-risk rescue promotion must not rely on broad-window
   membership, `owner_backfill` trace labels, local apex presence, or scan support
   alone.
+- Broad Backfill candidate universes are audit/review surfaces, not writer
+  pools. Quality blockers, quality explanations, round-trip reintegration
+  checks, ISTD comparisons, review packets, and lockbox membership may raise
+  questions or provide evidence, but they do not grant ProductWriter authority
+  without the activation/export chain described above.
 - Treat `family` as a review/search container, not the promotion unit. The
   same-peak evidence unit is the detected anchor peak/seed group, and the
   product decision unit is the individual rescued cell.
@@ -196,6 +221,11 @@ contract, machine-readable reason/status fields, and regression tests.
 - Analyte `NL_FAIL` and `NO_MS2` remain not-counted unless the active paired
   analyte rescue policy has all required support. Pair evidence must not
   silently convert missing or failed product evidence into a counted detection.
+- The current targeted MS1 own-max opt-in verdict is limited to the headless
+  explicit `limited_5hmdc_5medc_v1` support-TSV workflow. It may project
+  reviewed `5-hmdC`/`5-medC` `NL_FAIL` candidates to `detected_flagged` only
+  under the support-TSV key-set and expected-diff gate. Default automatic
+  rescue, GUI rescue, and broader-target rescue remain blocked.
 - DDA MS2 trigger without the key target NL/product tag is acquisition
   opportunity evidence, not analyte identity support. When the key NL/product
   tag is missing or failed, analyte rescue must rely on coherent MS1 peak

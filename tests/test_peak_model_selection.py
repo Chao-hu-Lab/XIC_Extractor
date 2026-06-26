@@ -14,14 +14,11 @@ from xic_extractor.peak_detection.model_selection import (
     model_select_peak_hypothesis,
 )
 
-CHARACTERIZATION_MAP = Path(
-    "docs/superpowers/notes/"
-    "2026-06-02-selected-hypothesis-model-selection-characterization-map.md"
-)
+PEAK_MODEL_SELECTION_DOC = Path("docs/product/peak-model-selection.md")
 
 
 def test_characterization_map_covers_required_fixture_families() -> None:
-    text = CHARACTERIZATION_MAP.read_text(encoding="utf-8")
+    text = PEAK_MODEL_SELECTION_DOC.read_text(encoding="utf-8")
     required = [
         "clean single peak",
         "confidence rank",
@@ -46,11 +43,11 @@ def test_characterization_map_covers_required_fixture_families() -> None:
 
 
 def test_characterization_map_blocks_legacy_test_deletion() -> None:
-    text = CHARACTERIZATION_MAP.read_text(encoding="utf-8")
+    text = PEAK_MODEL_SELECTION_DOC.read_text(encoding="utf-8")
 
-    assert "Do Not Delete Yet" in text
+    assert "legacy scoring tests cannot be deleted" in text
     assert "tests/test_peak_scoring.py" in text
-    assert "no legacy test deletion is proposed" in text
+    assert "Deleting legacy scoring tests before a successor invariant" in text
 
 
 def test_shadow_model_selection_reports_parity_for_legacy_selected_hypothesis() -> None:

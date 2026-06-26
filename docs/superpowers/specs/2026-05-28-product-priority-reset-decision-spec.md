@@ -92,11 +92,11 @@ note and accepted by the user before it is used to start a behavior-changing PR.
 The gate scope is fixed to the current accepted validation surfaces:
 
 - 8RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv`
+  `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv`
 - 85RAW discovery index:
-  `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv`
-- RAW root: `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R`
-- DLL dir: `C:\Xcalibur\system\programs`
+  `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv`
+- RAW root: `$env:XIC_RAW_ROOT`
+- DLL dir: `$env:THERMO_RAWFILE_READER_DLL_DIR`
 - Python runtime: `.venv\Scripts\python.exe` from the active worktree, after
   verifying that `.venv` exists or is a junction to the canonical repo runtime.
 - Machine delivery files: `alignment_matrix.tsv`, `alignment_review.tsv`,
@@ -157,8 +157,8 @@ Use the documented validation-minimal surface by default:
 Test-Path .venv\Scripts\python.exe
 .venv\Scripts\python.exe -m scripts.run_alignment `
   --discovery-batch-index <accepted-discovery-batch-index.csv> `
-  --raw-dir C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R `
-  --dll-dir C:\Xcalibur\system\programs `
+  --raw-dir $env:XIC_RAW_ROOT `
+  --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR `
   --output-dir <task-specific-output-dir> `
   --expected-sample-count <8-or-85> `
   --output-level validation-minimal `
@@ -200,9 +200,9 @@ Authoritative references for the first Phase 1 pass:
 | Oracle | Authoritative reference | Required evidence |
 | --- | --- | --- |
 | PR70 matrix handoff | `docs/superpowers/notes/2026-05-28-pr70-alignment-matrix-handoff-raw-validation-note.md` | 8RAW and 85RAW primary artifact parity for `alignment_matrix.tsv`, `alignment_review.tsv`, `alignment_cells.tsv` |
-| Resolver / selected-row hotfix | `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` | strict ISTD hotfix PASS; `15N5-8-oxodG` boundary restoration; `d3-N6-medA` same-surface explanation |
+| Resolver / selected-row hotfix | `retired-provenance:230f58c7688e` | strict ISTD hotfix PASS; `15N5-8-oxodG` boundary restoration; `d3-N6-medA` same-surface explanation |
 | Identity coherence | `docs/superpowers/validation/identity_coherence_v04_8raw_acceptance_handoff.md` | reviewed controls manifest hash, 5/5 positive controls PASS, 3/3 decoys rejected |
-| ASLS / baseline interpretation | `docs/superpowers/notes/2026-05-27-asls-minimal-closeout-note.md` | area shift alone is not a blocker when identity, RT, boundary, and primary delivery are accepted |
+| ASLS / baseline interpretation | `retired-provenance:65420d0c9a87` | area shift alone is not a blocker when identity, RT, boundary, and primary delivery are accepted |
 | Diagnostic inventory | `tools/diagnostics/INDEX.md` | existing gate / audit tools considered before any new diagnostic |
 
 ## Gate Rules

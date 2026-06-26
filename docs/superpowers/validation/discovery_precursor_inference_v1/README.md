@@ -17,7 +17,7 @@ looked near `300.2028 - 116.0474 = 184.1554`, so it rejected the valid
 Validation command:
 
 ```powershell
-.venv\Scripts\python.exe scripts\run_discovery.py --raw C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\TumorBC2312_DNA.raw --dll-dir C:\Xcalibur\system\programs --output-dir docs\superpowers\validation\discovery_precursor_inference_v1\TumorBC2312_DNA --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --rt-min 22 --rt-max 25 --ms2-precursor-tol-da 1.6 --resolver-mode local_minimum
+.venv\Scripts\python.exe scripts\run_discovery.py --raw <raw-data>/TumorBC2312_DNA.raw --dll-dir $env:THERMO_RAWFILE_READER_DLL_DIR --output-dir docs/superpowers\validation\discovery_precursor_inference_v1\TumorBC2312_DNA --neutral-loss-tag DNA_dR --neutral-loss-da 116.0474 --rt-min 22 --rt-max 25 --ms2-precursor-tol-da 1.6 --resolver-mode local_minimum
 ```
 
 Observed result in `TumorBC2312_DNA/discovery_candidates.csv`:
@@ -39,7 +39,7 @@ Observed result in `TumorBC2312_DNA/discovery_candidates.csv`:
 Checker command:
 
 ```powershell
-uv run python scripts/check_discovery_precursor_inference_artifact.py --check-only --summary-json docs\superpowers\validation\discovery_precursor_inference_v1\discovery_precursor_inference_check_summary.json
+uv run python scripts/check_discovery_precursor_inference_artifact.py --check-only --summary-json docs/superpowers\validation\discovery_precursor_inference_v1\discovery_precursor_inference_check_summary.json
 ```
 
 Checker result:

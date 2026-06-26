@@ -9,6 +9,7 @@
 | [`README.md`](../README.md) | 使用者 | 下載、執行、Settings / Targets 欄位說明、輸出格式 |
 | [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 高頻開發 guardrails、canonical references、public contract 摘要 |
 | [`docs/agent/`](agent/) | 寫程式碼的人、reviewer、subagent | AGENTS 拆出的 nested contracts：communication、execution gates、planning、validation、architecture、Codex OS |
+| [`docs/product/`](product/) | 寫程式碼的人、reviewer、future agent | 可公開的 product-topic 代表文件；目前先收斂 Backfill、Discovery、Alignment、Presets、Productization，後續可擴充 |
 | [`docs/architecture-contract.md`](architecture-contract.md) | 做程式結構調整的人 | 設計原則、所有權地圖、依賴規則、重構紀律、測試結構規則 |
 | **本檔** | 想知道「檔案放哪」的人 | 目錄地圖、外部約束、新檔決策樹、暫存目錄清理規則、命名慣例 |
 
@@ -49,6 +50,70 @@
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
 | `.codex/` | Repo-local Codex skills, hooks, rules, and subagent profiles | 否 |
 
+### `docs/` source-of-truth 與歷程邊界
+
+`docs/` 可以放正式 source-of-truth 文件，但不是所有開發歷程都應該留在 repo。
+把 repo 當公開文件面：留下可公開、可審查、可被下一個 agent 執行的正式規則與
+sanitized summary；把 Obsidian 當私人工作筆記：保存長篇推理、開發歷程、命令
+diary、分支過程、私人 local context。
+Obsidian-backed migration and repo-stub rules live in
+`docs/agent/obsidian-handoff-contract.md`; that contract is the standing policy,
+not a one-branch experiment.
+For private-vault mechanics, use the installed `obsidian-wiki` model: staged
+writes, `index.md`/`log.md`/`.manifest.json`, frontmatter summaries, provenance
+markers, and compiled project pages. The older flat-root Obsidian convention is
+legacy for XIC; new LLM-authored XIC wiki pages should start in `_staging/` and
+promote to `projects/xic-extractor/` only after review. The existing `XIC/`
+subtree remains the private migration/archive/workbench area.
+
+跨越多份 dated plans/specs/validation 的產品主題，先收斂成
+`docs/product/` 下的小型代表文件。這不是完整 taxonomy；目前第一批 owner 是
+Backfill、Discovery、Alignment、Presets、Productization、Evidence Spine、
+Quant Matrix、Run Provenance、Review Roundtrip、Sample Metadata/QC、Targeted
+Selection、Quantitation Context、Instrument QC/Calibration。之後若出現同等全局主題，新增
+`docs/product/<topic>.md`，不要讓 repo 讀者只能從私人 Obsidian 或一串歷史 note
+重建產品規則。
+
+歷史 notes 要升格前，先把穩定 claim 分流到既有 owner：
+
+| Claim 類型 | Repo owner |
+|------|------|
+| Backfill / Discovery / Alignment / Presets / Productization / Evidence Spine / Quant Matrix / Run Provenance / Review Roundtrip / Sample Metadata/QC / Targeted Selection / Quantitation Context / Instrument QC/Calibration 等全局產品主題 | `docs/product/` 對應主題文件；實際 tier、writer authority、schema、validation verdict 仍查下列 owner |
+| 產品成熟度 tier、active lane、writer scope、promotion packet | `docs/superpowers/plans/2026-06-15-productization-control-plane.md`、`docs/superpowers/validation/productization_status_index_v1.tsv`、`docs/superpowers/specs/productization_authority_manifest.v1.json` |
+| LC-MS/MS evidence rule、Backfill evidence semantics、Gaussian15 area owner | `docs/lcms-msms-evidence-rules.md` |
+| product-readiness wording、public-surface discipline | `docs/agent/product-validation-contract.md` |
+| validation verdict、rerun policy、known target/failure conclusion | `docs/diagnostic-ledger.md` 或 compact validation artifact |
+| output/artifact placement、stub/retention hygiene | 本檔 |
+| architecture ownership、dependency direction | `docs/architecture-contract.md` |
+
+長篇開發 diary、探索性策略重置、命令 transcript、本機絕對路徑、私人 RAW
+layout、sample-level investigation、obsolete PR sequencing，預設進私人
+Obsidian / ignored artifact，不直接當 repo source-of-truth。若 keep-repo 檔案仍
+引用該歷史 note，先新增或更新 repo 內正式摘要 / sanitized stub，再考慮移出原文。
+不要把 repo referrer 改成只能在私人 Obsidian 才能讀懂。
+
+如果歷史 note 內有重要但尚未整理的內容，先把穩定 public claim 寫進上表
+canonical owner，再把原文當 private context 移交 Obsidian。不能因為 Obsidian
+有完整原文，就讓 repo 只剩一個需要私人 vault 才能理解的引用。
+
+新增文件時先判斷公開面：
+
+- 先決定 `Doc placement:`：
+  `formal_repo_doc`、`repo_active_stub`、`branch_closeout_summary`、
+  `repo_stub_plus_obsidian`、`private_obsidian_note`、`ignored_artifact`，或
+  `throwaway_scratch`。
+- 會改 public behavior、schema、validation policy、product authority、agent
+  workflow rule 的內容，寫進上表 canonical owner；若不在 canonical owner
+  path，commit 前必須有 `Doc placement:` 與 `Repo owner:`。
+- 只是探索、開發日誌、review 細節、命令 transcript、私人資料位置，寫進
+  Obsidian staged draft 或 ignored artifact，不要先 commit 再回頭 `git rm`。
+- active execution plan 不能 Obsidian-only；repo 必須有短 stub，能交代
+  objective、scope、constraints、next 1-3 actions、verification、stop rule。
+- 如果私人筆記對接手有幫助，repo 只保留短 stub：現在狀態、正式 owner、已跑驗證、
+  blocker、下一步。stub 不能要求讀者一定要有私人 vault 才能理解下一步。
+- 不要把整個 `docs/` 設成 Obsidian 自動 ingest 來源；正式 repo docs 預設留在 repo，
+  只有明確核准要成為私人 context 的來源才進 vault raw inbox 或 migration manifest。
+
 ### 第一層子目錄（忽略）
 
 | 目錄 | 用途 |
@@ -67,6 +132,15 @@
 | `.remember/` | Claude 代理記憶日誌 |
 | `local_raw_samples/`、`local_validation_raw/` | 本地測試 RAW 樣本（私人資料） |
 | `xic_extractor.egg-info/` | setuptools 安裝元資料 |
+
+Validation output 的預設去處是 ignored storage，不是 repo。個人同機開發時，
+完整 workbook、full matrix、RAW-derived dump、exploratory diagnostics 可以留在
+`output/` 或 `local_validation_artifacts/`；repo 只留能讓 clean checkout 審查
+產品 claim 的最小 contract seed：summary、manifest、hash、row count、再生指令、
+authority/status 欄位，或 focused test 需要的小型 fixture。若某個 validation 檔
+只是「我本機看過的完整結果」，不要為了方便把它升格成 tracked artifact。
+若它是 checker/test/PR review 需要的契約證據，先把完整表縮成最小 fixture 或
+summary，再考慮外部化原始 full dump。
 
 ### `xic_extractor/` subpackage 分工
 
@@ -162,8 +236,9 @@ else:
 │       共用 fixture → tests/conftest.py 或 tests/fixtures/
 │
 ├── 規格 / 計畫文件
-│   ├── 設計規格 → docs/superpowers/specs/YYYY-MM-DD-<kebab-description>.md
-│   └── 實作計畫 → docs/superpowers/plans/YYYY-MM-DD-<kebab-description>.md
+│   ├── 正式公開規格 → docs/superpowers/specs/YYYY-MM-DD-<kebab-description>.md
+│   ├── 全局控制面 / 命名 owner → docs/superpowers/plans/<explicit-owner>.md
+│   └── active implementation context → repo_active_stub；長篇推理與 branch sequencing 進 Obsidian staged draft
 │
 ├── 可重用解法 / 工作流知識
 │   └→ docs/solutions/<category>/<slug>.md
@@ -294,8 +369,9 @@ else:
 
 | 類別 | 慣例 | 範例 |
 |------|------|------|
-| 規格檔 | `docs/superpowers/specs/YYYY-MM-DD-<kebab>.md` | `2026-05-13-untargeted-duplicate-drift-soft-edge-design.md` |
-| 計畫檔 | `docs/superpowers/plans/YYYY-MM-DD-<kebab>.md` | `2026-05-03-output-maintainability-refactor.md` |
+| 規格檔 | `docs/superpowers/specs/YYYY-MM-DD-<kebab>.md` | `YYYY-MM-DD-<topic>-design.md` |
+| 全局計畫 owner | `docs/superpowers/plans/<explicit-owner>.md` | `2026-06-15-productization-control-plane.md` |
+| Active stub | `docs/superpowers/handoffs/current/<branch-or-topic>.md` 或帶 `Doc placement: repo_active_stub` 的明確 owner path | `codex-docs-cleanup-official-docs-and-handoff.md` |
 | 測試檔 | `tests/test_<module>_<behavior>.py`，**扁平結構，不鏡像 src** | `test_alignment_owner_clustering.py` |
 | CLI 入口 | `scripts/run_<purpose>.py` | `scripts/run_extraction.py` |
 | CLI 輔助 | `scripts/<verb>_<noun>.py` 或 `<purpose>.py` | `scripts/csv_to_excel.py` |
@@ -319,11 +395,13 @@ else:
 - `tools/diagnostics/alignment_decision_report.py`、`single_dr_production_gate_decision_report.py`、`targeted_istd_benchmark.py`、`family_ms1_backfill_review_report.py`、`analyze_rt_normalization_anchors.py`、`family_ms1_overlay_plot.py`、`untargeted_alignment_guardrails.py`、`seed_aware_backfill_review.py`、`targeted_nl_dropout_root_cause_audit.py`、`peak_candidate_score_calibration_report.py`、`evidence_spine_consistency.py`、`area_integration_uncertainty_audit.py`、`cwt_peak_candidate_audit.py`、`cross_report_evidence_consistency.py`、`targeted_gt_alignment_audit.py` 已拆出 loading / report model / matching / summary / analysis / rendering / style / guardrail 或 writing helpers。
 - `xic_extractor/alignment/pipeline.py` 已拆出 `pipeline_outputs.py` 與 `raw_sources.py`，保留 `run_alignment(...)` 作 orchestration facade。
 
-相關 spec：
+相關 architecture owner：
 
-- [`docs/superpowers/specs/2026-05-06-workbook-and-extraction-module-decomposition-spec.md`](superpowers/specs/2026-05-06-workbook-and-extraction-module-decomposition-spec.md)
-- [`docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`](superpowers/specs/2026-05-16-module-responsibility-inventory.md)
-- [`docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`](superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md)
+- [`docs/architecture-contract.md`](architecture-contract.md)
+- [`docs/agent/architecture-public-contracts.md`](agent/architecture-public-contracts.md)
+
+Retired dated decomposition specs are retained only as migration/history stubs
+after their stable claims are folded into the architecture owners above.
 
 ## § 8 維護本檔的時機
 

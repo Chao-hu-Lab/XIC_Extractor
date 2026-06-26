@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts.build_lockbox_label_collection_pack import (
     LABEL_TEMPLATE_HEADER,
+    LOCKBOX_MANIFEST,
     PACKET_INDEX_HEADER,
     build_lockbox_label_collection_pack,
 )
@@ -333,9 +334,25 @@ def test_checker_rejects_missing_packet_file(tmp_path: Path) -> None:
 def test_checker_default_is_hermetic_but_can_verify_evidence_files(
     tmp_path: Path,
 ) -> None:
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    trace = evidence_dir / "trace.json"
+    overlay = evidence_dir / "overlay.png"
+    hypothesis = evidence_dir / "overlay_hypothesis.png"
+    trace.write_text('{"points": []}\n', encoding="utf-8")
+    overlay.write_bytes(b"\x89PNG\r\n\x1a\nminimal-overlay")
+    hypothesis.write_bytes(b"\x89PNG\r\n\x1a\nminimal-hypothesis")
+
+    manifest = tmp_path / "manifest.tsv"
+    manifest_header, manifest_rows = _read_tsv_with_header(LOCKBOX_MANIFEST)
+    manifest_rows[0]["trace_data_path"] = str(trace)
+    manifest_rows[0]["overlay_png_path"] = str(overlay)
+    _write_tsv(manifest, manifest_header, manifest_rows)
+
     packet_dir = tmp_path / "packets"
     label_template = tmp_path / "labels.tsv"
     build_lockbox_label_collection_pack(
+        manifest_path=manifest,
         packet_dir=packet_dir,
         label_template_path=label_template,
     )
@@ -343,16 +360,19 @@ def test_checker_default_is_hermetic_but_can_verify_evidence_files(
     row = next(
         packet_row
         for packet_row in packet_rows
-        if packet_row["evidence_status"] != "missing_evidence_recorded"
+        if packet_row["lockbox_case_id"] == manifest_rows[0]["lockbox_case_id"]
     )
+    assert row["evidence_status"] == "complete_visual_evidence"
     row["trace_data_path"] = str(tmp_path / "missing_trace.json")
     _write_tsv(packet_dir / "packet_index.tsv", header, packet_rows)
 
     structural_problems = check_lockbox_label_schema(
+        manifest_path=manifest,
         packet_dir=packet_dir,
         label_template_path=label_template,
     )
     evidence_problems = check_lockbox_label_schema(
+        manifest_path=manifest,
         packet_dir=packet_dir,
         label_template_path=label_template,
         verify_evidence_files=True,

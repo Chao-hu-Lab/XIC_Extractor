@@ -1,7 +1,7 @@
 # Diagnostic Ledger And Rerun Policy
 
 **Status:** maintained repo-local diagnostic memory
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-25
 
 This ledger records diagnostic conclusions that should survive branch and
 worktree changes. Use it before rerunning expensive RAW validation or treating a
@@ -10,6 +10,18 @@ known target as a new blocker.
 This file is not a replacement for task-specific validation notes. It is the
 small durable index that tells future agents which prior conclusions are already
 known, where the evidence lives, and when a rerun is justified.
+
+This file is also not the live productization tier board. Product maturity tier,
+active lane, current writer counts, promotion-packet status, and Backfill
+authority scopes are owned by
+`docs/superpowers/plans/2026-06-15-productization-control-plane.md`, the
+productization status index
+`docs/superpowers/validation/productization_status_index_v1.tsv`, and the
+authority manifest
+`docs/superpowers/specs/productization_authority_manifest.v1.json`. When this
+ledger cites a historical validation note, treat it as diagnostic/rerun memory
+unless the current control plane or a current authority artifact still promotes
+the same claim.
 
 ## Use Rules
 
@@ -25,17 +37,21 @@ known, where the evidence lives, and when a rerun is justified.
   Small diagnostic snapshots that must survive worktrees belong under
   `docs/superpowers/fixtures/` with a source note and hash.
 - If a rerun changes a durable conclusion, update this ledger in the same PR.
+- If a later control-plane or authority-manifest entry changes maturity tier,
+  writer scope, or product authority after a ledger entry was written, defer to
+  the later productization authority and update this ledger only when the
+  diagnostic/rerun conclusion itself changes.
 
 ## Stable Inputs
 
 | Purpose | Stable path |
 | --- | --- |
-| Accepted P8b 8RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\8raw\discovery_batch_index.csv` |
-| Accepted P8b 85RAW discovery input | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\discovery\accepted_p8b\85raw\discovery_batch_index.csv` |
-| Targeted GT 8RAW default workbook | `C:\Users\user\Desktop\XIC_Extractor\local_validation_artifacts\targeted_gt_workbooks\8raw\xic_results_20260512_1151.xlsx`, SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7` |
-| RAW root | `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` |
-| Thermo DLL dir | `C:\Xcalibur\system\programs` |
-| RAW-capable Python | `C:\Users\user\Desktop\XIC_Extractor\.venv\Scripts\python.exe` |
+| Accepted P8b 8RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/8raw/discovery_batch_index.csv` |
+| Accepted P8b 85RAW discovery input | `local_validation_artifacts/discovery/accepted_p8b/85raw/discovery_batch_index.csv` |
+| Targeted GT 8RAW default workbook | `local_validation_artifacts/targeted_gt_workbooks/8raw/xic_results_20260512_1151.xlsx`, SHA256 `788892188C8419C82DC4618C98E160B90AC6C44C38676C53609248AA529889F7` |
+| RAW root | `$env:XIC_RAW_ROOT` |
+| Thermo DLL dir | `$env:THERMO_RAWFILE_READER_DLL_DIR` |
+| RAW-capable Python | `"${env:XIC_REPO_ROOT}\.venv\Scripts\python.exe"` |
 
 ## Known Diagnostic Conclusions
 
@@ -96,8 +112,8 @@ Current auto-limited 85RAW smoke:
 Key facts:
 
 - Baseline and opt-in runs both used
-  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R\validation` for 8RAW and
-  `C:\Xcalibur\data\20260106_CSMU_NAA_Tissue_R` for 85RAW; all runs used
+  `$env:XIC_RAW_VALIDATION_DIR` for 8RAW and
+  `$env:XIC_RAW_ROOT` for 85RAW; all runs used
   CSV-only output.
 - Opt-in runs used
   `output/ms1_rescue_5hmdc_own_max_similarity_20260616/targeted_ms1_shape_identity_v0.tsv`.
@@ -169,7 +185,8 @@ area. Missing typed morphology facts fail closed as
 `missing_ms1_morphology_area`.
 
 Durable closeout:
-`docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md`
+retired private-history closeout; the current durable facts are the verdict,
+key facts, and retained artifact paths in this ledger section.
 
 Current 85RAW foreground gate:
 `output/gaussian15_ms1_morphology_85raw_20260605/alignment_validation_minimal_no_asls_fallback/`
@@ -196,7 +213,8 @@ must not borrow active strict NL support from a different Gaussian15 MS1 peak
 group. Outside-group strict NL stays diagnostic context.
 
 Durable closeout:
-`docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md`
+retired private-history closeout; the current durable facts are the verdict,
+key facts, and retained artifact paths in this ledger section.
 
 Current 8RAW targeted gate:
 `output/gaussian15_ms1_peak_group_nl_scope_8raw_20260605/nl_peak_group_scope_8raw/ms1_peak_group_nl_scope_gate/ms1_peak_group_nl_scope_gate_manifest.json`
@@ -220,6 +238,124 @@ only after current code changes targeted candidate MS2/NL evidence ownership,
 chrom peak segment selection, candidate-table projection, or the cited artifacts
 are stale or contradictory.
 
+### 2026-05-24 Resolver Default Switch / P2 Entry Gate
+
+Verdict: `production_candidate` for P2 entry on the 8RAW method gate after the
+hotfix evidence-chain continuation. This is not an 85RAW clearance and not
+`production_ready`.
+
+Durable closeout:
+retired private-history validation note; the current durable facts are the
+verdict, key facts, and rerun rule in this ledger section.
+
+Key facts:
+
+- The stale pre-hotfix artifact state was `NO-GO`; do not use it to block or
+  approve current P2 work.
+- The hotfix restored untargeted alignment production peak picking to
+  `local_minimum` while keeping `region_first_safe_merge` as audit context for
+  alignment runs.
+- The strict ISTD blocker on `15N5-8-oxodG` was resolved in hotfix artifacts.
+- Reviewed identity-coherence controls passed V0.4 acceptance, and the
+  hotfix-reviewed identity-family decisions were byte-identical to the
+  pre-change baseline.
+- The same-surface `d3-N6-medA` probe reclassified the
+  apparent mismatch as a mixed-surface diagnostic artifact, not a standalone
+  evidence-spine blocker.
+
+Do not rerun the P1/P2 resolver default gate just to re-prove P2 entry. Rerun
+only after current code changes resolver default routing, candidate selection,
+selected boundaries, strict ISTD benchmark behavior, identity-coherence
+decisions, or the cited artifacts become stale or contradictory.
+
+### 2026-05-26 P8b 85RAW Super-Window Acceptance
+
+Verdict: `production_candidate` for explicit opt-in
+`validation-minimal + production-equivalent + validation-fast + super-window`
+85RAW alignment validation. This is a validated runner/performance mode, not a
+new default behavior and not `production_ready` by itself.
+
+Durable closeout:
+retired private-history runtime note; the current durable facts are the
+validated command profile and rerun rule in this ledger section.
+
+Key facts:
+
+- The 85RAW super-window run completed and emitted the expected machine
+  artifacts.
+- Matrix, cells, and review surfaces were byte-identical to the accepted
+  P8b exact-window reference for the checked contract.
+- No new RT, identity, or coverage failure was introduced by super-window.
+- The CLI default remained exact-window batching; super-window stayed explicit
+  opt-in.
+- Known targeted-benchmark warnings from the prior accepted surface remained
+  warning-class follow-up, not super-window regressions.
+
+Do not rerun 85RAW just to re-prove super-window acceptance. Rerun only after
+current code changes RAW locality, owner-backfill request grouping,
+super-window batching/cropping, validation-fast settings, output surfaces used
+by the gate, or the cited artifacts become stale or contradictory.
+
+### 2026-06-15 Replay Executor Validation
+
+Verdict: `run_ok` and `gate_ok` for targeted CLI CSV/workbook replay parity on
+the reviewed 8RAW and 85RAW replay surfaces. This validates replayed analytical
+output equivalence for the named contract; it is not a full exact artifact
+replay, GUI parity proof, or timestamped workbook hash guarantee.
+
+Durable closeout:
+retired private-history replay note; the current durable facts are the verdict,
+key facts, and rerun rule in this ledger section.
+
+Key facts:
+
+- CSV replay parity passed for the reviewed 8RAW and 85RAW surfaces.
+- Workbook analytical parity passed for the reviewed 8RAW and 85RAW surfaces.
+- Replay validation intentionally excluded full byte-identical artifact replay
+  where timestamped workbook metadata makes exact hashes unsuitable.
+- GUI replay parity was not part of the accepted gate.
+
+Do not rerun replay validation just to re-prove these surfaces. Rerun only after
+current code changes method-manifest binding, replay CLI behavior,
+settings/targets artifact resolution, CSV/workbook writer semantics, or the
+cited artifacts become stale or contradictory.
+
+### 2026-05-28 Qualitative Selection / Owner-Backfill Scan Support Gate
+
+Verdict: `production_candidate` for the Phase 1b qualitative selected-peak /
+Backfill promotion blocker on the current production-equivalent alignment path.
+This closes the qualitative promotion blocker for the next product-decision PR;
+it does not declare the whole product `production_ready`.
+
+Durable closeout:
+retired private-history gate note; the current durable facts are the verdict,
+key facts, and retained fixtures in this ledger section.
+
+Key facts:
+
+- The earlier `NO_GO` was valid, but the root cause was narrower than Backfill
+  itself: `owner_backfill` was used as a support label without emitting the
+  independent `scan_support_score` required by the shared promotion policy.
+- Owner-backfill cells now compute `scan_support_score` from the extracted XIC
+  trace and selected peak boundary.
+- `trace_quality=owner_backfill` remains insufficient as independent support by
+  itself.
+- High-backfill promotion requires either at least two detected identity cells
+  or one detected seed plus product-authorized same-peak rescue evidence; a
+  single detected seed cannot promote a mostly backfilled row from local MS1
+  peak presence alone.
+- Supported high-backfill rows are capped at medium confidence and marked with
+  `high_backfill_dependency_capped`.
+- The accepted 85RAW foreground run used the canonical
+  production-equivalent, audit-off, validation-fast, super-window, heartbeat
+  command shape and produced the cited durable fixture summaries.
+
+Do not rerun Phase 1b just to re-prove the owner-backfill scan-support fix.
+Rerun only after current code changes owner-backfill trace support emission,
+promotion-policy support semantics, selected peak boundaries, high-backfill
+confidence/flag projection, or the cited artifacts become stale or
+contradictory.
+
 ### d3-N6-medA
 
 **Current classification:** known RT-drift / same-surface case; not a standalone
@@ -231,10 +367,10 @@ Known facts:
   trend audit recorded target-only RT range `2.1538 min`,
   global-median absolute RT delta p95 `1.4571 min`, local rolling-median p95
   `0.0483 min`, and local moderate/severe drift rows `0 / 85`.
-- The `d3-N6-medA / NormalBC2312_DNA` evidence-spine mismatch was reclassified
-  as mixed-surface diagnostic artifact after same-surface probes. Same-surface
-  comparison had `8/8` non-missing rows consistent and reviewed row area ratio
-  about `1.000001375`.
+- The `d3-N6-medA` evidence-spine mismatch was reclassified as mixed-surface
+  diagnostic artifact after same-surface probes. Same-surface comparison had
+  `8/8` non-missing rows consistent and reviewed row area ratio about
+  `1.000001375`.
 - Area mismatch alone must not block P2B or handoff progression for this target
   when identity, local RT coherence, selected peak, boundary ownership, and
   matrix delivery are accepted.
@@ -249,16 +385,14 @@ Post-fix 8RAW primary-delivery conclusion:
   `DNA_dR`, `owner_complete_link`, `include_in_primary_matrix=TRUE`,
   `8/8 present`, `3 detected`, `5 MS1 backfilled`, `22` event clusters,
   and `24` event members.
-- `FAM000264` contains `NormalBC2312_DNA#22176` as detected and contains a
-  `TumorBC2312_DNA` rescued cell at RT `25.4204`, matching the strong
-  target-derived `TumorBC2312_DNA#21195` MS1 apex RT.
+- `FAM000264` contains a detected representative and a rescued companion cell
+  at RT `25.4204`, matching the strong target-derived MS1 apex RT.
 - `FAM000264` is now present in `alignment_matrix.tsv`; the row carries
   `row_flags=rescue_heavy;weak_seed_tolerated` so the warning remains visible.
-- The post-fix row-level gate has `GO blocker count: 0`. `TumorBC2312_DNA /
-  d3-N6-medA` resolves by an equivalent current artifact because the strong
-  source candidate `TumorBC2312_DNA#21195` was an ambiguous owner row, while the
-  primary `FAM000264` cell has the same sample, target m/z class, and apex RT
-  `25.4204`.
+- The post-fix row-level gate has `GO blocker count: 0`. The `d3-N6-medA`
+  representative resolves by an equivalent current artifact because the strong
+  source candidate was an ambiguous owner row, while the primary `FAM000264`
+  cell has the same sample class, target m/z class, and apex RT `25.4204`.
 - A broad rule that promotes every `weak_seed_backfill_dependency` row with
   `q_detected >= 3` remains unacceptable. The accepted fix promoted 13
   additional `DNA_dR` rows, all flagged `rescue_heavy;weak_seed_tolerated`, and
@@ -289,14 +423,14 @@ hardening:
   for the production behavior as written. `d3-N6-medA` drift and area mismatch
   are not the blocker; the blocker is the weak-seed promotion contract.
 
-Authoritative notes and artifacts:
+Evidence notes and retained artifacts for this diagnostic conclusion:
 
 | Evidence | Path / fact |
 | --- | --- |
-| P2B area mismatch triage | `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` |
-| Resolver default hotfix / same-surface d3 note | `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` |
-| 85RAW super-window acceptance | `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
-| Product-priority Phase 1 gate | `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md` |
+| P2B area-mismatch triage | retired private-history note; current facts summarized above |
+| Resolver default hotfix / same-surface d3 finding | retired private-history note; current facts summarized above |
+| 85RAW super-window runtime acceptance | retired private-history note; current facts summarized above |
+| Product-priority Phase 1 gate | retired private-history note; current facts summarized above |
 | Current 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved.tsv`, SHA256 `9A63FC81C811CF92925853884837B623878B644A26311799FAF64FA4947548E8` |
 | Post-fix 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`, SHA256 `B38EC06D01714B4AACA6825B1C003C9BB724264689FCD78FBCB8DD2F9AB0CE9D` |
 | Current 8RAW row triage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/target_derived_review_row_triage.tsv`, SHA256 `73601AE36C879CE827AEA5816F6E690DF023F8DEB59B63F97ED8BBDEE635A3F9` |

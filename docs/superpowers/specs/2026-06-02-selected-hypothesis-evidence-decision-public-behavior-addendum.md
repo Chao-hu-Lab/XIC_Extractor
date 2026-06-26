@@ -6,7 +6,7 @@
 **Behavior label:** production extraction-result projection, output values
 preserved
 **Parent launch contract:** [C4 / C6 / Region Public Behavior Retirement Productization Design](2026-06-02-public-behavior-retirement-productization-design.md)
-**Primary design:** [C4 -- Peak Scoring Evidence-Decision Design](2026-06-01-c4-peak-scoring-evidence-decision-design.md)
+**Primary design:** [C4 -- Peak Scoring Evidence-Decision Design](retired-provenance:af29f907f881)
 
 Historical roadmap alias: this phase was previously tracked as `C4`; product
 code, schema, metadata, and tests should use selected-hypothesis / evidence
