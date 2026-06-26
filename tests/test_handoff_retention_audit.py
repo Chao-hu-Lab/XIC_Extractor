@@ -4,7 +4,6 @@ from pathlib import Path
 
 from tools.diagnostics.handoff_retention_audit import run_handoff_retention_audit
 
-
 HEADER = "path\tretention_decision\trepo_owner\tnext_review_event\trationale"
 CURRENT = "docs/superpowers/handoffs/current/codex-example.md"
 ARCHIVE = "docs/superpowers/handoffs/archive/2026-07-01_codex-example.md"

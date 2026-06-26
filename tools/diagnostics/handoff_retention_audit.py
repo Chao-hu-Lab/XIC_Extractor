@@ -243,7 +243,10 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
                     RetentionMessage(
                         "blocker",
                         path,
-                        "current handoff must be active_current or productization_anchor",
+                        (
+                            "current handoff must be active_current or "
+                            "productization_anchor"
+                        ),
                     )
                 )
             if _is_markdown(path):

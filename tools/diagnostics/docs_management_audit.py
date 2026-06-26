@@ -16,7 +16,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.diagnostics.handoff_retention_audit import run_handoff_retention_audit
+from tools.diagnostics.handoff_retention_audit import (  # noqa: E402
+    run_handoff_retention_audit,
+)
 
 DEFAULT_CONFIG = Path.home() / ".obsidian-wiki" / "config"
 
@@ -228,14 +230,23 @@ def audit_repo(root: Path) -> tuple[list[AuditMessage], dict[str, object]]:
     messages: list[AuditMessage] = []
     docs = sorted((root / "docs").rglob("*.md"))
     docs_by_top = Counter(
-        path.relative_to(root / "docs").parts[0] if path.relative_to(root / "docs").parts else "."
+        path.relative_to(root / "docs").parts[0]
+        if path.relative_to(root / "docs").parts
+        else "."
         for path in docs
     )
 
     stale_targets = [
-        root / "docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md",
         root
-        / "docs/superpowers/handoffs/archive/2026-06-26_codex-docs-cleanup_branch-closeout-summary.md",
+        / (
+            "docs/superpowers/handoffs/current/"
+            "codex-docs-cleanup-official-docs-and-handoff.md"
+        ),
+        root
+        / (
+            "docs/superpowers/handoffs/archive/"
+            "2026-06-26_codex-docs-cleanup_branch-closeout-summary.md"
+        ),
     ]
     for path in stale_targets:
         if not path.exists():
@@ -273,7 +284,8 @@ def audit_repo(root: Path) -> tuple[list[AuditMessage], dict[str, object]]:
                 "repo",
                 (
                     "local/private path exposure remains in tracked text; "
-                    f"{len(local_path_counts)} files, {sum(local_path_counts.values())} hits"
+                    f"{len(local_path_counts)} files, "
+                    f"{sum(local_path_counts.values())} hits"
                 ),
             )
         )
@@ -394,7 +406,11 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
 
     md_files = sorted(vault.rglob("*.md"))
     top_level = Counter(path.relative_to(vault).parts[0] for path in md_files)
-    staging_md = list((vault / "_staging").rglob("*.md")) if (vault / "_staging").exists() else []
+    staging_md = (
+        list((vault / "_staging").rglob("*.md"))
+        if (vault / "_staging").exists()
+        else []
+    )
     raw_files = [
         path
         for path in (vault / "_raw").glob("*")
@@ -447,7 +463,9 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
         ("invalid tier", invalid_tier),
     ):
         if count:
-            messages.append(AuditMessage("warning", "vault", f"{count} pages have {label}"))
+            messages.append(
+                AuditMessage("warning", "vault", f"{count} pages have {label}")
+            )
 
     manifest_summary: dict[str, object] = {"manifest_exists": False}
     manifest = vault / ".manifest.json"
@@ -475,7 +493,9 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
         for problem in manifest_problems[:20]:
             messages.append(AuditMessage("blocker", ".manifest.json", problem))
     else:
-        messages.append(AuditMessage("blocker", ".manifest.json", "manifest is missing"))
+        messages.append(
+            AuditMessage("blocker", ".manifest.json", "manifest is missing")
+        )
 
     link_health = _vault_link_health(md_files, vault)
     if link_health["broken_wikilinks"]:
@@ -483,7 +503,10 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
             AuditMessage(
                 "warning",
                 "vault",
-                f"{link_health['broken_wikilinks']} approximate broken wikilinks remain",
+                (
+                    f"{link_health['broken_wikilinks']} approximate broken "
+                    "wikilinks remain"
+                ),
             )
         )
 
