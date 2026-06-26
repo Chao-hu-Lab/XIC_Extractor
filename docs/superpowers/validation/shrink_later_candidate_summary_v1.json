@@ -5,11 +5,11 @@
   "destructive_action": "none",
   "sample_identifier_policy": "Tracked summary omits column names and row values so sample identifiers do not survive after full dumps are removed.",
   "reviewed_file_count": 6,
-  "removal_candidate_after_explicit_approval_count": 3,
+  "removal_candidate_after_explicit_approval_count": 2,
   "keep_minimal_fixture_count": 2,
-  "blocked_count": 1,
+  "blocked_count": 2,
   "total_reviewed_size_bytes": 1418453,
-  "removal_candidate_size_bytes": 828168,
+  "removal_candidate_size_bytes": 524258,
   "rows": [
     {
       "path": "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/readiness_integration_fixture/inputs/cell_provenance.tsv",
@@ -73,7 +73,7 @@
     },
     {
       "path": "docs/superpowers/validation/quant_matrix_real_bundle_v1/source_artifacts/standard_peak_activation_values.tsv",
-      "review_disposition": "removal_candidate_after_explicit_approval",
+      "review_disposition": "blocked_pending_contract_referrer_rewrite",
       "externalized_copy": "local_validation_artifacts/externalized_superpowers_validation/docs/superpowers/validation/quant_matrix_real_bundle_v1/source_artifacts/standard_peak_activation_values.tsv",
       "sha256": "aecda89c4f52137b48adcb61434787086c24f1e9b6c43520a3de3b5f30b6e422",
       "size_bytes": 303910,
@@ -81,8 +81,8 @@
       "data_row_count": 511,
       "column_count": 11,
       "review_status": "no_deletion_performed",
-      "review_rationale": "Full generated activation-values table; externalized copy exists and retained summaries preserve hash/shape metadata."
+      "review_rationale": "Full generated activation-values table, but retained contract artifacts still reference this repo path; block removal until referrers are rewritten to a retained summary or externalized-copy provenance."
     }
   ],
-  "next_action": "Do not git rm automatically. If removal is approved, limit it to removal_candidate_after_explicit_approval rows and update inventory/referrers in the same change."
+  "next_action": "Do not git rm automatically. If removal is approved, limit it to removal_candidate_after_explicit_approval rows. Rows marked blocked require referrer or hash-semantics repair before any deletion request."
 }

@@ -131,10 +131,11 @@ file-removal batch:
 4. use
    `docs/superpowers/validation/shrink_later_candidate_manifest_v1.tsv` and
    `docs/superpowers/validation/shrink_later_candidate_summary_v1.json` as a
-   reviewed mixed-disposition manifest: three paths are removal candidates after
-   explicit approval, two tiny paths are retained as `keep_minimal_fixture`, and
-   `seed_guard_decisions.tsv` remains blocked pending a focused referrer/hash
-   semantics review;
+   reviewed mixed-disposition manifest: two paths are removal candidates after
+   explicit approval, two tiny paths are retained as `keep_minimal_fixture`,
+   `standard_peak_activation_values.tsv` is blocked pending retained-contract
+   referrer rewrite, and `seed_guard_decisions.tsv` remains blocked pending a
+   focused referrer/hash semantics review;
 5. local copies live under ignored
    `local_validation_artifacts/externalized_superpowers_validation/`, but this
    is not a deletion authorization;
