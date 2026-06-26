@@ -47,6 +47,12 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
 - PR body is the normal durable closeout surface. Condense the branch handoff
   into the PR body instead of treating the current handoff as the final record;
   archive only compact completed phase summaries that must remain in repo.
+- Handoff retention is inventory-driven. Any file added to
+  `docs/superpowers/handoffs/current/` or `docs/superpowers/handoffs/archive/`
+  must also be recorded in `docs/superpowers/handoffs/RETENTION.tsv`. Use
+  `tools/diagnostics/handoff_retention_audit.py` before PR closeout to find
+  stale current handoffs, Obsidian-transfer candidates, and tracked-removal
+  candidates. The audit is not deletion approval.
 - Status labels such as `[active]`, `[blocked]`, `[done]`, and `[superseded]`
   are useful in open-work sections. Remove `[done]` and `[superseded]` items
   from the active handoff during the next prune unless they prevent repeated

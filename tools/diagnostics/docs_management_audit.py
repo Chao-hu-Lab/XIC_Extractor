@@ -14,12 +14,18 @@ import json
 import os
 import re
 import subprocess
+import sys
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.diagnostics.handoff_retention_audit import run_handoff_retention_audit
+
 DEFAULT_CONFIG = Path.home() / ".obsidian-wiki" / "config"
 
 STALE_HANDOFF_PATTERNS = (
@@ -272,12 +278,23 @@ def audit_repo(root: Path) -> tuple[list[AuditMessage], dict[str, object]]:
             )
         )
 
+    handoff_result = run_handoff_retention_audit(root)
+    messages.extend(
+        AuditMessage(
+            msg.severity,
+            msg.path,
+            f"handoff retention: {msg.message}",
+        )
+        for msg in handoff_result.messages
+    )
+
     summary: dict[str, object] = {
         "repo_markdown_files": len(docs),
         "docs_by_top_level": dict(sorted(docs_by_top.items())),
         "local_path_files": len(local_path_counts),
         "local_path_hits": sum(local_path_counts.values()),
         "top_local_path_files": top_local_path_files,
+        "handoff_retention": handoff_result.summary,
     }
     return messages, summary
 

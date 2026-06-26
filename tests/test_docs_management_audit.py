@@ -13,6 +13,7 @@ CLOSEOUT_SUMMARY = (
     "docs/superpowers/handoffs/archive/"
     "2026-06-26_codex-docs-cleanup_branch-closeout-summary.md"
 )
+RETENTION_INVENTORY = "docs/superpowers/handoffs/RETENTION.tsv"
 
 
 def _write(path: Path, text: str) -> None:
@@ -28,6 +29,23 @@ def _clean_repo(root: Path) -> None:
     _write(
         root / CLOSEOUT_SUMMARY,
         "# Closeout\n\nStatus: committed.\n\n## PR Body Seed\n\nProblem: x.\n",
+    )
+    _write(
+        root / RETENTION_INVENTORY,
+        "\n".join(
+            [
+                "path\tretention_decision\trepo_owner\tnext_review_event\trationale",
+                (
+                    f"{CURRENT_HANDOFF}\tactive_current\tPR #1\t"
+                    "pr_merge_or_close\tActive branch stub."
+                ),
+                (
+                    f"{CLOSEOUT_SUMMARY}\tkeep_repo_closeout_summary\tPR #1\t"
+                    "pr_merge_or_close\tCompact PR closeout."
+                ),
+            ]
+        )
+        + "\n",
     )
 
 
@@ -72,6 +90,19 @@ def test_stale_handoff_state_is_a_blocker(tmp_path: Path) -> None:
         root / CURRENT_HANDOFF,
         "Status: batches are staged; no commit has been made.\n",
     )
+    _write(
+        root / RETENTION_INVENTORY,
+        "\n".join(
+            [
+                "path\tretention_decision\trepo_owner\tnext_review_event\trationale",
+                (
+                    f"{CURRENT_HANDOFF}\tactive_current\tPR #1\t"
+                    "pr_merge_or_close\tActive branch stub."
+                ),
+            ]
+        )
+        + "\n",
+    )
 
     result = run_audit(root, vault)
 
@@ -109,6 +140,33 @@ def test_local_machine_path_is_reported_as_warning(tmp_path: Path) -> None:
     assert any(
         msg.severity == "warning" and "local/private path exposure" in msg.message
         for msg in result.messages
+    )
+
+
+def test_handoff_retention_blocker_is_reported_by_docs_management_audit(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    _clean_vault(vault)
+    _write(
+        root / CURRENT_HANDOFF,
+        "# Current handoff\n\nStatus: active.\n",
+    )
+    _write(
+        root / RETENTION_INVENTORY,
+        "path\tretention_decision\trepo_owner\tnext_review_event\trationale\n",
+    )
+
+    result = run_audit(root, vault)
+
+    assert "handoff_retention" in result.summary["repo"]
+    assert result.summary["repo"]["handoff_retention"]["handoff_files"] == 1
+    assert any(
+        msg.path == CURRENT_HANDOFF
+        and msg.message.startswith("handoff retention:")
+        and "no retention inventory row" in msg.message
+        for msg in result.blockers
     )
 
 

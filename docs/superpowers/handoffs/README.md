@@ -51,6 +51,48 @@ long reasoning in Obsidian.
 - Use `[active]`, `[blocked]`, `[done]`, and `[superseded]` labels when helpful;
   remove `[done]` and `[superseded]` from current handoff during the next prune
   unless they prevent repeated mistakes.
+- Every file under `current/` or `archive/` must have one row in
+  `RETENTION.tsv`. Adding, moving, or deleting a handoff file without updating
+  that inventory is a workflow bug.
+
+## Retention inventory
+
+`RETENTION.tsv` is the machine-readable cleanup queue for this directory. It is
+not deletion approval. It records which files are active, which are public
+evidence, which should move to Obsidian after PR review, and which may later be
+removed only through an exact manifest plus explicit approval.
+
+Allowed `retention_decision` values:
+
+- `active_current`: active branch resume stub. Keep in `current/` only while
+  the branch or PR workflow is live.
+- `productization_anchor`: shared status anchor used by productization checks.
+- `keep_repo_public_evidence`: compact public evidence that should remain in
+  repo until the owning policy changes.
+- `keep_repo_closeout_summary`: compact branch narrative or PR body seed.
+- `keep_repo_until_referrers_removed`: exact manifest, referrer audit, or
+  public cleanup evidence that may still be referenced by repo docs or PR
+  review.
+- `move_to_obsidian_after_pr`: useful branch/review history that should not
+  live in repo indefinitely after PR review.
+- `superseded_by_pr`: repo archive content already replaced by the PR body.
+- `remove_after_merge_approval`: candidate for tracked removal after merge or
+  closeout, but still requires a concrete manifest and explicit user approval.
+
+Allowed `next_review_event` values are `active_branch_change`,
+`pr_open_update`, `pr_merge_or_close`, `referrer_audit`,
+`validation_cleanup`, `productization_policy_change`, and `manual_review`.
+
+Run the read-only audit before PR closeout or whenever this directory changes:
+
+```powershell
+python tools/diagnostics/handoff_retention_audit.py
+python tools/diagnostics/docs_management_audit.py
+```
+
+The audit can report candidates, but it must not auto-delete. `git rm`,
+archive moves, or repo-tracked deletion still require exact paths, referrer
+audit, and explicit user approval.
 
 ## PR closeout lifecycle
 
@@ -63,8 +105,13 @@ Current handoff is an input to closeout, not the durable endpoint.
    action. Do not paste the whole handoff or private Obsidian-only context.
 3. If the completed phase must remain in repo history after PR closeout, write a
    compact archive summary under `archive/`.
-4. After the PR is closed or merged, stop maintaining that branch current
-   handoff unless a follow-up branch explicitly reuses it.
+4. After the PR is closed or merged, run the retention audit. Move
+   `move_to_obsidian_after_pr` material into the private vault if it is still
+   useful, mark PR-superseded material as `superseded_by_pr`, and prepare an
+   exact cleanup manifest for any `remove_after_merge_approval` candidates.
+5. Stop maintaining that branch current handoff unless a follow-up branch
+   explicitly reuses it. Do not remove it from repo without the same manifest
+   and explicit-approval flow used for other tracked deletions.
 
 ## Authority
 

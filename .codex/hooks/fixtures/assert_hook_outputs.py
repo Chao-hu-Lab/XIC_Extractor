@@ -411,6 +411,25 @@ def main() -> int:
         "git commit with -a/--all or pathspec is blocked",
     )
 
+    git_commit_bash_lc_wrapped_autostage_payload = {
+        "hook_event_name": "PreToolUse",
+        "turn_id": "fixture",
+        "tool_name": "Bash",
+        "tool_use_id": "fixture",
+        "cwd": ".",
+        "permission_mode": "default",
+        "tool_input": {
+            "command": "bash -lc 'git commit -am docs'",
+        },
+    }
+    assert_contains(
+        run_hook(
+            "xic_pre_tool_guard.py",
+            git_commit_bash_lc_wrapped_autostage_payload,
+        ),
+        "git commit with -a/--all or pathspec is blocked",
+    )
+
     git_commit_docs_guard_payload = {
         "hook_event_name": "PreToolUse",
         "turn_id": "fixture",

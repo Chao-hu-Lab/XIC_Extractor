@@ -148,6 +148,14 @@ GIT_COMMIT_OPTIONS_WITH_VALUE = {
     "--trailer",
 }
 SHELL_COMMAND_FLAGS = {"-c", "-command", "/c"}
+POSIX_SHELL_EXECUTABLES = {"bash", "bash.exe", "sh", "sh.exe"}
+POWERSHELL_EXECUTABLES = {
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "pwsh.exe",
+}
+CMD_EXECUTABLES = {"cmd", "cmd.exe"}
 
 
 @dataclass(frozen=True)
@@ -368,6 +376,22 @@ def is_shell_executable(token: str) -> bool:
     }
 
 
+def is_shell_command_flag(shell_token: str, option: str) -> bool:
+    shell = token_basename(shell_token)
+    option = option.lower()
+    if shell in POSIX_SHELL_EXECUTABLES:
+        return option == "-c" or (
+            option.startswith("-")
+            and not option.startswith("--")
+            and "c" in option[1:]
+        )
+    if shell in POWERSHELL_EXECUTABLES:
+        return option in {"-c", "-command"}
+    if shell in CMD_EXECUTABLES:
+        return option == "/c"
+    return option in SHELL_COMMAND_FLAGS
+
+
 def skip_git_global_options(tokens: list[str], index: int) -> int:
     while index < len(tokens):
         token = command_word(tokens[index])
@@ -405,7 +429,10 @@ def nested_shell_commands(tokens: list[str]) -> list[str]:
             continue
         for option_index in range(index + 1, len(tokens)):
             option = command_word(tokens[option_index]).lower()
-            if option in SHELL_COMMAND_FLAGS and option_index + 1 < len(tokens):
+            if (
+                is_shell_command_flag(token, option)
+                and option_index + 1 < len(tokens)
+            ):
                 commands.append(" ".join(tokens[option_index + 1 :]))
                 break
     return commands

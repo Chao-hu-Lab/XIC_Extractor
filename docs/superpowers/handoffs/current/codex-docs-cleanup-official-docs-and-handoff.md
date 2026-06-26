@@ -1,7 +1,7 @@
 # Docs cleanup current handoff
 
 Branch: `codex/docs-cleanup`
-Status: PR gate passed; ready for local closeout commit, push, and PR creation
+Status: PR opened; follow-up handoff-retention guardrail patch in progress
 Validation status: `diagnostic_only`
 
 ## Current Verdict
@@ -22,16 +22,24 @@ The branch now has these committed groups:
 - `ead777bf`, `4ebf3c2d`, `1ea1c69a`: review, externalize, and finalize
   validation shrink candidates; current retention checker reports
   `249 retained`, `48 externalized`, and `0 shrink_later`.
+- `20d90316`: finalize cleanup PR handoff, validation metadata hash/path
+  normalization, and PR-ready closeout state.
 
-Current uncommitted closeout delta:
+Current uncommitted follow-up delta:
 
-- Handoff and branch closeout summary were pruned into the branch-current resume
-  surface plus PR-body seed.
-- PR gate exposed stale retained-validation JSON path/hash bindings; those were
-  normalized to repo-relative forward-slash JSON paths and synchronized through
-  the validation inventory, productization status index, bounded lane acceptance
-  packet, authority manifest, and lockbox summaries.
-- Two ruff-only test formatting issues were fixed without changing test intent.
+- `docs/superpowers/handoffs/RETENTION.tsv` now records retention decisions for
+  current/archive handoff files.
+- `tools/diagnostics/handoff_retention_audit.py` adds a read-only audit for
+  missing retention rows, invalid decisions, oversized current handoffs, stale
+  current wording, and post-PR cleanup/Obsidian-transfer candidates.
+- `tools/diagnostics/docs_management_audit.py` now includes handoff retention in
+  the overall docs-management health check.
+- `.codex/hooks/xic_hook_policy.py` now recognizes POSIX shell combined
+  command flags such as `bash -lc 'git commit -am docs'`, closing the PR review
+  comment about autostage commit guard bypass.
+- This is docs governance only. It does not change maturity tier, active lane,
+  ProductWriter authority, matrix/workbook schema, selected area/counting, or
+  product outputs; no productization control-plane update is needed.
 
 ## Routing State
 
@@ -42,11 +50,13 @@ Use this split when preparing the PR or continuing the branch:
 | Next safe actions and branch status | This current handoff | Self-sufficient resume stub. |
 | PR body seed and reviewer narrative | `docs/superpowers/handoffs/archive/2026-06-26_codex-docs-cleanup_branch-closeout-summary.md` | Completed phase summary that can be condensed into a PR. |
 | Exact deletion authorization, manifests, public-surface audits | Existing `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_*` evidence files | Public-safe audit trail for file-management decisions. |
+| Handoff cleanup/transfer queue | `docs/superpowers/handoffs/RETENTION.tsv` | Read-only retention inventory; not deletion approval. |
 | Long development diary, reviewer rationale, branch sequencing, private context | Obsidian private notes | Not repo authority and not PR body material. |
 | Full generated validation TSVs not needed for clean checkout | `local_validation_artifacts/externalized_superpowers_validation/` | Ignored local storage; repo keeps summaries, manifests, hashes, and contract fixtures. |
 
 Do not add another handoff system. The branch-scoped current handoff remains the
-resume surface; the archive closeout summary is the PR body source.
+resume surface; the archive closeout summary is the PR body source; the
+retention inventory is the cleanup queue.
 
 ## File-Management State
 
@@ -65,12 +75,12 @@ The remaining reviewed source artifacts are not deletion candidates:
 - `cell_provenance.tsv` and `standard_peak_activation_inputs.tsv` remain
   `keep_minimal_fixture`.
 
-Stop before any further `git rm`, vault rebuild, push, PR creation, merge, or
+Stop before any further `git rm`, vault rebuild, push, PR update, merge, or
 productization-tier change unless the user explicitly requests it.
 
 ## Latest Verification
 
-Latest validation in this worktree:
+Latest full PR validation before opening PR #98:
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
@@ -89,10 +99,13 @@ reported `249 retained`, `48 externalized`, `0 shrink_later`; productization
 state, authority, and bounded-lane checkers passed; docs audit reported
 `0 blockers` and `0 warnings`.
 
+Follow-up handoff-retention patch still needs focused tests and docs audit
+rerun before commit.
+
 ## Next Actions
 
-1. Stage only this closeout delta and run staged guard checks.
-2. Commit the closeout patch.
-3. Push `codex/docs-cleanup` and open the PR as workflow-only /
-   diagnostic-only documentation governance cleanup; preserve branch history and
-   local ignored artifacts until merge closeout is complete.
+1. Run focused tests for docs management and handoff retention.
+2. Run `python tools/diagnostics/handoff_retention_audit.py` and
+   `python tools/diagnostics/docs_management_audit.py`.
+3. Stage only the handoff-retention follow-up patch, run staged guard checks,
+   then commit/push as a PR #98 update when requested.
