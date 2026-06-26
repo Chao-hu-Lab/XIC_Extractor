@@ -29,6 +29,7 @@ from tools.diagnostics.handoff_retention_audit import (  # noqa: E402
 )
 
 DEFAULT_CONFIG = Path.home() / ".obsidian-wiki" / "config"
+LOCAL_ENV_FILES = (".env.xic-local", ".env")
 
 STALE_HANDOFF_PATTERNS = (
     "no commit has been made",
@@ -212,12 +213,13 @@ def resolve_vault(root: Path, explicit: Path | None) -> Path | None:
     current = root.resolve()
     home = Path.home().resolve()
     for candidate_dir in (current, *current.parents):
-        candidate = candidate_dir / ".env"
-        if candidate.exists():
-            values = _config_values(candidate)
-            vault = values.get("OBSIDIAN_VAULT_PATH")
-            if vault:
-                return Path(vault)
+        for filename in LOCAL_ENV_FILES:
+            candidate = candidate_dir / filename
+            if candidate.exists():
+                values = _config_values(candidate)
+                vault = values.get("OBSIDIAN_VAULT_PATH")
+                if vault:
+                    return Path(vault)
         if candidate_dir == home:
             break
 

@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-23
-**Total entry-points:** 103
-**Total files (incl. helpers):** 182 Python files under `tools/diagnostics/`
+**Last refreshed:** 2026-06-26
+**Total entry-points:** 104
+**Total files (incl. helpers):** 183 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/architecture-contract.md`; the retired dated
 diagnostic lifecycle spec remains only as a same-path public stub.
 **Provenance note:** `Originating spec/plan`, `Recent doc`, and similar fields
@@ -42,7 +42,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 8. [Family / Overlay Visualization](#family--overlay-visualization) — 7 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
-11. [Agent / Docs Workflow Guards](#agent--docs-workflow-guards) — 2 tools
+11. [Agent / Docs Workflow Guards](#agent--docs-workflow-guards) — 3 tools
 
 ---
 
@@ -1658,14 +1658,30 @@ markers without auto-fixing.
 **Purpose**: Audit the repo/Obsidian documentation management system after
 cleanup. It catches stale post-commit handoff wording, manifest stats drift,
 pending vault raw/staged files, missing vault lifecycle metadata, approximate
-broken wikilinks, and local/private path exposure that needs focused
-retention/privacy review.
-**Topic group**: `docs_management_audit.py` + `docs_placement_guard.py`
+broken wikilinks, handoff retention drift, and local/private path exposure that
+needs focused retention/privacy review.
+**Topic group**: `docs_management_audit.py` + `docs_placement_guard.py` +
+`handoff_retention_audit.py`
 **Governing doc**: `docs/agent/obsidian-handoff-contract.md`
 **Status note**: Read-only docs governance audit. It does not move files, write
 to Obsidian, stage changes, mutate product output, or authorize tracked
 deletion. Use it after major docs cleanup and before PR closeout when the
 repo/vault split changed.
+
+---
+
+### `handoff_retention_audit.py`
+
+**Purpose**: Audit repo-tracked handoff retention state. It checks that every
+file under `docs/superpowers/handoffs/current/` and
+`docs/superpowers/handoffs/archive/` has a `RETENTION.tsv` row, that retention
+decisions are valid, that current handoffs stay compact, and that archive
+cleanup remains manifest-driven.
+**Topic group**: `docs_management_audit.py` + `handoff_retention_audit.py`
+**Governing doc**: `docs/superpowers/handoffs/README.md`
+**Status note**: Read-only docs governance audit. It reports Obsidian-transfer
+and cleanup candidates but never moves files, writes to Obsidian, stages
+changes, or authorizes tracked deletion.
 
 ---
 

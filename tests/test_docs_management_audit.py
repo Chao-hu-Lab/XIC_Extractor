@@ -184,6 +184,24 @@ def test_env_example_local_machine_path_is_reported(tmp_path: Path) -> None:
     assert any(item["path"] == ".env.example" for item in top_hits)
 
 
+def test_xic_local_env_configures_vault_when_env_var_is_unset(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    monkeypatch.delenv("OBSIDIAN_VAULT_PATH", raising=False)
+    _clean_repo(root)
+    _clean_vault(vault)
+    _write(root / ".env.xic-local", f"OBSIDIAN_VAULT_PATH={vault}\n")
+
+    result = run_audit(root)
+
+    assert result.blockers == ()
+    assert result.summary["vault"]["vault_configured"] is True
+    assert result.summary["vault"]["vault_path"] == str(vault)
+
+
 def test_wikilink_heading_anchor_is_not_reported_broken(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     vault = tmp_path / "vault"

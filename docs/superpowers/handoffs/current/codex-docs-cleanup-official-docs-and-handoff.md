@@ -37,6 +37,11 @@ Current uncommitted follow-up delta:
 - `.codex/hooks/xic_hook_policy.py` now recognizes POSIX shell combined
   command flags such as `bash -lc 'git commit -am docs'`, closing the PR review
   comment about autostage commit guard bypass.
+- `tools/diagnostics/docs_management_audit.py` now reads `.env.xic-local` as
+  the documented local vault config source, closing the PR review comment about
+  skipped Obsidian vault audits.
+- `tools/diagnostics/INDEX.md` was refreshed for
+  `handoff_retention_audit.py`, matching the CI diagnostics-index gate.
 - This is docs governance only. It does not change maturity tier, active lane,
   ProductWriter authority, matrix/workbook schema, selected area/counting, or
   product outputs; no productization control-plane update is needed.
