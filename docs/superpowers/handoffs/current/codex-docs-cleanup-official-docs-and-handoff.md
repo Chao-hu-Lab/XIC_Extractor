@@ -126,16 +126,16 @@ file-removal batch:
 2. keep only clean-checkout contract seeds in repo: summary, manifest, hash,
    row count, regeneration command, authority/status fields, or minimal fixture;
 3. make `scripts/check_validation_artifact_retention.py` expose `shrink_later`
-   debt clearly; after subagent review the remaining debt is four tracked rows
-   / 1,415,764 bytes;
+   debt clearly; after exact-path git-rm approval and referrer review there is
+   no remaining `shrink_later` debt;
 4. use
    `docs/superpowers/validation/shrink_later_candidate_manifest_v1.tsv` and
    `docs/superpowers/validation/shrink_later_candidate_summary_v1.json` as a
-   reviewed mixed-disposition manifest: two paths are removal candidates after
-   explicit approval, two tiny paths are retained as `keep_minimal_fixture`,
-   `standard_peak_activation_values.tsv` is blocked pending retained-contract
-   referrer rewrite, and `seed_guard_decisions.tsv` remains blocked pending a
-   focused referrer/hash semantics review;
+   reviewed mixed-disposition manifest: two paths were removed from git after
+   explicit approval, two tiny paths are retained as `keep_minimal_fixture`, and
+   the two remaining full source-artifact TSVs are retained as clean-checkout
+   provenance contracts because retained artifacts still reference their repo
+   paths;
 5. local copies live under ignored
    `local_validation_artifacts/externalized_superpowers_validation/`, but this
    is not a deletion authorization;

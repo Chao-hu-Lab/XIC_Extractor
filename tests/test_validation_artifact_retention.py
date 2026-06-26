@@ -11,19 +11,12 @@ def test_current_validation_retention_inventory_accepts_worktree() -> None:
 
     assert result.problems == ()
     assert result.summary["inventory_rows"] == 298
-    assert result.summary["present_validation_files"] == 251
-    assert result.summary["externalized_count"] == 46
-    assert result.summary["shrink_later_count"] == 4
-    assert result.summary["shrink_later_tracked_count"] == 4
-    assert result.summary["shrink_later_tracked_bytes"] == 1_415_764
-    assert {
-        row["path"] for row in result.summary["shrink_later_files"]
-    } == {
-        "docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/artifacts/downstream_impact_inputs/quant_matrix.tsv",
-        "docs/superpowers/validation/quant_matrix_real_bundle_v1/source_artifacts/activation_value_delta.tsv",
-        "docs/superpowers/validation/quant_matrix_real_bundle_v1/source_artifacts/seed_guard_decisions.tsv",
-        "docs/superpowers/validation/quant_matrix_real_bundle_v1/source_artifacts/standard_peak_activation_values.tsv",
-    }
+    assert result.summary["present_validation_files"] == 249
+    assert result.summary["externalized_count"] == 48
+    assert result.summary["shrink_later_count"] == 0
+    assert result.summary["shrink_later_tracked_count"] == 0
+    assert result.summary["shrink_later_tracked_bytes"] == 0
+    assert result.summary["shrink_later_files"] == []
 
 
 def test_checker_rejects_missing_inventory_row(tmp_path: Path) -> None:
