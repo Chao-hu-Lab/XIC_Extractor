@@ -1,7 +1,7 @@
 # Docs cleanup current handoff
 
 Branch: `codex/docs-cleanup`
-Status: committed docs-governance cleanup; follow-up health fixes in progress
+Status: committed docs-governance cleanup; validation retention minimization in progress
 Validation status: `diagnostic_only`
 
 ## Current Verdict
@@ -9,6 +9,7 @@ Validation status: `diagnostic_only`
 The docs cleanup branch now has a committed repo/Obsidian split baseline:
 
 - commit: `634d568c docs: establish repo and Obsidian document flow`;
+- commit: `a1e43819 docs: harden document management health checks`;
 - repo keeps formal source-of-truth docs, compact public migration evidence,
   checker-readable validation artifacts, and active handoff stubs;
 - Obsidian keeps private development history, long branch diaries, review
@@ -93,6 +94,9 @@ Externalize to ignored storage:
 
 - generated bulk artifacts marked `externalize`, while keeping repo summaries,
   hashes, row counts, source script, and regeneration metadata.
+- full validation outputs that are useful only on this developer machine, while
+  retaining clean-checkout summaries, minimal fixtures, or contract seeds in
+  repo when tests/checkers/reviewers need them.
 
 ## Latest Verification
 
@@ -114,16 +118,28 @@ reported a clean worktree.
 
 ## Current Follow-Up
 
-The remaining work is docs-management health hardening, not another file-removal
-batch:
+The active follow-up is validation retention minimization, not another
+file-removal batch:
 
-1. keep this handoff and the closeout summary aligned with post-commit state;
-2. repair Obsidian manifest/index/frontmatter health metadata without moving
-   repo authority into the vault;
-3. use `tools/diagnostics/docs_management_audit.py` as the repeatable health
-   check;
-4. treat validation local-path exposure as a focused retention/privacy review,
-   because several affected TSVs are checker-backed contracts.
+1. keep full workbooks, full matrices, RAW-derived dumps, and exploratory
+   diagnostics in ignored `output/` or `local_validation_artifacts/` by default;
+2. keep only clean-checkout contract seeds in repo: summary, manifest, hash,
+   row count, regeneration command, authority/status fields, or minimal fixture;
+3. make `scripts/check_validation_artifact_retention.py` expose `shrink_later`
+   debt clearly; after subagent review the remaining debt is four tracked rows
+   / 1,415,764 bytes;
+4. use
+   `docs/superpowers/validation/shrink_later_candidate_manifest_v1.tsv` and
+   `docs/superpowers/validation/shrink_later_candidate_summary_v1.json` as a
+   reviewed mixed-disposition manifest: three paths are removal candidates after
+   explicit approval, two tiny paths are retained as `keep_minimal_fixture`, and
+   `seed_guard_decisions.tsv` remains blocked pending a focused referrer/hash
+   semantics review;
+5. local copies live under ignored
+   `local_validation_artifacts/externalized_superpowers_validation/`, but this
+   is not a deletion authorization;
+6. do not remove checker-backed validation TSVs until the user explicitly
+   approves the exact candidate set and any checker/referrer updates are known.
 
 Stop before any further tracked deletion, vault rebuild, PR, push, or
 productization-tier change unless the user explicitly requests it.

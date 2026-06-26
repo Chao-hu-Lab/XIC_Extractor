@@ -7,6 +7,14 @@ This directory is a product-evidence index, not a full result dump. Keep enough
 state to audit, regenerate, and review product claims; externalize bulky rendered
 outputs and full-run tables unless they are the smallest durable contract source.
 
+For personal single-machine development, it is acceptable and preferred to keep
+full workbooks, full matrices, RAW-derived dumps, and exploratory diagnostics in
+ignored local storage such as `output/` or `local_validation_artifacts/`. That
+does not weaken the repo if the repo still keeps the contract seed: a small
+fixture or summary, row counts, hashes, source command, authority/status fields,
+and enough regeneration metadata for future review. Do not keep large data in
+git merely because the current developer can see it locally.
+
 ## Decisions
 
 Use one of these retention decisions in `ARTIFACT_INVENTORY.tsv`.
@@ -36,6 +44,11 @@ Use one of these retention decisions in `ARTIFACT_INVENTORY.tsv`.
 - PNG plots and other binary review media.
 - Duplicated inputs copied into validation packets when a retained
   source-summary/hash is sufficient.
+
+If a full dump is needed only for local inspection on the same machine, keep it
+ignored and cite it from a tracked summary. If a clean checkout must run a test
+or checker without the local file, retain the smallest fixture slice that proves
+the contract instead of retaining the entire table.
 
 ## Externalization Convention
 
@@ -69,6 +82,11 @@ uv run python scripts/check_validation_artifact_retention.py --require-externali
 
 Use `--strict` only for a focused shrink cleanup where all `shrink_later` rows
 are expected to be removed.
+
+Default output includes a shrink-later debt summary. Treat it as the next
+cleanup backlog: each row should eventually become either `keep_contract` /
+`keep_minimal_fixture` after a reviewer confirms the whole table is the contract,
+or `externalize` after a tracked summary/minimal fixture replaces the full table.
 
 ## Product Boundary
 

@@ -133,6 +133,15 @@ canonical owner，再把原文當 private context 移交 Obsidian。不能因為
 | `local_raw_samples/`、`local_validation_raw/` | 本地測試 RAW 樣本（私人資料） |
 | `xic_extractor.egg-info/` | setuptools 安裝元資料 |
 
+Validation output 的預設去處是 ignored storage，不是 repo。個人同機開發時，
+完整 workbook、full matrix、RAW-derived dump、exploratory diagnostics 可以留在
+`output/` 或 `local_validation_artifacts/`；repo 只留能讓 clean checkout 審查
+產品 claim 的最小 contract seed：summary、manifest、hash、row count、再生指令、
+authority/status 欄位，或 focused test 需要的小型 fixture。若某個 validation 檔
+只是「我本機看過的完整結果」，不要為了方便把它升格成 tracked artifact。
+若它是 checker/test/PR review 需要的契約證據，先把完整表縮成最小 fixture 或
+summary，再考慮外部化原始 full dump。
+
 ### `xic_extractor/` subpackage 分工
 
 由 `docs/architecture-contract.md § Ownership Map` 規範。一句話摘要：
