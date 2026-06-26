@@ -371,7 +371,7 @@ else:
 |------|------|------|
 | 規格檔 | `docs/superpowers/specs/YYYY-MM-DD-<kebab>.md` | `YYYY-MM-DD-<topic>-design.md` |
 | 全局計畫 owner | `docs/superpowers/plans/<explicit-owner>.md` | `2026-06-15-productization-control-plane.md` |
-| Active stub | `docs/superpowers/handoffs/current/<branch-or-topic>.md` 或帶 `Doc placement: repo_active_stub` 的明確 owner path | `codex-docs-cleanup-official-docs-and-handoff.md` |
+| Active stub | ignored local `docs/superpowers/handoffs/current/ACTIVE.local.md`; force-added repo stub only when intentionally public | `ACTIVE.local.md` |
 | 測試檔 | `tests/test_<module>_<behavior>.py`，**扁平結構，不鏡像 src** | `test_alignment_owner_clustering.py` |
 | CLI 入口 | `scripts/run_<purpose>.py` | `scripts/run_extraction.py` |
 | CLI 輔助 | `scripts/<verb>_<noun>.py` 或 `<purpose>.py` | `scripts/csv_to_excel.py` |

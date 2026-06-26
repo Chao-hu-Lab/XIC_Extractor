@@ -66,7 +66,6 @@ DOC_CANONICAL_OWNER_DIRS = [
     "docs/superpowers/specs/",
     "docs/superpowers/validation/",
     "docs/superpowers/fixtures/",
-    "docs/superpowers/handoffs/current/",
     "docs/validation/",
     "tests/fixtures/",
 ]
@@ -82,6 +81,7 @@ DOC_CANONICAL_OWNER_FILES = {
     "docs/project-layout.md",
     "docs/research-line-triage.md",
     "docs/superpowers/README.md",
+    PRODUCTIZATION_STATUS_HANDOFF_PATH,
     "docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md",
     "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
     "docs/superpowers/plans/README.md",
@@ -89,6 +89,7 @@ DOC_CANONICAL_OWNER_FILES = {
 HIGH_RISK_DOC_DIRS = [
     "docs/deepresearch/",
     "docs/superpowers/deepresearch/",
+    "docs/superpowers/handoffs/current/",
     "docs/superpowers/handoffs/archive/",
     "docs/superpowers/notes/",
     "docs/superpowers/plans/",

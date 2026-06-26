@@ -1,8 +1,10 @@
 """Audit repo-tracked handoff retention state.
 
-The audit is read-only. It checks that every repo handoff current/archive file
-has an explicit retention row, that active handoffs stay compact, and that
-archive cleanup remains manifest-driven instead of ad hoc deletion.
+The audit is read-only. It checks that every git-tracked handoff
+current/archive file has an explicit retention row, that active handoffs stay
+compact, and that archive cleanup remains manifest-driven instead of ad hoc
+deletion. Ignored local handoff files are private workspace state and are not
+audited here.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import subprocess
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -57,6 +60,16 @@ STALE_CURRENT_SIGNALS = (
     "no commit has been made",
     "staged deletions",
 )
+ACTIONABLE_DUE_DECISIONS = {
+    "active_current",
+    "move_to_obsidian_after_pr",
+    "remove_after_merge_approval",
+    "superseded_by_pr",
+}
+
+
+class HandoffDiscoveryError(RuntimeError):
+    """Raised when tracked handoff discovery would be ambiguous."""
 
 
 @dataclass(frozen=True)
@@ -87,7 +100,7 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def _tracked_handoff_files(root: Path) -> tuple[str, ...]:
+def _filesystem_handoff_files(root: Path) -> tuple[str, ...]:
     paths: list[str] = []
     for directory in (root / CURRENT_DIR, root / ARCHIVE_DIR):
         if not directory.exists():
@@ -98,6 +111,54 @@ def _tracked_handoff_files(root: Path) -> tuple[str, ...]:
             if path.is_file()
         )
     return tuple(paths)
+
+
+def _tracked_handoff_files(
+    root: Path,
+    *,
+    allow_filesystem_fallback: bool = False,
+) -> tuple[str, ...]:
+    try:
+        top_level = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return _filesystem_handoff_files(root)
+
+    git_root = Path(top_level.stdout.strip()).resolve()
+    if git_root != root:
+        if allow_filesystem_fallback:
+            return _filesystem_handoff_files(root)
+        raise HandoffDiscoveryError(
+            (
+                "handoff retention audit root must be the git worktree root "
+                f"for tracked-only mode: root={root}, git_top_level={git_root}"
+            )
+        )
+
+    completed = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            CURRENT_DIR.as_posix(),
+            ARCHIVE_DIR.as_posix(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return tuple(
+        line.strip().replace("\\", "/")
+        for line in completed.stdout.splitlines()
+        if line.strip()
+    )
 
 
 def _read_inventory(path: Path) -> tuple[list[dict[str, str]], list[str]]:
@@ -144,10 +205,50 @@ def _stale_current_signal(text: str) -> str:
     return ""
 
 
-def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
+def _due_event_message(decision: str, due_event: str) -> str:
+    if decision == "active_current":
+        return (
+            f"due for event {due_event}: branch current handoff needs closeout "
+            "review; prepare an exact manifest and approval before tracked removal"
+        )
+    if decision == "move_to_obsidian_after_pr":
+        return (
+            f"due for event {due_event}: move useful branch/review history to "
+            "private Obsidian, then keep only a public stub or approved repo summary"
+        )
+    if decision == "remove_after_merge_approval":
+        return (
+            f"due for event {due_event}: tracked removal candidate still needs "
+            "exact-path manifest, referrer audit, and explicit approval"
+        )
+    if decision == "superseded_by_pr":
+        return (
+            f"due for event {due_event}: confirm PR body supersedes this file "
+            "before any tracked cleanup"
+        )
+    return f"due for event {due_event}: review retention decision"
+
+
+def run_handoff_retention_audit(
+    root: Path = ROOT,
+    *,
+    due_event: str | None = None,
+    allow_filesystem_fallback: bool = False,
+) -> RetentionResult:
     root = root.resolve()
     messages: list[RetentionMessage] = []
-    handoff_files = set(_tracked_handoff_files(root))
+    try:
+        handoff_files = set(
+            _tracked_handoff_files(
+                root,
+                allow_filesystem_fallback=allow_filesystem_fallback,
+            )
+        )
+    except HandoffDiscoveryError as exc:
+        handoff_files = set()
+        messages.append(
+            RetentionMessage("blocker", HANDOFF_ROOT.as_posix(), str(exc))
+        )
     inventory_path = root / RETENTION_INVENTORY
     rows, inventory_errors = _read_inventory(inventory_path)
     for error in inventory_errors:
@@ -195,12 +296,30 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
             )
         )
 
+    missing_tracked_files = {
+        path for path in handoff_files if not (root / path).exists()
+    }
+    for path in sorted(missing_tracked_files):
+        messages.append(
+            RetentionMessage(
+                "blocker",
+                path,
+                (
+                    "git-tracked handoff file is missing from the working tree; "
+                    "restore it or remove it only through the explicit approval flow"
+                ),
+            )
+        )
+
     decision_counts: Counter[str] = Counter()
     next_review_counts: Counter[str] = Counter()
     transfer_candidates: list[str] = []
     cleanup_candidates: list[str] = []
     current_files: list[str] = []
     archive_files: list[str] = []
+    due_paths: list[str] = []
+    non_actionable_due_paths: list[str] = []
+    due_decision_counts: Counter[str] = Counter()
 
     for path in sorted(handoff_files):
         row = rows_by_path.get(path, {})
@@ -208,6 +327,7 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
         review_event = row.get("next_review_event", "")
         repo_owner = row.get("repo_owner", "")
         rationale = row.get("rationale", "")
+        path_exists = path not in missing_tracked_files
         decision_counts[decision or "(missing)"] += 1
         next_review_counts[review_event or "(missing)"] += 1
 
@@ -235,6 +355,19 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
             messages.append(
                 RetentionMessage("blocker", path, "rationale is required")
             )
+        if due_event and review_event == due_event:
+            if decision in ACTIONABLE_DUE_DECISIONS:
+                due_paths.append(path)
+                due_decision_counts[decision or "(missing)"] += 1
+                messages.append(
+                    RetentionMessage(
+                        "warning",
+                        path,
+                        _due_event_message(decision, due_event),
+                    )
+                )
+            else:
+                non_actionable_due_paths.append(path)
 
         if _is_current(path):
             current_files.append(path)
@@ -250,27 +383,31 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
                     )
                 )
             if _is_markdown(path):
-                line_count = _line_count(root, path)
-                if line_count > MAX_CURRENT_LINES:
-                    messages.append(
-                        RetentionMessage(
-                            "warning",
-                            path,
-                            (
-                                f"current handoff has {line_count} lines; "
-                                f"target is <= {MAX_CURRENT_LINES}"
-                            ),
+                if path_exists:
+                    line_count = _line_count(root, path)
+                    if line_count > MAX_CURRENT_LINES:
+                        messages.append(
+                            RetentionMessage(
+                                "warning",
+                                path,
+                                (
+                                    f"current handoff has {line_count} lines; "
+                                    f"target is <= {MAX_CURRENT_LINES}"
+                                ),
+                            )
                         )
-                    )
-                signal = _stale_current_signal(_read_text(root / path))
-                if signal:
-                    messages.append(
-                        RetentionMessage(
-                            "warning",
-                            path,
-                            f"current handoff may be stale after closeout: {signal!r}",
+                    signal = _stale_current_signal(_read_text(root / path))
+                    if signal:
+                        messages.append(
+                            RetentionMessage(
+                                "warning",
+                                path,
+                                (
+                                    "current handoff may be stale after closeout: "
+                                    f"{signal!r}"
+                                ),
+                            )
                         )
-                    )
         elif _is_archive(path):
             archive_files.append(path)
             if decision in {"active_current", "productization_anchor"}:
@@ -296,6 +433,11 @@ def run_handoff_retention_audit(root: Path = ROOT) -> RetentionResult:
         "move_to_obsidian_after_pr": transfer_candidates,
         "cleanup_after_approval": cleanup_candidates,
     }
+    if due_event:
+        summary["due_event"] = due_event
+        summary["due_paths"] = due_paths
+        summary["non_actionable_due_paths"] = non_actionable_due_paths
+        summary["due_retention_decisions"] = dict(sorted(due_decision_counts.items()))
     return RetentionResult(tuple(messages), summary)
 
 
@@ -321,12 +463,20 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Print machine-readable JSON instead of text.",
     )
+    parser.add_argument(
+        "--event",
+        choices=sorted(VALID_REVIEW_EVENTS),
+        help=(
+            "Report files whose next_review_event is due. This is read-only and "
+            "does not imply deletion approval."
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    result = run_handoff_retention_audit(args.root)
+    result = run_handoff_retention_audit(args.root, due_event=args.event)
     if args.json:
         print(
             json.dumps(

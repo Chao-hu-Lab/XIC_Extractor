@@ -228,7 +228,11 @@ def resolve_vault(root: Path, explicit: Path | None) -> Path | None:
     return Path(vault) if vault else None
 
 
-def audit_repo(root: Path) -> tuple[list[AuditMessage], dict[str, object]]:
+def audit_repo(
+    root: Path,
+    *,
+    allow_filesystem_handoff_fallback: bool = False,
+) -> tuple[list[AuditMessage], dict[str, object]]:
     messages: list[AuditMessage] = []
     docs = sorted((root / "docs").rglob("*.md"))
     docs_by_top = Counter(
@@ -292,7 +296,10 @@ def audit_repo(root: Path) -> tuple[list[AuditMessage], dict[str, object]]:
             )
         )
 
-    handoff_result = run_handoff_retention_audit(root)
+    handoff_result = run_handoff_retention_audit(
+        root,
+        allow_filesystem_fallback=allow_filesystem_handoff_fallback,
+    )
     messages.extend(
         AuditMessage(
             msg.severity,
@@ -533,8 +540,16 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
     return messages, summary
 
 
-def run_audit(root: Path = ROOT, vault: Path | None = None) -> AuditResult:
-    repo_messages, repo_summary = audit_repo(root)
+def run_audit(
+    root: Path = ROOT,
+    vault: Path | None = None,
+    *,
+    allow_filesystem_handoff_fallback: bool = False,
+) -> AuditResult:
+    repo_messages, repo_summary = audit_repo(
+        root,
+        allow_filesystem_handoff_fallback=allow_filesystem_handoff_fallback,
+    )
     resolved_vault = resolve_vault(root, vault)
     vault_messages, vault_summary = audit_vault(resolved_vault)
     messages = [*repo_messages, *vault_messages]

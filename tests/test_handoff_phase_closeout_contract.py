@@ -100,7 +100,7 @@ def test_obsidian_handoff_contract_defines_branch_closeout_guardrails() -> None:
     assert "public contract" in text
     assert "docs governance" in text
     assert "approved file moves" in text
-    assert "active handoff must link to the latest branch closeout summary" in text
+    assert "normal durable closeout surface" in text
     assert "The PR body seed must be short" in text
     assert "entire closeout summary" in text
 
