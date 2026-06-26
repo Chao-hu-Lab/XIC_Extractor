@@ -73,10 +73,23 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
 - Keep active handoffs as short current-state snapshots, not logs. Use archive
   for completed phase summaries, notes for long scratch details, and prune
   around the 200-line target before substantial continuation.
+- For non-trivial branch closeout, keep the current handoff as the live
+  handoff only and write a branch-level archive closeout summary that can seed
+  the PR body. This is required for public-contract, docs-governance,
+  validation-policy, artifact-retention, broad public-surface, or approved
+  deletion work.
 - Treat repo docs as the public source-of-truth surface and Obsidian or ignored
   artifacts as the private lab notebook. Public contracts, product authority,
   validation policy, and future-agent rules stay in canonical repo owners; long
   development diary, command transcript, and private/local context do not.
+- Active execution plans cannot be Obsidian-only. Keep a short repo stub with
+  objective, scope, constraints, next 1-3 actions, verification, and stop rule;
+  Obsidian can only provide optional private depth.
+- New or risky repo docs outside canonical owner paths need `Doc placement:` and
+  `Repo owner:` before commit. Private diary, command log, review rationale, and
+  branch sequencing go to Obsidian staged draft or ignored storage.
+- For docs-heavy work, use explicit `git add` and inspect staged diff; do not use
+  `git commit -a`, `git commit --all`, `git commit -am`, or pathspec commits.
 - For tracked docs moving toward Obsidian, first formalize stable claims in a
   repo owner or keep a same-path sanitized stub. Do not `git rm`, archive-move,
   or delete tracked docs without explicit approval after a referrer scan.

@@ -48,6 +48,15 @@ This page does not decide:
 - Current Backfill expansion work should prioritize mechanical adjudication,
   structured review, truth acquisition, trace-evidence recovery, and evidence
   provenance before any new writer scope.
+- A stable lifecycle vocabulary is useful, but it is not writer authority by
+  itself: missing call, Backfill candidate, evidence-chain packet, review item,
+  approval decision, export policy, and quant-matrix version are separate
+  states.
+- Seed-aware review gates and shadow gates can classify Backfill readiness, but
+  `shadow_gate_ready` is not matrix authority.
+- Positive support must be provenance-valid. Display tokens in
+  `alignment_review.tsv` do not promote a row without the approved source
+  sidecar or authority chain.
 
 ## Public Surfaces
 
@@ -69,6 +78,8 @@ This page does not decide:
 | Trace-matched unresolved rows | Rows with some trace-level evidence but insufficient authority | Backfill evidence lifecycle and adjudication surfaces |
 | Missing-overlay rows | Rows blocked by absent or insufficient overlay evidence | Evidence availability packets and blocker reports |
 | Expansion packets | Proposed future writer changes | Control plane, authority manifest, expected-diff packet, output tests |
+| Evidence-chain packet | Structured source evidence for review or approval | Backfill evidence lifecycle and provenance owners |
+| Approval decision | Human or machine-readable approval state | Review roundtrip and authority manifest gates |
 
 ## Workflow
 
@@ -97,6 +108,9 @@ Before changing Backfill product behavior, require the relevant subset of:
 
 - Treating the candidate/audit universe as the writer pool.
 - Treating overlays, galleries, blocker tokens, or sidecars as matrix authority.
+- Treating `shadow_gate_ready` as a write predicate.
+- Treating `alignment_review.tsv` tokens as positive support without
+  provenance-valid sidecars.
 - Moving a historical Backfill note to private storage before its stable public
   claims are represented in repo owners.
 - Updating a topic summary while leaving the control plane, status index, or
@@ -113,6 +127,8 @@ Use these before changing product behavior or cleanup policy:
 - [`docs/superpowers/validation/mechanical_adjudication_index_v1.tsv`](../superpowers/validation/mechanical_adjudication_index_v1.tsv)
 - [`docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`](../superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md)
 - [`docs/lcms-msms-evidence-rules.md`](../lcms-msms-evidence-rules.md)
+- [`docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`](../superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
+- [`docs/superpowers/notes/2026-05-19-seed-aware-backfill-review-index.md`](../superpowers/notes/2026-05-19-seed-aware-backfill-review-index.md)
 
 ## Cleanup Rule
 
@@ -120,7 +136,8 @@ Backfill diaries, reset notes, command transcripts, and detailed review debate
 belong in Obsidian or ignored artifacts after their stable public claims are
 covered here, in the control plane, or in the authority/evidence owners. Keep a
 same-path repo stub only while exact referrers, checkers, hashes, fixtures, or
-compatibility references still need that path.
+compatibility references still need that path, including old sidecar provenance
+checkpoint notes.
 
 ## When To Update
 

@@ -9,7 +9,7 @@ source_refs:
   - ".codex/skills/xic-pr-stack-repair/SKILL.md"
   - "docs/agent/execution-gates.md"
   - "docs/agent/planning-workflows.md"
-  - "docs/superpowers/notes/2026-06-24-pr88-stack-artifact-boundary-retrospective.md"
+  - "docs/superpowers/README.md"
 ---
 
 # PR Stack Artifact Boundary Clean Closeout

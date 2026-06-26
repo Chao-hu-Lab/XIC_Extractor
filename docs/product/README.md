@@ -18,6 +18,16 @@ already known to need representative repo docs during the Obsidian cleanup:
 | Discovery | [`discovery.md`](discovery.md) | Untargeted feature discovery, candidate/review outputs, and seed evidence handoff |
 | Alignment | [`alignment.md`](alignment.md) | Cross-sample alignment outputs, owner construction, backfill evidence sidecars, and matrix handoff contracts |
 | Presets | [`presets.md`](presets.md) | Resolver and alignment preset behavior, reproducibility rules, and preset public-surface risk |
+| Productization | [`productization.md`](productization.md) | Current-state capability map, promotion boundaries, and authority routing |
+| Evidence Spine | [`evidence-spine.md`](evidence-spine.md) | Shared evidence carriers, peak hypotheses, and targeted/untargeted product-projection boundaries |
+| Peak Model Selection | [`peak-model-selection.md`](peak-model-selection.md) | Selected-hypothesis model-selection invariants, parity requirements, expected-diff gates, and legacy scoring retirement boundaries |
+| Quant Matrix | [`quant-matrix.md`](quant-matrix.md) | Product-facing matrix values, Backfill activation boundaries, sidecars, and matrix authority routing |
+| Run Provenance | [`run-provenance.md`](run-provenance.md) | Method manifests, run metadata, replay context, and command-diary cleanup boundaries |
+| Review Roundtrip | [`review-roundtrip.md`](review-roundtrip.md) | Review action import, lockbox evidence, expected-diff gates, and private review-rationale boundaries |
+| Sample Metadata And QC | [`sample-metadata-qc.md`](sample-metadata-qc.md) | Sample identity/order/role/QC metadata, safe-current-use boundaries, and activation gates |
+| Targeted Selection | [`targeted-selection.md`](targeted-selection.md) | Targeted public behavior, selected hypotheses, region/boundary gates, reasons, and target-pair RT activation |
+| Quantitation Context | [`quantitation-context.md`](quantitation-context.md) | Bounded trace context for selected peak integration, morphology evidence, and area-impacting gates |
+| Instrument QC And Calibration | [`instrument-qc-calibration.md`](instrument-qc-calibration.md) | Clean-vs-biological QC roles, HCD audit limits, calibration readiness, and activation boundaries |
 
 Add another file here when a product topic has durable public rules but no
 single small repo entry point. Do not add a topic here just to preserve a branch

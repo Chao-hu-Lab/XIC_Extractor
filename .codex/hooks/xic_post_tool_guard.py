@@ -14,10 +14,13 @@ from xic_hook_policy import (
     PRODUCT_SURFACE_PATHS,
     PRODUCTIZATION_STATUS_HANDOFF_PATH,
     branch_slug,
+    is_git_add_command,
     is_productization_status_handoff,
+    is_shell_command_event,
     mentions_any_path,
     mentions_path,
     normalize_path_text,
+    run_docs_placement_guard,
     touched_handoff_paths,
     touches_control_plane,
     touches_handoff,
@@ -84,6 +87,12 @@ def error_text_from_response(value: object) -> str:
     if isinstance(value, list):
         return "\n".join(error_text_from_response(item) for item in value)
     return ""
+
+
+def guard_output_text(result: object) -> str:
+    stdout = getattr(result, "stdout", "").strip()
+    stderr = getattr(result, "stderr", "").strip()
+    return "\n".join(part for part in (stdout, stderr) if part)
 
 
 def text_from_value(value: object) -> str:
@@ -289,6 +298,28 @@ def main() -> int:
         contexts.append(
             "Git lock/ref-lock friction detected. Stop retrying the same shape; inspect the lock/ref state and use the documented Windows git recovery path."
         )
+
+    if is_shell_command_event(str(event.get("tool_name", "")), command) and (
+        is_git_add_command(command)
+    ):
+        cwd = str(event.get("cwd", "."))
+        guard_result = run_docs_placement_guard(cwd)
+        if guard_result.returncode != 0:
+            details = guard_output_text(guard_result)
+            reason = "Docs placement guard failed after git add."
+            if details:
+                reason = f"{reason}\n{details}"
+            emit(
+                {
+                    "decision": "block",
+                    "reason": reason,
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": reason,
+                    },
+                }
+            )
+            return 0
 
     if is_write_like(event, command):
         tool_input_text = text_from_value(event.get("tool_input"))

@@ -185,7 +185,8 @@ area. Missing typed morphology facts fail closed as
 `missing_ms1_morphology_area`.
 
 Durable closeout:
-`docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md`
+retired private-history closeout; the current durable facts are the verdict,
+key facts, and retained artifact paths in this ledger section.
 
 Current 85RAW foreground gate:
 `output/gaussian15_ms1_morphology_85raw_20260605/alignment_validation_minimal_no_asls_fallback/`
@@ -212,7 +213,8 @@ must not borrow active strict NL support from a different Gaussian15 MS1 peak
 group. Outside-group strict NL stays diagnostic context.
 
 Durable closeout:
-`docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md`
+retired private-history closeout; the current durable facts are the verdict,
+key facts, and retained artifact paths in this ledger section.
 
 Current 8RAW targeted gate:
 `output/gaussian15_ms1_peak_group_nl_scope_8raw_20260605/nl_peak_group_scope_8raw/ms1_peak_group_nl_scope_gate/ms1_peak_group_nl_scope_gate_manifest.json`
@@ -243,7 +245,8 @@ hotfix evidence-chain continuation. This is not an 85RAW clearance and not
 `production_ready`.
 
 Durable closeout:
-`docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md`
+retired private-history validation note; the current durable facts are the
+verdict, key facts, and rerun rule in this ledger section.
 
 Key facts:
 
@@ -273,7 +276,8 @@ Verdict: `production_candidate` for explicit opt-in
 new default behavior and not `production_ready` by itself.
 
 Durable closeout:
-`docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md`
+retired private-history runtime note; the current durable facts are the
+validated command profile and rerun rule in this ledger section.
 
 Key facts:
 
@@ -300,7 +304,8 @@ output equivalence for the named contract; it is not a full exact artifact
 replay, GUI parity proof, or timestamped workbook hash guarantee.
 
 Durable closeout:
-`docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`
+retired private-history replay note; the current durable facts are the verdict,
+key facts, and rerun rule in this ledger section.
 
 Key facts:
 
@@ -323,7 +328,8 @@ This closes the qualitative promotion blocker for the next product-decision PR;
 it does not declare the whole product `production_ready`.
 
 Durable closeout:
-`docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md`
+retired private-history gate note; the current durable facts are the verdict,
+key facts, and retained fixtures in this ledger section.
 
 Key facts:
 
@@ -421,10 +427,10 @@ Evidence notes and retained artifacts for this diagnostic conclusion:
 
 | Evidence | Path / fact |
 | --- | --- |
-| P2B area mismatch triage | `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` |
-| Resolver default hotfix / same-surface d3 note | `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` |
-| 85RAW super-window acceptance | `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` |
-| Product-priority Phase 1 gate | `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md` |
+| P2B area-mismatch triage | retired private-history note; current facts summarized above |
+| Resolver default hotfix / same-surface d3 finding | retired private-history note; current facts summarized above |
+| 85RAW super-window runtime acceptance | retired private-history note; current facts summarized above |
+| Product-priority Phase 1 gate | retired private-history note; current facts summarized above |
 | Current 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved.tsv`, SHA256 `9A63FC81C811CF92925853884837B623878B644A26311799FAF64FA4947548E8` |
 | Post-fix 8RAW resolved matrix snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/phase1_review_matrix_resolved_primary_delivery_fix.tsv`, SHA256 `B38EC06D01714B4AACA6825B1C003C9BB724264689FCD78FBCB8DD2F9AB0CE9D` |
 | Current 8RAW row triage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/target_derived_review_row_triage.tsv`, SHA256 `73601AE36C879CE827AEA5816F6E690DF023F8DEB59B63F97ED8BBDEE635A3F9` |

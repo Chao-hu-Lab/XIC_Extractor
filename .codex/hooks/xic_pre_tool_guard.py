@@ -5,7 +5,14 @@ import json
 import re
 import sys
 
-from xic_hook_policy import PRODUCT_SURFACE_PATHS, mentions_any_path
+from xic_hook_policy import (
+    PRODUCT_SURFACE_PATHS,
+    git_commit_uses_autostage_or_pathspec,
+    is_git_commit_command,
+    is_shell_command_event,
+    mentions_any_path,
+    run_docs_placement_guard,
+)
 
 DESTRUCTIVE_COMMANDS = [
     (
@@ -66,6 +73,12 @@ def context(message: str) -> None:
     )
 
 
+def guard_output_text(result: object) -> str:
+    stdout = getattr(result, "stdout", "").strip()
+    stderr = getattr(result, "stderr", "").strip()
+    return "\n".join(part for part in (stdout, stderr) if part)
+
+
 def get_command(event: dict[str, object]) -> str:
     tool_input = event.get("tool_input")
     if isinstance(tool_input, dict):
@@ -118,6 +131,24 @@ def main() -> int:
             "Background RAW launch through Start-Process is blocked. Use the documented foreground heartbeat/timing command shape, or get explicit external-terminal approval."
         )
         return 0
+
+    if is_shell_command_event(str(event.get("tool_name", "")), command) and (
+        is_git_commit_command(command)
+    ):
+        if git_commit_uses_autostage_or_pathspec(command):
+            deny(
+                "git commit with -a/--all or pathspec is blocked because it can bypass the staged docs placement guard. Run explicit git add first, review the staged diff, then commit."
+            )
+            return 0
+        cwd = str(event.get("cwd", "."))
+        guard_result = run_docs_placement_guard(cwd)
+        if guard_result.returncode != 0:
+            details = guard_output_text(guard_result)
+            reason = "Docs placement guard failed before git commit."
+            if details:
+                reason = f"{reason}\n{details}"
+            deny(reason)
+            return 0
 
     normalized = command.replace("\\", "/")
     if any(path.replace("\\", "/") in normalized for path in EXEC_CONFIG_PATHS):

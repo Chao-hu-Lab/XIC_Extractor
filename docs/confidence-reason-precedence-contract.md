@@ -5,7 +5,8 @@ and counted-detection values on a targeted workbook row come from**. It is a
 code-anchored map, not a rationale document.
 
 - Design rationale and the authority-migration decision live in
-  `docs/superpowers/specs/2026-06-03-targeted-evidence-chain-alignment-spec.md`.
+  `docs/product/alignment.md` and `docs/product/evidence-spine.md`; the dated
+  targeted evidence-chain spec is retained only as a migration/history stub.
 - Module ownership lives in `docs/architecture-contract.md`.
 - This file only answers: *given a row, which layer decided its displayed
   `Confidence` / `Reason` and whether it counts?* Keep it in sync when any of the

@@ -43,6 +43,21 @@ This page does not decide:
   worktree-local output directories as durable inputs.
 - Minimal output modes are for fast inspection; standard outputs are the public
   machine handoff surfaces.
+- Discovery UX and review surfaces are public handoffs when they define
+  filenames, columns, row identity, output level, or downstream consumption.
+  Dated implementation plans can move to private history only if those stable
+  output and review-surface claims remain represented here, in named specs, and
+  in tests.
+- The current CID-NL Discovery product lane is separate from Backfill. A
+  Discovery slice must use Discovery vocabulary and authority; it must not
+  reopen broad Backfill or expand the Backfill authority manifest by accident.
+- The current CID-NL Discovery scope is a bounded accepted slice. Future
+  Discovery-only expansion needs successor-level tag context, MS1/quant support,
+  provenance, value-delta framing, expected matrix effect, and explicit
+  expected-diff review.
+- RAW locality and request batching are performance/product constraints. Do not
+  introduce vendor RAW to mzML conversion as an implicit product dependency
+  without a separate public contract.
 
 ## Public Surfaces
 
@@ -82,20 +97,24 @@ Before changing discovery behavior, require the relevant subset of:
 - Hiding discovery output-contract changes in dated implementation notes.
 - Treating a new evidence provider as ProductWriter authority without Backfill
   activation.
+- Dragging CID-NL Discovery decisions into the Backfill lane.
+- Starting untargeted performance implementation before timing/locality evidence
+  identifies the bottleneck and correctness gate.
 
 ## Source Owners
 
-- [`docs/architecture-contract.md`](../architecture-contract.md) for package
-  ownership and dependency direction.
-- [`docs/superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md`](../superpowers/specs/2026-05-09-untargeted-discovery-v1-spec.md)
-  for the initial discovery contract.
-- [`docs/superpowers/specs/2026-05-10-discovery-output-performance-spec.md`](../superpowers/specs/2026-05-10-discovery-output-performance-spec.md)
-  for output and performance expectations.
-- [`docs/superpowers/specs/2026-05-10-discovery-ux-surface-contract.md`](../superpowers/specs/2026-05-10-discovery-ux-surface-contract.md)
-  for review-surface behavior.
+- This file owns the durable public Discovery method, output, review-surface,
+  and performance direction. Dated Discovery specs are migration/history stubs
+  after their stable claims are absorbed here.
+- [`docs/architecture-contract.md`](../architecture-contract.md) owns package
+  ownership, dependency direction, and diagnostic-vs-production boundaries.
 - [`alignment.md`](alignment.md) for the cross-sample handoff boundary.
 - [`docs/lcms-msms-evidence-rules.md`](../lcms-msms-evidence-rules.md) for
   evidence semantics.
+- [`docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md`](../superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md)
+  for the current CID-NL Discovery product lane boundary.
+- [`docs/superpowers/specs/2026-05-12-untargeted-performance-architecture-spec.md`](../superpowers/specs/2026-05-12-untargeted-performance-architecture-spec.md)
+  for RAW-locality and request-batching performance direction.
 
 ## Cleanup Rule
 

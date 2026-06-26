@@ -466,7 +466,7 @@ Minimal valid JSON shape:
   - `python -m pytest tests\test_method_manifest.py tests\test_output_metadata.py tests\test_excel_pipeline.py tests\test_excel_sheets_contract.py tests\test_csv_to_excel.py tests\test_workbook_compare.py tests\test_extractor.py tests\test_extractor_run.py tests\test_parallel_execution.py -q`
   - `python -m pytest tests\test_output_schema_contract.py tests\test_output_metadata.py tests\test_method_manifest.py -q`
 - RAW-backed validation:
-  - `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md`
+  - `retired-provenance:a715796da6a7`
   - targeted 8RAW CSV-only replay processed `8` RAW files in both runs and emitted `155` diagnostics in both runs.
   - `xic_results.csv`, `xic_results_long.csv`, and `xic_diagnostics.csv` matched byte-for-byte between initial run and replay.
   - targeted 8RAW Excel-mode replay processed `8` RAW files in both runs and workbook compare passed between initial run and replay.

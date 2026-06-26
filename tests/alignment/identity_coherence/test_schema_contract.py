@@ -58,9 +58,9 @@ from xic_extractor.alignment.identity_coherence.schema import (
 CONTRACT_PATH = (
     Path(__file__).resolve().parents[3]
     / "docs"
-    / "superpowers"
-    / "specs"
-    / "2026-05-22-untargeted-identity-coherence-implementation-contract.md"
+    / "validation"
+    / "schemas"
+    / "identity-coherence-schema-contract.md"
 )
 IDENTITY_COHERENCE_PACKAGE = "xic_extractor.alignment.identity_coherence"
 INLINE_ADAPTER_MODULES = (

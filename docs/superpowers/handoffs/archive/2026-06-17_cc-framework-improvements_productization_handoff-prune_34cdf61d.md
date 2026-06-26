@@ -114,4 +114,4 @@ This archive is a phase summary, not a log. Read the current handoff first:
 - Control plane:
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
 - Deep research background:
-  `docs/deepresearch/Backfill Production Gate.md`
+  `retired-provenance:ef216de2963e`

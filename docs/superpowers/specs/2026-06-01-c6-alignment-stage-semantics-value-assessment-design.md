@@ -3,11 +3,11 @@
 **Date:** 2026-06-01
 **Status:** Phase 5 implementation snapshot v1.8 — C6-M successor-constructor migration
 **Readiness label:** `diagnostic_only`
-**Supersedes for implementation:** [C6 alignment grouping consolidation](2026-05-24-peak-pipeline-cleanup-alignment-grouping-consolidation-spec.md)
+**Supersedes for implementation:** [C6 alignment grouping consolidation](retired-provenance:a2156b86083c)
 **Execution contract:** [Peak pipeline cleanup one-goal phase contract](2026-06-01-peak-pipeline-cleanup-one-goal-phase-contract-spec.md)
-**Current-state input:** [Peak pipeline cleanup current-state reassessment](2026-06-01-peak-pipeline-cleanup-current-state-reassessment-spec.md)
-**Output contract input:** [Untargeted alignment output contract](2026-05-11-untargeted-alignment-output-contract.md)
-**Follow-up successor design:** [C6 cross-sample peak group hypothesis shadow contract](2026-06-02-c6-cross-sample-peak-group-hypothesis-shadow-contract-design.md)
+**Current-state input:** [Peak pipeline cleanup current-state reassessment](retired-provenance:2ae004032a4f)
+**Output contract input:** [Untargeted alignment output contract](retired-provenance:a8d826fd641c)
+**Follow-up successor design:** [C6 cross-sample peak group hypothesis shadow contract](retired-provenance:64de5836a40e)
 
 ## Verdict
 
@@ -884,7 +884,7 @@ When a C6-B/C cleanup can affect writer-facing behavior, use this matrix before
 editing. The canonical output-level source is
 `xic_extractor/alignment/output_levels.py`; path construction is in
 `xic_extractor/alignment/pipeline_outputs.py`; output contract rationale is in
-[Untargeted alignment output contract](2026-05-11-untargeted-alignment-output-contract.md).
+[Untargeted alignment output contract](retired-provenance:a8d826fd641c).
 
 | Surface | Minimum oracle for C6-B/C |
 | --- | --- |

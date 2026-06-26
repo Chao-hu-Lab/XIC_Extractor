@@ -31,6 +31,11 @@ This page does not decide:
 
 - Changing a default preset or silent resolver behavior changes public
   behavior. It needs expected-diff framing, focused tests, and relevant evidence.
+- The current tracked settings and `ExtractionConfig` public resolver token are
+  `region_first_safe_merge`; alignment production maps that compatibility token
+  to `local_minimum`. `local_minimum` remains an explicit direct mode or
+  validation slice, not a silent default unless config, CLI, or GUI selection
+  says so.
 - The GUI local profile can expose explicit preset buttons. It must not silently
   overwrite user intent.
 - Preset runs should be reproducible from documented CLI/config surfaces and
@@ -38,6 +43,11 @@ This page does not decide:
 - Product publication still requires the productization authority path. A
   preset can enable required sidecars and checkers, but it does not itself
   grant matrix-writing authority.
+- `dna_dr_product_ready` is the CLI alignment preset surface for replaying the
+  registered productization tail, including the current clean-target 84-cell
+  Backfill activation when the sample universe, expected-diff packet, and
+  authority scope match. It does not create GUI behavior, broaden Backfill or
+  CID-NL authority, or make candidate-only evidence publishable.
 
 ## Public Surfaces
 

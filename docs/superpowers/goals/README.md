@@ -21,9 +21,9 @@ is not active just because it is in this directory.
 
 - `XIC_Extractor_Productization_Roadmap_Review.md` is the current Backfill /
   quant-matrix roadmap.
-- `2026-06-07-backfill-evidence-reconciliation-productization-goal.md` is
-  historical diagnostic/gallery provenance and is superseded for future Backfill
-  roadmap execution.
+- The June 2026 Backfill evidence-reconciliation goal is historical
+  diagnostic/gallery provenance and is superseded for future Backfill roadmap
+  execution.
 
 ## Rule
 

@@ -20,9 +20,15 @@ treated acceptance as a truth-import problem.
 
 ## Current Authority Boundary
 
-Current state is unchanged by this blueprint:
+Current writer authority is not defined by this blueprint. Use the
+productization status index, authority manifest, and control plane as the
+current source of truth. As of the current repo state:
 
-- Current Backfill product authority remains exactly 511 cells.
+- The original Backfill write-ready scope remains exactly 511 cells.
+- The clean-target selective Backfill expansion adds a separate bounded 84-cell
+  `production_ready` authority scope.
+- The 666-cell Backfill expansion replay remains candidate evidence only, with
+  no write authority.
 - Broad Backfill auto-write remains parked.
 - The parked item is broad uncontracted Backfill, not the product goal of
   accepted Backfill values entering the default quant matrix.

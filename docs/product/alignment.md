@@ -44,6 +44,19 @@ This page does not decide:
   contract.
 - Product activation is a separate decision owned by productization control
   plane, status index, authority manifest, and output tests.
+- Successor/group identity, gap-fill semantics, and workbook metadata versioning
+  are public behavior when they affect alignment outputs. They must stay
+  repo-readable through the relevant public-behavior addenda or this topic page.
+- `alignment_review.tsv` tokens are review context. Positive support for
+  promoted behavior must come from provenance-valid sidecars or explicit
+  authority records, not from display tokens alone.
+- Alignment output filenames, row ordering, column schema, schema-version
+  signals, and identity/provenance sidecars are public contracts. Dated
+  implementation plans may move to private history only after those contracts
+  remain represented here, in named specs, and in focused tests.
+- Runner scripts orchestrate inputs, profiles, and output locations. Reusable
+  grouping, ownership, identity, writer, and sidecar behavior belongs in package
+  modules or explicit specs, not in branch-local command diaries.
 
 ## Public Surfaces
 
@@ -54,6 +67,7 @@ This page does not decide:
 | `alignment_matrix_identity.tsv` | Identity and owner traceability |
 | `alignment_backfill_cell_evidence.tsv` | Backfill-related cell evidence sidecar |
 | `alignment_run_metadata.json` | Conditional run settings and provenance sidecar when enabled by the runner |
+| `alignment-results-v2/v3` metadata | Workbook/report schema-version signals for public behavior changes |
 
 ## Ownership Boundaries
 
@@ -96,22 +110,31 @@ Before changing alignment behavior, require the relevant subset of:
 - Changing output columns without updating specs, tests, and downstream
   handoff docs.
 - Claiming product readiness from `validation-minimal` alone.
+- Treating a gap-filled or successor-group sidecar row as product authority
+  without a matching output contract.
+- Letting `alignment_review.tsv` support tokens promote rows without
+  provenance-valid source sidecars.
 
 ## Source Owners
 
+- This file owns durable public Alignment output, matrix-handoff, owner-family,
+  and cross-sample behavior. Dated alignment specs are migration/history stubs
+  after their stable claims are absorbed here.
 - [`docs/architecture-contract.md`](../architecture-contract.md)
 - [`docs/agent-parameter-settings.md`](../agent-parameter-settings.md)
 - [`docs/agent/product-validation-contract.md`](../agent/product-validation-contract.md)
 - [`docs/diagnostic-ledger.md`](../diagnostic-ledger.md)
-- [`docs/superpowers/specs/2026-05-11-untargeted-alignment-output-contract.md`](../superpowers/specs/2026-05-11-untargeted-alignment-output-contract.md)
 - [`docs/superpowers/specs/productization_authority_manifest.v1.json`](../superpowers/specs/productization_authority_manifest.v1.json)
+- [`docs/superpowers/specs/2026-06-02-cross-sample-peak-group-public-behavior-addendum.md`](../superpowers/specs/2026-06-02-cross-sample-peak-group-public-behavior-addendum.md)
+- [`docs/superpowers/specs/2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md`](../superpowers/specs/2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
 
 ## Cleanup Rule
 
 Alignment plans and closeout notes often contain useful history but should not
 remain the only public explanation of matrix handoff behavior. Formalize stable
 output contracts, runner profiles, and ownership boundaries here or in the
-source owners before moving long history to Obsidian.
+source owners before moving long history to Obsidian. Same-path stubs can remain
+for old sidecar provenance checkpoint refs.
 
 ## When To Update
 

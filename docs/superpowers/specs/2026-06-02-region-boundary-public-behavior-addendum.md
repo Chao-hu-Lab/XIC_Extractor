@@ -4,7 +4,7 @@
 **Parent launch contract:**
 [C4 / C6 / Region Public Behavior Retirement Productization Design](2026-06-02-public-behavior-retirement-productization-design.md)
 **Base design:**
-[Region-Boundary Decision Owner Design](2026-06-02-region-boundary-decision-owner-design.md)
+[Region-Boundary Decision Owner Design](retired-provenance:44f1b5db924b)
 **Status:** Draft v0.3 - Phase 1 disposition and exit-evidence table locked;
 implementation must still be verified against this contract
 **Behavior label:** public behavior change

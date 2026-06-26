@@ -41,7 +41,7 @@ adding Parquet caches, adding Polars, or introducing distributed frameworks.
 | Discovery RAW access | Thermo `.raw` via `raw_reader.open_raw()` | `xic_extractor/discovery/pipeline.py`, `xic_extractor/raw_reader.py` |
 | Discovery family grouping | Per-sample grouping only; not a cross-sample synchronization point | `xic_extractor/discovery/feature_family.py` requires same `raw_file` and `sample_stem` |
 | Alignment synchronization | Cross-sample work lives in alignment ownership/backfill/claim registry | `xic_extractor/alignment/pipeline.py`, `xic_extractor/alignment/claim_registry.py` |
-| `.mzML` policy | Existing plans explicitly avoid converting `.raw` to `.mzML` | `docs/superpowers/specs/2026-05-06-numofinder-inspired-ms2-evidence-and-discovery-spec.md` |
+| `.mzML` policy | Existing plans explicitly avoid converting `.raw` to `.mzML` | `retired-provenance:43ac0f54d103` |
 
 ## Boundary
 

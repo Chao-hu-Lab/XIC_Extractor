@@ -4,7 +4,7 @@
 **Status:** Draft v0.7 - row-specific expected-diff approval is production-ready for BC1055/8-oxodG; full candidate-switch promotion still gated
 **Readiness label:** `row_specific_expected_diff_production_ready`; paired-anchor projection is `production_ready` via the targeted evidence-chain alignment spec; broad Phase 3 candidate switching remains `blocked_until_expected_diff_and_transfer_gate`
 **Primary surface:** targeted extraction product selection
-**Related specs:** [Targeted evidence-chain alignment](2026-06-03-targeted-evidence-chain-alignment-spec.md), [Selected full-envelope quantitation boundary](2026-06-03-selected-full-envelope-quantitation-boundary-spec.md), [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md), [Peak-scoring tiered design](2026-04-20-peak-scoring-tiered-design.md)
+**Related specs:** [Targeted evidence-chain alignment](retired-provenance:d762b1a67888), [Selected full-envelope quantitation boundary](2026-06-03-selected-full-envelope-quantitation-boundary-spec.md), [Mature package flow reference](retired-provenance:ebcb7b73c424), [Peak-scoring tiered design](retired-provenance:19b77d0bb466)
 
 ## Verdict
 

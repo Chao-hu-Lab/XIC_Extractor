@@ -4,27 +4,20 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "handoff_phase_closeout"
 CLOSEOUT = (
-    ROOT
-    / "docs"
-    / "superpowers"
-    / "notes"
-    / "2026-05-28-handoff-productization-phase-closeout.md"
+    FIXTURE_DIR
+    / "phase_closeout_contract.md"
 )
 C0_NOTE = (
-    ROOT
-    / "docs"
-    / "superpowers"
-    / "notes"
-    / "2026-05-27-handoff-productization-c0-source-of-truth.md"
+    FIXTURE_DIR
+    / "c0_source_reference.md"
 )
 CHECKLIST = (
-    ROOT
-    / "docs"
-    / "superpowers"
-    / "notes"
-    / "2026-05-21-lcms-msms-handoff-progress-checklist.md"
+    FIXTURE_DIR
+    / "checklist_reference.md"
 )
+OBSIDIAN_HANDOFF_CONTRACT = ROOT / "docs" / "agent" / "obsidian-handoff-contract.md"
 
 VALID_LABELS = {
     "retire_now",
@@ -99,6 +92,49 @@ def test_selected_handoff_peak_call_surface_remains_targeted_only() -> None:
 
     unexpected = sorted(files - expected)
     assert unexpected == []
+
+
+def test_obsidian_handoff_contract_defines_branch_closeout_guardrails() -> None:
+    text = OBSIDIAN_HANDOFF_CONTRACT.read_text(encoding="utf-8")
+
+    assert "public contract" in text
+    assert "docs governance" in text
+    assert "approved file moves" in text
+    assert "active handoff must link to the latest branch closeout summary" in text
+    assert "The PR body seed must be short" in text
+    assert "entire closeout summary" in text
+
+
+def test_obsidian_handoff_contract_defines_doc_placement_taxonomy() -> None:
+    text = OBSIDIAN_HANDOFF_CONTRACT.read_text(encoding="utf-8")
+
+    assert "## Placement marker and taxonomy" in text
+    assert "Doc placement:" in text
+    assert "Repo owner:" in text
+    for placement in (
+        "formal_repo_doc",
+        "repo_active_stub",
+        "branch_closeout_summary",
+        "repo_stub_plus_obsidian",
+        "private_obsidian_note",
+        "ignored_artifact",
+        "throwaway_scratch",
+    ):
+        assert placement in text
+    for field in (
+        "repo: XIC_Extractor",
+        "branch: <branch-name>",
+        "source_type:",
+        "visibility: internal",
+        "status: draft",
+        "repo_owner:",
+        "active_stub:",
+        "source_hash:",
+        "created_at:",
+    ):
+        assert field in text
+    assert "Staged tracked deletions are not adjudicated by placement markers" in text
+    assert "## Daily document routing" in text
 
 
 def _matrix_rows(text: str) -> list[dict[str, str]]:

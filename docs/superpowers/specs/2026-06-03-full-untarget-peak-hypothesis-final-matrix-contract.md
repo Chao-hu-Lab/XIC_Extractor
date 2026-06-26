@@ -13,7 +13,7 @@ available; `feature_family_id` remains source provenance. This does not by
 itself prove all-family split science readiness or `production_ready` status.
 
 This spec supersedes the final-matrix row-identity direction in
-`2026-05-14-final-matrix-identity-contract.md`. The older contract kept
+`retired-provenance:3826f209136f`. The older contract kept
 `production_family` as the product row identity. The new contract keeps the old
 pipeline matrix shape, but changes the internal row identity to
 `PeakHypothesis`.

@@ -5,7 +5,7 @@
 `ChromPeakSegment` is the scoped product-candidate pivot
 **Readiness label:** selected-full-envelope `diagnostic_only`;
 `chrom_peak_segment` candidate slice `production_candidate`
-**Related specs:** [AsLS primary matrix value policy](2026-06-02-asls-primary-matrix-value-policy-spec.md), [Region-boundary decision owner design](2026-06-02-region-boundary-decision-owner-design.md), [Region-boundary public behavior addendum](2026-06-02-region-boundary-public-behavior-addendum.md), [Mature package flow reference](2026-06-02-mature-package-flow-reference-spec.md)
+**Related specs:** [AsLS primary matrix value policy](retired-provenance:66796b0ff1ab), [Region-boundary decision owner design](retired-provenance:44f1b5db924b), [Region-boundary public behavior addendum](2026-06-02-region-boundary-public-behavior-addendum.md), [Mature package flow reference](retired-provenance:ebcb7b73c424)
 
 ## Verdict
 

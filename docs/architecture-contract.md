@@ -124,8 +124,9 @@ there has cross-path blast radius.
 
 The end-to-end `Confidence` / `Reason` / counted-detection resolution order is
 documented in `docs/confidence-reason-precedence-contract.md`; the authority
-migration rationale is in
-`docs/superpowers/specs/2026-06-03-targeted-evidence-chain-alignment-spec.md`.
+migration now lives in `docs/product/alignment.md` and
+`docs/product/evidence-spine.md` after the dated evidence-chain spec was reduced
+to a migration/history stub.
 
 ## Diagnostics Contract
 
@@ -154,7 +155,8 @@ Before any PR that adds, removes, or renames a CLI entry point in
 `tools/diagnostics/`, read `tools/diagnostics/INDEX.md` and cite which existing
 entries were considered. Every PR that changes the set of entry points must
 update `INDEX.md` in the same diff. Full lifecycle rules live in
-`docs/superpowers/specs/2026-05-26-diagnostic-tool-lifecycle-spec.md`.
+this Diagnostics Contract plus `docs/agent/architecture-public-contracts.md`;
+the dated lifecycle spec is retained only as a migration/history stub.
 
 ## Refactor And Test Discipline
 
@@ -209,6 +211,9 @@ surface, not an active phase plan:
 
 See also:
 
-- `docs/superpowers/specs/2026-05-06-workbook-and-extraction-module-decomposition-spec.md`
-- `docs/superpowers/specs/2026-05-16-module-responsibility-inventory.md`
-- `docs/superpowers/specs/2026-05-16-alignment-module-responsibility-contract.md`
+- `docs/project-layout.md`
+- `docs/agent/architecture-public-contracts.md`
+- `docs/product/alignment.md`
+
+Retired dated decomposition specs have been folded into this contract and are
+kept only as migration/history stubs while exact historical refs are cleaned up.

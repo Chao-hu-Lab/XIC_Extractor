@@ -6,7 +6,7 @@
 **Behavior label:** parity-first model-selection migration with controlled
 expected-diff lane
 **Parent addendum:** [Selected-Hypothesis Evidence Decision Public Behavior Addendum](2026-06-02-selected-hypothesis-evidence-decision-public-behavior-addendum.md)
-**Primary design:** [Peak Scoring Evidence-Decision Design](2026-06-01-c4-peak-scoring-evidence-decision-design.md)
+**Primary design:** [Peak Scoring Evidence-Decision Design](retired-provenance:af29f907f881)
 
 Historical roadmap note: this work follows the old peak-scoring cleanup thread,
 but the implementation, tests, output metadata, and human-facing wording should

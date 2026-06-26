@@ -1,5 +1,8 @@
 # Obsidian migration classification inventory
 
+Doc placement: repo_stub_plus_obsidian
+Repo owner: docs/agent/obsidian-handoff-contract.md
+
 Date: 2026-06-25
 Branch: `codex/docs-cleanup`
 Status: direction locked; cleanup patch staging inventory; not a deletion list
@@ -28,7 +31,7 @@ Disposition vocabulary is defined in
 | `docs/agent/product-validation-contract.md` | `keep_repo` | product validation language and public-surface discipline | low | high | none | keep as repo source-of-truth | no |
 | `docs/lcms-msms-evidence-rules.md` | `keep_repo` | LC-MS/MS evidence rule source-of-truth | medium | high | none | keep formal evidence contract | no |
 | `docs/diagnostic-ledger.md` | `keep_repo` | compact known diagnostic conclusions | medium | high | none | keep compact conclusions only | no |
-| `docs/deepresearch/Backfill Production Gate.md` | `repo_stub_plus_obsidian` | control plane and evidence rules for current Backfill gate semantics | medium | medium | `[[Backfill Production Gate]]` | same-path public stub landed; keep stub while exact referrers exist | no |
+| `retired-provenance:ef216de2963e` | `repo_stub_plus_obsidian` | control plane and evidence rules for current Backfill gate semantics | medium | medium | `retired-provenance:ef216de2963e` | same-path public stub landed; keep stub while exact referrers exist | no |
 | `docs/superpowers/handoffs/README.md` | `keep_repo` | handoff lifecycle rules | low | high | none | keep branch-scoped handoff rules current | no |
 | `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md` | `repo_stub_plus_obsidian` | active branch handoff stub | low | high | `[[XIC Docs Cleanup Hybrid Handoff]]` after pilot | keep stub self-sufficient before any Obsidian pointer is required | no |
 | `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` | `keep_repo` | productization status anchor | low | high | none | keep anchor phrases for checkers; not a branch handoff | no |
@@ -42,19 +45,19 @@ Disposition vocabulary is defined in
 | `docs/superpowers/validation/productization_status_index_v1.tsv` | `keep_repo` | machine-checkable productization status index | low | high | none | preserve hash/checker consistency before release-slice checks | no |
 | `scripts/check_productization_state.py` | `keep_repo` | productization status checker | low | high | none | keep productization anchor behavior explicit | no |
 | `scripts/check_cid_nl_discovery_release_slice.py` | `keep_repo` | CID-NL release-slice checker | low | medium | none | checker may call anchor `handoff`, but comment clarifies role | no |
-| `docs/superpowers/plans/2026-06-18-backfill-evidence-lifecycle-blueprint.md` | `formalize_repo` | superseded/older Backfill lifecycle plan with reusable gates | medium | medium | `[[XIC Backfill Evidence Lifecycle Blueprint Notes]]` after pilot | confirm 2026-06-19 blueprint and formal owners cover active claims | no |
-| `docs/superpowers/plans/2026-05-03-output-maintainability-refactor.md` | `move_to_obsidian_after_stub` | `docs/project-layout.md` for current output/artifact rules | medium | low | `[[XIC Output Maintainability Refactor History]]` | preserve any stable placement rule in `docs/project-layout.md` | no |
-| `docs/superpowers/reports/2026-06-15-current-capability-inventory-and-promotion-roadmap.md` | `keep_repo` | control plane still cites this as primary evidence | medium | high | optional deep notes only | keep until control-plane no longer depends on this exact report | no |
-| `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for current rerun policy | medium | medium | `[[2026-05-24 Resolver Default Switch Validation Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for current target conclusion | medium | medium | `[[2026-05-26 P2b Area Mismatch Triage Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for rerun policy and gate summary | medium | medium | `[[2026-05-26 P8b 85raw Superwindow Acceptance Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` and evidence rules | medium | medium | `[[XIC Qualitative Selection Acceptance Gate History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md` | `repo_stub_plus_obsidian` | `docs/lcms-msms-evidence-rules.md` for Gaussian15 owner claims | medium | medium | `[[XIC Gaussian15 MS1 Morphology Closeout History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md` | `repo_stub_plus_obsidian` | `docs/lcms-msms-evidence-rules.md` for Gaussian15 NL scope | medium | medium | `[[XIC Gaussian15 Peak Group NL Scope History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` or replay formal owner | medium | medium | `[[XIC Replay Executor Validation History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md` | `repo_stub_plus_obsidian` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Critical Review]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md` | `repo_stub_plus_obsidian` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Strategy]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
-| `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md` | `repo_stub_plus_obsidian` | control plane / active roadmap for current objective | medium | low | `[[XIC Backfill Productization Reset History]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
+| `retired-provenance:6a732d03b396` | `formalize_repo` | superseded/older Backfill lifecycle history with reusable gates | medium | medium | `[[XIC Backfill Evidence Lifecycle Notes]]` after pilot | confirm 2026-06-19 blueprint and formal owners cover active claims | no |
+| `retired-provenance:b6b90d4c5a61` | `move_to_obsidian_after_stub` | `docs/project-layout.md` for current output/artifact rules | medium | low | `[[XIC Output Maintainability History]]` | preserve any stable placement rule in `docs/project-layout.md` | no |
+| `retired-provenance:0bcc2e4921db` | `keep_repo` | control plane still cites this as primary evidence | medium | high | optional deep notes only | keep until control-plane no longer depends on this exact report | no |
+| `retired-provenance:230f58c7688e` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for current rerun policy | medium | medium | `[[2026-05-24 Resolver Default Switch Validation Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
+| `retired-provenance:ee34c2a7c8b7` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for current target conclusion | medium | medium | `[[2026-05-26 P2b Area Mismatch Triage Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
+| `retired-provenance:06186d494ccc` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` for rerun policy and gate summary | medium | medium | `[[2026-05-26 P8b 85raw Superwindow Acceptance Note]]` | same-path public stub landed; keep stub while exact referrers exist | no |
+| `retired-provenance:1c044268cdd9` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` and evidence rules | medium | medium | `[[XIC Qualitative Selection Acceptance Gate History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
+| `retired-provenance:315e9bea6c02` | `repo_stub_plus_obsidian` | `docs/lcms-msms-evidence-rules.md` for Gaussian15 owner claims | medium | medium | `[[XIC Gaussian15 MS1 Morphology Closeout History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
+| `retired-provenance:d2f594bc103d` | `repo_stub_plus_obsidian` | `docs/lcms-msms-evidence-rules.md` for Gaussian15 NL scope | medium | medium | `[[XIC Gaussian15 Peak Group NL Scope History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
+| `retired-provenance:a715796da6a7` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` or replay formal owner | medium | medium | `[[XIC Replay Executor Validation History]]` | same-path public stub landed in cleanup patch 3; keep stub while exact referrers exist | no |
+| `retired-provenance:14c21c25e777` | `repo_stub_plus_obsidian` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Critical Review]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
+| `retired-provenance:3c8b1f3345d2` | `repo_stub_plus_obsidian` | control plane and Backfill evidence owner docs | medium | medium | `[[XIC Backfill Autowrite Ground Truth Strategy]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
+| `retired-provenance:5808d3cecd36` | `repo_stub_plus_obsidian` | control plane / active roadmap for current objective | medium | low | `[[XIC Backfill Productization Reset History]]` | same-path public stub landed in cleanup patch 4; keep stub while exact referrers exist | no |
 | `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md` | `keep_repo` | current status-index artifact and authority-manifest decision packet for broad Backfill parked state | medium | high | optional deep notes only | do not move until a compact replacement artifact updates status index, authority manifest, hashes, and exact referrers | no |
 
 ## Current Decision
@@ -135,10 +138,10 @@ against repo referrers and current authority owners.
 
 | Source path | Batch verdict | Why | Next safe action |
 | --- | --- | --- | --- |
-| `docs/deepresearch/Backfill Production Gate.md` | `repo_stub_plus_obsidian` | Control plane already extracts the stable claim that `height >= 2e6` is a rollout guardrail, not a product hard gate; exact repo referrers still exist. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
-| `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the durable P2-entry/rerun conclusion, but fixture/spec/plan referrers still cite the exact note path. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
-| `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the current target conclusion; fixture and older plan referrers still cite the exact note path. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
-| `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the rerun conclusion and `docs/agent-parameter-settings.md` owns the validated 85RAW command profile; exact refs still cite this note as evidence. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
+| `retired-provenance:ef216de2963e` | `repo_stub_plus_obsidian` | Control plane already extracts the stable claim that `height >= 2e6` is a rollout guardrail, not a product hard gate; exact repo referrers still exist. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
+| `retired-provenance:230f58c7688e` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the durable P2-entry/rerun conclusion, but fixture/spec/plan referrers still cite the exact note path. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
+| `retired-provenance:ee34c2a7c8b7` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the current target conclusion; fixture and older plan referrers still cite the exact note path. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
+| `retired-provenance:06186d494ccc` | `repo_stub_plus_obsidian` | `docs/diagnostic-ledger.md` owns the rerun conclusion and `docs/agent-parameter-settings.md` owns the validated 85RAW command profile; exact refs still cite this note as evidence. | Same-path public stub landed in cleanup patch 1; keep it while exact referrers exist. |
 | `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md` | `keep_repo` | `productization_status_index_v1.tsv` uses this exact file as `current_artifact` with hash, and the authority manifest uses it as the parked-lane decision packet. | Do not move or stub until a compact replacement artifact updates status index, authority manifest, hashes, and exact referrers. |
 
 ## Cleanup Patch 1: Same-Path Public Stubs
@@ -153,10 +156,10 @@ the user-approved private vault and was read back before the stubs were written.
 
 | Source path | Stub status | Private note | Repo self-contained? |
 | --- | --- | --- | --- |
-| `docs/deepresearch/Backfill Production Gate.md` | landed | `[[Backfill Production Gate]]` | yes |
-| `docs/superpowers/notes/2026-05-24-resolver-default-switch-validation-note.md` | landed | `[[2026-05-24 Resolver Default Switch Validation Note]]` | yes |
-| `docs/superpowers/notes/2026-05-26-p2b-area-mismatch-triage-note.md` | landed | `[[2026-05-26 P2b Area Mismatch Triage Note]]` | yes |
-| `docs/superpowers/notes/2026-05-26-p8b-85raw-superwindow-acceptance-note.md` | landed | `[[2026-05-26 P8b 85raw Superwindow Acceptance Note]]` | yes |
+| `retired-provenance:ef216de2963e` | landed | `retired-provenance:ef216de2963e` | yes |
+| `retired-provenance:230f58c7688e` | landed | `[[2026-05-24 Resolver Default Switch Validation Note]]` | yes |
+| `retired-provenance:ee34c2a7c8b7` | landed | `[[2026-05-26 P2b Area Mismatch Triage Note]]` | yes |
+| `retired-provenance:06186d494ccc` | landed | `[[2026-05-26 P8b 85raw Superwindow Acceptance Note]]` | yes |
 
 No `git rm` is part of this patch. These paths should remain tracked while repo
 referrers still cite the exact path.
@@ -197,10 +200,10 @@ written.
 
 | Source path | Stub status | Private note | Repo self-contained? |
 | --- | --- | --- | --- |
-| `docs/superpowers/notes/2026-05-28-qualitative-selection-acceptance-gate-note.md` | landed | `[[XIC Qualitative Selection Acceptance Gate History]]` | yes |
-| `docs/superpowers/notes/2026-06-05-gaussian15-ms1-morphology-production-ready-closeout.md` | landed | `[[XIC Gaussian15 MS1 Morphology Closeout History]]` | yes |
-| `docs/superpowers/notes/2026-06-05-gaussian15-ms1-peak-group-nl-scope-production-ready-closeout.md` | landed | `[[XIC Gaussian15 Peak Group NL Scope History]]` | yes |
-| `docs/superpowers/notes/2026-06-15-replay-executor-validation-note.md` | landed | `[[XIC Replay Executor Validation History]]` | yes |
+| `retired-provenance:1c044268cdd9` | landed | `[[XIC Qualitative Selection Acceptance Gate History]]` | yes |
+| `retired-provenance:315e9bea6c02` | landed | `[[XIC Gaussian15 MS1 Morphology Closeout History]]` | yes |
+| `retired-provenance:d2f594bc103d` | landed | `[[XIC Gaussian15 Peak Group NL Scope History]]` | yes |
+| `retired-provenance:a715796da6a7` | landed | `[[XIC Replay Executor Validation History]]` | yes |
 
 No `git rm` is part of this patch. These paths should remain tracked while repo
 referrers still cite the exact path.
@@ -219,9 +222,9 @@ action.
 
 | Source path | Stub status | Private note | Repo self-contained? |
 | --- | --- | --- | --- |
-| `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-critical-review.md` | landed | `[[XIC Backfill Autowrite Ground Truth Critical Review]]` | yes |
-| `docs/superpowers/notes/2026-06-18-backfill-autowrite-ground-truth-strategy-note.md` | landed | `[[XIC Backfill Autowrite Ground Truth Strategy]]` | yes |
-| `docs/superpowers/notes/2026-06-18-chatgpt_reset_backfill_productization_objective.md` | landed | `[[XIC Backfill Productization Reset History]]` | yes |
+| `retired-provenance:14c21c25e777` | landed | `[[XIC Backfill Autowrite Ground Truth Critical Review]]` | yes |
+| `retired-provenance:3c8b1f3345d2` | landed | `[[XIC Backfill Autowrite Ground Truth Strategy]]` | yes |
+| `retired-provenance:5808d3cecd36` | landed | `[[XIC Backfill Productization Reset History]]` | yes |
 
 No productization control-plane update is needed for this patch because it does
 not change maturity tier, active lane, writer authority, output schema,
