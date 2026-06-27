@@ -9,6 +9,7 @@ import sys
 
 from xic_hook_policy import (
     CONTROL_PLANE_PATH,
+    DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH,
     HANDOFF_CURRENT_DIR,
     HANDOFF_MAX_LINES,
     PRODUCT_SURFACE_PATHS,
@@ -226,6 +227,8 @@ def is_active_branch_handoff_path(path: str, root: str, branch: str) -> bool:
     normalized = normalize_path_text(path).lstrip("./")
     if is_productization_status_handoff(normalized) or not path_is_current_handoff(normalized):
         return False
+    if normalized == DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH:
+        return True
     slug = branch_slug(branch)
     filename = os.path.basename(normalized).lower()
     if slug and filename.startswith(slug):
@@ -239,13 +242,16 @@ def path_is_current_handoff(path: str) -> bool:
 
 
 def mentions_active_branch_handoff(text: str, branch: str) -> bool:
+    normalized_text = normalize_path_text(text)
+    if DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH in normalized_text:
+        return True
     slug = branch_slug(branch)
     if not slug:
         return False
     active_prefix = f"{HANDOFF_CURRENT_DIR}{slug}"
     return any(
         active_prefix in line and PRODUCTIZATION_STATUS_HANDOFF_PATH not in line
-        for line in normalize_path_text(text).splitlines()
+        for line in normalized_text.splitlines()
     )
 
 
@@ -378,7 +384,8 @@ def main() -> int:
         if handoff_missing_from_tool or handoff_missing_from_worktree:
             contexts.append(
                 "Product/control-plane state may have changed, but the plain-language handoff "
-                "is not part of this update. Before closeout, resolve the active branch handoff under "
+                "is not part of this update. Before closeout, resolve the active branch handoff at "
+                f"{DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH} or under "
                 f"{HANDOFF_CURRENT_DIR}<branch-slug>-<topic>.md and rewrite/prune that snapshot, "
                 "or explicitly state why no branch handoff update is needed. Productization status anchors do not satisfy "
                 "this branch handoff check. Do not update another branch's handoff."

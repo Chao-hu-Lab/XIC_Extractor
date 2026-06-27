@@ -108,6 +108,24 @@ def test_public_manifest_under_handoff_archive_is_blocker(tmp_path: Path) -> Non
     assert any("not handoffs" in msg.message for msg in result.blockers)
 
 
+def test_branch_named_productization_current_handoff_is_not_public_record(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/handoffs/current/codex-productization.md"
+    _write(tmp_path / path, "# Current\n\nBranch: `codex/productization`\n")
+    _inventory(
+        tmp_path,
+        (
+            f"{path}\tactive_current\tPR #1\tpr_merge_or_close\t"
+            "Active branch handoff for productization work."
+        ),
+    )
+
+    result = _audit(tmp_path)
+
+    assert result.blockers == ()
+
+
 def test_git_ignored_local_handoff_does_not_need_inventory(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     _write(

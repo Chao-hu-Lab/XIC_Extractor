@@ -213,6 +213,36 @@ def test_force_added_local_handoff_without_marker_fails(tmp_path: Path) -> None:
     assert any("lacks placement marker" in problem for problem in problems)
 
 
+def test_branch_named_productization_active_stub_is_not_misplaced_record(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/handoffs/current/codex-productization.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Productization handoff",
+                "",
+                "Doc placement: repo_active_stub",
+                "Repo owner: docs/superpowers/handoffs/current/codex-productization.md",
+                "",
+                "Objective: keep productization work recoverable.",
+                "Scope: active branch state only.",
+                "Constraints: no public status authority.",
+                "Next 1-3 actions:",
+                "1. Re-run the guard.",
+                "Verification: hook fixture.",
+                "Stop rule: stop if the stub cannot name the next action.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
 def test_productization_status_handoff_remains_canonical(tmp_path: Path) -> None:
     path = (
         "docs/superpowers/productization/status/"

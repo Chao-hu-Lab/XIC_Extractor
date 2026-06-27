@@ -10,6 +10,7 @@ from dataclasses import dataclass
 CONTROL_PLANE_PATH = "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
 HANDOFF_CURRENT_DIR = "docs/superpowers/handoffs/current/"
 HANDOFF_ARCHIVE_DIR = "docs/superpowers/handoffs/archive/"
+DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH = f"{HANDOFF_CURRENT_DIR}ACTIVE.local.md"
 PRODUCTIZATION_STATUS_ANCHOR_PATH = (
     "docs/superpowers/productization/status/cc-framework-improvements-productization.md"
 )
@@ -113,13 +114,13 @@ PRIVATE_HISTORY_SIGNALS = [
 ]
 CLOSEOUT_DIR = "docs/superpowers/closeouts/"
 MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS = [
-    re.compile(r"productization", re.IGNORECASE),
-    re.compile(r"closeout-summary", re.IGNORECASE),
-    re.compile(r"file-management", re.IGNORECASE),
-    re.compile(r"git-rm-candidate-manifest", re.IGNORECASE),
-    re.compile(r"public-surface-stub-audit", re.IGNORECASE),
-    re.compile(r"source-of-truth-queue", re.IGNORECASE),
-    re.compile(r"historical-referrer", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])branch-closeout-summary(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])file-management-approval-plan(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])git-rm-candidate-manifest(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])historical-referrer", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])productization_handoff-prune(?:[_\-.]|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])public-surface-stub-audit(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])source-of-truth-queue(?:\.|$)", re.IGNORECASE),
 ]
 GIT_GLOBAL_OPTIONS_WITH_VALUE = {
     "-C",
