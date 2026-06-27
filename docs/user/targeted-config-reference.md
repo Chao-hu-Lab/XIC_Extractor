@@ -12,7 +12,7 @@ contain local machine paths.
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `data_dir` | path | *(none)* | Directory containing `.raw` files to process |
-| `dll_dir` | path | `C:\Xcalibur\system\programs` | Directory containing Thermo RawFileReader DLLs |
+| `dll_dir` | path | machine-specific DLL directory | Directory containing Thermo RawFileReader DLLs |
 | `injection_order_source` | path | *(empty)* | Optional CSV/XLSX with `Sample_Name` and `Injection_Order` columns |
 
 ### Peak Detection
