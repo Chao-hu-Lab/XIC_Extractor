@@ -49,7 +49,8 @@ root `AGENTS.md`. Keep the root file limited to high-frequency guardrails.
   private data placement back into the repo.
 - PR body is the normal durable closeout surface. Condense the branch handoff
   into the PR body instead of treating the current handoff as the final record;
-  force-add only compact completed phase summaries that must remain in repo.
+  add compact completed phase summaries under `docs/superpowers/closeouts/`
+  only when they must remain in repo.
 - Handoff retention is inventory-driven only for git-tracked handoff files.
   Ignored local handoffs do not need `RETENTION.tsv` rows. Any force-added file
   under `docs/superpowers/handoffs/current/` or

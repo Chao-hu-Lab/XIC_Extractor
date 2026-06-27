@@ -122,7 +122,7 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
 
 def test_branch_closeout_summary_with_pr_body_seed_passes(tmp_path: Path) -> None:
     path = (
-        "docs/superpowers/handoffs/archive/"
+        "docs/superpowers/closeouts/"
         "2026-07-01_codex-example_branch-closeout-summary.md"
     )
     _write(
@@ -152,9 +152,9 @@ def test_branch_closeout_summary_with_pr_body_seed_passes(tmp_path: Path) -> Non
     assert result.problems == ()
 
 
-def test_handoff_archive_cleanup_evidence_passes_without_marker(tmp_path: Path) -> None:
+def test_file_management_cleanup_evidence_passes_without_marker(tmp_path: Path) -> None:
     path = (
-        "docs/superpowers/handoffs/archive/"
+        "docs/superpowers/file-management/docs-cleanup/"
         "2026-07-01_codex-docs-cleanup_git-rm-candidate-manifest.md"
     )
     _write(
@@ -166,6 +166,22 @@ def test_handoff_archive_cleanup_evidence_passes_without_marker(tmp_path: Path) 
     result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
 
     assert result.problems == ()
+
+
+def test_handoff_archive_cleanup_evidence_without_marker_fails(tmp_path: Path) -> None:
+    path = (
+        "docs/superpowers/handoffs/archive/"
+        "2026-07-01_codex-docs-cleanup_git-rm-candidate-manifest.md"
+    )
+    _write(
+        tmp_path,
+        path,
+        "# Candidate manifest\n\nPublic cleanup evidence in the wrong lane.\n",
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("do not belong under handoffs" in problem for problem in problems)
 
 
 def test_handoff_archive_private_diary_without_marker_fails(tmp_path: Path) -> None:
@@ -199,7 +215,7 @@ def test_force_added_local_handoff_without_marker_fails(tmp_path: Path) -> None:
 
 def test_productization_status_handoff_remains_canonical(tmp_path: Path) -> None:
     path = (
-        "docs/superpowers/handoffs/current/"
+        "docs/superpowers/productization/status/"
         "cc-framework-improvements-productization.md"
     )
     _write(tmp_path, path, "# Productization status anchor\n")
@@ -211,7 +227,7 @@ def test_productization_status_handoff_remains_canonical(tmp_path: Path) -> None
 
 def test_branch_closeout_summary_still_requires_pr_body_seed(tmp_path: Path) -> None:
     path = (
-        "docs/superpowers/handoffs/archive/"
+        "docs/superpowers/closeouts/"
         "2026-07-01_codex-example_branch-closeout-summary.md"
     )
     _write(tmp_path, path, "# Branch closeout\n\n## Verification\n")

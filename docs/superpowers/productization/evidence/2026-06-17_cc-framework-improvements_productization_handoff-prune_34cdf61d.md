@@ -1,4 +1,4 @@
-# XIC productization handoff archive
+# XIC productization evidence archive
 
 Archived: 2026-06-17
 Branch: `cc/framework-improvements`
@@ -6,8 +6,9 @@ Source active handoff before prune: 1615 lines
 Reason: convert append-heavy continuation handoff into a compact current-state
 snapshot.
 
-This archive is a phase summary, not a log. Read the current handoff first:
-`docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`.
+This archive is a phase summary, not a log. Read the current productization
+status anchor first:
+`docs/superpowers/productization/status/cc-framework-improvements-productization.md`.
 
 ## Completed Phase Summary
 
@@ -109,8 +110,8 @@ This archive is a phase summary, not a log. Read the current handoff first:
 
 ## Pointers
 
-- Current handoff:
-  `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
+- Productization status anchor:
+  `docs/superpowers/productization/status/cc-framework-improvements-productization.md`
 - Control plane:
   `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
 - Deep research background:

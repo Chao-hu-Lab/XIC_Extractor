@@ -24,6 +24,7 @@ from xic_hook_policy import (  # noqa: E402
     is_canonical_doc_owner_path,
     is_high_risk_repo_doc_path,
     is_markdown_path,
+    is_misplaced_handoff_public_record_path,
     is_repo_doc_path,
     repo_owner_value,
 )
@@ -179,6 +180,22 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
     problems: list[PlacementProblem] = []
     placement = doc_placement_value(text)
     repo_owner = repo_owner_value(text)
+
+    if is_misplaced_handoff_public_record_path(path):
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=(
+                    "public productization/file-management/closeout records "
+                    "do not belong under handoffs/current or handoffs/archive"
+                ),
+                required_marker=(
+                    "Move to docs/superpowers/productization/, "
+                    "docs/superpowers/file-management/, or "
+                    "docs/superpowers/closeouts/."
+                ),
+            )
+        )
 
     if placement and placement not in DOC_PLACEMENT_VALUES:
         problems.append(

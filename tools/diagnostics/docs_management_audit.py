@@ -250,7 +250,7 @@ def audit_repo(
         ),
         root
         / (
-            "docs/superpowers/handoffs/archive/"
+            "docs/superpowers/closeouts/"
             "2026-06-26_codex-docs-cleanup_branch-closeout-summary.md"
         ),
     ]

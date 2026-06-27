@@ -34,7 +34,7 @@ Disposition vocabulary is defined in
 | `retired-provenance:ef216de2963e` | `repo_stub_plus_obsidian` | control plane and evidence rules for current Backfill gate semantics | medium | medium | `retired-provenance:ef216de2963e` | same-path public stub landed; keep stub while exact referrers exist | no |
 | `docs/superpowers/handoffs/README.md` | `keep_repo` | handoff lifecycle rules | low | high | none | keep branch-scoped handoff rules current | no |
 | `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md` | `repo_stub_plus_obsidian` | active branch handoff stub | low | high | `[[XIC Docs Cleanup Hybrid Handoff]]` after pilot | keep stub self-sufficient before any Obsidian pointer is required | no |
-| `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` | `keep_repo` | productization status anchor | low | high | none | keep anchor phrases for checkers; not a branch handoff | no |
+| `docs/superpowers/productization/status/cc-framework-improvements-productization.md` | `keep_repo` | productization status anchor | low | high | none | keep anchor phrases for checkers; not a branch handoff | no |
 | `docs/superpowers/goals/README.md` | `keep_repo` | productization goal routing index | low | high | none | keep productization anchor vs branch handoff distinction | no |
 | `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md` | `keep_repo` | active productization roadmap index | medium | high | optional deep notes only | keep link labels as productization status anchor, not universal handoff | no |
 | `docs/superpowers/plans/README.md` | `keep_repo` | productization plan routing index | low | high | none | keep branch-specific handoff reading order | no |

@@ -11,7 +11,7 @@ CURRENT_HANDOFF = (
     "codex-docs-cleanup-official-docs-and-handoff.md"
 )
 CLOSEOUT_SUMMARY = (
-    "docs/superpowers/handoffs/archive/"
+    "docs/superpowers/closeouts/"
     "2026-06-26_codex-docs-cleanup_branch-closeout-summary.md"
 )
 RETENTION_INVENTORY = "docs/superpowers/handoffs/RETENTION.tsv"
@@ -39,10 +39,6 @@ def _clean_repo(root: Path) -> None:
                 (
                     f"{CURRENT_HANDOFF}\tactive_current\tPR #1\t"
                     "pr_merge_or_close\tActive branch stub."
-                ),
-                (
-                    f"{CLOSEOUT_SUMMARY}\tkeep_repo_closeout_summary\tPR #1\t"
-                    "pr_merge_or_close\tCompact PR closeout."
                 ),
             ]
         )

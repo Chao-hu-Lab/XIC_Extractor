@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import subprocess
 from collections import Counter
 from collections.abc import Sequence
@@ -27,10 +28,6 @@ MAX_CURRENT_LINES = 200
 
 VALID_DECISIONS = {
     "active_current",
-    "productization_anchor",
-    "keep_repo_public_evidence",
-    "keep_repo_closeout_summary",
-    "keep_repo_until_referrers_removed",
     "move_to_obsidian_after_pr",
     "superseded_by_pr",
     "remove_after_merge_approval",
@@ -66,6 +63,15 @@ ACTIONABLE_DUE_DECISIONS = {
     "remove_after_merge_approval",
     "superseded_by_pr",
 }
+MISPLACED_PUBLIC_RECORD_PATTERNS = (
+    re.compile(r"productization", re.IGNORECASE),
+    re.compile(r"closeout-summary", re.IGNORECASE),
+    re.compile(r"file-management", re.IGNORECASE),
+    re.compile(r"git-rm-candidate-manifest", re.IGNORECASE),
+    re.compile(r"public-surface-stub-audit", re.IGNORECASE),
+    re.compile(r"source-of-truth-queue", re.IGNORECASE),
+    re.compile(r"historical-referrer", re.IGNORECASE),
+)
 
 
 class HandoffDiscoveryError(RuntimeError):
@@ -205,6 +211,13 @@ def _stale_current_signal(text: str) -> str:
     return ""
 
 
+def _is_misplaced_public_record(rel_path: str) -> bool:
+    if not (_is_current(rel_path) or _is_archive(rel_path)):
+        return False
+    filename = Path(rel_path).name
+    return any(pattern.search(filename) for pattern in MISPLACED_PUBLIC_RECORD_PATTERNS)
+
+
 def _due_event_message(decision: str, due_event: str) -> str:
     if decision == "active_current":
         return (
@@ -331,6 +344,20 @@ def run_handoff_retention_audit(
         decision_counts[decision or "(missing)"] += 1
         next_review_counts[review_event or "(missing)"] += 1
 
+        if _is_misplaced_public_record(path):
+            messages.append(
+                RetentionMessage(
+                    "blocker",
+                    path,
+                    (
+                        "public productization/file-management/closeout record "
+                        "belongs under docs/superpowers/productization/, "
+                        "docs/superpowers/file-management/, or "
+                        "docs/superpowers/closeouts/, not handoffs"
+                    ),
+                )
+            )
+
         if decision and decision not in VALID_DECISIONS:
             messages.append(
                 RetentionMessage(
@@ -371,15 +398,12 @@ def run_handoff_retention_audit(
 
         if _is_current(path):
             current_files.append(path)
-            if decision not in {"active_current", "productization_anchor"}:
+            if decision != "active_current":
                 messages.append(
                     RetentionMessage(
                         "blocker",
                         path,
-                        (
-                            "current handoff must be active_current or "
-                            "productization_anchor"
-                        ),
+                        "current handoff must be active_current",
                     )
                 )
             if _is_markdown(path):
@@ -410,7 +434,7 @@ def run_handoff_retention_audit(
                         )
         elif _is_archive(path):
             archive_files.append(path)
-            if decision in {"active_current", "productization_anchor"}:
+            if decision == "active_current":
                 messages.append(
                     RetentionMessage(
                         "blocker",

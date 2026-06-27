@@ -5,7 +5,7 @@
 目前 readiness: `diagnostic_only` for this control document
 主要依據: [productization topic map](../../product/productization.md)
 歷史盤點: summarized in this control plane; original branch inventory is retired private-history context
-產品化狀態 anchor: [cc-framework-improvements productization handoff](../handoffs/current/cc-framework-improvements-productization.md)
+產品化狀態 anchor: [cc-framework-improvements productization status](../productization/status/cc-framework-improvements-productization.md)
 可重用背景研究: [deepresearch notes](../../deepresearch/README.md)
 
 ## Authority
@@ -5277,3 +5277,19 @@ the later low-height writer entry above as the current tier source.
   shadow readiness requires 85RAW baseline/current evidence plus a separate
   expected-diff/control-plane decision if any product output or writer authority
   would change.
+
+### 2026-06-27 - Docs Placement Refactor No-Impact Record
+
+- Lane: documentation placement and agent workflow governance only.
+- Change: moved productization status/evidence, file-management cleanup
+  manifests, referrer sidecars, and PR closeout summaries out of
+  `docs/superpowers/handoffs/` into their explicit repo owners:
+  `docs/superpowers/productization/`, `docs/superpowers/file-management/`, and
+  `docs/superpowers/closeouts/`.
+- Control-plane decision: no maturity tier, active lane, ProductWriter
+  authority, matrix/workbook schema, review/replay behavior, selected peak,
+  selected area, counted detection, matrix values, or matrix authority changes.
+- Rationale: the old handoff paths were public evidence and status anchors, not
+  active branch handoffs. Moving them to semantic owner directories prevents
+  future handoff archives from becoming a second file-management or
+  productization system.

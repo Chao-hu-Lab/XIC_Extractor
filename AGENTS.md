@@ -75,8 +75,9 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   move long completed history to Obsidian, and prune around the 200-line target
   before substantial continuation.
 - For non-trivial branch closeout, condense the current handoff into the PR body
-  as the durable closeout surface. Force-add a repo archive summary only when
-  the completed phase is intentionally public repo evidence for
+  as the durable closeout surface. Add a repo closeout summary under
+  `docs/superpowers/closeouts/` only when the completed phase is intentionally
+  public repo evidence for
   public-contract, docs-governance, validation-policy, artifact-retention, broad
   public-surface, or approved deletion work.
 - Treat repo docs as the public source-of-truth surface and Obsidian or ignored

@@ -713,7 +713,7 @@ def main() -> int:
                 "*** Update File: xic_extractor/output/schema.py\n"
                 "*** Update File: docs/superpowers/plans/"
                 "2026-06-15-productization-control-plane.md\n"
-                "*** Update File: docs/superpowers/handoffs/current/"
+                "*** Update File: docs/superpowers/productization/status/"
                 "cc-framework-improvements-productization.md\n"
             ),
         },
@@ -729,7 +729,7 @@ def main() -> int:
                     [
                         "xic_extractor/output/schema.py",
                         "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
-                        "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md",
+                        "docs/superpowers/productization/status/cc-framework-improvements-productization.md",
                     ]
                 ),
             },

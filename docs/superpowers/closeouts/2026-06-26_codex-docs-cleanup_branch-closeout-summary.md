@@ -65,9 +65,9 @@ agents can copy the pattern without inventing another system.
 
 | Source content | Routed to | Kept out of |
 | --- | --- | --- |
-| Branch objective, current status, stop rules, next 1-3 actions | `docs/superpowers/handoffs/current/codex-docs-cleanup-official-docs-and-handoff.md` | PR body, Obsidian-only notes |
+| Branch objective, current status, stop rules, next 1-3 actions | ignored local handoff under `docs/superpowers/handoffs/current/` | PR body, Obsidian-only notes |
 | Reviewer-readable problem, solution, verification, residual risk | This archive closeout summary, then PR body | Current handoff long history |
-| Completed file-management authorization evidence | Existing archive manifests and audits under `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_*` | Current handoff |
+| Completed file-management authorization evidence | `docs/superpowers/file-management/docs-cleanup/` manifests, audits, and referrer sidecars | Current handoff |
 | Private development diary, command narrative, branch sequencing, detailed review rationale | Obsidian private notebook layer | Repo and PR body |
 | Full generated validation TSVs not needed for clean checkout | `local_validation_artifacts/externalized_superpowers_validation/` | Git history |
 | Stable product/method claims | `docs/product/`, `docs/agent/`, validation summaries, and named specs | Handoff as authority |

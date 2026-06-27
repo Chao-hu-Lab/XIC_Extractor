@@ -46,10 +46,7 @@ progress-report.server-info.json
 # to Obsidian by default. Force-add only compact public summaries that are meant
 # to remain in repo history.
 docs/superpowers/handoffs/current/*
-!docs/superpowers/handoffs/current/cc-framework-improvements-productization.md
 docs/superpowers/handoffs/archive/*
-!docs/superpowers/handoffs/archive/public/
-!docs/superpowers/handoffs/archive/public/**
 
 # Private user config/profiles (only examples are versioned)
 config/*

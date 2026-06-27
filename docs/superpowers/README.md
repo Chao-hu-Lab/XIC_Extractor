@@ -1,12 +1,27 @@
-# Development History Archive
+# Superpowers Documentation Layout
 
-Status: `migration_index`
+Status: `routing_index`
 
-This tree used to hold a large amount of branch planning, implementation
-history, reviews, and research notes. That material is being externalized to a
-private Obsidian vault because it can include incomplete reasoning, local
-workflow details, and development history that should not be treated as public
-product documentation.
+`docs/superpowers/` keeps public, repo-readable planning and evidence artifacts
+that are still useful to future agents and reviewers. It is not a dumping ground
+for private branch history. Long development diaries, command narratives,
+discarded reasoning, and local context belong in Obsidian or ignored local
+storage after their stable public claims are represented in formal repo docs.
+
+## Directory Map
+
+| Directory | Purpose | Do not put here |
+| --- | --- | --- |
+| `plans/` | active control planes, named roadmaps, and intentionally retained public plans | private implementation diary or branch scratch |
+| `specs/` | public specs, schema contracts, design contracts, and retained formal behavior docs | command transcripts or local validation chronology |
+| `validation/` | checker-readable validation packets, inventories, summaries, lockbox artifacts, and compact evidence | unbounded generated dumps or private reviewer rationale |
+| `fixtures/` | small test/checker fixtures and expected-output oracles | full validation bundles |
+| `productization/status/` | machine-readable or checker-facing productization status anchors | branch handoff state |
+| `productization/evidence/` | compact public productization evidence summaries | active branch handoff or private diary |
+| `file-management/` | approved cleanup manifests, referrer audits, migration queues, and placement evidence | product behavior specs or handoff logs |
+| `closeouts/` | intentionally public branch closeout summaries and PR-body seeds | active handoff next actions |
+| `handoffs/` | ignored local active handoff workspace plus rare tracked compatibility stubs | productization anchors, file-management manifests, or closeout summaries |
+| `notes/`, `goals/`, `reports/`, `pulse-reports/` | retained legacy or public-readable remnants pending further normalization | new private history by default |
 
 ## Public Repo Boundary
 
@@ -14,10 +29,10 @@ The public repo should keep:
 
 - formal source-of-truth docs under `docs/product/`, `docs/agent/`, and the
   top-level architecture/evidence contracts;
-- concise migration indexes, handoffs, and closeout summaries that are safe for
-  public review;
+- compact public evidence, closeout summaries, and migration indexes that are
+  safe for public review;
 - schema contracts, test fixtures, validation inventories, and small summaries
-  when code or tests still depend on them.
+  when code or tests still depend on them;
 - product/user-facing HTML reading artifacts when they are still useful as
   complete public documentation.
 
@@ -29,13 +44,22 @@ Branch-story or worktree-report HTML belongs to the same cleanup decision as
 handoff history; it should not block private-history stub removal unless the
 repo deliberately keeps it as a public artifact.
 
-## Migration State
+## Current Cleanup Evidence
 
-Current audit artifacts:
+The docs-cleanup public evidence now lives under
+`docs/superpowers/file-management/docs-cleanup/`:
 
-- `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.md`
-- `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`
-- `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_file-management-approval-plan.md`
+- `docs/superpowers/file-management/docs-cleanup/audits/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.md`
+- `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`
+- `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_file-management-approval-plan.md`
 
 No file deletion is authorized by these artifacts. Any removal requires an
 explicit approved path set and a separate file-management patch.
+
+## Validation Layout Debt
+
+`validation/` remains intentionally mixed for now because scripts, tests,
+hashes, inventories, and productization status artifacts reference many exact
+paths. Do not move the validation tree wholesale. A validation relocation must
+be a focused checker-aware migration that updates referrers, retention rows,
+hashes, schemas, tests, and docs in the same patch.

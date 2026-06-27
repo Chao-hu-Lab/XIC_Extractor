@@ -89,6 +89,25 @@ def test_default_audit_does_not_report_due_event_warnings(tmp_path: Path) -> Non
     assert "due_event" not in result.summary
 
 
+def test_public_manifest_under_handoff_archive_is_blocker(tmp_path: Path) -> None:
+    path = (
+        "docs/superpowers/handoffs/archive/"
+        "2026-07-01_codex-docs-cleanup_git-rm-candidate-manifest.tsv"
+    )
+    _write(tmp_path / path, "path\tcandidate_group\n")
+    _inventory(
+        tmp_path,
+        (
+            f"{path}\tremove_after_merge_approval\tdocs/agent/example.md\t"
+            "referrer_audit\tManifest is intentionally misplaced in fixture."
+        ),
+    )
+
+    result = _audit(tmp_path)
+
+    assert any("not handoffs" in msg.message for msg in result.blockers)
+
+
 def test_git_ignored_local_handoff_does_not_need_inventory(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     _write(
@@ -199,12 +218,9 @@ def test_repo_gitignore_declares_handoff_local_defaults() -> None:
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     assert "docs/superpowers/handoffs/current/*" in gitignore
-    assert (
-        "!docs/superpowers/handoffs/current/"
-        "cc-framework-improvements-productization.md"
-    ) in gitignore
     assert "docs/superpowers/handoffs/archive/*" in gitignore
-    assert "!docs/superpowers/handoffs/archive/public/**" in gitignore
+    assert "cc-framework-improvements-productization.md" not in gitignore
+    assert "!docs/superpowers/handoffs/archive/public/**" not in gitignore
 
 
 def test_due_event_reports_post_merge_cleanup_warnings(tmp_path: Path) -> None:

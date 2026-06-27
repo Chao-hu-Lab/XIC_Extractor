@@ -4,7 +4,7 @@ Date: 2026-06-22
 Branch: `cc/framework-improvements`
 
 This archive keeps the completed phase details that were pruned from the
-current productization handoff.
+productization status anchor.
 
 ## Exact-safe 8RAW preset performance
 
@@ -61,7 +61,7 @@ Validation recorded during the pass:
 - `ruff check xic_extractor tests`: passed before the checker sync.
 - `mypy xic_extractor`: passed.
 
-## Productization packets referenced by current handoff
+## Productization packets referenced by the status anchor
 
 Full-chain 666-cell diagnostic:
 `docs/superpowers/validation/backfill_expansion_full_evidence_chain_v1/`.

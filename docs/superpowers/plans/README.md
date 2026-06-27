@@ -12,7 +12,7 @@ plan is not active by default.
    authority, and current broad uncontracted Backfill parked state.
 2. The branch-specific current handoff named by the goal or PR workflow for
    continuation state. Use
-   `../handoffs/current/cc-framework-improvements-productization.md` only when
+   `../productization/status/cc-framework-improvements-productization.md` only when
    working on that productization status-anchor branch.
 3. `2026-06-19-backfill-quant-matrix-product-blueprint.md` for Backfill /
    quant-matrix phase execution.

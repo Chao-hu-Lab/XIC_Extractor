@@ -4,14 +4,6 @@
 contract。handoff 的用途是讓下一個 agent/session 快速知道最近在做什麼、
 什麼真的可用、什麼還沒收掉、下一步先做哪裡。
 
-## Productization status anchor
-
-- [cc-framework-improvements productization](current/cc-framework-improvements-productization.md)
-
-This file is a productization status anchor used by productization checks and
-older productization planning surfaces. It is not the default handoff for every
-branch.
-
 ## Default Workflow
 
 - `current/ACTIVE.local.md`: recommended local active handoff name. It is
@@ -21,23 +13,26 @@ branch.
   also ignored by default. Use them only when multiple local branches need
   simultaneous handoff state.
 - Completed branch diaries, review rationale, and long phase history should
-  move to Obsidian. Local archive drafts under `archive/` are ignored unless
-  they are force-added as explicit public evidence.
-- Public closeout belongs primarily in the PR body. Add a repo archive summary
-  only when the summary is intentionally part of the public repo record.
+  move to Obsidian. Local archive drafts under `archive/` are ignored and should
+  not become the default public record.
+- Public closeout belongs primarily in the PR body. Add a repo closeout summary
+  under `docs/superpowers/closeouts/` only when the summary is intentionally
+  part of the public repo record.
 
 ## Versioned Allowlist
 
 New handoff files are ignored by default through `.gitignore`. Repo-tracked
 handoff files should be rare:
 
-- `current/cc-framework-improvements-productization.md`: productization status
-  anchor required by existing productization checks.
-- Compact public evidence or closeout summaries that are intentionally
-  force-added after review.
-- `archive/public/**`: reserved public archive lane for intentionally public
-  summaries. Files here still need `RETENTION.tsv` rows and normal review.
-- Exact manifests that are needed for public referrer or deletion approval.
+- active branch stubs that must be shared publicly for a live PR or branch;
+- exceptional compatibility stubs whose exact path is intentionally part of a
+  public workflow.
+
+Productization status anchors live under `docs/superpowers/productization/`.
+File-management manifests, referrer audits, and approval records live under
+`docs/superpowers/file-management/`. Branch closeout summaries live under
+`docs/superpowers/closeouts/`. Do not put those public records back under
+`handoffs/archive/`.
 
 Do not force-add private diaries, command transcripts, raw review rationale, or
 Obsidian-only depth context.
@@ -64,33 +59,29 @@ leave the long reasoning in Obsidian.
 - Current handoff should stay short enough to read every time, normally under
   about 200 lines.
 - Rewrite and prune current handoff instead of appending chronological updates.
-- If a repo archive summary is intentionally public, keep it compact: completed
-  work, important decisions, rejected paths, and final validation.
+- If a repo closeout summary is intentionally public, keep it compact:
+  completed work, important decisions, rejected paths, and final validation.
 - Use `[active]`, `[blocked]`, `[done]`, and `[superseded]` labels when helpful;
   remove `[done]` and `[superseded]` from current handoff during the next prune
   unless they prevent repeated mistakes.
 - Every git-tracked file under `current/` or `archive/` must have one row in
   `RETENTION.tsv`. Ignored local handoff files do not need inventory rows.
+  As of 2026-06-27, there are no tracked `current/` or `archive/` handoff files,
+  so `RETENTION.tsv` is header-only.
 
 ## Retention inventory
 
 `RETENTION.tsv` is the machine-readable cleanup queue for versioned handoff
 files only. It is not deletion approval. It records which tracked files are
-active, which are public evidence, which should move to Obsidian after PR
-review, and which may later be removed only through an exact manifest plus
-explicit approval.
+active, which should move to Obsidian after PR review, and which may later be
+removed only through an exact manifest plus explicit approval. Public
+file-management evidence, productization anchors, and closeout summaries have
+their own directories and do not belong in this inventory.
 
 Allowed `retention_decision` values:
 
 - `active_current`: active branch resume stub. Keep in `current/` only while
   the branch or PR workflow is live.
-- `productization_anchor`: shared status anchor used by productization checks.
-- `keep_repo_public_evidence`: compact public evidence that should remain in
-  repo until the owning policy changes.
-- `keep_repo_closeout_summary`: compact branch narrative or PR body seed.
-- `keep_repo_until_referrers_removed`: exact manifest, referrer audit, or
-  public cleanup evidence that may still be referenced by repo docs or PR
-  review.
 - `move_to_obsidian_after_pr`: useful branch/review history that should not
   live in repo indefinitely after PR review.
 - `superseded_by_pr`: repo archive content already replaced by the PR body.
@@ -131,8 +122,7 @@ Current handoff is an input to closeout, not the durable endpoint.
    problem, solution, verification actually run, residual risk, and next
    action. Do not paste the whole handoff or private Obsidian-only context.
 3. If the completed phase must remain in repo history after PR closeout,
-   intentionally force-add a compact archive summary and add a `RETENTION.tsv`
-   row in the same patch.
+   add a compact summary under `docs/superpowers/closeouts/`.
 4. After the PR is closed or merged, move useful local handoff depth to
    Obsidian during routine vault maintenance. No cleanup PR is needed unless
    tracked handoff files were intentionally added.
