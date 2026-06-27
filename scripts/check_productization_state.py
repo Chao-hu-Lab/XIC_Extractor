@@ -4,8 +4,8 @@ This is a control-plane consistency guard. It validates the current lane status
 index against the authority manifest, productization status anchor document, and
 control-plane anchors without touching ProductWriter, matrices, workbooks,
 selected peaks, or counted detections. The default anchor is not the active
-handoff for every branch; branch-specific handoffs live under
-docs/superpowers/handoffs/current/<branch-slug>-<topic>.md.
+handoff for every branch; active branch handoffs are ignored local files such
+as docs/superpowers/handoffs/current/ACTIVE.local.md.
 """
 
 from __future__ import annotations
@@ -32,7 +32,8 @@ DEFAULT_AUTHORITY_MANIFEST = (
 )
 DEFAULT_PRODUCTIZATION_STATUS_ANCHOR = (
     ROOT
-    / "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
+    / "docs/superpowers/productization/status"
+    / "cc-framework-improvements-productization.md"
 )
 DEFAULT_HANDOFF = DEFAULT_PRODUCTIZATION_STATUS_ANCHOR
 DEFAULT_CONTROL_PLANE = (

@@ -1673,10 +1673,11 @@ repo/vault split changed.
 ### `handoff_retention_audit.py`
 
 **Purpose**: Audit repo-tracked handoff retention state. It checks that every
-file under `docs/superpowers/handoffs/current/` and
+git-tracked file under `docs/superpowers/handoffs/current/` and
 `docs/superpowers/handoffs/archive/` has a `RETENTION.tsv` row, that retention
-decisions are valid, that current handoffs stay compact, and that archive
-cleanup remains manifest-driven.
+decisions are valid, that tracked current handoffs stay compact, and that
+tracked archive cleanup remains manifest-driven. Ignored local handoffs are
+private workspace state and are not audited here.
 **Topic group**: `docs_management_audit.py` + `handoff_retention_audit.py`
 **Governing doc**: `docs/superpowers/handoffs/README.md`
 **Status note**: Read-only docs governance audit. It reports Obsidian-transfer

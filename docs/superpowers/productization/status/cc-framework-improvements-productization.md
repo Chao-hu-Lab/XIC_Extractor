@@ -7,8 +7,9 @@ Status: shared productization anchor for productization checks and older
 planning surfaces; not a branch current handoff.
 
 This file is not the active handoff for every branch. Branch work must use a
-branch-scoped current handoff named by the active goal, PR workflow, or
-`docs/superpowers/handoffs/current/<branch-slug>-<topic>.md`.
+local ignored current handoff such as
+`docs/superpowers/handoffs/current/ACTIVE.local.md`; use a branch-named ignored
+local handoff only when multiple local branches need simultaneous state.
 
 Durable tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,

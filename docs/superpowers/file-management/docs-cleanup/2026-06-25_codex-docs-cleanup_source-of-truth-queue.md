@@ -64,13 +64,11 @@ plane.
 These have stable public claims now represented elsewhere, but exact referrers
 or privacy-sensitive historical detail mean the old path cannot simply vanish.
 
-Completed stub batches are recorded in
-`docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_phase2-stub-readiness.md`.
-The 52-file bulk private-history batch is indexed separately in
-`docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_bulk-private-history-stub-batch.md`.
-The remaining 104 eligible notes/plans are indexed in
-`docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_remaining-notes-plans-stub-batch.md`.
-Do not reprocess completed rows unless their formal owner docs need a new
+Completed stub-batch details were branch-local migration control artifacts and
+are no longer repo source-of-truth files. Use the retained docs-cleanup
+manifests in this directory, the product owner docs listed above, and Obsidian
+private migration history when private batch rationale is needed. Do not
+reprocess completed rows unless their formal owner docs need a new
 source-of-truth correction.
 
 | Source | Public owner | Why stub first |

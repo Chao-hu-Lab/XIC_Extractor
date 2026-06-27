@@ -179,9 +179,9 @@ repo owner first.
 | Layer | Owner | Purpose | Must not contain |
 | --- | --- | --- | --- |
 | Formal repo docs | `docs/agent/`, `docs/superpowers/specs/`, named plans, ledgers | Public contracts, product state, validation policy, source-of-truth claims | private diary, raw transcripts, obsolete branch sequencing |
-| Branch handoff stub | `docs/superpowers/handoffs/current/<branch-slug>-<topic>.md` | Current objective, decisions, validation, blocker, next actions, optional Obsidian pointer | long logs, full chat history, private sample investigation |
-| Branch closeout summary | `docs/superpowers/handoffs/archive/<date>_<branch-slug>_branch-closeout-summary.md` | Branch-level narrative and PR-body seed: problem, solution, verification, residual risk, evidence links | raw transcript, private diary, Obsidian-only context, unchecked product claims |
-| Productization status anchor | `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md` | Productization checker anchor phrases and shared status reminders | branch-specific current objectives |
+| Branch handoff stub | `docs/superpowers/handoffs/current/ACTIVE.local.md` or branch-named ignored local handoff | Current objective, decisions, validation, blocker, next actions, optional Obsidian pointer | long logs, full chat history, private sample investigation |
+| Branch closeout summary | PR body by default; `docs/superpowers/closeouts/` only when intentionally public | Branch-level narrative and PR-body seed: problem, solution, verification, residual risk, evidence links | raw transcript, private diary, Obsidian-only context, unchecked product claims |
+| Productization status anchor | `docs/superpowers/productization/status/cc-framework-improvements-productization.md` | Productization checker anchor phrases and shared status reminders | branch-specific current objectives |
 | PR body | GitHub PR description | Durable closeout: problem, solution, verification, residual risk | raw handoff paste or private Obsidian-only context |
 | Obsidian note | User-approved private vault | Long-form research, development diary, exploratory analysis, detailed private notes | secrets, credentials, repo-only source-of-truth claims |
 | Global `$handoff` output | OS temp conversation handoff | Temporary cross-session transfer | repo authority or PR closeout |
@@ -195,8 +195,8 @@ for repo documents.
 | Placement | Meaning | Default destination |
 | --- | --- | --- |
 | `formal_repo_doc` | Public contract, source-of-truth, source index, validation policy, or checker-readable summary | repo canonical owner |
-| `repo_active_stub` | Short active execution stub that lets the next agent continue without private vault access | repo active handoff or approved stub path |
-| `branch_closeout_summary` | Branch narrative and PR body seed after non-trivial branch work | repo handoff archive |
+| `repo_active_stub` | Short active execution stub that lets the next agent continue without private vault access | ignored local handoff by default; repo only when intentionally force-added |
+| `branch_closeout_summary` | Branch narrative and PR body seed after non-trivial branch work | PR body by default; repo archive only when intentionally public |
 | `repo_stub_plus_obsidian` | Same-path public-safe stub; long original content lives in Obsidian | repo stub plus private staged draft |
 | `private_obsidian_note` | Implementation diary, command log, review rationale, branch sequencing, or private/local context | Obsidian staged draft |
 | `ignored_artifact` | Bulky generated artifact or local-only evidence packet | ignored storage plus repo summary/hash/regeneration metadata |
@@ -214,12 +214,11 @@ Rules:
 1. Repo docs outside an explicit canonical owner path must carry
    `Doc placement: <value>` before commit.
    Canonical owner paths include `docs/product/`, `docs/agent/`,
-   `docs/superpowers/specs/`, validation and checker fixture paths, active
-   handoffs, and explicitly named public branch-archive evidence such as
-   closeout summaries, approval manifests, candidate manifests, stub-readiness
-   batches, and cleanup audit summaries. The whole handoff archive directory is
-   not canonical by itself; private branch diary or review rationale files there
-   still need placement markers or should move to Obsidian.
+   `docs/superpowers/specs/`, validation and checker fixture paths,
+   `docs/superpowers/productization/`, `docs/superpowers/file-management/`, and
+   `docs/superpowers/closeouts/`. The handoff current and archive directories
+   are ignored local workspace by default; private branch diary or review
+   rationale files there should move to Obsidian rather than becoming repo docs.
 2. Repo-tracked placements that depend on repo authority must also carry
    `Repo owner: <path-or-topic>`: `formal_repo_doc`, `repo_active_stub`,
    `branch_closeout_summary`, `repo_stub_plus_obsidian`, and
@@ -290,8 +289,11 @@ repo stub must still support the next safe action.
 
 ## Branch closeout summary requirements
 
-For any non-trivial branch, keep a separate archive closeout summary before
-commit/PR review. This is required when the branch changes any of these:
+For any non-trivial branch, condense the active local handoff into the PR body
+before PR review. A separate repo-tracked closeout summary under
+`docs/superpowers/closeouts/` is optional and should be added only when the
+completed branch narrative is
+intentionally public repo evidence for one of these:
 
 - public contract, public behavior, schema, or repo source-of-truth claims;
 - docs governance, handoff rules, public/private placement, or future-agent
@@ -301,10 +303,10 @@ commit/PR review. This is required when the branch changes any of these:
 - broad public surface or reviewer-facing documentation;
 - approved file moves, archive moves, `git rm`, or other tracked deletions.
 
-The active handoff remains a compact live-state snapshot; the closeout summary
-carries the completed branch narrative. Once the closeout summary exists, the
-active handoff must link to the latest branch closeout summary so a fresh agent
-can find the branch-level story without scanning archive artifacts.
+The active local handoff remains a compact live-state snapshot; the PR body is
+the normal durable closeout surface. If a force-added repo archive closeout
+summary exists, the local handoff may link to it, but ignored local handoffs do
+not create follow-up cleanup work.
 
 Required fields:
 

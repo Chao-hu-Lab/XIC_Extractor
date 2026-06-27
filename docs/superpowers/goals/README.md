@@ -9,7 +9,7 @@ is not active just because it is in this directory.
 
 1. `docs/superpowers/plans/2026-06-15-productization-control-plane.md`
 2. Productization status anchor:
-   `docs/superpowers/handoffs/current/cc-framework-improvements-productization.md`
+   `docs/superpowers/productization/status/cc-framework-improvements-productization.md`
    only when working on the productization status-anchor workflow; otherwise
    use the branch-scoped current handoff named by the active goal or PR workflow.
 3. `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md`

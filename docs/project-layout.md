@@ -92,6 +92,22 @@ Obsidian / ignored artifact，不直接當 repo source-of-truth。若 keep-repo 
 引用該歷史 note，先新增或更新 repo 內正式摘要 / sanitized stub，再考慮移出原文。
 不要把 repo referrer 改成只能在私人 Obsidian 才能讀懂。
 
+`docs/superpowers/` 下的 public repo artifacts 必須先選 owner，不要回到單一
+archive 大桶：
+
+| Artifact | Repo target |
+|------|------|
+| productization checker/status anchor | `docs/superpowers/productization/status/` |
+| compact productization evidence summary | `docs/superpowers/productization/evidence/` |
+| exact cleanup manifest、referrer audit、approval record、source-of-truth queue | `docs/superpowers/file-management/` |
+| intentionally public PR/branch closeout summary | `docs/superpowers/closeouts/` |
+| ignored local active handoff or rare tracked compatibility stub | `docs/superpowers/handoffs/` |
+| checker-readable validation packet、inventory、status index、lockbox public artifact | `docs/superpowers/validation/` until a focused checker-aware migration moves it |
+
+`docs/superpowers/handoffs/current/` 與 `docs/superpowers/handoffs/archive/`
+是 local handoff workspace；不要把 productization anchors、file-management
+manifest、closeout summary 當作 handoff archive 例外塞回去。
+
 如果歷史 note 內有重要但尚未整理的內容，先把穩定 public claim 寫進上表
 canonical owner，再把原文當 private context 移交 Obsidian。不能因為 Obsidian
 有完整原文，就讓 repo 只剩一個需要私人 vault 才能理解的引用。
@@ -238,6 +254,9 @@ else:
 ├── 規格 / 計畫文件
 │   ├── 正式公開規格 → docs/superpowers/specs/YYYY-MM-DD-<kebab-description>.md
 │   ├── 全局控制面 / 命名 owner → docs/superpowers/plans/<explicit-owner>.md
+│   ├── productization status/evidence → docs/superpowers/productization/<status|evidence>/
+│   ├── file-management manifest/audit/approval → docs/superpowers/file-management/
+│   ├── public branch closeout / PR-body seed → docs/superpowers/closeouts/
 │   └── active implementation context → repo_active_stub；長篇推理與 branch sequencing 進 Obsidian staged draft
 │
 ├── 可重用解法 / 工作流知識
@@ -371,7 +390,7 @@ else:
 |------|------|------|
 | 規格檔 | `docs/superpowers/specs/YYYY-MM-DD-<kebab>.md` | `YYYY-MM-DD-<topic>-design.md` |
 | 全局計畫 owner | `docs/superpowers/plans/<explicit-owner>.md` | `2026-06-15-productization-control-plane.md` |
-| Active stub | `docs/superpowers/handoffs/current/<branch-or-topic>.md` 或帶 `Doc placement: repo_active_stub` 的明確 owner path | `codex-docs-cleanup-official-docs-and-handoff.md` |
+| Active stub | ignored local `docs/superpowers/handoffs/current/ACTIVE.local.md`; force-added repo stub only when intentionally public | `ACTIVE.local.md` |
 | 測試檔 | `tests/test_<module>_<behavior>.py`，**扁平結構，不鏡像 src** | `test_alignment_owner_clustering.py` |
 | CLI 入口 | `scripts/run_<purpose>.py` | `scripts/run_extraction.py` |
 | CLI 輔助 | `scripts/<verb>_<noun>.py` 或 `<purpose>.py` | `scripts/csv_to_excel.py` |

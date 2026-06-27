@@ -60,7 +60,8 @@ ROADMAP = ROOT / "docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roa
 # default branch handoff target for unrelated work.
 HANDOFF = (
     ROOT
-    / "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
+    / "docs/superpowers/productization/status"
+    / "cc-framework-improvements-productization.md"
 )
 CONTROL_PLANE = (
     ROOT / "docs/superpowers/plans/2026-06-15-productization-control-plane.md"

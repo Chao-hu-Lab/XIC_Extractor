@@ -28,7 +28,7 @@ Use this roadmap with:
 
 - [Backfill Quant Matrix Product Blueprint](../plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
 - [productization control plane](../plans/2026-06-15-productization-control-plane.md)
-- [productization status anchor](../handoffs/current/cc-framework-improvements-productization.md)
+- [productization status anchor](../productization/status/cc-framework-improvements-productization.md)
 - [deepresearch index](../../deepresearch/README.md)
 
 The control plane remains the authority for current tier, active lane, and

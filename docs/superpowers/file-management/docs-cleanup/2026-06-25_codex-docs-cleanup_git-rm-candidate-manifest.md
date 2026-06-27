@@ -18,7 +18,7 @@ does not authorize any additional `git rm`.
 - `removal_candidate_no_repo_referrers`: 106.
 - `removal_candidate_after_historical_referrer_cleanup`: 0.
 - `diagnostic_provenance_only`: 0.
-- Exact TSV: `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`.
+- Exact TSV: `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`.
 
 ## Candidate Paths
 

@@ -19,9 +19,9 @@ The current branch has a large stub forest. That is acceptable only as a migrati
 - Diagnostic-provenance-only references: 0.
 - Historical-referrer-only removal candidates: 0.
 - No-repo-referrer removal candidates: 106.
-- TSV inventory: `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.tsv`.
-- Candidate deletion manifest: `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`.
-- Candidate deletion TSV: `docs/superpowers/handoffs/archive/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`.
+- TSV inventory: `docs/superpowers/file-management/docs-cleanup/audits/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.tsv`.
+- Candidate deletion manifest: `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`.
+- Candidate deletion TSV: `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.tsv`.
 
 ## Policy
 

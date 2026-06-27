@@ -10,9 +10,13 @@ from dataclasses import dataclass
 CONTROL_PLANE_PATH = "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
 HANDOFF_CURRENT_DIR = "docs/superpowers/handoffs/current/"
 HANDOFF_ARCHIVE_DIR = "docs/superpowers/handoffs/archive/"
-PRODUCTIZATION_STATUS_HANDOFF_PATH = (
-    "docs/superpowers/handoffs/current/cc-framework-improvements-productization.md"
+DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH = f"{HANDOFF_CURRENT_DIR}ACTIVE.local.md"
+PRODUCTIZATION_STATUS_ANCHOR_PATH = (
+    "docs/superpowers/productization/status/cc-framework-improvements-productization.md"
 )
+# Backward-compatible import name for existing hook code. The file is no longer
+# a handoff; keep the alias until hook call sites are renamed in a focused pass.
+PRODUCTIZATION_STATUS_HANDOFF_PATH = PRODUCTIZATION_STATUS_ANCHOR_PATH
 HANDOFF_MAX_LINES = 200
 
 PRODUCT_SURFACE_PATHS = [
@@ -66,7 +70,9 @@ DOC_CANONICAL_OWNER_DIRS = [
     "docs/superpowers/specs/",
     "docs/superpowers/validation/",
     "docs/superpowers/fixtures/",
-    "docs/superpowers/handoffs/current/",
+    "docs/superpowers/productization/",
+    "docs/superpowers/file-management/",
+    "docs/superpowers/closeouts/",
     "docs/validation/",
     "tests/fixtures/",
 ]
@@ -82,6 +88,7 @@ DOC_CANONICAL_OWNER_FILES = {
     "docs/project-layout.md",
     "docs/research-line-triage.md",
     "docs/superpowers/README.md",
+    PRODUCTIZATION_STATUS_HANDOFF_PATH,
     "docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md",
     "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
     "docs/superpowers/plans/README.md",
@@ -89,6 +96,7 @@ DOC_CANONICAL_OWNER_FILES = {
 HIGH_RISK_DOC_DIRS = [
     "docs/deepresearch/",
     "docs/superpowers/deepresearch/",
+    "docs/superpowers/handoffs/current/",
     "docs/superpowers/handoffs/archive/",
     "docs/superpowers/notes/",
     "docs/superpowers/plans/",
@@ -104,21 +112,15 @@ PRIVATE_HISTORY_SIGNALS = [
     "private obsidian",
     "raw transcript",
 ]
-PUBLIC_HANDOFF_ARCHIVE_EVIDENCE_PATTERNS = [
-    re.compile(r"_branch-closeout-summary\.md$", re.IGNORECASE),
-    re.compile(r"_file-management-approval-plan\.md$", re.IGNORECASE),
-    re.compile(r"_git-rm-candidate-manifest\.md$", re.IGNORECASE),
-    re.compile(r"_public-surface-stub-audit\.md$", re.IGNORECASE),
-    re.compile(r"_obsidian-vault-dedup-audit\.md$", re.IGNORECASE),
-    re.compile(r"_source-of-truth-queue\.md$", re.IGNORECASE),
-    re.compile(r"_phase2-stub-readiness\.md$", re.IGNORECASE),
-    re.compile(r"_phase2-batch1-review\.md$", re.IGNORECASE),
-    re.compile(r"_deepresearch-stub-drafts\.md$", re.IGNORECASE),
-    re.compile(
-        r"_(?:bulk-private-history|non-notes-formalized|remaining-notes-plans)"
-        r"-stub-batch\.md$",
-        re.IGNORECASE,
-    ),
+CLOSEOUT_DIR = "docs/superpowers/closeouts/"
+MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS = [
+    re.compile(r"(?:^|[_-])branch-closeout-summary(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])file-management-approval-plan(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])git-rm-candidate-manifest(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])historical-referrer", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])productization_handoff-prune(?:[_\-.]|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])public-surface-stub-audit(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:^|[_-])source-of-truth-queue(?:\.|$)", re.IGNORECASE),
 ]
 GIT_GLOBAL_OPTIONS_WITH_VALUE = {
     "-C",
@@ -240,19 +242,26 @@ def is_repo_doc_path(path: str) -> bool:
 
 def is_branch_closeout_summary_path(path: str) -> bool:
     normalized = normalize_path_text(path).lstrip("./").lower()
-    return normalized.startswith(HANDOFF_ARCHIVE_DIR) and normalized.endswith(
+    return normalized.startswith(CLOSEOUT_DIR) and normalized.endswith(
         "_branch-closeout-summary.md"
     )
 
 
 def is_public_handoff_archive_evidence_path(path: str) -> bool:
+    return False
+
+
+def is_misplaced_handoff_public_record_path(path: str) -> bool:
     normalized = normalize_path_text(path).lstrip("./")
-    if not normalized.startswith(HANDOFF_ARCHIVE_DIR):
+    if not (
+        normalized.startswith(HANDOFF_CURRENT_DIR)
+        or normalized.startswith(HANDOFF_ARCHIVE_DIR)
+    ):
         return False
     filename = os.path.basename(normalized)
     return any(
         pattern.search(filename)
-        for pattern in PUBLIC_HANDOFF_ARCHIVE_EVIDENCE_PATTERNS
+        for pattern in MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS
     )
 
 

@@ -152,15 +152,18 @@ Apply the global current-state handoff rule through this skill because XIC
 goals are usually launched via `$goal-execution`.
 
 Use the active handoff named by the goal, plan, or PR workflow. If none is
-named and a repo-tracked handoff is needed, create or update a branch-scoped
-file under `docs/superpowers/handoffs/current/<branch-slug>-<topic>.md`; use
-`HANDOFF.md` only when the current goal establishes it as the active file.
+named, update the ignored local
+`docs/superpowers/handoffs/current/ACTIVE.local.md`; use a branch-named ignored
+local handoff only when multiple local branches need simultaneous state. Create
+or force-add a repo-tracked handoff only when the goal explicitly needs public
+repo evidence, and add the matching `RETENTION.tsv` row in the same patch.
+Use `HANDOFF.md` only when the current goal establishes it as the active file.
 Never update a handoff whose `Branch:` / `Status:` belongs to another branch.
 The active handoff is a short continuation snapshot, not the productization
 tier authority. Tier history, per-round maintenance logs, and lane evidence
-belong in the control plane, named specs, validation notes, or archive.
-Long exploration logs and scratch analysis belong in notes, not the active
-handoff.
+belong in the control plane, named specs, validation notes, PR body, or
+intentionally public repo archive. Long exploration logs and scratch analysis
+belong in Obsidian, not the active handoff.
 
 For XIC, the same three-layer rule applies even when filenames differ:
 

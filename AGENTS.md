@@ -70,14 +70,16 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   `docs/agent-parameter-settings.md` and use documented runners and paths.
 - Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
   diagnostic output groups need a summary or index.
-- Keep active handoffs as short current-state snapshots, not logs. Use archive
-  for completed phase summaries, notes for long scratch details, and prune
-  around the 200-line target before substantial continuation.
-- For non-trivial branch closeout, keep the current handoff as the live
-  handoff only and write a branch-level archive closeout summary that can seed
-  the PR body. This is required for public-contract, docs-governance,
-  validation-policy, artifact-retention, broad public-surface, or approved
-  deletion work.
+- Keep active handoffs as short current-state snapshots, not logs. Use the
+  ignored local `docs/superpowers/handoffs/current/ACTIVE.local.md` by default,
+  move long completed history to Obsidian, and prune around the 200-line target
+  before substantial continuation.
+- For non-trivial branch closeout, condense the current handoff into the PR body
+  as the durable closeout surface. Add a repo closeout summary under
+  `docs/superpowers/closeouts/` only when the completed phase is intentionally
+  public repo evidence for
+  public-contract, docs-governance, validation-policy, artifact-retention, broad
+  public-surface, or approved deletion work.
 - Treat repo docs as the public source-of-truth surface and Obsidian or ignored
   artifacts as the private lab notebook. Public contracts, product authority,
   validation policy, and future-agent rules stay in canonical repo owners; long
