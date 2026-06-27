@@ -174,12 +174,63 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
             )
         ]
 
-    if is_canonical_doc_owner_path(path) and not is_branch_closeout_summary_path(path):
-        return []
-
     problems: list[PlacementProblem] = []
     placement = doc_placement_value(text)
     repo_owner = repo_owner_value(text)
+
+    if is_canonical_doc_owner_path(path) and not is_branch_closeout_summary_path(path):
+        if path.startswith("docs/user/"):
+            if placement and placement not in DOC_PLACEMENT_VALUES:
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=f"unknown doc placement value: {placement}",
+                        required_marker=(
+                            f"{DOC_PLACEMENT_MARKER} <one of "
+                            f"{', '.join(sorted(DOC_PLACEMENT_VALUES))}>"
+                        ),
+                    )
+                )
+            elif placement and placement != "formal_repo_doc":
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=(
+                            f"{placement} is not valid in docs/user; user docs "
+                            "must be public user guides, not branch stubs, "
+                            "Obsidian stubs, closeouts, or artifact records"
+                        ),
+                        required_marker=(
+                            f"{DOC_PLACEMENT_MARKER} formal_repo_doc "
+                            "or omit the marker for canonical user guides"
+                        ),
+                    )
+                )
+            elif placement and doc_placement_is_non_repo(placement):
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=(
+                            f"{placement} is not a repo-trackable user guide; "
+                            "write private history to Obsidian staged draft or "
+                            "ignored scratch instead"
+                        ),
+                        required_marker=required_marker_text("formal_repo_doc"),
+                    )
+                )
+            if has_private_history_signal(text):
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=(
+                            "user guide contains private-history signals; "
+                            "move implementation diary, command transcript, "
+                            "or review rationale to Obsidian"
+                        ),
+                        required_marker=required_marker_text("formal_repo_doc"),
+                    )
+                )
+        return problems
 
     if is_misplaced_handoff_public_record_path(path):
         problems.append(
