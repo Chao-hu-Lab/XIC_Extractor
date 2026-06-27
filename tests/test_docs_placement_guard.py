@@ -74,6 +74,55 @@ def test_product_formal_source_of_truth_passes_without_marker(tmp_path: Path) ->
     assert result.problems == ()
 
 
+def test_user_guide_passes_without_marker(tmp_path: Path) -> None:
+    path = "docs/user/targeted-extraction.md"
+    _write(tmp_path, path, "# Targeted Extraction\n\nPublic user guide.\n")
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_user_guide_with_private_history_signal_fails(tmp_path: Path) -> None:
+    path = "docs/user/branch-notes.md"
+    _write(
+        tmp_path,
+        path,
+        "# Branch notes\n\nImplementation diary and command transcript details.\n",
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("private-history signals" in problem for problem in problems)
+
+
+def test_user_guide_with_non_user_placement_fails(tmp_path: Path) -> None:
+    for placement in (
+        "repo_active_stub",
+        "branch_closeout_summary",
+        "repo_stub_plus_obsidian",
+        "ignored_artifact",
+    ):
+        path = f"docs/user/{placement}.md"
+        _write(
+            tmp_path,
+            path,
+            "\n".join(
+                [
+                    "# Misplaced user doc",
+                    "",
+                    f"Doc placement: {placement}",
+                    "",
+                    "Objective: preserve branch state.",
+                ]
+            ),
+        )
+
+        problems = _problems(tmp_path, "A", path)
+
+        assert any("not valid in docs/user" in problem for problem in problems)
+
+
 def test_canonical_doc_can_document_marker_schema_without_false_positive(
     tmp_path: Path,
 ) -> None:

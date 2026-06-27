@@ -97,6 +97,28 @@ def test_advanced_section_contains_required_flags(qtbot) -> None:
     } <= advanced_keys
 
 
+def test_reset_button_restores_param_defaults_keeping_paths(qtbot) -> None:
+    section = SettingsSection()
+    qtbot.addWidget(section)
+    section.show()
+    section.load(
+        {**_canonical_settings(), "data_dir": "C:\\keep", "dll_dir": "C:\\dll"}
+    )
+    section._smooth_window_spin.setValue(
+        int(_canonical_settings()["smooth_window"]) + 4
+    )
+
+    section._reset_button.click()
+
+    values = section.get_values()
+    assert int(values["smooth_window"]) == int(
+        CANONICAL_SETTINGS_DEFAULTS["smooth_window"]
+    )
+    assert values["data_dir"] == "C:\\keep"
+    assert values["dll_dir"] == "C:\\dll"
+    assert section._save_button.isVisible()  # reset marks the form dirty
+
+
 def test_rt_prior_library_gui_label_marks_developer_debug(qtbot) -> None:
     section = SettingsSection()
     qtbot.addWidget(section)
@@ -177,6 +199,7 @@ def test_resolver_profiles_show_legacy_controls_for_legacy_mode(qtbot) -> None:
     qtbot.addWidget(section)
     section.show()
     section.load({**_canonical_settings(), "resolver_mode": "legacy_savgol"})
+    section.method_advanced_section._toggle.setChecked(True)
 
     assert section._legacy_resolver_panel.isVisible()
     assert not section._local_minimum_resolver_panel.isVisible()
@@ -192,6 +215,7 @@ def test_resolver_profiles_show_local_controls_for_local_minimum_mode(qtbot) -> 
     qtbot.addWidget(section)
     section.show()
     section.load({**_canonical_settings(), "resolver_mode": "local_minimum"})
+    section.method_advanced_section._toggle.setChecked(True)
 
     assert not section._legacy_resolver_panel.isVisible()
     assert section._local_minimum_resolver_panel.isVisible()
@@ -207,6 +231,7 @@ def test_resolver_profiles_do_not_offer_retired_arbitrated_mode(qtbot) -> None:
     qtbot.addWidget(section)
     section.show()
     section.load({**_canonical_settings(), "resolver_mode": "arbitrated"})
+    section.method_advanced_section._toggle.setChecked(True)
 
     assert "arbitrated" not in [
         section._resolver_mode_combo.itemText(index)
@@ -231,6 +256,7 @@ def test_resolver_profiles_show_both_controls_for_region_first_safe_merge_mode(
     section.load(
         {**_canonical_settings(), "resolver_mode": "region_first_safe_merge"}
     )
+    section.method_advanced_section._toggle.setChecked(True)
 
     assert section._legacy_resolver_panel.isVisible()
     assert section._local_minimum_resolver_panel.isVisible()

@@ -24,6 +24,7 @@ PRODUCT_SURFACE_PATHS = [
     "AGENTS.md",
     "docs/architecture-contract.md",
     "docs/product/",
+    "docs/user/",
     "docs/agent/product-validation-contract.md",
     "docs/agent/architecture-public-contracts.md",
     "docs/superpowers/specs/",
@@ -64,6 +65,7 @@ NON_REPO_DOC_PLACEMENTS = {
 }
 DOC_CANONICAL_OWNER_DIRS = [
     "docs/product/",
+    "docs/user/",
     "docs/agent/",
     "docs/engineering-skills/",
     "docs/solutions/",

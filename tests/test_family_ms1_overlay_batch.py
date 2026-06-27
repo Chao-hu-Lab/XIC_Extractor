@@ -11,6 +11,8 @@ from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
 def test_render_family_job_returns_failure_row_instead_of_raising(
     tmp_path: Path,
 ) -> None:
+    # The parallel-render worker must never propagate exceptions; a failed
+    # family becomes a failure row so the batch (and pool) keep going.
     request = batch.OverlayBatchRequest(
         rank=1,
         family_id="FAM001",
@@ -25,7 +27,7 @@ def test_render_family_job_returns_failure_row_instead_of_raising(
     payload = (
         request,
         {
-            "alignment_cells": tmp_path / "missing.tsv",
+            "alignment_cells": tmp_path / "missing.tsv",  # forces a load failure
             "raw_dir": tmp_path,
             "dll_dir": tmp_path,
             "output_dir": tmp_path / "out",
@@ -1293,6 +1295,76 @@ def test_batch_reuses_existing_outputs_without_raw_when_requested(
     summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
     assert summary[0]["feature_family_id"] == "FAM_REUSE"
     assert summary[0]["absolute_own_max_shape_supported_fraction"] == "0.8"
+
+
+def test_parallel_batch_writes_incremental_prefixes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    output_dir = tmp_path / "out"
+    alignment_cells.write_text("feature_family_id\nFAM001\nFAM002\n", encoding="utf-8")
+    _write_queue(
+        queue_tsv,
+        [
+            _queue_row("FAM001", seed_group_id="seed::FAM001::a"),
+            _queue_row("FAM002", seed_group_id="seed::FAM002::a"),
+        ],
+    )
+    write_calls: list[list[str]] = []
+
+    class FakeExecutor:
+        def __init__(self, max_workers: int) -> None:
+            assert max_workers == 2
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def map(self, func, payloads):
+            for payload in payloads:
+                yield func(payload)
+
+    def fake_render_job(payload):
+        request, _kwargs = payload
+        return {
+            "rank": str(request.rank),
+            "feature_family_id": request.family_id,
+            "seed_group_id": request.seed_group_id,
+            "status": "success",
+        }
+
+    def fake_batch_trace_rows(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(batch, "ProcessPoolExecutor", FakeExecutor)
+    monkeypatch.setattr(batch, "_batch_trace_rows_for_requests", fake_batch_trace_rows)
+    monkeypatch.setattr(batch, "_render_family_job", fake_render_job)
+    monkeypatch.setattr(
+        batch,
+        "_write_outputs",
+        lambda _output_dir, rows, **_kwargs: write_calls.append(
+            [row["feature_family_id"] for row in rows]
+        ),
+    )
+
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=output_dir,
+        workers=2,
+        write_incremental=True,
+    )
+
+    assert [row["feature_family_id"] for row in rows] == ["FAM001", "FAM002"]
+    assert write_calls == [["FAM001"], ["FAM001", "FAM002"]]
 
 
 def test_batch_does_not_reuse_existing_outputs_with_mismatched_trace_json(

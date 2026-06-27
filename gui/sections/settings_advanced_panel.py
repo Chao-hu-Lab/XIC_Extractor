@@ -34,7 +34,7 @@ def build_advanced_section(
     file_browse_button_factory: Callable[[QLineEdit], QPushButton],
 ) -> None:
     help_label = QLabel("下列選項僅在除錯或方法開發時需要。日常使用請保持預設值。")
-    help_label.setStyleSheet("color: #57606a; font-size: 9pt;")
+    help_label.setObjectName("hint")
     section.add_row(help_label)
 
     body = QWidget()

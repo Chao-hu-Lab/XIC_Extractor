@@ -166,17 +166,19 @@ def run_alignment_experiment_batch(
             },
         ):
             with ProcessPoolExecutor(max_workers=workers) as executor:
-                rows = list(executor.map(_render_or_reuse_row_job, payloads))
-        if write_incremental:
-            with recorder.stage(
-                "standard_peak.shift_aware_batch.write_incremental_summary",
-                metrics={"row_count": len(rows)},
-            ):
-                write_tsv(
-                    output_dir / "family_ms1_alignment_experiment_batch_summary.tsv",
-                    rows,
-                    SUMMARY_COLUMNS,
-                )
+                for result in executor.map(_render_or_reuse_row_job, payloads):
+                    rows.append(result)
+                    if write_incremental:
+                        with recorder.stage(
+                            "standard_peak.shift_aware_batch.write_incremental_summary",
+                            metrics={"row_count": len(rows)},
+                        ):
+                            write_tsv(
+                                output_dir
+                                / "family_ms1_alignment_experiment_batch_summary.tsv",
+                                rows,
+                                SUMMARY_COLUMNS,
+                            )
     else:
         for row in selected_rows:
             family = text_value(row.get("feature_family_id"))
