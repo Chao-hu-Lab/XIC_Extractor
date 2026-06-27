@@ -1,0 +1,130 @@
+# Untargeted Preset Guide
+
+Presets are TOML files that bundle discovery and alignment settings into a
+named method. They live in `xic_extractor/presets/data/` and are selectable
+from the GUI or passed to CLI scripts.
+
+## Available Presets
+
+| Name | Display name | Strategy | NL mass (Da) | Description |
+| --- | --- | --- | --- | --- |
+| `dna_dr` | DNA dR | CID neutral loss | 116.0474 | 2'-deoxyribose neutral-loss discovery |
+| `dna_dr_product_ready` | DNA dR Product Ready | CID neutral loss | 116.0474 | Same discovery with production-grade alignment |
+
+---
+
+## Preset Structure
+
+Every preset TOML must contain:
+
+```toml
+name = "Display Name"
+description = "One-line human-readable description"
+combine_mode = "single"          # tag combination: only "single" currently
+
+[[tag]]
+strategy = "neutral_loss"        # discovery strategy type
+name = "TAG_NAME"                # tag identifier used in outputs
+value = 116.0474                 # neutral loss mass (Da)
+
+[discovery]                      # optional overrides for discovery defaults
+# nl_tolerance_ppm = 20.0
+
+[alignment]                      # optional overrides for alignment defaults
+# standard_peak_backfill = true
+```
+
+### Tag Rules
+
+- `combine_mode = "single"` requires exactly one `[[tag]]` entry.
+- `strategy` must be `"neutral_loss"` (other strategies are defined but not
+  yet enabled).
+- `value` must be a finite number (not boolean, infinity, or NaN).
+
+---
+
+## Discovery Defaults
+
+These values apply unless overridden in the `[discovery]` section.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `nl_tolerance_ppm` | 20.0 | Neutral loss mass tolerance (PPM) |
+| `precursor_mz_tolerance_ppm` | 20.0 | Precursor m/z tolerance (PPM) |
+| `product_mz_tolerance_ppm` | 20.0 | Product ion m/z tolerance (PPM) |
+| `product_search_ppm` | 50.0 | Product ion search window (PPM) |
+| `ms2_precursor_tol_da` | 1.6 | MS2 precursor tolerance (Da) |
+| `nl_min_intensity_ratio` | 0.01 | Minimum NL intensity ratio (1%) |
+| `seed_rt_gap_min` | 0.20 | Minimum RT gap between seeds (min) |
+| `ms1_search_padding_min` | 0.20 | MS1 search window padding (min) |
+| `rt_min` | 0.0 | Minimum RT filter (min) |
+| `rt_max` | 999.0 | Maximum RT filter (min) |
+| `resolver_mode` | `local_minimum` | Peak resolver algorithm |
+
+---
+
+## Alignment Defaults
+
+These values apply unless overridden in the `[alignment]` section.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `standard_peak_backfill` | false | Enable standard peak backfill |
+| `standard_peak_backfill_chunk_size` | 120 | Samples per backfill chunk |
+| `standard_peak_backfill_publication_mode` | `deep-audit` | Publication scope |
+| `standard_peak_backfill_write_gallery` | true | Write diagnostic gallery (legacy) |
+| `standard_peak_backfill_reuse_existing` | false | Reuse existing backfill results |
+| `standard_peak_backfill_min_shape_r` | 0.95 | Minimum peak shape R-squared |
+| `owner_build_xic_backend` | `raw` | XIC backend for owner construction |
+| `backfill_expansion_productization` | `off` | Expansion productization mode |
+| `backfill_expansion_reuse_existing_raw_overlay` | false | Reuse existing raw overlay |
+| `backfill_expansion_reuse_existing_shift_aware` | false | Reuse existing shift-aware data |
+| `backfill_expansion_render_shift_aware_images` | false | Render shift-aware diagnostic images |
+
+### Publication Mode Values
+
+| Value | Description |
+| --- | --- |
+| `matrix-only` | Update alignment matrix only; skip gallery and deep audit |
+| `review-gallery` | Write matrix + review HTML gallery |
+| `deep-audit` | Full output: matrix + gallery + deep audit artifacts |
+
+### XIC Backend Values
+
+| Value | Description |
+| --- | --- |
+| `raw` | Read directly from RAW files (default) |
+| `raw-super-window` | RAW with wider super-window for cross-sample coverage |
+| `ms1-index` | Use pre-built MS1 index (faster, requires prior indexing) |
+
+---
+
+## Preset Comparison
+
+| Parameter | `dna_dr` | `dna_dr_product_ready` |
+| --- | --- | --- |
+| NL mass | 116.0474 Da | 116.0474 Da |
+| Discovery overrides | none | none |
+| Backfill enabled | yes | yes |
+| Backfill chunk size | 120 | 240 |
+| Publication mode | matrix-only | matrix-only |
+| XIC backend | raw (default) | raw-super-window |
+
+`dna_dr_product_ready` differs from `dna_dr` in two ways: a larger chunk
+size (240 vs 120) for higher throughput, and the `raw-super-window` backend
+for better cross-sample coverage during owner construction.
+
+---
+
+## GUI Advanced Overrides
+
+When running from the GUI, the Advanced panel allows per-run overrides on top
+of the selected preset. These overrides are applied after preset defaults and
+take precedence. Common overrides:
+
+- RT window (`rt_min`, `rt_max`)
+- Tolerance values (`nl_tolerance_ppm`, `precursor_mz_tolerance_ppm`)
+- Backfill chunk size
+- Publication mode
+
+Overrides are stored in `config/discovery_gui.json` (machine-local, untracked).
