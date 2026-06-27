@@ -691,18 +691,21 @@ def test_run_alignment_production_level_writes_user_artifacts_and_identity_tsv(
     )
 
     names = sorted(path.name for path in (tmp_path / "out").iterdir())
+    # alignment_matrix.tsv is part of the production contract: it is the
+    # downstream-consumed matrix every run must emit (see output_levels.py).
     assert names == [
+        "alignment_matrix.tsv",
         "alignment_matrix_identity.tsv",
         "alignment_results.xlsx",
         "review_report.html",
     ]
     assert outputs.workbook == tmp_path / "out" / "alignment_results.xlsx"
+    assert outputs.matrix_tsv == tmp_path / "out" / "alignment_matrix.tsv"
     assert (
         outputs.matrix_identity_tsv
         == tmp_path / "out" / "alignment_matrix_identity.tsv"
     )
     assert outputs.review_html == tmp_path / "out" / "review_report.html"
-    assert outputs.matrix_tsv is None
     assert outputs.review_tsv is None
 
 

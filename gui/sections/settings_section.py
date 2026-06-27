@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -26,7 +25,8 @@ from gui.sections.settings_constants import _ADVANCED_SETTING_KEYS
 from gui.sections.settings_controls import AdvancedControls, ResolverControls
 from gui.sections.settings_resolver_panel import (
     apply_local_minimum_preset,
-    build_peak_resolver_panel,
+    build_resolver_detail_panel,
+    build_resolver_mode_row,
     configure_resolver_controls,
     update_resolver_profile_visibility,
 )
@@ -39,6 +39,7 @@ from gui.sections.settings_value_helpers import (
     _invalid_parallel_workers,
 )
 from gui.sections.settings_widgets import CollapsibleSection, _LabeledSpin
+from gui.ui import SPACE_LG, SPACE_MD, SPACE_SM, titled_card
 from xic_extractor.config import migrate_settings_dict
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS, RESOLVER_MODES
 
@@ -56,27 +57,23 @@ class SettingsSection(QWidget):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
-        card.setObjectName("section_card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
+        card, header_layout, card_layout = titled_card(
+            "① Settings", "資料路徑與峰偵測參數"
+        )
+        header_layout.addStretch()
+        self._reset_button = QPushButton("↺ 回到預設")
+        self._reset_button.setToolTip(
+            "將方法參數重設為預設值（保留 Data / DLL 路徑）"
+        )
+        self._reset_button.clicked.connect(self._reset_defaults)
+        header_layout.addWidget(self._reset_button)
         root_layout.addWidget(card)
-
-        header = QFrame()
-        header.setObjectName("section_header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("① Settings")
-        title.setObjectName("section_title")
-        header_layout.addWidget(title)
-        card_layout.addWidget(header)
 
         body = QWidget()
         body_layout = QGridLayout(body)
-        body_layout.setContentsMargins(16, 16, 16, 16)
-        body_layout.setHorizontalSpacing(12)
-        body_layout.setVerticalSpacing(8)
+        body_layout.setContentsMargins(SPACE_LG, SPACE_LG, SPACE_LG, SPACE_LG)
+        body_layout.setHorizontalSpacing(SPACE_MD)
+        body_layout.setVerticalSpacing(SPACE_SM)
         card_layout.addWidget(body)
 
         self._data_dir_edit = QLineEdit()
@@ -181,7 +178,7 @@ class SettingsSection(QWidget):
         body_layout.addWidget(self._make_browse_button(self._data_dir_edit), 0, 2)
 
         self._data_dir_error = QLabel("路徑不存在")
-        self._data_dir_error.setStyleSheet("color: #cf222e; font-size: 9pt;")
+        self._data_dir_error.setObjectName("field_error")
         self._data_dir_error.setVisible(False)
         body_layout.addWidget(self._data_dir_error, 1, 1)
 
@@ -192,13 +189,21 @@ class SettingsSection(QWidget):
 
         body_layout.addWidget(QLabel("Peak resolver"), 3, 0)
         body_layout.addWidget(
-            build_peak_resolver_panel(self._resolver_controls), 3, 1, 1, 2
+            build_resolver_mode_row(self._resolver_controls), 3, 1, 1, 2
         )
 
-        body_layout.addWidget(QLabel("MS2 / NL"), 4, 0)
-        ms2_layout = QHBoxLayout()
+        # The per-mode resolver numerics and the MS2/NL tolerances are seldom
+        # tuned per run (sensible CANONICAL defaults apply), so collapse them by
+        # default — only the resolver Mode stays visible above.
+        self.method_advanced_section = CollapsibleSection("峰偵測進階參數")
+        self.method_advanced_section.add_row(
+            build_resolver_detail_panel(self._resolver_controls)
+        )
+        ms2_row = QWidget()
+        ms2_layout = QHBoxLayout(ms2_row)
         ms2_layout.setContentsMargins(0, 0, 0, 0)
         ms2_layout.setSpacing(16)
+        ms2_layout.addWidget(QLabel("MS2 / NL"))
         ms2_layout.addWidget(
             _LabeledSpin("Precursor tol", self._ms2_precursor_tol_da_spin)
         )
@@ -206,7 +211,8 @@ class SettingsSection(QWidget):
             _LabeledSpin("Min intensity", self._nl_min_intensity_ratio_spin)
         )
         ms2_layout.addStretch()
-        body_layout.addLayout(ms2_layout, 4, 1, 1, 2)
+        self.method_advanced_section.add_row(ms2_row)
+        body_layout.addWidget(self.method_advanced_section, 4, 0, 1, 3)
 
         self.advanced_section = CollapsibleSection("⚙ Advanced — debug 與方法開發專用")
         build_advanced_section(
@@ -589,7 +595,15 @@ class SettingsSection(QWidget):
         stripped = text.strip()
         invalid = bool(stripped) and not Path(stripped).exists()
         self._data_dir_error.setVisible(invalid)
-        self._data_dir_edit.setStyleSheet("border-color: #cf222e;" if invalid else "")
+        # Reuse the themed QLineEdit[invalid="true"] rule from styles.py instead
+        # of an inline hard-coded colour (which froze the error tint to the light
+        # palette and never followed dark mode). Repolish so the property-based
+        # selector re-evaluates immediately.
+        self._data_dir_edit.setProperty("invalid", invalid)
+        edit_style = self._data_dir_edit.style()
+        if edit_style is not None:
+            edit_style.unpolish(self._data_dir_edit)
+            edit_style.polish(self._data_dir_edit)
 
     def _make_browse_button(self, target: QLineEdit) -> QPushButton:
         button = QPushButton("Browse…")
@@ -612,6 +626,16 @@ class SettingsSection(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Select file", target.text())
         if path:
             target.setText(path)
+
+    def _reset_defaults(self) -> None:
+        """Reset method parameters to canonical defaults, keeping the data/DLL
+        paths (those are environment-specific locations, not parameters). Marks
+        the form dirty so the user can save — or discard — the reset."""
+        defaults = dict(CANONICAL_SETTINGS_DEFAULTS)
+        defaults["data_dir"] = self._data_dir_edit.text()
+        defaults["dll_dir"] = self._dll_dir_edit.text()
+        self.load(defaults)
+        self._set_dirty(True)
 
     def _save(self) -> None:
         self._set_dirty(False)

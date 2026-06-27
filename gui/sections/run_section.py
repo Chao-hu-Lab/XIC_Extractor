@@ -1,6 +1,5 @@
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
-    QFrame,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -8,6 +7,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from gui.ui import section_card
 
 
 class RunSection(QWidget):
@@ -17,30 +18,19 @@ class RunSection(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._running = False
+        self._ready = True
         self._elapsed_seconds = 0
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
-        card.setObjectName("section_card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
+        card, body = section_card("③ Run", "執行並顯示進度")
         root_layout.addWidget(card)
 
-        header = QFrame()
-        header.setObjectName("section_header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("③ Run")
-        title.setObjectName("section_title")
-        header_layout.addWidget(title)
-        card_layout.addWidget(header)
-
-        body = QVBoxLayout()
-        body.setContentsMargins(16, 16, 16, 16)
-        body.setSpacing(10)
+        self._ready_hint = QLabel("")
+        self._ready_hint.setObjectName("ready_hint_ok")
+        self._ready_hint.setWordWrap(True)
+        body.addWidget(self._ready_hint)
 
         self._button = QPushButton("開始執行")
         self._button.setObjectName("btn_run")
@@ -57,13 +47,11 @@ class RunSection(QWidget):
         status_row.setContentsMargins(0, 0, 0, 0)
         self._status_label = QLabel("尚未開始")
         self._elapsed_label = QLabel("")
-        self._elapsed_label.setStyleSheet("color: #57606a; font-size: 9pt;")
+        self._elapsed_label.setObjectName("elapsed_label")
         self._elapsed_label.setVisible(False)
         status_row.addWidget(self._status_label, 1)
         status_row.addWidget(self._elapsed_label)
         body.addLayout(status_row)
-
-        card_layout.addLayout(body)
 
         # Elapsed timer (fires every second in the main thread — safe for Qt)
         self._timer = QTimer(self)
@@ -71,6 +59,19 @@ class RunSection(QWidget):
         self._timer.timeout.connect(self._tick)
 
     # ── Public API ─────────────────────────────────────────────────────────────
+
+    def set_ready(self, ready: bool, missing: list[str]) -> None:
+        """Reflect whether the current config can run, and what is missing."""
+        self._ready = ready
+        if ready:
+            self._ready_hint.setObjectName("ready_hint_ok")
+            self._ready_hint.setText("✓ 設定完整，可以執行")
+        else:
+            self._ready_hint.setObjectName("ready_hint_block")
+            self._ready_hint.setText("尚缺：" + "、".join(missing))
+        self._repolish(self._ready_hint)
+        if not self._running:
+            self._button.setEnabled(ready)
 
     def set_progress(self, current: int, total: int, filename: str) -> None:
         progress_max = max(total, 1)
@@ -87,14 +88,24 @@ class RunSection(QWidget):
             self._timer.start()
             self._status_label.setText("準備中...")
             self._progress.setValue(0)
+            self._ready_hint.setVisible(False)
+            self._button.setEnabled(True)
         else:
             self._timer.stop()
+            self._ready_hint.setVisible(True)
+            self._button.setEnabled(self._ready)
 
         self._button.setText("停止執行" if running else "開始執行")
         self._button.setObjectName("btn_stop" if running else "btn_run")
-        self._button.style().unpolish(self._button)
-        self._button.style().polish(self._button)
-        self._button.update()
+        self._repolish(self._button)
+
+    @staticmethod
+    def _repolish(widget: QWidget) -> None:
+        style = widget.style()
+        if style is not None:
+            style.unpolish(widget)
+            style.polish(widget)
+        widget.update()
 
     def set_complete(self, total: int) -> None:
         self._timer.stop()

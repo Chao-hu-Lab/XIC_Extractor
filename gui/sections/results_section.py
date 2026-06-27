@@ -4,14 +4,14 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.styles import COLORS
+from gui import styles
+from gui.ui import titled_card
 
 
 class _Card(QFrame):
@@ -22,9 +22,10 @@ class _Card(QFrame):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(6)
 
+        muted = styles.ACTIVE["text_muted"]
         label_widget = QLabel(label.upper())
         label_widget.setStyleSheet(
-            f"color: {COLORS['text_muted']}; font-size: 9pt; font-weight: 600;"
+            f"color: {muted}; font-size: 9pt; font-weight: 600;"
         )
         value_widget = QLabel(value)
         value_widget.setStyleSheet(
@@ -32,7 +33,7 @@ class _Card(QFrame):
         )
         detail_widget = QLabel(detail)
         detail_widget.setWordWrap(True)
-        detail_widget.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9pt;")
+        detail_widget.setStyleSheet(f"color: {muted}; font-size: 9pt;")
 
         layout.addWidget(label_widget)
         layout.addWidget(value_widget)
@@ -44,38 +45,30 @@ class ResultsSection(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self._excel_path = ""
+        # Cache the last render so a dark/light toggle can rebuild the dynamic
+        # cards from the now-current ACTIVE palette (the cards hard-bake their
+        # colours at build time, so they can't follow the theme on their own).
+        self._last_summary: dict | None = None
+        self._last_error: str | None = None
         self.setVisible(False)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
-        card.setObjectName("section_card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
+        card, header_layout, card_layout = titled_card(
+            "④ Results", "偵測統計與輸出檔案"
+        )
         root_layout.addWidget(card)
-
-        header = QFrame()
-        header.setObjectName("section_header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("④ Results")
-        title.setObjectName("section_title")
-        header_layout.addWidget(title)
         header_layout.addStretch()
         self._folder_button = QPushButton("開啟資料夾")
-        self._folder_button.setObjectName("btn_open_excel")
         self._folder_button.clicked.connect(self._open_folder)
         self._folder_button.setVisible(False)
         header_layout.addWidget(self._folder_button)
 
         self._open_button = QPushButton("開啟 Excel")
-        self._open_button.setObjectName("btn_open_excel")
         self._open_button.clicked.connect(self._open_excel)
         self._open_button.setVisible(False)
         header_layout.addWidget(self._open_button)
-        card_layout.addWidget(header)
 
         self._body = QWidget()
         self._body_layout = QVBoxLayout(self._body)
@@ -84,22 +77,19 @@ class ResultsSection(QWidget):
         card_layout.addWidget(self._body)
 
         self._error_label = QLabel()
+        self._error_label.setObjectName("results_error")
         self._error_label.setWordWrap(True)
         self._error_label.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
-        self._error_label.setStyleSheet(f"color: {COLORS['error']}; font-weight: 600;")
         self._error_label.setVisible(False)
         self._body_layout.addWidget(self._error_label)
 
         self._istd_warn_label = QLabel()
+        self._istd_warn_label.setObjectName("istd_warning")
         self._istd_warn_label.setWordWrap(True)
         self._istd_warn_label.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-        )
-        self._istd_warn_label.setStyleSheet(
-            "background-color: #FF7043; color: white; font-weight: 600;"
-            " padding: 8px 12px; border-radius: 4px;"
         )
         self._istd_warn_label.setVisible(False)
         self._body_layout.addWidget(self._istd_warn_label)
@@ -110,6 +100,8 @@ class ResultsSection(QWidget):
         self._body_layout.addLayout(self._grid)
 
     def update_results(self, summary: dict) -> None:
+        self._last_summary = summary
+        self._last_error = None
         self._excel_path = summary.get("excel_path", "")
         has_path = bool(self._excel_path)
         self._open_button.setVisible(has_path)
@@ -135,9 +127,9 @@ class ResultsSection(QWidget):
                     label=str(target["label"]),
                     value=f"{target['detected']}/{target['total']}",
                     detail=_target_detail(target),
-                    color=COLORS["success"]
+                    color=styles.ACTIVE["success"]
                     if target.get("detected")
-                    else COLORS["text_muted"],
+                    else styles.ACTIVE["text_muted"],
                 )
             )
 
@@ -146,9 +138,9 @@ class ResultsSection(QWidget):
                 label="DIAGNOSTICS",
                 value=str(summary.get("diagnostics_count", 0)),
                 detail="Issue rows",
-                color=COLORS["warning"]
+                color=styles.ACTIVE["warning"]
                 if summary.get("diagnostics_count", 0)
-                else COLORS["success"],
+                else styles.ACTIVE["success"],
             )
         )
         cards.append(
@@ -156,7 +148,7 @@ class ResultsSection(QWidget):
                 label="TOTAL FILES",
                 value=str(summary.get("total_files", 0)),
                 detail="Processed sample files",
-                color=COLORS["primary"],
+                color=styles.ACTIVE["primary"],
             )
         )
 
@@ -168,6 +160,8 @@ class ResultsSection(QWidget):
         self.setVisible(True)
 
     def show_error(self, message: str) -> None:
+        self._last_error = message
+        self._last_summary = None
         self._excel_path = ""
         self._open_button.setVisible(False)
         self._folder_button.setVisible(False)
@@ -176,6 +170,17 @@ class ResultsSection(QWidget):
         self._error_label.setText(message)
         self._error_label.setVisible(True)
         self.setVisible(True)
+
+    def refresh_theme(self) -> None:
+        """Rebuild the dynamic cards from the live palette on a theme switch.
+
+        Static labels (error / ISTD warning) follow the theme automatically via
+        their objectName QSS rules; only the colour-baked cards need replaying.
+        """
+        if self._last_error is not None:
+            self.show_error(self._last_error)
+        elif self._last_summary is not None:
+            self.update_results(self._last_summary)
 
     def _open_excel(self) -> None:
         if self._excel_path:

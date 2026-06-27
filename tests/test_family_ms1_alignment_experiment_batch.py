@@ -521,6 +521,7 @@ def test_batch_reuses_existing_best_shift_summary(tmp_path: Path) -> None:
 
 
 def test_render_or_reuse_row_job_runs_in_process(tmp_path: Path) -> None:
+    # The process-pool worker must unpack its payload and return a status row.
     trace_json = _write_trace_json(tmp_path, family_id="FAM001")
     cell_evidence = tmp_path / "cells.tsv"
     cell_evidence.write_text(
@@ -622,6 +623,79 @@ def test_batch_workers_must_be_positive(tmp_path: Path) -> None:
             output_dir=tmp_path / "out",
             workers=0,
         )
+
+
+def test_parallel_batch_writes_incremental_summary_rows(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    overlay_summary = tmp_path / "overlay.tsv"
+    overlay_summary.write_text(
+        "\n".join(
+            [
+                "rank\tfeature_family_id\toutput_prefix\tstatus",
+                "1\tFAM001\t001_fam001\tsuccess",
+                "2\tFAM002\t002_fam002\tsuccess",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cell_evidence = tmp_path / "cells.tsv"
+    cell_evidence.write_text(
+        "feature_family_id\tsample_stem\treason\n",
+        encoding="utf-8",
+    )
+    write_calls: list[list[str]] = []
+
+    class FakeExecutor:
+        def __init__(self, max_workers: int) -> None:
+            assert max_workers == 2
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def map(self, func, payloads):
+            for payload in payloads:
+                yield func(payload)
+
+    def fake_render_job(payload):
+        row, _kwargs = payload
+        return {
+            "rank": row["rank"],
+            "feature_family_id": row["feature_family_id"],
+            "seed_group_id": "",
+            "overlay_status": row["status"],
+            "source_best_shift_summary_tsv": "",
+            "alignment_status": "rendered",
+            "failure_reason": "",
+        }
+
+    monkeypatch.setattr(batch, "ProcessPoolExecutor", FakeExecutor)
+    monkeypatch.setattr(batch, "_render_or_reuse_row_job", fake_render_job)
+    monkeypatch.setattr(
+        batch,
+        "write_tsv",
+        lambda _path, rows, _columns: write_calls.append(
+            [row["feature_family_id"] for row in rows]
+        ),
+    )
+
+    rows, summary = batch.run_alignment_experiment_batch(
+        overlay_batch_summary_tsv=overlay_summary,
+        cell_evidence_tsv=cell_evidence,
+        output_dir=tmp_path / "out",
+        write_incremental=True,
+        source_family_by_family_sample={},
+        workers=2,
+    )
+
+    assert [row["feature_family_id"] for row in rows] == ["FAM001", "FAM002"]
+    assert write_calls == [["FAM001"], ["FAM001", "FAM002"]]
+    assert summary["successful_shift_aware_row_count"] == 2
 
 
 def _trace_json(

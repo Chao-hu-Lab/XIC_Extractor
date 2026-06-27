@@ -160,6 +160,7 @@ def test_worker_does_not_write_excel_or_emit_summary_after_cancellation(
     interrupted = {"value": False}
     wrote_excel: list[bool] = []
     summaries: list[dict] = []
+    cancelled: list[bool] = []
 
     monkeypatch.setattr(
         module.config_module,
@@ -180,11 +181,13 @@ def test_worker_does_not_write_excel_or_emit_summary_after_cancellation(
     monkeypatch.setattr(module.extractor, "run", _extract)
     monkeypatch.setattr(module, "write_excel_from_run_output", _excel)
     worker.finished.connect(summaries.append)
+    worker.cancelled.connect(lambda: cancelled.append(True))
 
     worker.run()
 
     assert wrote_excel == []
     assert summaries == []
+    assert cancelled == [True]
 
 
 @pytest.mark.parametrize(
@@ -230,7 +233,10 @@ def test_main_window_run_uses_user_writable_config_dir(
     monkeypatch,
     qtbot,
 ) -> None:
+    # The run logic lives in TargetedView now; MainWindow wires it with the
+    # user-writable _ROOT/config dir, so monkeypatch the targeted_view module.
     import gui.main_window as module
+    import gui.views.targeted_view as targeted_module
 
     created: list[Path] = []
     data_dir = tmp_path / "data"
@@ -242,6 +248,7 @@ def test_main_window_run_uses_user_writable_config_dir(
         progress = _Signal()
         finished = _Signal()
         error = _Signal()
+        cancelled = _Signal()
 
         def __init__(self, config_dir: Path) -> None:
             created.append(config_dir)
@@ -249,27 +256,32 @@ def test_main_window_run_uses_user_writable_config_dir(
         def start(self) -> None:
             pass
 
-    monkeypatch.setattr(module, "PipelineWorker", FakeWorker)
+    monkeypatch.setattr(targeted_module, "PipelineWorker", FakeWorker)
     monkeypatch.setattr(
-        module,
+        targeted_module,
         "read_settings",
         lambda: {"data_dir": str(data_dir), "dll_dir": str(dll_dir)},
     )
-    monkeypatch.setattr(module, "read_targets", lambda: [])
-    monkeypatch.setattr(module, "write_settings", lambda _settings: None)
-    monkeypatch.setattr(module, "write_targets", lambda _targets: None)
+    monkeypatch.setattr(targeted_module, "read_targets", lambda: [])
+    monkeypatch.setattr(targeted_module, "write_settings", lambda _settings: None)
+    monkeypatch.setattr(targeted_module, "write_targets", lambda _targets: None)
     window = module.MainWindow()
     qtbot.addWidget(window)
 
-    window._on_run()
+    window.targeted_view._on_run()
 
     assert created == [module._ROOT / "config"]
+
+    # The fake worker is not a real thread; clear it so qtbot's teardown close
+    # does not see a "busy" view and block on the confirm-close modal.
+    window.targeted_view._worker = None
 
 
 def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
     monkeypatch, qtbot
 ) -> None:
     import gui.main_window as module
+    import gui.views.targeted_view as targeted_module
 
     created: list[Path] = []
     saved: list[dict[str, str]] = []
@@ -278,6 +290,7 @@ def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
         progress = _Signal()
         finished = _Signal()
         error = _Signal()
+        cancelled = _Signal()
 
         def __init__(self, config_dir: Path) -> None:
             created.append(config_dir)
@@ -285,9 +298,9 @@ def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
         def start(self) -> None:
             pass
 
-    monkeypatch.setattr(module, "PipelineWorker", FakeWorker)
+    monkeypatch.setattr(targeted_module, "PipelineWorker", FakeWorker)
     monkeypatch.setattr(
-        module,
+        targeted_module,
         "read_settings",
         lambda: {
             "data_dir": "C:\\data",
@@ -303,15 +316,15 @@ def test_main_window_does_not_start_worker_when_parallel_settings_are_invalid(
             "parallel_workers": "0",
         },
     )
-    monkeypatch.setattr(module, "read_targets", lambda: [])
+    monkeypatch.setattr(targeted_module, "read_targets", lambda: [])
     monkeypatch.setattr(
-        module, "write_settings", lambda settings: saved.append(settings)
+        targeted_module, "write_settings", lambda settings: saved.append(settings)
     )
-    monkeypatch.setattr(module, "write_targets", lambda _targets: None)
+    monkeypatch.setattr(targeted_module, "write_targets", lambda _targets: None)
     window = module.MainWindow()
     qtbot.addWidget(window)
 
-    window._on_run()
+    window.targeted_view._on_run()
 
     assert saved == []
     assert created == []
@@ -323,7 +336,10 @@ def test_main_window_load_config_persists_first_run_settings_migration(
     monkeypatch,
     qtbot,
 ) -> None:
+    # MainWindow construction calls targeted_view.load_config(), which migrates
+    # legacy setting keys and persists them on first run.
     import gui.main_window as module
+    import gui.views.targeted_view as targeted_module
 
     saved: list[dict[str, str]] = []
     data_dir = tmp_path / "data"
@@ -331,7 +347,7 @@ def test_main_window_load_config_persists_first_run_settings_migration(
     data_dir.mkdir()
     dll_dir.mkdir()
     monkeypatch.setattr(
-        module,
+        targeted_module,
         "read_settings",
         lambda: {
             "data_dir": str(data_dir),
@@ -340,9 +356,9 @@ def test_main_window_load_config_persists_first_run_settings_migration(
             "smooth_sigma": "3.0",
         },
     )
-    monkeypatch.setattr(module, "read_targets", lambda: [])
+    monkeypatch.setattr(targeted_module, "read_targets", lambda: [])
     monkeypatch.setattr(
-        module,
+        targeted_module,
         "write_settings",
         lambda settings: saved.append(settings),
     )

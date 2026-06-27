@@ -6,9 +6,12 @@ from xic_extractor.alignment.output_levels import (
 )
 
 
-def test_production_output_level_artifacts_are_xlsx_and_html_only():
+def test_production_output_level_includes_downstream_matrix_tsv():
+    # alignment_matrix.tsv is a mandatory downstream output on every run
+    # (owner contract); production must emit it, not just xlsx + identity + html.
     assert artifact_names_for_output_level("production") == (
         "alignment_results.xlsx",
+        "alignment_matrix.tsv",
         "alignment_matrix_identity.tsv",
         "review_report.html",
     )
