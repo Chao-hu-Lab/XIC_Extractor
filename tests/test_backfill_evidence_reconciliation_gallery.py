@@ -19,6 +19,15 @@ from xic_extractor.diagnostics import (
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_assets as gallery_assets,
 )
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_html as gallery_html,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_indices as gallery_indices,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_models as gallery_models,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -58,6 +67,43 @@ def test_gallery_static_assets_stay_out_of_reconciliation_logic() -> None:
     assert gallery._gallery_css is gallery_assets.gallery_css
     assert gallery._lightbox_html is gallery_assets.lightbox_html
     assert gallery._lightbox_script is gallery_assets.lightbox_script
+
+
+def test_gallery_models_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery.ReconciliationGroup is gallery_models.ReconciliationGroup
+    assert gallery.ReconciliationIndex is gallery_models.ReconciliationIndex
+    assert gallery.RepresentativeCell is gallery_models.RepresentativeCell
+    assert gallery._ordered_unique([" a ", "a", "", None]) == ("a",)
+
+
+def test_gallery_html_helpers_stay_out_of_reconciliation_orchestrator(
+    tmp_path: Path,
+) -> None:
+    assert gallery._escape is gallery_html.escape_html
+    assert gallery._badge is gallery_html.badge
+    assert gallery._href_for_path("javascript:alert(1)", tmp_path / "index.html") == ""
+
+
+def test_gallery_indices_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._shadow_policy_cell_from_row
+        is gallery_indices._shadow_policy_cell_from_row
+    )
+    assert (
+        gallery._shadow_projection_cells_by_group
+        is gallery_indices._shadow_projection_cells_by_group
+    )
+    row = {
+        "feature_family_id": "FAM1",
+        "seed_group_id": "seed1",
+        "sample_stem": "sample1",
+        "shadow_policy_decision": "fill_now",
+        "decision_reason": "shape supported",
+    }
+    assert (
+        gallery._shadow_policy_cell_from_row(row).shadow_policy_decision == "fill_now"
+    )
+
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
     "schema_version",

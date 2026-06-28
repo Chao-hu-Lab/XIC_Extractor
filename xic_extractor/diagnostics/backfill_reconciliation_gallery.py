@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +21,74 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_assets import (
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_assets import (
     lightbox_script as _lightbox_script,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    badge as _badge,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    badge_label as _badge_label,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    compact_path_label as _compact_path_label,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    detected_url_scheme as _detected_url_scheme,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    escape_attr as _escape_attr,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    escape_html as _escape,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    href_for_path as _href_for_path,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    path_link_html as _path_link_html,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
+    safe_href as _safe_href,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _activation_application_summary,
+    _activation_delta_cell_from_row,
+    _activation_value_delta_matrix_effect_counts,
+    _shadow_policy_cell_from_row,
+    _shadow_policy_cell_sort_key,
+    _shadow_policy_cells_by_family,
+    _shadow_policy_cells_by_group,
+    _shadow_policy_cells_for_family_groups,
+    _shadow_policy_cells_for_group,
+    _shadow_policy_compact_summary,
+    _shadow_policy_decision_counts,
+    _shadow_policy_production_gap_counts,
+    _shadow_projection_cell_from_row,
+    _shadow_projection_cell_sort_key,
+    _shadow_projection_cells_by_family,
+    _shadow_projection_cells_by_group,
+    _shadow_projection_cells_for_family_groups,
+    _shadow_projection_cells_for_group,
+    _shadow_projection_compact_summary,
+    _shadow_projection_decision_counts,
+    _shadow_projection_matrix_counts,
+    _target_benchmark_context_counts,
+    _target_benchmark_context_from_row,
+    _target_benchmark_context_sort_key,
+    _target_benchmark_contexts_by_family,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    ActivationDeltaCell,
+    ReconciliationGroup,
+    ReconciliationIndex,
+    ReconciliationOutputs,
+    RepresentativeCell,
+    ShadowPolicyCell,
+    ShadowProjectionCell,
+    TargetBenchmarkContext,
+    _GalleryRenderContext,
+    _ordered_unique,
+    _SeedRecord,
+    _ShiftAwareSamePatternEvidence,
 )
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
@@ -180,8 +246,6 @@ _ROLE_PRIORITY = {
     "seed_representative": 4,
     "product_disagreement_example": 5,
 }
-_URL_SCHEME_RE = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*):")
-_DANGEROUS_SCHEMES = {"javascript", "data", "vbscript"}
 _HUMAN_REVIEW_PREFIXES = ("review_required_",)
 _HUMAN_REVIEW_TOKENS = {
     "neighbor_interference_review",
@@ -283,224 +347,6 @@ _INPUT_ARTIFACT_LABEL_BY_KEY = {
     "activation_value_delta_tsv": "activation_value_delta.tsv",
     "targeted_istd_benchmark_summary_tsv": "targeted_istd_benchmark_summary.tsv",
 }
-
-
-@dataclass(frozen=True)
-class RepresentativeCell:
-    feature_family_id: str
-    seed_group_id: str
-    representative_roles: tuple[str, ...]
-    sample_stem: str
-    cell_status: str
-    product_cell_state: str = ""
-    shape_similarity: str = ""
-    scan_support_score: str = ""
-    apex_delta_sec: str = ""
-    boundary_overlap: str = ""
-    interference_signal: str = ""
-    source_peak_hypothesis_id: str = ""
-    successor_peak_hypothesis_id: str = ""
-    successor_decision: str = ""
-    representative_reason: str = ""
-    source_row_key: str = ""
-
-
-@dataclass(frozen=True)
-class ShadowPolicyCell:
-    feature_family_id: str
-    seed_group_id: str
-    sample_stem: str
-    current_product_cell_state: str
-    shadow_policy_decision: str
-    decision_reason: str
-    production_gap: str = ""
-    diagnostic_authority: str = ""
-    cell_status: str = ""
-    evidence_gate_status: str = ""
-    overlay_family_verdict: str = ""
-    own_max_shape_supported_fraction: str = ""
-    absolute_trace_apex_cluster_fraction: str = ""
-    support_components: str = ""
-    blockers: str = ""
-    missing_evidence: str = ""
-    overlay_png_path: str = ""
-
-
-@dataclass(frozen=True)
-class ShadowProjectionCell:
-    feature_family_id: str
-    seed_group_id: str
-    sample_stem: str
-    current_raw_status: str
-    current_production_status: str
-    current_rescue_tier: str
-    current_matrix_written: bool
-    current_matrix_value: str
-    current_blank_reason: str
-    current_matrix_source: str
-    review_rescued_cell: bool
-    shadow_decision: str
-    shadow_reasons: tuple[str, ...] = ()
-    shadow_warnings: tuple[str, ...] = ()
-    projected_matrix_written: bool = False
-    projected_matrix_value: str = ""
-    projection_authority: str = ""
-    product_authority_chain: str = ""
-    detected_anchor_count: str = ""
-    rescued_cell_count: str = ""
-    request_window_overlap: str = ""
-    local_global_ratio: str = ""
-    evidence_gate_status: str = ""
-    support_components: tuple[str, ...] = ()
-    hard_blockers: tuple[str, ...] = ()
-    missing_evidence: tuple[str, ...] = ()
-    overlay_verdict: str = ""
-    overlay_png_path: str = ""
-
-
-@dataclass(frozen=True)
-class ActivationDeltaCell:
-    feature_family_id: str
-    sample_id: str
-    activation_status: str
-    product_effect: str
-    activated_matrix_value: str
-    matrix_value_effect: str
-    activation_reason: str = ""
-
-
-@dataclass(frozen=True)
-class TargetBenchmarkContext:
-    target_label: str
-    role: str
-    active_tag: str
-    status: str
-    selected_feature_id: str
-    primary_feature_ids: tuple[str, ...] = ()
-    targeted_positive_count: str = ""
-    untargeted_positive_count: str = ""
-    coverage_minimum: str = ""
-    failure_modes: tuple[str, ...] = ()
-    note: str = ""
-
-    @property
-    def feature_family_ids(self) -> tuple[str, ...]:
-        return tuple(
-            _ordered_unique((*self.primary_feature_ids, self.selected_feature_id)),
-        )
-
-
-@dataclass(frozen=True)
-class _ShiftAwareSamePatternEvidence:
-    support: bool
-    review_required: bool
-    notes: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ReconciliationGroup:
-    feature_family_id: str
-    seed_group_id: str
-    seed_group_basis: str
-    seed_mz: str = ""
-    seed_rt: str = ""
-    seed_rt_window: str = ""
-    seed_ppm: str = ""
-    tag_or_class: str = ""
-    product_behavior_state: str = "product_unknown"
-    evidence_authority_state: str = "not_assessable"
-    reconciliation_class: str = "evidence_inconclusive"
-    include_in_primary_matrix: bool = False
-    identity_decision: str = ""
-    row_flags: str = ""
-    family_evidence: str = ""
-    accepted_cell_count: int = 0
-    detected_cell_count: int = 0
-    rescued_cell_count: int = 0
-    provisional_cell_count: int = 0
-    seed_detected_anchor_count: int = 0
-    duplicate_assigned_cell_count: int = 0
-    cell_total_count: int = 0
-    top_product_reason: str = ""
-    top_support_component: str = ""
-    top_blocker: str = ""
-    missing_evidence: tuple[str, ...] = ()
-    overlay_png_path: str = ""
-    overlay_trace_json_path: str = ""
-    family_pattern_png_path: str = ""
-    family_pattern_trace_json_path: str = ""
-    family_pattern_verdict: str = ""
-    overlay_evidence_notes: tuple[str, ...] = ()
-    source_artifacts: tuple[str, ...] = ()
-    source_warnings: tuple[str, ...] = ()
-    product_grade_support_components: tuple[str, ...] = ()
-    review_only_visual_components: tuple[str, ...] = ()
-    dependent_context_components: tuple[str, ...] = ()
-    blocker_components: tuple[str, ...] = ()
-    representative_cells: tuple[RepresentativeCell, ...] = ()
-
-
-@dataclass(frozen=True)
-class ReconciliationIndex:
-    groups: tuple[ReconciliationGroup, ...]
-    representative_cells: tuple[RepresentativeCell, ...]
-    shadow_policy_cells: tuple[ShadowPolicyCell, ...] = ()
-    shadow_projection_cells: tuple[ShadowProjectionCell, ...] = ()
-    activation_delta_cells: tuple[ActivationDeltaCell, ...] = ()
-    target_benchmark_contexts: tuple[TargetBenchmarkContext, ...] = ()
-    summary: dict[str, object] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ReconciliationOutputs:
-    groups_tsv: Path
-    representative_cells_tsv: Path
-    summary_json: Path
-    gallery_html: Path
-
-
-@dataclass(frozen=True)
-class _GalleryRenderContext:
-    all_groups: tuple[ReconciliationGroup, ...]
-    html_groups: tuple[ReconciliationGroup, ...]
-    html_shadow_policy_cells: tuple[ShadowPolicyCell, ...]
-    html_shadow_projection_cells: tuple[ShadowProjectionCell, ...]
-    representatives_by_group: Mapping[
-        tuple[str, str],
-        tuple[RepresentativeCell, ...],
-    ]
-    shadow_policy_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowPolicyCell, ...],
-    ]
-    shadow_policy_cells_by_family: Mapping[str, tuple[ShadowPolicyCell, ...]]
-    shadow_projection_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowProjectionCell, ...],
-    ]
-    shadow_projection_cells_by_family: Mapping[str, tuple[ShadowProjectionCell, ...]]
-    target_benchmark_contexts_by_family: Mapping[
-        str,
-        tuple[TargetBenchmarkContext, ...],
-    ]
-
-
-@dataclass(frozen=True)
-class _SeedRecord:
-    seed_group_id: str
-    seed_group_basis: str
-    seed_mz: str = ""
-    seed_rt: str = ""
-    rt_start: str = ""
-    rt_end: str = ""
-    ppm: str = ""
-    samples: frozenset[str] = frozenset()
-
-    @property
-    def seed_rt_window(self) -> str:
-        if self.rt_start or self.rt_end:
-            return f"{self.rt_start or 'unknown'}-{self.rt_end or 'unknown'}"
-        return ""
 
 
 def run_reconciliation_gallery(
@@ -2932,52 +2778,6 @@ def _input_artifact_path_rows(
         elif value:
             rows.append((label, str(value)))
     return tuple(rows)
-
-
-def _path_link_html(path_text: str, *, html_path: Path, label: str) -> str:
-    href = _href_for_path(path_text, html_path)
-    if not href:
-        return _escape(label)
-    return (
-        f'<a href="{_escape_attr(href)}" title="{_escape_attr(path_text)}">'
-        f"{_escape(label)}</a>"
-    )
-
-
-def _compact_path_label(path_text: str) -> str:
-    parts = [part for part in _slash_path(path_text).split("/") if part]
-    if len(parts) >= 2:
-        return "/".join(parts[-2:])
-    return text_value(path_text)
-
-
-def _href_for_path(value: object, html_path: Path) -> str:
-    href = _safe_href(text_value(value))
-    if not href:
-        return ""
-    if _detected_url_scheme(href):
-        return _slash_path(href)
-    raw_path = Path(href)
-    target: Path
-    if raw_path.is_absolute():
-        target = raw_path
-    else:
-        resolved_target: Path | None = None
-        for candidate in (html_path.parent / raw_path, Path.cwd() / raw_path):
-            if candidate.exists():
-                resolved_target = candidate.resolve()
-                break
-        if resolved_target is None:
-            return _slash_path(href)
-        target = resolved_target
-    try:
-        return _slash_path(os.path.relpath(target, html_path.parent))
-    except ValueError:
-        return _slash_path(str(target))
-
-
-def _slash_path(value: str) -> str:
-    return value.replace("\\", "/")
 
 
 def _filter_html(
@@ -5902,93 +5702,9 @@ def _first_path(*values: object) -> str:
     return ""
 
 
-def _ordered_unique(values: Iterable[str]) -> tuple[str, ...]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        normalized = text_value(value)
-        if normalized and normalized not in seen:
-            seen.add(normalized)
-            result.append(normalized)
-    return tuple(result)
-
-
 def _int_text(value: object) -> int:
     parsed = optional_float(value)
     return int(parsed) if parsed is not None else 0
-
-
-def _safe_href(value: str) -> str:
-    sanitized = _remove_control_chars(text_value(value))
-    scheme = _detected_url_scheme(sanitized)
-    if scheme in _DANGEROUS_SCHEMES:
-        return ""
-    return sanitized
-
-
-def _detected_url_scheme(value: str) -> str:
-    compact = "".join(ch for ch in text_value(value) if ord(ch) > 32)
-    match = _URL_SCHEME_RE.match(compact)
-    if not match:
-        return ""
-    scheme = match.group(1).lower()
-    if len(scheme) == 1 and len(compact) >= 3 and compact[1:3] in {":\\", ":/"}:
-        return ""
-    return scheme
-
-
-def _remove_control_chars(value: str) -> str:
-    return "".join(ch for ch in value if ord(ch) >= 32)
-
-
-def _escape(value: object) -> str:
-    import html
-
-    return html.escape(text_value(value), quote=True)
-
-
-def _escape_attr(value: object) -> str:
-    return _escape(value)
-
-
-def _badge(value: str) -> str:
-    label = _badge_label(value)
-    return (
-        f'<span class="badge {_escape_attr(value)}" title="{_escape_attr(label)}">'
-        f"{_escape(label)}</span>"
-    )
-
-
-def _badge_label(value: str) -> str:
-    labels = {
-        "product_grade_support": "product-grade",
-        "review_only_visual_support": "visual support",
-        "dependent_context_only": "context only",
-        "human_visual_judgment_only": "human review",
-        "evidence_blocks_backfill": "blocks",
-        "evidence_inconclusive": "inconclusive",
-        "not_assessable": "not assessable",
-        "product_accepts_and_product_grade_supports": "matrix + product-grade",
-        "product_accepts_and_visual_supports": "matrix + visual",
-        "product_rejects_but_product_grade_supports": "not written + product-grade",
-        "product_rejects_but_visual_supports": "not written + visual",
-        "product_accepts_but_evidence_conflicts": "matrix + conflict",
-        "product_rejects_and_evidence_blocks": "not written + blocks",
-        "not_assessable_missing_overlay": "missing overlay",
-        "not_assessable_missing_seed_provenance": "missing seed",
-        "not_assessable_join_gap": "join gap",
-        "product_primary_backfilled": "matrix written",
-        "product_rescued_context_only": "candidate only",
-        "candidate_context": "candidate only",
-        "product_provisional": "provisional",
-        "product_review_only": "review only",
-        "product_not_backfilled": "not written",
-        "product_unknown": "unknown",
-        "pattern_context_only": "family map",
-        "pattern_available": "context available",
-        "pattern_unavailable": "context unavailable",
-    }
-    return labels.get(value, text_value(value).replace("_", " "))
 
 
 def _search_blob(
@@ -6072,408 +5788,6 @@ def _representatives_by_group(
         key: tuple(sorted(items, key=_representative_sort_key))
         for key, items in grouped.items()
     }
-
-
-def _shadow_policy_cell_from_row(row: Mapping[str, str]) -> ShadowPolicyCell:
-    return ShadowPolicyCell(
-        feature_family_id=text_value(row.get("feature_family_id")),
-        seed_group_id=text_value(row.get("seed_group_id")),
-        sample_stem=text_value(row.get("sample_stem")),
-        current_product_cell_state=text_value(row.get("current_product_cell_state")),
-        shadow_policy_decision=text_value(row.get("shadow_policy_decision")),
-        decision_reason=text_value(row.get("decision_reason")),
-        production_gap=text_value(row.get("production_gap")),
-        diagnostic_authority=text_value(row.get("diagnostic_authority")),
-        cell_status=text_value(row.get("cell_status")),
-        evidence_gate_status=text_value(row.get("evidence_gate_status")),
-        overlay_family_verdict=text_value(row.get("overlay_family_verdict")),
-        own_max_shape_supported_fraction=text_value(
-            row.get("own_max_shape_supported_fraction"),
-        ),
-        absolute_trace_apex_cluster_fraction=text_value(
-            row.get("absolute_trace_apex_cluster_fraction"),
-        ),
-        support_components=text_value(row.get("support_components")),
-        blockers=text_value(row.get("blockers")),
-        missing_evidence=text_value(row.get("missing_evidence")),
-        overlay_png_path=text_value(row.get("overlay_png_path")),
-    )
-
-
-def _shadow_projection_cell_from_row(
-    row: Mapping[str, str],
-) -> ShadowProjectionCell:
-    return ShadowProjectionCell(
-        feature_family_id=text_value(row.get("feature_family_id")),
-        seed_group_id=text_value(row.get("seed_group_id")),
-        sample_stem=text_value(row.get("sample_stem")),
-        current_raw_status=text_value(row.get("current_raw_status")),
-        current_production_status=text_value(row.get("current_production_status")),
-        current_rescue_tier=text_value(row.get("current_rescue_tier")),
-        current_matrix_written=bool_value(row.get("current_matrix_written")) is True,
-        current_matrix_value=text_value(row.get("current_matrix_value")),
-        current_blank_reason=text_value(row.get("current_blank_reason")),
-        current_matrix_source=text_value(row.get("current_matrix_source")),
-        review_rescued_cell=bool_value(row.get("review_rescued_cell")) is True,
-        shadow_decision=text_value(row.get("shadow_decision")),
-        shadow_reasons=tuple(split_semicolon_labels(row.get("shadow_reasons"))),
-        shadow_warnings=tuple(split_semicolon_labels(row.get("shadow_warnings"))),
-        projected_matrix_written=(
-            bool_value(row.get("projected_matrix_written")) is True
-        ),
-        projected_matrix_value=text_value(row.get("projected_matrix_value")),
-        projection_authority=text_value(row.get("projection_authority")),
-        product_authority_chain=text_value(row.get("product_authority_chain")),
-        detected_anchor_count=text_value(row.get("detected_anchor_count")),
-        rescued_cell_count=text_value(row.get("rescued_cell_count")),
-        request_window_overlap=(
-            text_value(row.get("request_window_overlap"))
-            or text_value(row.get("same_peak_segment"))
-        ),
-        local_global_ratio=text_value(row.get("local_global_ratio")),
-        evidence_gate_status=text_value(row.get("evidence_gate_status")),
-        support_components=tuple(split_semicolon_labels(row.get("support_components"))),
-        hard_blockers=tuple(split_semicolon_labels(row.get("hard_blockers"))),
-        missing_evidence=tuple(split_semicolon_labels(row.get("missing_evidence"))),
-        overlay_verdict=text_value(row.get("overlay_verdict")),
-        overlay_png_path=text_value(row.get("overlay_png_path")),
-    )
-
-
-def _activation_delta_cell_from_row(
-    row: Mapping[str, str],
-) -> ActivationDeltaCell:
-    return ActivationDeltaCell(
-        feature_family_id=text_value(row.get("feature_family_id")),
-        sample_id=text_value(row.get("sample_id")),
-        activation_status=text_value(row.get("activation_status")),
-        product_effect=text_value(row.get("product_effect")),
-        activated_matrix_value=text_value(row.get("activated_matrix_value")),
-        matrix_value_effect=text_value(row.get("matrix_value_effect")),
-        activation_reason=text_value(row.get("activation_reason")),
-    )
-
-
-def _target_benchmark_context_from_row(
-    row: Mapping[str, str],
-) -> TargetBenchmarkContext | None:
-    selected_feature_id = text_value(row.get("selected_feature_id"))
-    primary_feature_ids = split_semicolon_labels(row.get("primary_feature_ids"))
-    if not selected_feature_id and not primary_feature_ids:
-        return None
-    return TargetBenchmarkContext(
-        target_label=text_value(row.get("target_label")),
-        role=text_value(row.get("role")),
-        active_tag=text_value(row.get("active_tag")),
-        status=text_value(row.get("status")),
-        selected_feature_id=selected_feature_id,
-        primary_feature_ids=tuple(primary_feature_ids),
-        targeted_positive_count=text_value(row.get("targeted_positive_count")),
-        untargeted_positive_count=text_value(row.get("untargeted_positive_count")),
-        coverage_minimum=text_value(row.get("coverage_minimum")),
-        failure_modes=tuple(split_semicolon_labels(row.get("failure_modes"))),
-        note=text_value(row.get("note")),
-    )
-
-
-def _target_benchmark_contexts_by_family(
-    contexts: Sequence[TargetBenchmarkContext],
-) -> dict[str, tuple[TargetBenchmarkContext, ...]]:
-    grouped: dict[str, list[TargetBenchmarkContext]] = {}
-    for context in contexts:
-        for family in context.feature_family_ids:
-            grouped.setdefault(family, []).append(context)
-    return {
-        family: tuple(sorted(items, key=_target_benchmark_context_sort_key))
-        for family, items in grouped.items()
-    }
-
-
-def _target_benchmark_context_counts(
-    contexts: Sequence[TargetBenchmarkContext],
-) -> dict[str, int]:
-    counts = Counter(context.status or "UNKNOWN" for context in contexts)
-    return dict(sorted(counts.items()))
-
-
-def _target_benchmark_context_sort_key(
-    context: TargetBenchmarkContext,
-) -> tuple[str, str, str]:
-    return (
-        context.status,
-        context.target_label,
-        context.selected_feature_id,
-    )
-
-
-def _shadow_policy_cells_by_group(
-    cells: Sequence[ShadowPolicyCell],
-) -> dict[tuple[str, str], tuple[ShadowPolicyCell, ...]]:
-    grouped: dict[tuple[str, str], list[ShadowPolicyCell]] = {}
-    for cell in cells:
-        if not cell.feature_family_id or not cell.seed_group_id:
-            continue
-        grouped.setdefault(
-            (cell.feature_family_id, cell.seed_group_id),
-            [],
-        ).append(cell)
-    return {
-        key: tuple(sorted(items, key=_shadow_policy_cell_sort_key))
-        for key, items in grouped.items()
-    }
-
-
-def _shadow_projection_cells_by_group(
-    cells: Sequence[ShadowProjectionCell],
-) -> dict[tuple[str, str], tuple[ShadowProjectionCell, ...]]:
-    grouped: dict[tuple[str, str], list[ShadowProjectionCell]] = {}
-    for cell in cells:
-        if not cell.feature_family_id or not cell.seed_group_id:
-            continue
-        grouped.setdefault(
-            (cell.feature_family_id, cell.seed_group_id),
-            [],
-        ).append(cell)
-    return {
-        key: tuple(sorted(items, key=_shadow_projection_cell_sort_key))
-        for key, items in grouped.items()
-    }
-
-
-def _shadow_policy_cells_by_family(
-    cells: Sequence[ShadowPolicyCell],
-) -> dict[str, tuple[ShadowPolicyCell, ...]]:
-    grouped: dict[str, list[ShadowPolicyCell]] = {}
-    for cell in cells:
-        if cell.feature_family_id:
-            grouped.setdefault(cell.feature_family_id, []).append(cell)
-    return {
-        family: tuple(sorted(items, key=_shadow_policy_cell_sort_key))
-        for family, items in grouped.items()
-    }
-
-
-def _shadow_projection_cells_by_family(
-    cells: Sequence[ShadowProjectionCell],
-) -> dict[str, tuple[ShadowProjectionCell, ...]]:
-    grouped: dict[str, list[ShadowProjectionCell]] = {}
-    for cell in cells:
-        if cell.feature_family_id:
-            grouped.setdefault(cell.feature_family_id, []).append(cell)
-    return {
-        family: tuple(sorted(items, key=_shadow_projection_cell_sort_key))
-        for family, items in grouped.items()
-    }
-
-
-def _shadow_policy_cells_for_family_groups(
-    groups: Sequence[ReconciliationGroup],
-    *,
-    shadow_policy_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowPolicyCell, ...],
-    ],
-    shadow_policy_cells_by_family: Mapping[str, tuple[ShadowPolicyCell, ...]],
-) -> tuple[ShadowPolicyCell, ...]:
-    exact: list[ShadowPolicyCell] = []
-    for group in groups:
-        exact.extend(
-            shadow_policy_cells_by_group.get(
-                (group.feature_family_id, group.seed_group_id),
-                (),
-            ),
-        )
-    if exact:
-        return tuple(sorted(exact, key=_shadow_policy_cell_sort_key))
-    family = groups[0].feature_family_id if groups else ""
-    return shadow_policy_cells_by_family.get(family, ())
-
-
-def _shadow_projection_cells_for_family_groups(
-    groups: Sequence[ReconciliationGroup],
-    *,
-    shadow_projection_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowProjectionCell, ...],
-    ],
-    shadow_projection_cells_by_family: Mapping[str, tuple[ShadowProjectionCell, ...]],
-) -> tuple[ShadowProjectionCell, ...]:
-    exact: list[ShadowProjectionCell] = []
-    for group in groups:
-        exact.extend(
-            shadow_projection_cells_by_group.get(
-                (group.feature_family_id, group.seed_group_id),
-                (),
-            ),
-        )
-    if exact:
-        return tuple(sorted(exact, key=_shadow_projection_cell_sort_key))
-    family = groups[0].feature_family_id if groups else ""
-    return shadow_projection_cells_by_family.get(family, ())
-
-
-def _shadow_policy_cells_for_group(
-    group: ReconciliationGroup,
-    *,
-    shadow_policy_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowPolicyCell, ...],
-    ],
-    shadow_policy_cells_by_family: Mapping[str, tuple[ShadowPolicyCell, ...]],
-    allow_family_fallback: bool,
-) -> tuple[ShadowPolicyCell, ...]:
-    exact = shadow_policy_cells_by_group.get(
-        (group.feature_family_id, group.seed_group_id),
-        (),
-    )
-    if exact or not allow_family_fallback:
-        return exact
-    return shadow_policy_cells_by_family.get(group.feature_family_id, ())
-
-
-def _shadow_projection_cells_for_group(
-    group: ReconciliationGroup,
-    *,
-    shadow_projection_cells_by_group: Mapping[
-        tuple[str, str],
-        tuple[ShadowProjectionCell, ...],
-    ],
-    shadow_projection_cells_by_family: Mapping[str, tuple[ShadowProjectionCell, ...]],
-    allow_family_fallback: bool,
-) -> tuple[ShadowProjectionCell, ...]:
-    exact = shadow_projection_cells_by_group.get(
-        (group.feature_family_id, group.seed_group_id),
-        (),
-    )
-    if exact or not allow_family_fallback:
-        return exact
-    return shadow_projection_cells_by_family.get(group.feature_family_id, ())
-
-
-def _shadow_policy_compact_summary(
-    cells: Sequence[ShadowPolicyCell],
-) -> str:
-    if not cells:
-        return ""
-    counts = Counter(cell.shadow_policy_decision for cell in cells)
-    labels = (
-        ("fill_now", "fill"),
-        ("would_fill_under_ms1_rt_policy", "would"),
-        ("needs_ms1_same_peak_evidence", "needs MS1"),
-        ("blocked", "block"),
-    )
-    parts = [f"{label} {counts[key]}" for key, label in labels if counts[key]]
-    return "shadow: " + " · ".join(parts)
-
-
-def _shadow_projection_compact_summary(
-    cells: Sequence[ShadowProjectionCell],
-) -> str:
-    if not cells:
-        return ""
-    current = sum(cell.current_matrix_written for cell in cells)
-    review_only = sum(
-        cell.shadow_decision == "context" and not cell.current_matrix_written
-        for cell in cells
-    )
-    block = sum(cell.shadow_decision == "block" for cell in cells)
-    accept = sum(cell.shadow_decision == "accept" for cell in cells)
-    projected_new = sum(
-        not cell.current_matrix_written and cell.projected_matrix_written
-        for cell in cells
-    )
-    if review_only and not accept and not block and not current:
-        label = "candidate cell" if review_only == 1 else "candidate cells"
-        return f"review-only: {review_only} {label}"
-    if current and not accept and not block and not review_only:
-        label = "cell" if current == 1 else "cells"
-        return f"already written: {current} current {label}"
-    parts = []
-    if current:
-        parts.append(f"current {current}")
-    if accept:
-        parts.append(f"write {accept}")
-    if block:
-        parts.append(f"block {block}")
-    if review_only:
-        parts.append(f"review-only {review_only}")
-    if projected_new:
-        parts.append(f"+{projected_new} matrix")
-    return "projection: " + " · ".join(parts)
-
-
-def _shadow_policy_decision_counts(
-    cells: Sequence[ShadowPolicyCell],
-) -> dict[str, int]:
-    counts = Counter(cell.shadow_policy_decision for cell in cells)
-    return {key: counts[key] for key in sorted(counts) if key}
-
-
-def _shadow_projection_decision_counts(
-    cells: Sequence[ShadowProjectionCell],
-) -> dict[str, int]:
-    counts = Counter(cell.shadow_decision for cell in cells)
-    return {key: counts[key] for key in sorted(counts) if key}
-
-
-def _shadow_projection_matrix_counts(
-    cells: Sequence[ShadowProjectionCell],
-) -> dict[str, int]:
-    return {
-        "current_decision_written": sum(cell.current_matrix_written for cell in cells),
-        "projected_decision_written": sum(
-            cell.projected_matrix_written for cell in cells
-        ),
-        "projected_new_decision_write": sum(
-            not cell.current_matrix_written and cell.projected_matrix_written
-            for cell in cells
-        ),
-        "review_rescued_target": sum(cell.review_rescued_cell for cell in cells),
-    }
-
-
-def _activation_application_summary(
-    rows: Sequence[Mapping[str, str]],
-) -> dict[str, str]:
-    if not rows:
-        return {}
-    row = rows[0]
-    keys = (
-        "application_status",
-        "activation_output_mode",
-        "acceptance_status",
-        "decision_rows_total",
-        "auto_activate_count",
-        "auto_block_count",
-        "matrix_cells_written",
-        "matrix_cells_blanked",
-        "summary_reason",
-    )
-    return {key: text_value(row.get(key)) for key in keys if text_value(row.get(key))}
-
-
-def _activation_value_delta_matrix_effect_counts(
-    cells: Sequence[ActivationDeltaCell],
-) -> dict[str, int]:
-    counts = Counter(cell.matrix_value_effect for cell in cells)
-    return {key: counts[key] for key in sorted(counts) if key}
-
-
-def _shadow_policy_production_gap_counts(
-    cells: Sequence[ShadowPolicyCell],
-) -> dict[str, int]:
-    counts = Counter(cell.production_gap for cell in cells if cell.production_gap)
-    return {key: counts[key] for key in sorted(counts) if key}
-
-
-def _shadow_policy_cell_sort_key(cell: ShadowPolicyCell) -> tuple[str, str, str]:
-    return (cell.feature_family_id, cell.seed_group_id, cell.sample_stem)
-
-
-def _shadow_projection_cell_sort_key(
-    cell: ShadowProjectionCell,
-) -> tuple[str, str, str]:
-    return (cell.feature_family_id, cell.seed_group_id, cell.sample_stem)
 
 
 def _count_token_prefix(counts: object, prefix: str) -> int:
