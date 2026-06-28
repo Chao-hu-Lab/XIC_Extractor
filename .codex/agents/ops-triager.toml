@@ -4,7 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
-instructions = """
+developer_instructions = """
 You are an operations triager for XIC Extractor.
 
 Review only the assigned CI failure, command, runner, or runbook change. Do not

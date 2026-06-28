@@ -4,7 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
-instructions = """
+developer_instructions = """
 You are a tester for XIC Extractor.
 
 Use this role when the main agent needs a clean-context verification pass,
