@@ -89,6 +89,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_summary as gallery_summary,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_table_rows as gallery_table_rows,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_target_benchmark as gallery_target_benchmark,
 )
 from xic_extractor.diagnostics.backfill_shadow_policy import (
@@ -136,6 +139,9 @@ def test_gallery_models_stay_out_of_reconciliation_orchestrator() -> None:
     assert gallery.ReconciliationGroup is gallery_models.ReconciliationGroup
     assert gallery.ReconciliationIndex is gallery_models.ReconciliationIndex
     assert gallery.RepresentativeCell is gallery_models.RepresentativeCell
+    assert gallery.ShadowPolicyCell is gallery_models.ShadowPolicyCell
+    assert gallery.ShadowProjectionCell is gallery_models.ShadowProjectionCell
+    assert gallery.TargetBenchmarkContext is gallery_models.TargetBenchmarkContext
     assert gallery._ordered_unique([" a ", "a", "", None]) == ("a",)
 
 
@@ -544,6 +550,38 @@ def test_gallery_detail_cards_stay_out_of_reconciliation_orchestrator() -> None:
 
 def test_gallery_detail_drawer_stays_out_of_reconciliation_orchestrator() -> None:
     assert gallery._details_html is gallery_detail_drawer._details_html
+
+
+def test_gallery_table_rows_stay_out_of_reconciliation_orchestrator() -> None:
+    table_row_aliases = (
+        "_table_html",
+        "_family_groups",
+        "_family_sort_key",
+        "_family_tag_html",
+        "_family_detail_summary",
+        "_top_issue_html",
+        "_family_table_row",
+        "_consolidated_seed_alias_rows",
+        "_consolidated_seed_alias_family",
+        "_seed_alias_count_label",
+        "_representatives_for_groups",
+        "_consolidated_overlay_cell_html",
+        "_consolidated_seed_alias_details_html",
+        "_consolidated_review_answer_html",
+        "_consolidated_overlay_readout",
+        "_projection_accept_cells_html",
+        "_projection_accept_seed_hint_html",
+        "_seed_alias_table_html",
+        "_seed_decision_rows",
+        "_detail_row_id",
+        "_seed_table_row_html",
+        "_family_details_html",
+        "_seed_issue_text",
+        "_seed_detail_summary",
+        "_HIGH_SEED_ALIAS_COUNT",
+    )
+    for name in table_row_aliases:
+        assert getattr(gallery, name) is getattr(gallery_table_rows, name)
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
