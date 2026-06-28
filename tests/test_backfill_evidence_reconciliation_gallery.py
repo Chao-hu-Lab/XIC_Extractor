@@ -44,6 +44,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_html as gallery_html,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_index_builder as gallery_index_builder,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_index_fields as gallery_index_fields,
 )
 from xic_extractor.diagnostics import (
@@ -162,6 +165,13 @@ def test_gallery_inputs_stay_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._INPUT_ARTIFACT_LABEL_BY_KEY
         is gallery_inputs._INPUT_ARTIFACT_LABEL_BY_KEY
+    )
+
+
+def test_gallery_index_builder_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.build_reconciliation_index
+        is gallery_index_builder.build_reconciliation_index
     )
 
 
