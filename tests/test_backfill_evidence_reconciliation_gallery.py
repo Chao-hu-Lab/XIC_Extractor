@@ -43,6 +43,9 @@ from xic_extractor.diagnostics import (
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
 )
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_target_benchmark as gallery_target_benchmark,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -170,6 +173,25 @@ def test_gallery_provenance_stays_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._write_local_overlay_interpretation_guide
         is gallery_provenance._write_local_overlay_interpretation_guide
+    )
+
+
+def test_gallery_target_benchmark_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._target_benchmark_summary_text
+        is gallery_target_benchmark._target_benchmark_summary_text
+    )
+    assert (
+        gallery._target_benchmark_panel_html
+        is gallery_target_benchmark._target_benchmark_panel_html
+    )
+    assert (
+        gallery._target_benchmark_contexts_html
+        is gallery_target_benchmark._target_benchmark_contexts_html
+    )
+    assert (
+        gallery._family_target_summary_html
+        is gallery_target_benchmark._family_target_summary_html
     )
 
 
