@@ -7,7 +7,6 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_chain_html as _gallery_chain_html,
@@ -17,6 +16,9 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_filters as _gallery_filters,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_index_fields as _gallery_index_fields,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_inputs as _gallery_inputs,
@@ -32,6 +34,9 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_review_modes as _gallery_review_modes,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_search as _gallery_search,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as _gallery_source_context,
@@ -144,13 +149,15 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     ShadowProjectionCell,
     TargetBenchmarkContext,
     _ordered_unique,
-    _SeedRecord,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     RECONCILIATION_CLASS_PRIORITY as RECONCILIATION_CLASS_PRIORITY,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     RECONCILIATION_CLASSES as RECONCILIATION_CLASSES,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    _SeedRecord as _SeedRecord,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context import (
     _gallery_render_context,
@@ -347,6 +354,18 @@ _component_summary_text = _gallery_chain_html._component_summary_text
 _chain_item_html = _gallery_chain_html._chain_item_html
 _component_list_html = _gallery_chain_html._component_list_html
 _secondary_chain_details_html = _gallery_chain_html._secondary_chain_details_html
+_representative_cells_for_group = (
+    _gallery_index_fields._representative_cells_for_group
+)
+_product_cell_state = _gallery_index_fields._product_cell_state
+_apex_delta_sec = _gallery_index_fields._apex_delta_sec
+_source_row_key = _gallery_index_fields._source_row_key
+_top_product_reason = _gallery_index_fields._top_product_reason
+_tag_or_class = _gallery_index_fields._tag_or_class
+_first_label = _gallery_index_fields._first_label
+_search_blob = _gallery_search._search_blob
+_family_search_blob = _gallery_search._family_search_blob
+_shadow_projection_search_blob = _gallery_search._shadow_projection_search_blob
 
 _HIGH_SEED_ALIAS_COUNT = 5
 
@@ -953,102 +972,6 @@ def _gallery_hero_copy(
             "human review ready",
         ),
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def _representative_cells_for_group(
-    *,
-    family: str,
-    seed_group_id: str,
-    product_behavior_state: str,
-    evidence: Mapping[str, Any],
-    group_cells: Sequence[Mapping[str, str]],
-    seed_record: _SeedRecord,
-) -> tuple[RepresentativeCell, ...]:
-    rescued = [
-        row for row in group_cells if text_value(row.get("status")).lower() == "rescued"
-    ]
-    if not rescued:
-        return ()
-    by_key: dict[str, RepresentativeCell] = {}
-
-    def add(role: str, row: Mapping[str, str], reason: str) -> None:
-        key = _source_row_key(family, row)
-        existing = by_key.get(key)
-        roles = (
-            (role,)
-            if existing is None
-            else _ordered_unique((*existing.representative_roles, role))
-        )
-        by_key[key] = RepresentativeCell(
-            feature_family_id=family,
-            seed_group_id=seed_group_id,
-            representative_roles=tuple(roles),
-            sample_stem=text_value(row.get("sample_stem")),
-            cell_status=text_value(row.get("status")),
-            product_cell_state=_product_cell_state(row, product_behavior_state),
-            shape_similarity=text_value(row.get("shape_similarity")),
-            scan_support_score=text_value(row.get("scan_support_score")),
-            apex_delta_sec=_apex_delta_sec(row, seed_record),
-            boundary_overlap=text_value(row.get("boundary_overlap")),
-            interference_signal=text_value(
-                row.get("interference_signal")
-                or row.get("neighbor_interference")
-                or row.get("trace_quality"),
-            ),
-            representative_reason=reason,
-            source_row_key=key,
-        )
-
-    support_row = max(
-        rescued,
-        key=lambda row: (
-            optional_float(row.get("shape_similarity")) or -1.0,
-            optional_float(row.get("scan_support_score")) or -1.0,
-            text_value(row.get("sample_stem")),
-        ),
-    )
-    add("strongest_support", support_row, "highest existing support metric")
-    seed_row = min(
-        rescued,
-        key=lambda row: (
-            abs(optional_float(_apex_delta_sec(row, seed_record)) or 999999.0),
-            text_value(row.get("sample_stem")),
-        ),
-    )
-    add("seed_representative", seed_row, "seed/request representative")
-    if evidence.get("blocker_components"):
-        add("strongest_blocker", rescued[0], "existing blocker component")
-    if evidence.get("authority_state") in {
-        "product_grade_support",
-        "review_only_visual_support",
-        "evidence_blocks_backfill",
-    }:
-        add("product_disagreement_example", rescued[0], "product/evidence example")
-    return tuple(sorted(by_key.values(), key=_representative_sort_key))
 
 
 def _table_html(
@@ -3168,129 +3091,3 @@ def _representative_cells_table_html(
         "</tr></thead>"
         f"<tbody>{rep_rows}</tbody></table>"
     )
-
-
-
-
-
-
-def _product_cell_state(row: Mapping[str, str], group_state: str) -> str:
-    if _cell_writes_primary_matrix(row):
-        return "primary_matrix"
-    if _cell_has_primary_area_context(row):
-        return "candidate_context"
-    if group_state == "product_rescued_context_only":
-        return "candidate_context"
-    return group_state
-
-
-def _apex_delta_sec(row: Mapping[str, str], seed_record: _SeedRecord) -> str:
-    direct = text_value(row.get("backfill_apex_delta_sec") or row.get("rt_delta_sec"))
-    if direct:
-        return direct
-    apex = optional_float(row.get("apex_rt"))
-    seed_rt = optional_float(seed_record.seed_rt)
-    if apex is None or seed_rt is None:
-        return ""
-    return f"{(apex - seed_rt) * 60:.6g}"
-
-
-def _source_row_key(family: str, row: Mapping[str, str]) -> str:
-    sample = text_value(row.get("sample_stem")) or "unknown_sample"
-    status = text_value(row.get("status")) or "unknown_status"
-    return f"{family}::{sample}::{status}"
-
-
-def _top_product_reason(row: Mapping[str, str]) -> str:
-    for column in ("identity_reason", "primary_evidence", "reason", "row_flags"):
-        value = text_value(row.get(column))
-        if value:
-            return value
-    return ""
-
-
-def _tag_or_class(
-    review_row: Mapping[str, str],
-    seed_aware_row: Mapping[str, str],
-) -> str:
-    for value in (
-        review_row.get("neutral_loss_tag"),
-        seed_aware_row.get("review_classification"),
-        review_row.get("group_construction_role"),
-    ):
-        parsed = text_value(value)
-        if parsed:
-            return parsed
-    return ""
-
-
-def _first_label(values: Sequence[str]) -> str:
-    return values[0] if values else ""
-
-
-def _search_blob(
-    group: ReconciliationGroup,
-    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
-) -> str:
-    return " ".join(
-        (
-            group.feature_family_id,
-            group.seed_group_id,
-            group.product_behavior_state,
-            group.evidence_authority_state,
-            group.reconciliation_class,
-            group.top_support_component,
-            group.top_blocker,
-            ";".join(group.missing_evidence),
-            ";".join(group.source_warnings),
-            _shadow_projection_search_blob(shadow_projection_cells),
-        ),
-    )
-
-
-def _family_search_blob(
-    groups: Sequence[ReconciliationGroup],
-    target_benchmark_contexts: Sequence[TargetBenchmarkContext] = (),
-    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
-) -> str:
-    target_text = " ".join(
-        " ".join(
-            (
-                context.target_label,
-                context.role,
-                context.status,
-                context.selected_feature_id,
-            ),
-        )
-        for context in target_benchmark_contexts
-    )
-    return " ".join(
-        (
-            *(_search_blob(group) for group in groups),
-            target_text,
-            _shadow_projection_search_blob(shadow_projection_cells),
-        ),
-    )
-
-
-def _shadow_projection_search_blob(
-    cells: Sequence[ShadowProjectionCell],
-) -> str:
-    terms: list[str] = []
-    for cell in cells:
-        terms.extend(
-            (
-                cell.feature_family_id,
-                cell.seed_group_id,
-                cell.sample_stem,
-                cell.current_production_status,
-                cell.shadow_decision,
-                cell.projection_authority,
-                cell.product_authority_chain,
-                ";".join(cell.shadow_reasons),
-                ";".join(cell.shadow_warnings),
-            ),
-        )
-        if _is_projected_new_accept(cell):
-            terms.extend(("projection_accept", "projected_new_write"))
-    return " ".join(term for term in terms if term)

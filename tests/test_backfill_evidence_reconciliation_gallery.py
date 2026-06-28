@@ -32,6 +32,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_html as gallery_html,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_index_fields as gallery_index_fields,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_indices as gallery_indices,
 )
 from xic_extractor.diagnostics import (
@@ -54,6 +57,9 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_review_modes as gallery_review_modes,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_search as gallery_search,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
@@ -309,6 +315,28 @@ def test_gallery_chain_html_stays_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._component_summary_text
         is gallery_chain_html._component_summary_text
+    )
+
+
+def test_gallery_index_fields_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._representative_cells_for_group
+        is gallery_index_fields._representative_cells_for_group
+    )
+    assert gallery._product_cell_state is gallery_index_fields._product_cell_state
+    assert gallery._apex_delta_sec is gallery_index_fields._apex_delta_sec
+    assert gallery._source_row_key is gallery_index_fields._source_row_key
+    assert gallery._top_product_reason is gallery_index_fields._top_product_reason
+    assert gallery._tag_or_class is gallery_index_fields._tag_or_class
+    assert gallery._first_label is gallery_index_fields._first_label
+
+
+def test_gallery_search_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._search_blob is gallery_search._search_blob
+    assert gallery._family_search_blob is gallery_search._family_search_blob
+    assert (
+        gallery._shadow_projection_search_blob
+        is gallery_search._shadow_projection_search_blob
     )
 
 
