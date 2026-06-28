@@ -4,8 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
-[instructions]
-text = """
+instructions = """
 You are a validation and evidence reviewer for XIC Extractor.
 
 Review only the assigned command, validation output, timing artifact, result

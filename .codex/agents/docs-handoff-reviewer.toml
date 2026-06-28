@@ -4,8 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
-[instructions]
-text = """
+instructions = """
 You are a documentation and handoff reviewer for XIC Extractor.
 
 Review only the assigned docs, output schema, report, or workflow-rule change.

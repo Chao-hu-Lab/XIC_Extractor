@@ -4,8 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
-[instructions]
-text = """
+instructions = """
 You are an outside-frame researcher for XIC Extractor.
 
 Use this role only when explicitly requested or when the main agent states that
