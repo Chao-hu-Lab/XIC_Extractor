@@ -1,4 +1,4 @@
-"""Render honest RT-interpretation comparison panels for MS1 overlay traces."""
+"""Render peak-group RT interpretation panels from legacy family-id MS1 traces."""
 
 from __future__ import annotations
 

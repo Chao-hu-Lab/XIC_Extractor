@@ -1,4 +1,4 @@
-"""Render queued family MS1 overlays from a backfill review report."""
+"""Render queued peak-group MS1 overlays from a legacy family review report."""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 2
     failed = [row for row in rows if row["status"] == "failed"]
-    print(f"family MS1 overlay batch: {args.output_dir}")
+    print(f"peak-group MS1 overlay batch: {args.output_dir}")
     return 2 if failed else 0
 
 
@@ -1742,11 +1742,11 @@ def _write_markdown(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     )
     gate = _top30_expansion_gate(rows)
     lines = [
-        "# Family MS1 Overlay Batch",
+        "# Peak-Group MS1 Overlay Batch",
         "",
         "## Verdict",
         "",
-        f"- Requested families: {len(rows)}",
+        f"- Requested peak groups: {len(rows)}",
         f"- Succeeded: {statuses.get('success', 0)}",
         f"- Failed: {statuses.get('failed', 0)}",
         f"- Top 30 expansion: `{gate}`",
@@ -1755,9 +1755,9 @@ def _write_markdown(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
             f"`{SUPPORT_FAMILY_VERDICT}`; failed rows, `review_required_*`, "
             "and `insufficient_nl_seed_support` block expansion."
         ),
-        f"- Blocking families: {_format_markdown_blockers(rows)}",
+        f"- Blocking peak groups: {_format_markdown_blockers(rows)}",
         "",
-        "## Family Verdict Counts",
+        "## Peak-Group Verdict Counts",
         "",
     ]
     if verdicts:
@@ -1767,10 +1767,10 @@ def _write_markdown(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     lines.extend(
         [
             "",
-            "## Families",
+            "## Peak Groups",
             "",
             (
-                "| rank | family | m/z | RT window | status | family verdict | "
+                "| rank | peak group | m/z | RT window | status | family verdict | "
                 "coverage | own-max shape | global conflict | DDA-height signal | "
                 "failure |"
             ),

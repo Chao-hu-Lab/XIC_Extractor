@@ -1,4 +1,8 @@
-"""Build a review queue for low-seed/high-backfill MS1-supported families."""
+"""Build a review queue for low-seed/high-backfill peak-group rows.
+
+The module/file name is legacy compatibility: `family` means the public
+`feature_family_id` row label, not product identity authority.
+"""
 
 from __future__ import annotations
 
@@ -60,7 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    print(f"family MS1 backfill review report: {args.output_dir}")
+    print(f"peak-group MS1 backfill review report: {args.output_dir}")
     return 0
 
 
@@ -205,7 +209,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=int,
         default=30,
         help=(
-            "Maximum not-yet-overlayed families to place in the plotting queue "
+            "Maximum not-yet-overlayed peak groups to place in the plotting queue "
             "(default: 30)"
         ),
     )

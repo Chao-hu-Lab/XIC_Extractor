@@ -1,4 +1,4 @@
-"""Plot style helpers for family MS1 overlay diagnostics."""
+"""Plot style helpers for legacy family-id peak-group MS1 overlays."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ def _plot_unified_legend(ax: Any) -> None:
             lw=1,
             ls="--",
             alpha=0.6,
-            label="family center",
+            label="peak-group center",
         ),
     ]
     ax.legend(

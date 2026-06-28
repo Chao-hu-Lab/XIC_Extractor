@@ -1,4 +1,4 @@
-"""Output writers for family MS1 backfill review reports."""
+"""Write legacy family-id peak-group MS1 backfill review reports."""
 
 from __future__ import annotations
 
@@ -58,13 +58,13 @@ def _write_markdown(path: Path, result: Mapping[str, Any]) -> None:
         "classification:needs_ms1_overlay",
     )
     lines = [
-        "# Family MS1 Backfill Review Report",
+        "# Peak-Group MS1 Backfill Review Report",
         "",
         "## Review Verdict",
         "",
         (
             f"- {summary.get('candidate_count', '0')} low-seed/high-backfill "
-            "primary families need MS1 review discipline."
+            "primary peak groups need MS1 review discipline."
         ),
         (
             f"- {supported_count} already have overlay evidence supporting "
@@ -95,7 +95,10 @@ def _write_markdown(path: Path, result: Mapping[str, Any]) -> None:
             "",
             "## Top Image Queue",
             "",
-            "| # | family | m/z | RT window | seeds/backfill | class | next action |",
+            (
+                "| # | peak group | m/z | RT window | seeds/backfill | class | "
+                "next action |"
+            ),
             "|---:|---|---:|---|---:|---|---|",
         ]
     )
@@ -121,9 +124,10 @@ def _write_markdown(path: Path, result: Mapping[str, Any]) -> None:
             "",
             (
                 "This report separates cheap alignment-level screening from RAW-backed "
-                "MS1 overlay evidence. Generate plots only for queued or manually "
-                "selected families. The queue TSV includes per-family overlay command "
-                "arguments; add the run-level alignment-cells, RAW, DLL, and output "
+                "MS1 overlay evidence. Generate plots only for queued or "
+                "manually selected peak groups. The queue TSV includes "
+                "per-group overlay command arguments; add the run-level "
+                "alignment-cells, RAW, DLL, and output "
                 "paths when rendering plots."
             ),
             "",

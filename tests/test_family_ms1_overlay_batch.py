@@ -8,11 +8,21 @@ from tools.diagnostics import family_ms1_overlay_batch as batch
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
 
 
+def test_family_ms1_modules_document_legacy_peak_group_terminology() -> None:
+    diagnostics_dir = Path(__file__).resolve().parents[1] / "tools" / "diagnostics"
+
+    for path in diagnostics_dir.glob("family_ms1_*.py"):
+        source = path.read_text(encoding="utf-8")
+        docstring = source.split('"""', 2)[1].lower()
+        assert "peak-group" in docstring, path.name
+        assert "legacy" in docstring or "family-id" in docstring, path.name
+
+
 def test_render_family_job_returns_failure_row_instead_of_raising(
     tmp_path: Path,
 ) -> None:
     # The parallel-render worker must never propagate exceptions; a failed
-    # family becomes a failure row so the batch (and pool) keep going.
+    # peak group becomes a failure row so the batch (and pool) keep going.
     request = batch.OverlayBatchRequest(
         rank=1,
         family_id="FAM001",
@@ -1550,7 +1560,7 @@ def test_markdown_marks_top30_expansion_eligible_when_all_rows_support(
         encoding="utf-8",
     )
     assert "- Top 30 expansion: `eligible`" in markdown
-    assert "- Blocking families: none" in markdown
+    assert "- Blocking peak groups: none" in markdown
     summary = _read_tsv(output_dir / "family_ms1_overlay_batch_summary.tsv")
     assert [row["top30_expansion_gate"] for row in summary] == [
         "eligible",

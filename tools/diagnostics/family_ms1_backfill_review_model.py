@@ -1,4 +1,4 @@
-"""Candidate classification helpers for family MS1 backfill review."""
+"""Classify legacy family-id peak-group rows for MS1 backfill review."""
 
 from __future__ import annotations
 

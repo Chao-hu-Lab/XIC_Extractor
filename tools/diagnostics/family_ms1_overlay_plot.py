@@ -1,4 +1,4 @@
-"""Render MS1 overlay evidence for one alignment feature family."""
+"""Render MS1 overlay evidence for one legacy family-id peak-group row."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     prefix = args.output_prefix or f"{args.family_id.lower()}_ms1_overlay"
     # Compatibility only: these args used to feed an iRT panel, but the current
-    # family-context overlay is intentionally two-panel and must not fail on a
+    # peak-group context overlay is intentionally two-panel and must not fail on a
     # no-op drift artifact.
     drift_lookup = None
     outputs = write_family_ms1_overlay_outputs(
@@ -173,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Trace summary TSV: {outputs.summary_tsv}")
     print(f"Trace data JSON: {outputs.trace_data_json}")
     evidence_summary = build_family_ms1_evidence_summary(rows)
-    print(f"Family MS1 verdict: {evidence_summary['family_verdict']}")
+    print(f"Peak-group MS1 verdict: {evidence_summary['family_verdict']}")
     return 0
 
 
@@ -204,7 +204,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         help=(
             "Targeted XIC workbook (with ISTD rows). Accepted for compatibility; "
-            "the current family-context overlay stays two-panel and does not "
+            "the current peak-group context overlay stays two-panel and does not "
             "render an iRT panel."
         ),
     )
@@ -213,7 +213,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         type=Path,
         help=(
             "Sample info table for ISTD drift provenance. Accepted for "
-            "compatibility; not rendered by the current family-context overlay."
+            "compatibility; not rendered by the current peak-group context overlay."
         ),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
