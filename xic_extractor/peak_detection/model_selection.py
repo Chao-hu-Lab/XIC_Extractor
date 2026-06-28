@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 from xic_extractor.evidence_semantics import DecisionClass
+from xic_extractor.peak_detection.decision_policy import (
+    DECISION_CLASS_RANK,
+    DecisionPolicyTrace,
+    DecisionTerm,
+    decision_blockers,
+    decision_gate_terms,
+)
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.selection_decision import (
     SelectionDecisionCompatibilityOracle,
@@ -86,13 +93,6 @@ _PUBLIC_OUTPUT_ALIASES = {
     "reason": frozenset({"reason", "csv", "workbook", "xlsx"}),
 }
 _COUNTED_DECISION_CLASSES = frozenset({"accepted", "review"})
-_DECISION_CLASS_RANK: dict[DecisionClass, int] = {
-    "accepted": 0,
-    "review": 1,
-    "not_counted": 2,
-    "ambiguous": 3,
-    "excluded": 4,
-}
 _CONFIDENCE_RANK = {
     "HIGH": 0,
     "MEDIUM": 1,
@@ -329,19 +329,66 @@ def _successor_selected_hypothesis(
 
 
 def _successor_selection_key(hypothesis: PeakHypothesis) -> tuple[float, ...]:
+    return peak_hypothesis_selection_policy_trace(hypothesis).key
+
+
+def peak_hypothesis_selection_policy_trace(
+    hypothesis: PeakHypothesis,
+) -> DecisionPolicyTrace:
+    semantics = hypothesis.evidence.decision_semantics
     reasons = _selection_reasons(hypothesis)
-    return (
-        float(_DECISION_CLASS_RANK[_decision_class(hypothesis)]),
-        float(_blocking_reason_count(hypothesis)),
-        float(_CONFIDENCE_RANK.get(_projected_confidence(hypothesis), 4)),
-        -float(len(reasons)),
-        float(_chemical_evidence_rank(hypothesis)),
-        _selection_reference_distance(hypothesis),
-        float(
-            hypothesis.audit.selection_rank
-            if hypothesis.audit.selection_rank is not None
-            else 1_000_000
+    if semantics is None:
+        gate: tuple[DecisionTerm, ...] = (
+            ("decision_class_rank", float(DECISION_CLASS_RANK["review"])),
+            ("blocker_count", float(_blocking_reason_count(hypothesis))),
+        )
+        blockers = tuple(
+            dict.fromkeys(
+                (
+                    *hypothesis.evidence.concern_labels,
+                    *hypothesis.evidence.cap_labels,
+                )
+            )
+        )
+        support = tuple(hypothesis.evidence.support_labels)
+        decision_class: DecisionClass = "review"
+    else:
+        gate = decision_gate_terms(semantics)
+        blockers = decision_blockers(semantics)
+        support = semantics.support_reasons
+        decision_class = semantics.decision_class
+    tie_break: tuple[DecisionTerm, ...] = (
+        (
+            "projected_confidence_rank",
+            float(_CONFIDENCE_RANK.get(_projected_confidence(hypothesis), 4)),
         ),
+        ("negative_selection_reason_count", -float(len(reasons))),
+        ("chemical_evidence_rank", float(_chemical_evidence_rank(hypothesis))),
+        ("selection_reference_distance", _selection_reference_distance(hypothesis)),
+        (
+            "legacy_selection_rank",
+            float(
+                hypothesis.audit.selection_rank
+                if hypothesis.audit.selection_rank is not None
+                else 1_000_000
+            ),
+        ),
+    )
+    return DecisionPolicyTrace(
+        workflow="peak_hypothesis_model_selection",
+        unit_id=hypothesis.hypothesis_id,
+        required_evidence=(
+            "peak_hypothesis",
+            "integration_result",
+            "evidence_vector",
+            "audit_trail",
+        ),
+        decision_class=decision_class,
+        blockers=blockers,
+        support=support,
+        gate=gate,
+        tie_break=tie_break,
+        projection_authority="selected_hypothesis_model_selection_v1",
     )
 
 

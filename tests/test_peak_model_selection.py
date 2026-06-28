@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
@@ -12,6 +13,7 @@ from xic_extractor.peak_detection.model_selection import (
     expected_diff_approval_for_result,
     expected_diff_stable_row_id,
     model_select_peak_hypothesis,
+    peak_hypothesis_selection_policy_trace,
 )
 
 PEAK_MODEL_SELECTION_DOC = Path("docs/product/peak-model-selection.md")
@@ -111,6 +113,71 @@ def test_expected_diff_without_approval_record_cannot_product_switch() -> None:
     assert result.selection_status == "expected_diff"
     assert result.product_switch_allowed is False
     assert "missing_expected_diff_approval_record" in result.diff_reasons
+
+
+def test_peak_hypothesis_policy_trace_exposes_model_selection_order() -> None:
+    hypothesis = _hypothesis(
+        "successor",
+        selected=False,
+        confidence="HIGH",
+        decision_class="accepted",
+        support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
+    )
+
+    trace = peak_hypothesis_selection_policy_trace(hypothesis)
+
+    assert trace.workflow == "peak_hypothesis_model_selection"
+    assert trace.unit_id == hypothesis.hypothesis_id
+    assert trace.required_evidence == (
+        "peak_hypothesis",
+        "integration_result",
+        "evidence_vector",
+        "audit_trail",
+    )
+    assert trace.decision_class == "accepted"
+    assert trace.blockers == ()
+    assert trace.support == ("ms1_coherent", "candidate_aligned_ms2_nl")
+    assert trace.projection_authority == "selected_hypothesis_model_selection_v1"
+    assert [name for name, _value in trace.gate] == [
+        "decision_class_rank",
+        "blocker_count",
+    ]
+    assert [name for name, _value in trace.tie_break] == [
+        "projected_confidence_rank",
+        "negative_selection_reason_count",
+        "chemical_evidence_rank",
+        "selection_reference_distance",
+        "legacy_selection_rank",
+    ]
+    assert trace.key == (0.0, 0.0, 0.0, -2.0, 2.0, 0.0, 2.0)
+
+
+def test_peak_hypothesis_policy_trace_key_ignores_legacy_score_payload() -> None:
+    hypothesis = _hypothesis(
+        "successor",
+        selected=False,
+        confidence="HIGH",
+        raw_score=-999,
+        decision_class="accepted",
+        support_reasons=("ms1_coherent",),
+    )
+    adversarial = replace(
+        hypothesis,
+        evidence=replace(
+            hypothesis.evidence,
+            raw_score=999,
+            support_labels=("fake_legacy_support",),
+            concern_labels=("fake_legacy_concern",),
+            cap_labels=("fake_legacy_cap",),
+        ),
+    )
+
+    base_trace = peak_hypothesis_selection_policy_trace(hypothesis)
+    adversarial_trace = peak_hypothesis_selection_policy_trace(adversarial)
+
+    assert adversarial_trace.key == base_trace.key
+    assert adversarial_trace.support == base_trace.support
+    assert adversarial_trace.blockers == base_trace.blockers
 
 
 def test_blocked_and_inconclusive_statuses_cannot_product_switch() -> None:
