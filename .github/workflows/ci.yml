@@ -45,7 +45,8 @@ jobs:
           - gui
           - targeted-core
           - alignment-core
-          - product-gates
+          - product-gates-activation
+          - product-gates-evidence
           - diagnostics-tools
     steps:
       - uses: actions/checkout@v6
