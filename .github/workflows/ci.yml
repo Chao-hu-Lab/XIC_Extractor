@@ -17,6 +17,8 @@ jobs:
           python-version: "3.12"
       - run: uv sync --all-extras --dev
       - run: uv run ruff check xic_extractor tests
+      - name: Test shard coverage
+        run: uv run python -m tools.testing.test_shards --check
       - name: Diagnostics index in sync
         run: uv run python scripts/check_diagnostics_index.py
 
@@ -32,28 +34,36 @@ jobs:
       - run: uv run mypy xic_extractor
 
   test:
-    name: test / Test (Python ${{ matrix.python-version }})
+    name: test / ${{ matrix.shard }} (Python ${{ matrix.python-version }})
     runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
+        shard:
+          - docs-config
+          - gui
+          - targeted-core
+          - alignment-core
+          - product-gates-activation
+          - product-gates-evidence
+          - diagnostics-tools
     steps:
       - uses: actions/checkout@v6
         with:
-          path: repo-${{ matrix.python-version }}
+          path: repo-${{ matrix.python-version }}-${{ matrix.shard }}
           submodules: false
       - uses: astral-sh/setup-uv@v8.2.0
         with:
           python-version: ${{ matrix.python-version }}
-          working-directory: repo-${{ matrix.python-version }}
+          working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
       - name: Install
         shell: pwsh
-        working-directory: repo-${{ matrix.python-version }}
+        working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
         run: |
           uv venv --python ${{ matrix.python-version }} --clear
           uv pip install -e .[dev]
       - name: Test
         shell: pwsh
-        working-directory: repo-${{ matrix.python-version }}
-        run: uv run pytest -v --tb=short -x
+        working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
+        run: uv run python -m tools.testing.test_shards ${{ matrix.shard }} -- -v --tb=short -x

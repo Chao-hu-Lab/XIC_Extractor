@@ -782,6 +782,7 @@ def main() -> int:
     )
 
     for path in (
+        "docs/user/targeted-extraction.md",
         "scripts/run_new_cli.py",
         "xic_extractor/extractor.py",
         "xic_extractor/signal_processing.py",

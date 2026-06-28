@@ -17,6 +17,54 @@ longer architecture contract and known decomposition targets.
   load. Avoid both monoliths and many tiny indistinguishable modules.
 - Preserve public contracts unless an approved plan says otherwise.
 
+## System Overview
+
+```mermaid
+graph TB
+    subgraph entry["Entry Points"]
+        GUI["gui/\nPyQt6 workspace"]
+        CLI["scripts/\nCLI runners"]
+    end
+
+    subgraph domain["Domain Logic (xic_extractor/)"]
+        CFG["configuration/\nsettings, targets,\nvalidation"]
+        EXT["extraction/\ntargeted orchestration,\nanchor windowing"]
+        DISC["discovery/\nseed evidence,\ncandidate generation"]
+        PD["peak_detection/\nresolvers, hypotheses,\nmodel selection"]
+        ALN["alignment/\ncross-sample grouping,\nowner construction"]
+        DIAG["diagnostics/\naudit models,\nclassification"]
+    end
+
+    subgraph output["Output Rendering"]
+        OUT["output/\nExcel, TSV, HTML\nwriters"]
+    end
+
+    GUI --> CFG
+    GUI --> EXT
+    GUI --> DISC
+    GUI --> ALN
+    CLI --> CFG
+    CLI --> EXT
+    CLI --> DISC
+    CLI --> ALN
+
+    CFG --> EXT
+    CFG --> DISC
+    EXT --> PD
+    DISC --> PD
+    DISC --> ALN
+    DIAG --> PD
+
+    EXT --> OUT
+    ALN --> OUT
+```
+
+**Data flow — targeted:**
+`.raw` files + target list → `configuration/` → `extraction/` → `peak_detection/` → `output/` → Excel workbook
+
+**Data flow — untargeted:**
+`.raw` files + preset → `configuration/` → `discovery/` → `peak_detection/` → `alignment/` → `output/` → TSV matrix + HTML gallery
+
 ## Dependency Direction
 
 - Domain algorithms may use arrays, config, typed context objects, and small

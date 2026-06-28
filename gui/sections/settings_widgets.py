@@ -27,7 +27,7 @@ class _LabeledSpin(QWidget):
         lay.setSpacing(2)
 
         lbl = QLabel(label)
-        lbl.setStyleSheet("color: #57606a; font-size: 9pt;")
+        lbl.setObjectName("hint")
         lay.addWidget(lbl)
 
         row = QHBoxLayout()

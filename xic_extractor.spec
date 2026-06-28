@@ -1,7 +1,14 @@
 # xic_extractor.spec
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
+
 block_cipher = None
+
+preset_datas = collect_data_files(
+    "xic_extractor.presets",
+    includes=["data/*.toml"],
+)
 
 a = Analysis(
     ["gui/main.py"],
@@ -12,7 +19,8 @@ a = Analysis(
         ("config/settings.example.csv", "config"),
         ("config/targets.example.csv", "config"),
         ("scripts", "scripts"),
-    ],
+    ]
+    + preset_datas,
     hiddenimports=[
         "PyQt6.QtCore",
         "PyQt6.QtWidgets",

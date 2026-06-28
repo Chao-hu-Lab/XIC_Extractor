@@ -1,26 +1,59 @@
 import ctypes
+import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMainWindow, QScrollArea, QStatusBar, QVBoxLayout, QWidget
+from PyQt6.QtCore import QByteArray, QSettings, QSize, Qt
+from PyQt6.QtGui import QAction, QIcon, QKeySequence, QPainter, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
+from PyQt6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMenu,
+    QMenuBar,
+    QPushButton,
+    QScrollArea,
+    QStackedWidget,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
 
-from gui.config_io import read_settings, read_targets, write_settings, write_targets
-from gui.sections.results_section import ResultsSection
-from gui.sections.run_section import RunSection
-from gui.sections.settings_section import SettingsSection
-from gui.sections.targets_section import TargetsSection
-from gui.styles import STYLESHEET
-from gui.workers.pipeline_worker import PipelineWorker
+from gui.dialogs import confirm_close_while_busy, show_about
+from gui.styles import DARK_PALETTE, LIGHT_PALETTE, build_stylesheet, set_active
+from gui.views.targeted_view import TargetedView
+from gui.views.untargeted_view import UntargetedView
+
+_APP_VERSION = "0.2"
 
 if getattr(sys, "frozen", False):
     _ROOT = Path(sys.executable).parent  # user-writable: config/, output/
-    _BUNDLE = Path(sys._MEIPASS)  # read-only bundle: scripts/, assets/
+    _BUNDLE = Path(getattr(sys, "_MEIPASS"))  # read-only bundle: scripts/, assets/
 else:
     _ROOT = Path(__file__).resolve().parent.parent
     _BUNDLE = _ROOT
 _ICON_PATH = _BUNDLE / "assets" / "app_icon.png"
+_ICONS_DIR = _BUNDLE / "assets" / "icons"
 (_ROOT / "output").mkdir(exist_ok=True)
+
+
+def _icon(name: str, hex_color: str = "#7a828e") -> QIcon:
+    """Load an SVG icon recoloured to hex_color (the icons ship as #7a828e)."""
+    path = _ICONS_DIR / name
+    if not path.exists():
+        return QIcon()
+    svg = path.read_text(encoding="utf-8").replace("#7a828e", hex_color)
+    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    pixmap = QPixmap(48, 48)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    renderer.render(painter)
+    painter.end()
+    return QIcon(pixmap)
 
 if getattr(sys, "frozen", False) and sys.platform == "win32":
     _internal = _ROOT / "_internal"
@@ -31,6 +64,17 @@ if getattr(sys, "frozen", False) and sys.platform == "win32":
 
 # Title bar background colour (deep purple matching the icon)
 _TITLEBAR_COLOR = "#2D1B69"
+
+# (nav label, icon file, header title, header subtitle) per workspace view.
+_VIEWS = (
+    ("Targeted", "targeted.svg", "Targeted Extraction", "依目標清單萃取並整合 XIC"),
+    (
+        "Untargeted",
+        "untargeted.svg",
+        "Untargeted Discovery",
+        "全譜峰偵測、跨樣本對齊與候選審閱",
+    ),
+)
 
 
 def _color_titlebar(hwnd: int, hex_color: str) -> None:
@@ -56,125 +100,302 @@ def _color_titlebar(hwnd: int, hex_color: str) -> None:
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self._worker: PipelineWorker | None = None
 
         self.setWindowTitle("XIC Extractor")
-        self.resize(1100, 860)
-        self.setStyleSheet(STYLESHEET)
+        self.resize(1180, 880)
+        # The Targeted settings form is a dense ~30-parameter grid whose inputs
+        # (unbounded-range spin boxes) need ~796px of content width. Floor the
+        # window width at 1040 (796 content + 216 sidebar + scrollbar) so the
+        # form is never squeezed into a horizontal scrollbar.
+        self.setMinimumSize(1040, 640)
+        self._settings = QSettings("ChaoHuLab", "XICExtractor")
+        self._dark = bool(self._settings.value("window/dark", False, type=bool))
 
         if _ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(_ICON_PATH)))
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.setCentralWidget(scroll)
-
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(16, 16, 16, 16)
-        container_layout.setSpacing(12)
-        scroll.setWidget(container)
-
-        self._settings = SettingsSection()
-        self._targets = TargetsSection()
-        self._run = RunSection()
-        self._results = ResultsSection()
-
-        container_layout.addWidget(self._settings)
-        container_layout.addWidget(self._targets)
-        container_layout.addWidget(self._run)
-        container_layout.addWidget(self._results)
-        container_layout.addStretch()
-
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
+        self._state_label = QLabel()
+        self._state_label.setObjectName("status_state")
+        self._status_bar.addPermanentWidget(self._state_label)
+        self._view_states = ["就緒", "就緒"]
+        self._themed_icons: list[tuple[object, str]] = []
+        self._build_menu_bar()
 
-        self._settings.settings_saved.connect(self._save_settings)
-        self._settings.settings_saved.connect(
-            lambda: self._status_bar.showMessage("設定已儲存", 3000)
+        root = QWidget()
+        root.setObjectName("app_root")
+        row = QHBoxLayout(root)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self.setCentralWidget(root)
+
+        self._nav_buttons: list[QPushButton] = []
+        self._nav_group = QButtonGroup(self)
+        self._nav_group.setExclusive(True)
+        row.addWidget(self._build_sidebar())
+
+        right = QWidget()
+        right_col = QVBoxLayout(right)
+        right_col.setContentsMargins(0, 0, 0, 0)
+        right_col.setSpacing(0)
+        self._header_title = QLabel()
+        self._header_title.setObjectName("header_title")
+        self._header_subtitle = QLabel()
+        self._header_subtitle.setObjectName("header_subtitle")
+        right_col.addWidget(self._build_header())
+        self._stack = QStackedWidget()
+        right_col.addWidget(self._stack, 1)
+        row.addWidget(right, 1)
+
+        self.targeted_view = TargetedView(_ROOT / "config")
+        self.targeted_view.status_message.connect(self._show_status)
+        self.targeted_view.state_changed.connect(
+            lambda text: self._on_view_state(0, text)
         )
-        self._targets.targets_saved.connect(self._save_targets)
-        self._targets.targets_saved.connect(
-            lambda: self._status_bar.showMessage(
-                f"目標已儲存，共 {self._targets._table.rowCount()} 筆", 3000
+        self.untargeted_view = UntargetedView()
+        self.untargeted_view.status_message.connect(self._show_status)
+        self.untargeted_view.state_changed.connect(
+            lambda text: self._on_view_state(1, text)
+        )
+        self._views = (self.targeted_view, self.untargeted_view)
+        self._stack.addWidget(self._wrap_content(self.targeted_view))
+        self._stack.addWidget(self._wrap_content(self.untargeted_view))
+
+        self._restore_window_state()
+        self._apply_theme(self._dark)
+        self.targeted_view.load_config()
+        for view in self._views:
+            view.emit_state()
+
+    # ── Menu bar & shortcuts ────────────────────────────────────────────────
+
+    def _build_menu_bar(self) -> None:
+        bar = QMenuBar(self)
+        self.setMenuBar(bar)
+
+        file_menu = self._add_menu(bar, "檔案(&F)")
+        self._add_action(
+            file_menu, "開啟輸出資料夾", "Ctrl+O", self._open_output_dir,
+            icon="folder.svg",
+        )
+        file_menu.addSeparator()
+        self._add_action(file_menu, "結束", "Ctrl+Q", self.close)
+
+        view_menu = self._add_menu(bar, "檢視(&V)")
+        for index, (name, icon_file, _, _) in enumerate(_VIEWS):
+            self._add_action(
+                view_menu, name, f"Ctrl+{index + 1}",
+                lambda _checked=False, i=index: self._select_view(i),
+                icon=icon_file,
             )
-        )
-        self._run.run_clicked.connect(self._on_run)
-        self._run.stop_clicked.connect(self._on_stop)
+        view_menu.addSeparator()
+        self._dark_action = QAction("深色模式", self)
+        self._dark_action.setCheckable(True)
+        self._dark_action.setChecked(self._dark)
+        self._dark_action.setShortcut(QKeySequence("Ctrl+D"))
+        self._dark_action.toggled.connect(self._apply_theme)
+        view_menu.addAction(self._dark_action)
 
-        self._load_config()
+        run_menu = self._add_menu(bar, "執行(&R)")
+        self._add_action(
+            run_menu, "執行目前工作區", "Ctrl+R",
+            lambda: self._current_view().trigger_run(), icon="play.svg",
+        )
+        self._add_action(
+            run_menu, "停止", "Ctrl+.",
+            lambda: self._current_view().trigger_stop(), icon="stop.svg",
+        )
+
+        help_menu = self._add_menu(bar, "說明(&H)")
+        self._add_action(
+            help_menu, "關於 XIC Extractor", None,
+            lambda: show_about(self, _APP_VERSION), icon="info.svg",
+        )
+
+    def _add_menu(self, bar: QMenuBar, title: str) -> QMenu:
+        menu = bar.addMenu(title)
+        assert menu is not None  # addMenu only returns None on failure
+        return menu
+
+    def _add_action(
+        self,
+        menu: QMenu,
+        text: str,
+        shortcut: str | None,
+        slot: object,
+        *,
+        icon: str | None = None,
+    ) -> None:
+        action = QAction(text, self)
+        if icon is not None:
+            self._themed_icons.append((action, icon))
+        if shortcut is not None:
+            action.setShortcut(QKeySequence(shortcut))
+        action.triggered.connect(slot)  # type: ignore[arg-type]
+        menu.addAction(action)
+
+    def _apply_theme(self, dark: bool) -> None:
+        self._dark = dark
+        palette = DARK_PALETTE if dark else LIGHT_PALETTE
+        set_active(palette)
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            app.setStyleSheet(build_stylesheet(palette))
+        self._retheme_icons(palette["icon"])
+        for view in getattr(self, "_views", ()):
+            view.refresh_theme()
+        self._settings.setValue("window/dark", dark)
+
+    def _retheme_icons(self, color: str) -> None:
+        for target, name in self._themed_icons:
+            target.setIcon(_icon(name, color))  # type: ignore[attr-defined]
+
+    def _current_view(self) -> TargetedView | UntargetedView:
+        return self._views[self._stack.currentIndex()]
+
+    def _open_output_dir(self) -> None:
+        output_dir = _ROOT / "output"
+        output_dir.mkdir(exist_ok=True)
+        os.startfile(str(output_dir))  # noqa: S606
+
+    # ── Shell construction ──────────────────────────────────────────────────
+
+    def _build_sidebar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("sidebar")
+        bar.setFixedWidth(216)
+        col = QVBoxLayout(bar)
+        col.setContentsMargins(14, 18, 14, 16)
+        col.setSpacing(6)
+
+        brand = QHBoxLayout()
+        brand.setSpacing(9)
+        if _ICON_PATH.exists():
+            logo = QLabel()
+            logo.setPixmap(
+                QPixmap(str(_ICON_PATH)).scaledToHeight(
+                    28, Qt.TransformationMode.SmoothTransformation
+                )
+            )
+            brand.addWidget(logo)
+        brand_title = QLabel("XIC Extractor")
+        brand_title.setObjectName("brand_title")
+        brand.addWidget(brand_title)
+        brand.addStretch()
+        col.addLayout(brand)
+
+        brand_sub = QLabel("Metabolomics toolkit")
+        brand_sub.setObjectName("brand_sub")
+        col.addWidget(brand_sub)
+        col.addSpacing(16)
+
+        for index, (name, icon_file, _, _) in enumerate(_VIEWS):
+            button = QPushButton(f"  {name}")
+            button.setObjectName("nav_item")
+            button.setIconSize(QSize(18, 18))
+            self._themed_icons.append((button, icon_file))
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(lambda _checked, i=index: self._select_view(i))
+            self._nav_group.addButton(button, index)
+            self._nav_buttons.append(button)
+            col.addWidget(button)
+
+        col.addStretch()
+        footer = QLabel("v0.2 · discovery + alignment")
+        footer.setObjectName("brand_sub")
+        col.addWidget(footer)
+        return bar
+
+    def _build_header(self) -> QFrame:
+        header = QFrame()
+        header.setObjectName("app_header")
+        header.setFixedHeight(74)
+        col = QVBoxLayout(header)
+        col.setContentsMargins(26, 0, 26, 0)
+        col.setSpacing(2)
+        col.addStretch()
+        col.addWidget(self._header_title)
+        col.addWidget(self._header_subtitle)
+        col.addStretch()
+        return header
+
+    def _wrap_content(self, content: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setObjectName("content_scroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        container = QWidget()
+        container.setObjectName("scroll_content")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(22, 20, 22, 22)
+        layout.addWidget(content)
+        scroll.setWidget(container)
+        return scroll
+
+    # ── Behaviour ───────────────────────────────────────────────────────────
+
+    def _select_view(self, index: int) -> None:
+        self._stack.setCurrentIndex(index)
+        self._nav_buttons[index].setChecked(True)
+        _, _, title, subtitle = _VIEWS[index]
+        self._header_title.setText(title)
+        self._header_subtitle.setText(subtitle)
+        self._refresh_state_label()
+
+    def _on_view_state(self, index: int, text: str) -> None:
+        self._view_states[index] = text
+        if index == self._stack.currentIndex():
+            self._refresh_state_label()
+
+    def _refresh_state_label(self) -> None:
+        index = self._stack.currentIndex()
+        workspace = _VIEWS[index][0]
+        self._state_label.setText(f"{workspace} · {self._view_states[index]}")
+
+    def _restore_window_state(self) -> None:
+        geometry = self._settings.value("window/geometry")
+        if isinstance(geometry, QByteArray) and not geometry.isEmpty():
+            self.restoreGeometry(geometry)
+        last_view = self._settings.value("window/view", 1)
+        try:
+            index = int(last_view)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            index = 1
+        self._select_view(index if 0 <= index < len(_VIEWS) else 1)
+
+    def _save_window_state(self) -> None:
+        self._settings.setValue("window/geometry", self.saveGeometry())
+        self._settings.setValue("window/view", self._stack.currentIndex())
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
         _color_titlebar(int(self.winId()), _TITLEBAR_COLOR)
 
-    def _load_config(self) -> None:
-        settings: dict[str, str] = {}
-        targets: list[dict[str, str]] = []
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        busy = any(
+            view.is_busy()
+            for view in (self.targeted_view, self.untargeted_view)
+        )
+        if busy:
+            if not confirm_close_while_busy(self):
+                event.ignore()
+                return
+            for view in self._views:
+                if view.is_busy():
+                    view.trigger_stop(confirm=False)
+            if any(view.is_busy() for view in self._views):
+                self._show_status("正在停止工作，停止完成後再關閉視窗", 5000)
+                event.ignore()
+                return
         try:
-            settings = read_settings()
-        except FileNotFoundError:
-            settings = {}
+            self.untargeted_view.persist_config()
+        except OSError:
+            pass  # never let a config-save failure block closing
+        self._save_window_state()
+        event.accept()
 
-        try:
-            targets = read_targets()
-        except FileNotFoundError:
-            targets = []
-
-        migrated = self._settings.load(settings)
-        if migrated and self._settings.is_valid():
-            write_settings(self._settings.get_values())
-        self._targets.load(targets)
-        self._status_bar.showMessage(f"已載入 {len(targets)} 個目標")
-
-    def _save_settings(self) -> None:
-        write_settings(self._settings.get_values())
-
-    def _save_targets(self) -> None:
-        write_targets(self._targets.get_targets())
-
-    def _on_run(self) -> None:
-        if not self._settings.is_valid():
-            self._status_bar.showMessage("設定值無效，請修正後再執行", 5000)
-            return
-        self._save_settings()
-        self._save_targets()
-        self._settings.set_enabled(False)
-        self._targets.set_enabled(False)
-        self._run.set_running(True)
-        self._status_bar.showMessage("開始執行 pipeline...")
-
-        self._worker = PipelineWorker(_ROOT / "config")
-        self._worker.progress.connect(self._run.set_progress)
-        self._worker.finished.connect(self._on_finished)
-        self._worker.error.connect(self._on_error)
-        self._worker.start()
-
-    def _on_stop(self) -> None:
-        if self._worker is not None:
-            self._worker.stop()
-            self._worker.wait(1000)
-            self._worker = None
-        self._run.set_running(False)
-        self._settings.set_enabled(True)
-        self._targets.set_enabled(True)
-        self._status_bar.showMessage("已停止執行", 3000)
-
-    def _on_finished(self, summary: dict) -> None:
-        self._run.set_complete(summary["total_files"])
-        self._run.set_running(False)
-        self._settings.set_enabled(True)
-        self._targets.set_enabled(True)
-        self._results.update_results(summary)
-        self._status_bar.showMessage("Pipeline 執行完成", 5000)
-        self._worker = None
-
-    def _on_error(self, message: str) -> None:
-        self._run.set_running(False)
-        self._run.set_error(message)
-        self._settings.set_enabled(True)
-        self._targets.set_enabled(True)
-        self._results.show_error(message)
-        self._status_bar.showMessage(f"執行失敗: {message}", 5000)
-        self._worker = None
+    def _show_status(self, text: str, timeout: int) -> None:
+        self._status_bar.showMessage(text, timeout)

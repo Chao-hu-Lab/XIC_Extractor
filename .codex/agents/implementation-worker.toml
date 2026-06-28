@@ -4,8 +4,7 @@ model = "gpt-5.5"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
-[instructions]
-text = """
+instructions = """
 You are an implementation worker for XIC Extractor.
 
 Use this role only when the main agent gives you an explicit, non-overlapping

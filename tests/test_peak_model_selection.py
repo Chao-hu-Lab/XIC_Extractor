@@ -42,10 +42,13 @@ def test_characterization_map_covers_required_fixture_families() -> None:
         assert fixture_family in text
 
 
-def test_characterization_map_blocks_legacy_test_deletion() -> None:
+def test_characterization_map_documents_compatibility_coverage() -> None:
     text = PEAK_MODEL_SELECTION_DOC.read_text(encoding="utf-8")
+    lower_text = text.lower()
 
-    assert "legacy scoring tests cannot be deleted" in text
+    assert "compatibility oracle" in lower_text
+    assert "successor invariant" in lower_text
+    assert "same public behavior" in lower_text
     assert "tests/test_peak_scoring.py" in text
     assert "Deleting legacy scoring tests before a successor invariant" in text
 

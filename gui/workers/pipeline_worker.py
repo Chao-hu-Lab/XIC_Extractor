@@ -17,6 +17,7 @@ class PipelineWorker(QThread):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(dict)
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, config_dir: Path) -> None:
         super().__init__()
@@ -35,6 +36,7 @@ class PipelineWorker(QThread):
                 should_stop=self.isInterruptionRequested,
             )
             if self.isInterruptionRequested():
+                self.cancelled.emit()
                 return
             excel_path = write_excel_from_run_output(
                 config,

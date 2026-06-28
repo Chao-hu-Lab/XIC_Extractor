@@ -250,6 +250,7 @@ def run_overlay_batch(
             for request in pending_requests
         ]
         rendered_by_rank: dict[int, dict[str, Any]] = {}
+        next_write_index = 0
         with ProcessPoolExecutor(max_workers=workers) as executor:
             for request, row in zip(
                 pending_requests,
@@ -257,13 +258,28 @@ def run_overlay_batch(
                 strict=True,
             ):
                 rendered_by_rank[request.rank] = row
-        for request in requests:
+                if write_incremental:
+                    while next_write_index < len(requests):
+                        next_request = requests[next_write_index]
+                        if next_request.rank in existing_by_rank:
+                            rows.append(existing_by_rank[next_request.rank])
+                        elif next_request.rank in rendered_by_rank:
+                            rows.append(rendered_by_rank[next_request.rank])
+                        else:
+                            break
+                        next_write_index += 1
+                    if rows:
+                        _write_outputs(output_dir, rows)
+                        incremental_written = True
+        while next_write_index < len(requests):
+            request = requests[next_write_index]
             rows.append(
                 existing_by_rank[request.rank]
                 if request.rank in existing_by_rank
                 else rendered_by_rank[request.rank]
             )
-        if write_incremental:
+            next_write_index += 1
+        if write_incremental and rows and not incremental_written:
             _write_outputs(output_dir, rows)
             incremental_written = True
     else:

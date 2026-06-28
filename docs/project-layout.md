@@ -6,15 +6,17 @@
 
 | 文件 | 給誰看 | 內容 |
 |------|--------|------|
-| [`README.md`](../README.md) | 使用者 | 下載、執行、Settings / Targets 欄位說明、輸出格式 |
+| [`README.md`](../README.md) | 使用者 | 下載、quick start、workflow routing、文件索引 |
 | [`AGENTS.md`](../AGENTS.md) | 寫程式碼的人 | 高頻開發 guardrails、canonical references、public contract 摘要 |
 | [`docs/agent/`](agent/) | 寫程式碼的人、reviewer、subagent | AGENTS 拆出的 nested contracts：communication、execution gates、planning、validation、architecture、Codex OS |
-| [`docs/product/`](product/) | 寫程式碼的人、reviewer、future agent | 可公開的 product-topic 代表文件；目前先收斂 Backfill、Discovery、Alignment、Presets、Productization，後續可擴充 |
+| [`docs/user/`](user/) | 使用者、寫文件的人 | GUI/CLI 操作手冊；解釋怎麼使用，不承接 product authority |
+| [`docs/product/`](product/) | 寫程式碼的人、reviewer、future agent | 可公開的 product-topic 代表文件；目前先收斂 Backfill、Discovery、Alignment、Presets、Productization、Untargeted GUI 等主題，後續可擴充 |
 | [`docs/architecture-contract.md`](architecture-contract.md) | 做程式結構調整的人 | 設計原則、所有權地圖、依賴規則、重構紀律、測試結構規則 |
 | **本檔** | 想知道「檔案放哪」的人 | 目錄地圖、外部約束、新檔決策樹、暫存目錄清理規則、命名慣例 |
 
 這些檔案職責不重疊。本檔**不**描述「程式怎麼寫」（那是 AGENTS.md 與
-`docs/architecture-contract.md`），**不**描述「軟體怎麼用」（那是 README.md）。
+`docs/architecture-contract.md`），**不**描述「軟體怎麼用」（那是 README.md
+與 `docs/user/`）。
 
 ## § 2 目錄地圖
 
@@ -44,7 +46,7 @@
 | `scripts/` | CLI 入口（`run_*.py`）+ 開發 / 驗證腳本 | 經由 `datas` |
 | `tools/diagnostics/` | 一次性診斷工具，**不打包** | 否 |
 | `tests/` | pytest 測試（扁平結構 + `fixtures/`） | 否，exclude |
-| `docs/` | 文件、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
+| `docs/` | 使用者文件（`docs/user/`）、產品主題文件（`docs/product/`）、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
 | `config/` | runtime 設定；**只 `*.example.csv` 與固定列表（如 `RNA.csv`）被追蹤** | 範本 CSV |
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
@@ -68,9 +70,10 @@ subtree remains the private migration/archive/workbench area.
 
 跨越多份 dated plans/specs/validation 的產品主題，先收斂成
 `docs/product/` 下的小型代表文件。這不是完整 taxonomy；目前第一批 owner 是
-Backfill、Discovery、Alignment、Presets、Productization、Evidence Spine、
+Backfill、Discovery、Alignment、Presets、Productization、Untargeted GUI、Evidence Spine、
 Quant Matrix、Run Provenance、Review Roundtrip、Sample Metadata/QC、Targeted
-Selection、Quantitation Context、Instrument QC/Calibration。之後若出現同等全局主題，新增
+Selection、Quantitation Context、Instrument QC/Calibration。使用者操作手冊放
+`docs/user/`，不要塞回 README。之後若出現同等全局主題，新增
 `docs/product/<topic>.md`，不要讓 repo 讀者只能從私人 Obsidian 或一串歷史 note
 重建產品規則。
 
@@ -193,17 +196,24 @@ exclude = ["tests*"]
 ### (b) `xic_extractor.spec` 寫死的相對路徑
 
 ```python
+from PyInstaller.utils.hooks import collect_data_files
+
+preset_datas = collect_data_files(
+    "xic_extractor.presets",
+    includes=["data/*.toml"],
+)
+
 datas=[
     ("assets", "assets"),
     ("config/settings.example.csv", "config"),
     ("config/targets.example.csv", "config"),
     ("scripts", "scripts"),
-]
+] + preset_datas
 entry: ["gui/main.py"]
 icon: "assets/app_icon.png"
 ```
 
-→ 移動或重命名 `assets/`、`config/settings.example.csv`、`config/targets.example.csv`、`scripts/`、`gui/main.py`、`assets/app_icon.png` 之中任何一個 → CI build workflow 失敗。
+→ 移動或重命名 `assets/`、`config/settings.example.csv`、`config/targets.example.csv`、`scripts/`、`gui/main.py`、`assets/app_icon.png`、`xic_extractor/presets/data/*.toml` 之中任何一個 → CI build workflow 或 frozen GUI startup 失敗。
 → 若要動，必須同時更新 `xic_extractor.spec` 與 `.github/workflows/build.yml`。
 
 ### (c) `xic_extractor/configuration/loader.py:29` 寫死 config-output 同級

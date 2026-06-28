@@ -178,7 +178,7 @@ repo owner first.
 
 | Layer | Owner | Purpose | Must not contain |
 | --- | --- | --- | --- |
-| Formal repo docs | `docs/agent/`, `docs/superpowers/specs/`, named plans, ledgers | Public contracts, product state, validation policy, source-of-truth claims | private diary, raw transcripts, obsolete branch sequencing |
+| Formal repo docs | `docs/user/`, `docs/product/`, `docs/agent/`, `docs/superpowers/specs/`, named plans, ledgers | Public user guides, product contracts, product state, validation policy, source-of-truth claims | private diary, raw transcripts, obsolete branch sequencing |
 | Branch handoff stub | `docs/superpowers/handoffs/current/ACTIVE.local.md` or branch-named ignored local handoff | Current objective, decisions, validation, blocker, next actions, optional Obsidian pointer | long logs, full chat history, private sample investigation |
 | Branch closeout summary | PR body by default; `docs/superpowers/closeouts/` only when intentionally public | Branch-level narrative and PR-body seed: problem, solution, verification, residual risk, evidence links | raw transcript, private diary, Obsidian-only context, unchecked product claims |
 | Productization status anchor | `docs/superpowers/productization/status/cc-framework-improvements-productization.md` | Productization checker anchor phrases and shared status reminders | branch-specific current objectives |
@@ -213,7 +213,7 @@ Rules:
 
 1. Repo docs outside an explicit canonical owner path must carry
    `Doc placement: <value>` before commit.
-   Canonical owner paths include `docs/product/`, `docs/agent/`,
+   Canonical owner paths include `docs/user/`, `docs/product/`, `docs/agent/`,
    `docs/superpowers/specs/`, validation and checker fixture paths,
    `docs/superpowers/productization/`, `docs/superpowers/file-management/`, and
    `docs/superpowers/closeouts/`. The handoff current and archive directories

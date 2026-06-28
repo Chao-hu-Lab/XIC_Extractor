@@ -7,10 +7,8 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
-    QFrame,
     QHBoxLayout,
     QInputDialog,
-    QLabel,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -20,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from gui import config_io
+from gui.ui import titled_card
 
 _TABLE_HEADERS = [
     "Label",
@@ -96,22 +95,9 @@ class TargetsSection(QWidget):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
 
-        card = QFrame()
-        card.setObjectName("section_card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(0)
-        root_layout.addWidget(card)
-
-        header = QFrame()
-        header.setObjectName("section_header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 12, 16, 12)
-        title = QLabel("② 分析目標")
-        title.setObjectName("section_title")
-        header_layout.addWidget(title)
+        card, header_layout, card_layout = titled_card("② 分析目標", "要萃取的目標清單")
         header_layout.addStretch()
-        card_layout.addWidget(header)
+        root_layout.addWidget(card)
 
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(16, 16, 16, 0)
