@@ -26,6 +26,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_counts as gallery_counts,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_detail_cards as gallery_detail_cards,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
@@ -474,6 +477,65 @@ def test_gallery_shadow_tables_stay_out_of_reconciliation_orchestrator() -> None
     assert (
         gallery._shadow_policy_evidence_html
         is gallery_shadow_tables._shadow_policy_evidence_html
+    )
+
+
+def test_gallery_detail_cards_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._detail_summary_html is gallery_detail_cards._detail_summary_html
+    assert (
+        gallery._cid_nl_review_focus_card_html
+        is gallery_detail_cards._cid_nl_review_focus_card_html
+    )
+    assert (
+        gallery._cid_nl_discovery_identity_card_html
+        is gallery_detail_cards._cid_nl_discovery_identity_card_html
+    )
+    assert (
+        gallery._detail_summary_card_html
+        is gallery_detail_cards._detail_summary_card_html
+    )
+    assert gallery._review_answer_html is gallery_detail_cards._review_answer_html
+    assert (
+        gallery._review_answer_decision_text
+        is gallery_detail_cards._review_answer_decision_text
+    )
+    assert gallery._support_summary_items is gallery_detail_cards._support_summary_items
+    assert gallery._blocker_summary_items is gallery_detail_cards._blocker_summary_items
+    assert (
+        gallery._visual_summary_subtitle
+        is gallery_detail_cards._visual_summary_subtitle
+    )
+    assert (
+        gallery._detail_visual_summary_html
+        is gallery_detail_cards._detail_visual_summary_html
+    )
+    assert (
+        gallery._anchor_review_context_html
+        is gallery_detail_cards._anchor_review_context_html
+    )
+    assert (
+        gallery._cid_nl_identity_transition_list_html
+        is gallery_detail_cards._cid_nl_identity_transition_list_html
+    )
+    assert (
+        gallery._cid_nl_successor_decision_list_html
+        is gallery_detail_cards._cid_nl_successor_decision_list_html
+    )
+    assert (
+        gallery._summary_count_list_html
+        is gallery_detail_cards._summary_count_list_html
+    )
+    assert (
+        gallery._identity_transition_text
+        is gallery_detail_cards._identity_transition_text
+    )
+    assert (
+        gallery._overlay_evidence_notes_html
+        is gallery_detail_cards._overlay_evidence_notes_html
+    )
+    assert (
+        gallery._representative_cells_table_html
+        is gallery_detail_cards._representative_cells_table_html
     )
 
 
