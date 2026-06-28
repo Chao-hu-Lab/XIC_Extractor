@@ -43,7 +43,7 @@ Peak model selection defines the durable product invariants for selected-hypothe
 
 - **Owns:** model-selection policy, invariant class definitions, parity and expected-diff gates between legacy and successor scoring.
 - **Does not own:** selected-candidate switching in product outputs, workbook/TSV/GUI/ProductWriter behavior, or current parity gate implementation details.
-- Legacy scoring tests cannot be deleted without a successor invariant covering the same public behavior.
+- Legacy scoring coverage stays in place until a successor invariant covers the same public behavior.
 
 ## Verification
 
