@@ -71,6 +71,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_search as gallery_search,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_shadow_tables as gallery_shadow_tables,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
 )
 from xic_extractor.diagnostics import (
@@ -427,6 +430,50 @@ def test_gallery_family_pattern_stays_out_of_reconciliation_orchestrator() -> No
     assert (
         gallery._family_pattern_issue_html
         is gallery_family_pattern._family_pattern_issue_html
+    )
+
+
+def test_gallery_shadow_tables_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._shadow_policy_summary_note_html
+        is gallery_shadow_tables._shadow_policy_summary_note_html
+    )
+    assert (
+        gallery._cell_impact_legend_note_html
+        is gallery_shadow_tables._cell_impact_legend_note_html
+    )
+    assert (
+        gallery._shadow_projection_summary_note_html
+        is gallery_shadow_tables._shadow_projection_summary_note_html
+    )
+    assert (
+        gallery._shadow_policy_cells_html
+        is gallery_shadow_tables._shadow_policy_cells_html
+    )
+    assert (
+        gallery._shadow_projection_cells_html
+        is gallery_shadow_tables._shadow_projection_cells_html
+    )
+    assert (
+        gallery._shadow_projection_warnings_html
+        is gallery_shadow_tables._shadow_projection_warnings_html
+    )
+    assert (
+        gallery._shadow_projection_metric_text
+        is gallery_shadow_tables._shadow_projection_metric_text
+    )
+    assert (
+        gallery._shadow_projection_evidence_html
+        is gallery_shadow_tables._shadow_projection_evidence_html
+    )
+    assert (
+        gallery._shadow_policy_gap_html
+        is gallery_shadow_tables._shadow_policy_gap_html
+    )
+    assert gallery._shadow_metric_text is gallery_shadow_tables._shadow_metric_text
+    assert (
+        gallery._shadow_policy_evidence_html
+        is gallery_shadow_tables._shadow_policy_evidence_html
     )
 
 
