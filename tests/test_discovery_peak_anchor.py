@@ -5,7 +5,7 @@ from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
     DiscoveryEvidenceProfile,
 )
-from xic_extractor.discovery.feature_family import assign_feature_families
+from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 from xic_extractor.discovery.models import (
     DiscoveryCandidate,
     DiscoverySettings,
@@ -13,7 +13,7 @@ from xic_extractor.discovery.models import (
 )
 
 
-def test_assign_feature_families_groups_candidates_sharing_ms1_peak() -> None:
+def test_assign_peak_anchors_groups_candidates_sharing_ms1_peak() -> None:
     first = _candidate(
         candidate_id="Sample#10",
         precursor_mz=244.130,
@@ -31,7 +31,7 @@ def test_assign_feature_families_groups_candidates_sharing_ms1_peak() -> None:
         peak_end=12.306,
     )
 
-    assigned = assign_feature_families((second, first))
+    assigned = assign_peak_anchors((second, first))
 
     assert {candidate.feature_family_id for candidate in assigned} == {"Sample@F0001"}
     assert [candidate.feature_family_size for candidate in assigned] == [2, 2]
@@ -41,8 +41,8 @@ def test_assign_feature_families_groups_candidates_sharing_ms1_peak() -> None:
     ]
 
 
-def test_assign_feature_families_keeps_distinct_ms1_peaks_separate() -> None:
-    assigned = assign_feature_families(
+def test_assign_peak_anchors_keeps_distinct_ms1_peaks_separate() -> None:
+    assigned = assign_peak_anchors(
         (
             _candidate(
                 candidate_id="Sample#10",
@@ -66,8 +66,8 @@ def test_assign_feature_families_keeps_distinct_ms1_peaks_separate() -> None:
     assert [candidate.feature_family_size for candidate in assigned] == [1, 1]
 
 
-def test_assign_feature_families_does_not_group_missing_ms1_peaks() -> None:
-    assigned = assign_feature_families(
+def test_assign_peak_anchors_does_not_group_missing_ms1_peaks() -> None:
+    assigned = assign_peak_anchors(
         (
             _candidate(candidate_id="Sample#10", ms1_peak_found=False),
             _candidate(candidate_id="Sample#20", ms1_peak_found=False),
@@ -81,8 +81,8 @@ def test_assign_feature_families_does_not_group_missing_ms1_peaks() -> None:
     assert [candidate.feature_family_size for candidate in assigned] == [1, 1]
 
 
-def test_assign_feature_families_assigns_evidence_score_and_tier() -> None:
-    assigned = assign_feature_families(
+def test_assign_peak_anchors_assigns_evidence_score_and_tier() -> None:
+    assigned = assign_peak_anchors(
         (
             _candidate(
                 candidate_id="Sample#10",
@@ -129,8 +129,8 @@ def test_assign_feature_families_assigns_evidence_score_and_tier() -> None:
     assert by_id["Sample#30"].rt_alignment == "missing"
 
 
-def test_assign_feature_families_threads_custom_evidence_settings() -> None:
-    default_assigned = assign_feature_families((_candidate(candidate_id="Sample#10"),))
+def test_assign_peak_anchors_threads_custom_evidence_settings() -> None:
+    default_assigned = assign_peak_anchors((_candidate(candidate_id="Sample#10"),))
     custom_settings = DiscoverySettings(
         neutral_loss_profile=NeutralLossProfile("DNA_dR", 116.0474),
         evidence_profile=DiscoveryEvidenceProfile(
@@ -143,7 +143,7 @@ def test_assign_feature_families_threads_custom_evidence_settings() -> None:
         ),
     )
 
-    custom_assigned = assign_feature_families(
+    custom_assigned = assign_peak_anchors(
         (_candidate(candidate_id="Sample#10"),),
         settings=custom_settings,
     )

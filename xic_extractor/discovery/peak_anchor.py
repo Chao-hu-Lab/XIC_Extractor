@@ -6,35 +6,35 @@ from xic_extractor.discovery.models import DiscoveryCandidate, DiscoverySettings
 _APEX_RT_EPSILON_MIN = 1e-6
 
 
-def assign_feature_families(
+def assign_peak_anchors(
     candidates: tuple[DiscoveryCandidate, ...],
     *,
     settings: DiscoverySettings | None = None,
 ) -> tuple[DiscoveryCandidate, ...]:
-    family_assigned = _assign_strict_families(candidates)
-    return _score_all_evidence(family_assigned, settings=settings)
+    anchored = _assign_peak_anchors(candidates)
+    return _score_all_evidence(anchored, settings=settings)
 
 
-def _assign_strict_families(
+def _assign_peak_anchors(
     candidates: tuple[DiscoveryCandidate, ...],
 ) -> tuple[DiscoveryCandidate, ...]:
-    families: list[list[DiscoveryCandidate]] = []
+    groups: list[list[DiscoveryCandidate]] = []
     for candidate in candidates:
-        family_index = _matching_family_index(candidate, families)
-        if family_index is None:
-            families.append([candidate])
+        group_index = _matching_anchor_index(candidate, groups)
+        if group_index is None:
+            groups.append([candidate])
         else:
-            families[family_index].append(candidate)
+            groups[group_index].append(candidate)
 
-    family_ids = _family_ids(families)
+    anchor_ids = _anchor_ids(groups)
     assigned_by_candidate_id: dict[str, DiscoveryCandidate] = {}
-    for family, family_id in zip(families, family_ids, strict=True):
-        family_size = len(family)
-        for candidate in family:
+    for group, anchor_id in zip(groups, anchor_ids, strict=True):
+        group_size = len(group)
+        for candidate in group:
             assigned_by_candidate_id[candidate.candidate_id] = replace(
                 candidate,
-                feature_family_id=family_id,
-                feature_family_size=family_size,
+                feature_family_id=anchor_id,
+                feature_family_size=group_size,
             )
 
     return tuple(
@@ -64,17 +64,17 @@ def _score_all_evidence(
     return tuple(scored)
 
 
-def _matching_family_index(
+def _matching_anchor_index(
     candidate: DiscoveryCandidate,
-    families: list[list[DiscoveryCandidate]],
+    groups: list[list[DiscoveryCandidate]],
 ) -> int | None:
-    for index, family in enumerate(families):
-        if any(_same_feature_family(candidate, existing) for existing in family):
+    for index, group in enumerate(groups):
+        if any(_same_peak_anchor(candidate, existing) for existing in group):
             return index
     return None
 
 
-def _same_feature_family(
+def _same_peak_anchor(
     first: DiscoveryCandidate,
     second: DiscoveryCandidate,
 ) -> bool:
@@ -91,20 +91,20 @@ def _same_feature_family(
     )
 
 
-def _family_ids(families: list[list[DiscoveryCandidate]]) -> list[str]:
-    sorted_families = sorted(families, key=_family_sort_key)
-    family_id_by_key: dict[tuple[str, ...], str] = {}
-    for index, family in enumerate(sorted_families, start=1):
-        family_id_by_key[_family_identity_key(family)] = (
-            f"{family[0].sample_stem}@F{index:04d}"
+def _anchor_ids(groups: list[list[DiscoveryCandidate]]) -> list[str]:
+    sorted_groups = sorted(groups, key=_group_sort_key)
+    anchor_id_by_key: dict[tuple[str, ...], str] = {}
+    for index, group in enumerate(sorted_groups, start=1):
+        anchor_id_by_key[_group_identity_key(group)] = (
+            f"{group[0].sample_stem}@F{index:04d}"
         )
-    return [family_id_by_key[_family_identity_key(family)] for family in families]
+    return [anchor_id_by_key[_group_identity_key(group)] for group in groups]
 
 
-def _family_sort_key(
-    family: list[DiscoveryCandidate],
+def _group_sort_key(
+    group: list[DiscoveryCandidate],
 ) -> tuple[str, float, float, str]:
-    earliest = min(family, key=_candidate_sort_key)
+    earliest = min(group, key=_candidate_sort_key)
     return _candidate_sort_key(earliest)
 
 
@@ -117,8 +117,8 @@ def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[str, float, floa
     return (candidate.sample_stem, apex, candidate.best_seed_rt, candidate.candidate_id)
 
 
-def _family_identity_key(family: list[DiscoveryCandidate]) -> tuple[str, ...]:
-    return tuple(sorted(candidate.candidate_id for candidate in family))
+def _group_identity_key(group: list[DiscoveryCandidate]) -> tuple[str, ...]:
+    return tuple(sorted(candidate.candidate_id for candidate in group))
 
 
 def _peak_bounds_present(candidate: DiscoveryCandidate) -> bool:
