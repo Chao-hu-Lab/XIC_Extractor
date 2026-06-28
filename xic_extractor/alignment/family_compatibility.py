@@ -1,3 +1,14 @@
+"""Cross-sample group compatibility checks.
+
+Despite the legacy module name 'family_compatibility', these functions check
+whether two cross-sample groups represent the same chemical entity using m/z,
+RT, product m/z, and observed neutral loss tolerances.  They do NOT check
+discovery-layer peak-anchor membership.
+
+A future rename to ``group_compatibility.py`` is planned but deferred to
+minimize merge conflicts with active branches.
+"""
+
 from __future__ import annotations
 
 from typing import Any

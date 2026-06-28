@@ -21,6 +21,15 @@ from xic_extractor.alignment.ownership_models import (
 
 @dataclass(frozen=True)
 class OwnerAlignedFeature:
+    """Compatibility facade for cross-sample owner grouping.
+
+    ``feature_family_id`` here is a cross-sample group label, NOT the same
+    concept as discovery's per-sample peak anchor.  Use ``group_hypothesis_id``
+    for identity decisions.  ``feature_family_id`` is retained only because
+    output surfaces (alignment_review.tsv, alignment_cells.tsv) use it as a
+    column name.
+    """
+
     feature_family_id: str
     neutral_loss_tag: str
     family_center_mz: float

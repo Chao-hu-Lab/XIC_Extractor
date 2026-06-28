@@ -1,3 +1,15 @@
+"""Owner-family successor contract for cross-sample group identity.
+
+This module documents and verifies the compatibility bridge from the legacy
+``OwnerAlignedFeature`` facade to ``CrossSamplePeakGroupHypothesis``.  In this
+alignment context, "family" means a cross-sample chemical-entity group/display
+label, not discovery's per-sample peak anchor.
+
+Use ``group_hypothesis_id`` for pipeline identity decisions.
+``public_family_id`` and legacy ``feature_family_id`` surfaces remain display
+labels for output compatibility.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -91,12 +103,13 @@ def owner_family_successor_mapping(
     *,
     edge_evidence: Sequence[OwnerEdgeEvidence] | None = None,
 ) -> tuple[OwnerFamilyInvariantMapping, ...]:
-    """Project current owner-family semantics onto the successor-spine contract.
+    """Project current cross-sample group semantics onto the successor contract.
 
     This is intentionally a read-only migration guard. It does not replace
     ``cluster_sample_local_owners`` or participate in matrix construction, and
-    it should be updated once a successor cross-sample family spine owns these
-    invariants.
+    it should be updated once the successor cross-sample group spine owns these
+    invariants.  ``feature_family_id`` remains a compatibility display label;
+    identity decisions should use ``group_hypothesis_id``.
     """
 
     peak_group = cross_sample_peak_group_hypothesis_from_owner_feature(
@@ -299,10 +312,10 @@ def owner_clustering_disposition(
 ) -> OwnerClusteringDispositionDecision:
     """Return the final owner-clustering migration disposition.
 
-    This migration evaluator only promotes to adapter when no invariant remains
-    an active owner-clustering policy or a successor gap. Retirement still
-    requires concrete adapter consumers to stop depending on
-    ``OwnerAlignedFeature``.
+    This migration evaluator only promotes to adapter when no cross-sample
+    group invariant remains an active owner-clustering policy or a successor
+    gap. Retirement still requires concrete adapter consumers to stop depending
+    on ``OwnerAlignedFeature``.
     """
 
     blocking = tuple(
