@@ -101,8 +101,15 @@ from `.github/workflows/ci.yml` in the current worktree:
 
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
-$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards --check
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards docs-config -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards gui -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards targeted-core -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards alignment-core -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards product-gates -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards diagnostics-tools -- -v --tb=short -x
 ```
 
 If a command fails because of real lint/type/test errors, fix the root cause and
@@ -110,3 +117,5 @@ rerun the failed gate. If it fails only because sandbox blocks dependency
 resolution, executable spawn, or DLL loading, rerun the same command with
 approval instead of substituting a narrower check. PR descriptions and closeout
 notes must list exact commands and observed results.
+Do not replace the shard gate with a monolithic full-suite pytest run unless
+debugging the shard runner itself.
