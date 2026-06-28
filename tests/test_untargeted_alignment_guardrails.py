@@ -204,6 +204,38 @@ def test_high_backfill_dependency_fallback_only_when_warning_column_absent(
     assert metrics.high_backfill_dependency_families == 1
 
 
+def test_high_backfill_dependency_uses_row_flags_before_legacy_warning(
+    tmp_path: Path,
+) -> None:
+    alignment_dir = tmp_path / "alignment"
+    alignment_dir.mkdir(parents=True)
+    _write_tsv(
+        alignment_dir / "alignment_review.tsv",
+        [
+            {
+                "feature_family_id": "FAM001",
+                "family_center_mz": 500.0,
+                "family_center_rt": 5.0,
+                "event_cluster_count": 1,
+                "event_member_count": 1,
+                "warning": "no_anchor",
+                "row_flags": "rescue_heavy;high_backfill_dependency",
+            },
+        ],
+    )
+    _write_tsv(
+        alignment_dir / "alignment_cells.tsv",
+        [
+            _cell_row("FAM001", "detected"),
+            _cell_row("FAM001", "rescued"),
+        ],
+    )
+
+    metrics = guardrails.compute_guardrails(alignment_dir)
+
+    assert metrics.high_backfill_dependency_families == 1
+
+
 def test_guardrails_report_rescue_identity_and_duplicate_metrics(tmp_path: Path):
     alignment_dir = tmp_path / "alignment"
     alignment_dir.mkdir(parents=True)
