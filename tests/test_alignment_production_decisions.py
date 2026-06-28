@@ -149,6 +149,45 @@ def test_single_sample_local_owner_does_not_create_primary_identity():
     assert "single_sample_local_owner" in decisions.row("FAM001").row_flags
 
 
+def test_targeted_metadata_does_not_authorize_untargeted_matrix_write() -> None:
+    cells = (
+        _cell("s1", "FAM001", "detected", 100.0),
+        _cell("s2", "FAM001", "rescued", 90.0),
+    )
+    base = build_production_decisions(
+        _matrix(
+            clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),
+            cells=cells,
+            sample_order=("s1", "s2"),
+        ),
+        AlignmentConfig(),
+    )
+    adversarial = build_production_decisions(
+        _matrix(
+            clusters=(
+                _feature(
+                    "FAM001",
+                    evidence="single_sample_local_owner",
+                    paired_istd_status="rt_close",
+                    paired_istd_rt_delta_min=0.01,
+                    targeted_priority_rank=0,
+                    targeted_projection_authority="TargetedProductProjection",
+                ),
+            ),
+            cells=cells,
+            sample_order=("s1", "s2"),
+        ),
+        AlignmentConfig(),
+    )
+
+    assert adversarial.row("FAM001") == base.row("FAM001")
+    assert adversarial.cell("FAM001", "s1") == base.cell("FAM001", "s1")
+    assert adversarial.cell("FAM001", "s1").write_matrix_value is False
+    assert adversarial.cell("FAM001", "s1").blank_reason == (
+        "missing_row_identity_support"
+    )
+
+
 def test_production_cell_decision_record_explains_missing_row_identity_blank() -> None:
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),

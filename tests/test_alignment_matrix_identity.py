@@ -710,6 +710,40 @@ def test_matrix_identity_decision_record_ignores_seed_evidence_score_payload() -
     assert not hasattr(base_record, "key")
 
 
+def test_matrix_identity_ignores_targeted_only_priority_metadata() -> None:
+    base = build_matrix_identity_decisions(
+        _matrix(
+            _feature("FAM001", evidence="single_sample_local_owner"),
+            (
+                _cell("s1", "FAM001", "detected", 100.0),
+                _cell("s2", "FAM001", "rescued", 90.0),
+            ),
+        ),
+        AlignmentConfig(),
+    ).row("FAM001")
+    adversarial = build_matrix_identity_decisions(
+        _matrix(
+            _feature(
+                "FAM001",
+                evidence="single_sample_local_owner",
+                paired_istd_status="rt_close",
+                paired_istd_rt_delta_min=0.01,
+                targeted_priority_rank=0,
+                targeted_projection_authority="TargetedProductProjection",
+            ),
+            (
+                _cell("s1", "FAM001", "detected", 100.0),
+                _cell("s2", "FAM001", "rescued", 90.0),
+            ),
+        ),
+        AlignmentConfig(),
+    ).row("FAM001")
+
+    assert adversarial == base
+    assert adversarial.include_in_primary_matrix is False
+    assert adversarial.identity_decision == "provisional_discovery"
+
+
 def test_weak_seed_gate_reads_owner_events_when_trusted_support_is_thin() -> None:
     matrix = _matrix(
         _feature(

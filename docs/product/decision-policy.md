@@ -222,6 +222,11 @@ do not use it as shorthand for decision records.
 `DecisionRecord.gate` and `DecisionRecord.tie_break` are audit-visible policy
 terms, not a generic selection key. Only workflow-owned selection modules may
 convert those terms into ordering keys.
+`DecisionRecord.projection_authority` names the workflow owner allowed to
+project or count the result. It is not an evidence token, score field, shadow
+artifact label, or display writer name. New product authority labels need the
+same public-output expected-diff framing as any other behavior-changing writer
+contract.
 
 ## Red Lines
 

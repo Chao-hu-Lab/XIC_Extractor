@@ -1,4 +1,7 @@
+import ast
 import inspect
+import textwrap
+from collections.abc import Callable
 
 from xic_extractor import decision_policy as shared_decision_policy
 from xic_extractor.alignment import (
@@ -118,6 +121,40 @@ def test_decision_record_ordering_stays_selection_local() -> None:
     assert "ordering_key" not in non_selection_source
 
 
+def test_product_decision_record_projection_authority_stays_workflow_owned() -> None:
+    constructors: dict[str, tuple[Callable[..., object], str]] = {
+        "targeted_candidate_selection": (
+            candidate_selection.candidate_selection_decision_record,
+            "select_candidate_by_evidence",
+        ),
+        "peak_hypothesis_model_selection": (
+            model_selection.peak_hypothesis_decision_record,
+            "selected_hypothesis_model_selection_v1",
+        ),
+        "alignment_matrix_identity_row": (
+            matrix_identity.matrix_identity_row_decision_record,
+            "build_matrix_identity_decisions",
+        ),
+        "alignment_production_cell": (
+            production_decisions.production_cell_decision_record,
+            "build_production_decisions",
+        ),
+    }
+    forbidden_authorities = {
+        "raw_score",
+        "evidence_score",
+        "legacy_peak_scoring_current_oracle",
+        "shadow_projection_only",
+        "ProductWriter",
+    }
+
+    for workflow, (constructor, expected_authority) in constructors.items():
+        authorities = _literal_projection_authorities(constructor)
+
+        assert authorities == {expected_authority}, workflow
+        assert authorities.isdisjoint(forbidden_authorities), workflow
+
+
 def _hypothesis(
     suffix: str = "selected",
     *,
@@ -149,3 +186,27 @@ def _hypothesis(
             selection_reference_rt_min=8.5,
         ),
     )
+
+
+def _literal_projection_authorities(function: Callable[..., object]) -> set[str]:
+    tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+    authorities: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not _is_decision_record_call(node):
+            continue
+        for keyword in node.keywords:
+            if keyword.arg != "projection_authority":
+                continue
+            if not isinstance(keyword.value, ast.Constant) or not isinstance(
+                keyword.value.value,
+                str,
+            ):
+                raise AssertionError(
+                    f"{function.__name__} uses non-literal projection_authority"
+                )
+            authorities.add(keyword.value.value)
+    return authorities
+
+
+def _is_decision_record_call(node: ast.Call) -> bool:
+    return isinstance(node.func, ast.Name) and node.func.id == "DecisionRecord"
