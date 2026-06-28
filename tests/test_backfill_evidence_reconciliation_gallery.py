@@ -29,6 +29,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_family_pattern as gallery_family_pattern,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_filters as gallery_filters,
 )
 from xic_extractor.diagnostics import (
@@ -401,6 +404,29 @@ def test_gallery_state_stays_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._projection_matrix_state_html
         is gallery_state._projection_matrix_state_html
+    )
+
+
+def test_gallery_family_pattern_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._family_pattern_state_html
+        is gallery_family_pattern._family_pattern_state_html
+    )
+    assert (
+        gallery._family_pattern_status_html
+        is gallery_family_pattern._family_pattern_status_html
+    )
+    assert (
+        gallery._family_context_available
+        is gallery_family_pattern._family_context_available
+    )
+    assert (
+        gallery._family_anchor_summary_html
+        is gallery_family_pattern._family_anchor_summary_html
+    )
+    assert (
+        gallery._family_pattern_issue_html
+        is gallery_family_pattern._family_pattern_issue_html
     )
 
 
