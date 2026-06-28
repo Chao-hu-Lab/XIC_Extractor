@@ -38,6 +38,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_models as gallery_models,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_output_rows as gallery_output_rows,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_overlay_links as gallery_overlay_links,
 )
 from xic_extractor.diagnostics import (
@@ -263,6 +266,14 @@ def test_gallery_filters_stay_out_of_reconciliation_orchestrator() -> None:
     )
     assert gallery._group_filter_categories is gallery_filters._group_filter_categories
     assert gallery._review_category_counts is gallery_filters._review_category_counts
+
+
+def test_gallery_output_rows_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery.SCHEMA_VERSION == gallery_output_rows.SCHEMA_VERSION
+    assert gallery._group_as_row is gallery_output_rows._group_as_row
+    assert gallery._representative_as_row is gallery_output_rows._representative_as_row
+    assert gallery._summary is gallery_output_rows._summary
+    assert gallery._string_object_mapping is gallery_output_rows._string_object_mapping
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
