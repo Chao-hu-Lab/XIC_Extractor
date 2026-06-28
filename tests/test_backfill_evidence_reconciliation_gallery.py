@@ -35,6 +35,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_models as gallery_models,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_provenance as gallery_provenance,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_render_context as gallery_render_context,
 )
 from xic_extractor.diagnostics import (
@@ -156,6 +159,18 @@ def test_gallery_evidence_stays_out_of_reconciliation_orchestrator() -> None:
     assert gallery._classify_evidence is gallery_evidence._classify_evidence
     assert gallery._product_behavior is gallery_evidence._product_behavior
     assert gallery._reconciliation_class is gallery_evidence._reconciliation_class
+
+
+def test_gallery_provenance_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._input_artifact_links
+        is gallery_provenance._input_artifact_links
+    )
+    assert gallery._source_artifacts_html is gallery_provenance._source_artifacts_html
+    assert (
+        gallery._write_local_overlay_interpretation_guide
+        is gallery_provenance._write_local_overlay_interpretation_guide
+    )
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
