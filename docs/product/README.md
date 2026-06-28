@@ -16,6 +16,7 @@ For definitions of domain-specific terms used in these pages, see the
 | Discovery | [`discovery.md`](discovery.md) | Untargeted feature discovery, candidate/review outputs, seed evidence handoff |
 | Alignment | [`alignment.md`](alignment.md) | Cross-sample alignment, owner construction, backfill sidecars, matrix handoff |
 | Targeted Selection | [`targeted-selection.md`](targeted-selection.md) | Targeted behavior, selected hypotheses, region/boundary gates, reasons |
+| Decision Policy | [`decision-policy.md`](decision-policy.md) | Typed evidence, workflow gates, score boundaries, and projection authority |
 | Peak Model Selection | [`peak-model-selection.md`](peak-model-selection.md) | Model-selection invariants, parity requirements, expected-diff gates |
 | Quantitation Context | [`quantitation-context.md`](quantitation-context.md) | Bounded trace context, morphology evidence, area-impacting gates |
 

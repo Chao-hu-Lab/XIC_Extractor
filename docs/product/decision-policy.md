@@ -1,0 +1,246 @@
+# Decision Policy
+
+Decision policy is the layer that turns typed evidence into workflow-owned
+product decisions. It is not a new scoring formula and not a shortcut from
+diagnostics into product outputs.
+
+This page exists because "evidence chain" and "score" answer different
+questions:
+
+- Evidence explains what was observed and how trustworthy each observation is.
+- Score ranks comparable candidates after the hard decision gates are satisfied.
+- Workflow policy decides which evidence is required, which conflicts block the
+  decision, and which projection may write or count product output.
+
+## Contract
+
+- Evidence providers feed typed facts into `EvidenceVector`,
+  `EvidenceDecisionSemantics`, `PeakHypothesis`, `IntegrationResult`, and audit
+  records. They do not write product matrices directly.
+- Decision policy owns gate order. If a rule affects selected peak, selected
+  area, counted detection, product state, matrix value, or output identity, the
+  rule must be explicit and test-covered.
+- Score is a ranking and compatibility tool. A high score cannot bypass missing
+  required evidence, hard conflicts, unresolved ambiguity, missing provenance,
+  or workflow-specific activation gates.
+- Targeted and untargeted workflows may use the same typed evidence facts, but
+  they must not share hidden product decisions. Each workflow owns its own
+  projection policy.
+- Diagnostic, shadow, gallery, review, lockbox, and sidecar evidence can
+  explain a decision. They become product authority only through an explicit
+  activation/export contract and expected-diff gate.
+
+## Current Transition State
+
+The codebase is not fully `PeakHypothesis`-native yet. Legacy selectors,
+confidence fields, `raw_score`, `evidence_score`, `feature_family_id`,
+`public_family_id`, and string evidence fields still exist because they are
+public compatibility surfaces or migration adapters.
+
+Treat those surfaces as compatibility or audit signals unless another owner
+promotes them through typed evidence semantics, workflow projection, parity
+evidence, or approved expected-diff records. A compatibility oracle is a
+baseline for proving behavior, not the owner of product truth.
+
+## Layers
+
+| Layer | Owns | Must not own |
+| --- | --- | --- |
+| Typed evidence facts | Observed RT, shape, boundary, MS2, NL, isotope/adduct, standards, library, paired-context, and provenance facts | Product state, counted detection, matrix value |
+| Decision semantics | Accepted/review/not-counted/ambiguous/excluded classes, support reasons, conflict reasons, blocker reasons | Workflow-specific writer authority |
+| Model selection / ranking | Choosing among comparable `PeakHypothesis` candidates after typed gates | Overriding hard gates or granting matrix writes |
+| Workflow projection | Targeted product projection, alignment projection, Backfill authority, ProductWriter gates | Low-level evidence extraction |
+| Audit trail | Human-readable explanation, review queue, expected-diff evidence | Silent product behavior |
+
+## Common Decision Shape
+
+Every value-changing decision should be explainable in this order:
+
+1. **Unit:** what is being decided: target candidate, `PeakHypothesis`, sample
+   cell, cross-sample group, or matrix value.
+2. **Required evidence:** typed facts that must be present before the decision
+   can be considered.
+3. **Blockers:** conflicts, ambiguity, provenance gaps, sample-role exclusions,
+   wrong-peak evidence, or missing activation authority.
+4. **Support:** facts that strengthen the selected unit but do not independently
+   grant authority.
+5. **Tie-break:** deterministic ranking among still-comparable candidates.
+6. **Projection:** the workflow-owned output decision and the artifact or test
+   that authorizes it.
+
+If a decision cannot name these fields, it is not ready to become product
+behavior. It can remain diagnostic, shadow, or review-only.
+
+## Targeted Policy
+
+Targeted selection is hypothesis-driven. The workflow already knows target
+identity, role, target window, expected MS2/NL behavior, and paired standards
+when they are configured. That knowledge is part of the assay contract, not a
+generic evidence provider.
+
+| Decision role | Targeted rule |
+| --- | --- |
+| Unit | Candidate `PeakHypothesis` for a known target/sample pair |
+| Required evidence | Selected candidate or explicit no-peak state, target identity, target/sample applicability, positive MS1 state when counted, and provenance-valid trace context |
+| Hard blockers | Sample not applicable, invalid selected hypothesis, hard wrong-peak conflict, missing positive MS1 for counted detection, unapproved expected diff, role-incoherent paired context, missing activation for value-changing rescue |
+| Support | Candidate-aligned MS2/NL, target RT window, paired ISTD/standard RT context, paired area ratio, own-max same-peak support, morphology, boundary assessability, local S/N |
+| Tie-break | Decision class first, then blocker count, abundance demotion, role-aware RT/context, chemical evidence, trace strength, quality penalty, RT distance, abundance, and finally compatibility score only when comparable |
+| Projection | `TargetedProductProjection` owns product state, counted detection, confidence, reason, and targeted output fields |
+
+Targeted policy may prioritize paired ISTD/standard RT context because the
+targeted method declares that relationship ahead of time. That priority must
+remain in targeted projection or activation policy; it must not leak into
+untargeted identity decisions as if the workflow had known targets.
+
+Targeted-specific rules to keep explicit:
+
+- Positive MS1 means a finite selected RT and positive area. Without that, the
+  row or cell must project to explicit no-peak or not-counted state, not counted
+  detection by implication.
+- Sample applicability gates can exclude a target/sample pair before scoring,
+  such as role or matrix constraints.
+- ISTD and analyte missing-MS2/NL behavior are not symmetric. A configured ISTD
+  plausible dropout can be counted as `detected_flagged`; an analyte NL fail or
+  missing MS2 needs paired-support or expected-diff policy before it can count.
+- Paired analyte support is a bundle: coherent MS1, role-aware RT context,
+  paired-area support, same-peak support, and no hard quality blocker. No single
+  paired fact is standalone product authority.
+- Expected-diff support is product-relevant only when the selected row,
+  affected outputs, validation tier, and matrix impact are explicitly approved.
+- `legacy_review_only_projection` and legacy confidence labels are review or
+  compatibility context; they do not by themselves create a not-counted product
+  decision.
+
+## Untargeted / Backfill Policy
+
+Untargeted alignment and Backfill are discovery-driven. They do not know the
+target identity ahead of time, so they must decide from trace, owner, group,
+identity, and provenance evidence rather than targeted labels.
+
+| Decision role | Untargeted / Backfill rule |
+| --- | --- |
+| Unit | Separate decisions for owner edge, cross-sample group, matrix row identity, rescued cell, quant value, and activation output |
+| Required evidence | Explicit discovery/alignment input, owner construction, row identity, typed same-peak evidence when claiming same-peak support, and provenance-valid sidecar when used for product support |
+| Hard blockers | Ambiguous owner, duplicate loser, wrong-peak conflict, missing matrix identity, stale source hash, unsupported family projection, unapproved authority scope, missing expected-diff gate for new writer behavior |
+| Support | Cross-sample coherence, m/z/RT consistency, MS1 pattern, shape and boundary agreement, MS2/NL consistency, standards/library evidence when represented as typed facts |
+| Tie-break | Owner-edge evidence, group match quality, drift-corrected RT, m/z/product tolerances, seed support, owner quality, trace quality, duplicate context, deterministic row ordering, and score only within already-eligible comparable candidates |
+| Projection | `MatrixIdentityRowDecision` decides row inclusion; `ProductionCellDecision`, Backfill authority, ProductWriter, and activation contracts decide matrix presence and accepted quant values |
+
+Targeted outputs may be used as benchmark, audit, or falsification evidence for
+untargeted behavior. They must not directly promote untargeted rows unless a
+separate product contract converts that evidence into typed same-peak,
+group-hypothesis, or `PeakHypothesis` support.
+
+Untargeted-specific rules to keep explicit:
+
+- Owner-edge score supports group construction only after hard gates pass. It
+  cannot override same-sample conflicts, tag mismatch, m/z/product/NL mismatch,
+  ambiguous owner, identity conflict, non-detected owner, or backfill-bridge
+  blockers.
+- Row promotion requires row identity support and at least one quantifiable
+  detected seed. Rescue-only, duplicate-only, ambiguous-only, review-only,
+  consolidation-loser, and zero-detected rows fail closed unless an explicit
+  authority contract says otherwise.
+- A rescued cell can write only after row identity passes and the cell is
+  quantifiable. If backfill cell evidence is required, product-authorized
+  same-peak Backfill evidence is also required.
+- Same-peak support is not the same as group membership. It needs selected peak
+  geometry, RT or drift-supported compatibility, no MS1 pattern conflict, no
+  hypothesis or claim blocker, and product-authorized trace or pattern support.
+- MS2/NL, MS1 pattern, QC reference, matrix RT drift, and shape or region audit
+  are typed facts. They strengthen or block decisions only through Backfill
+  projection and authority fields.
+- `feature_family_id` and `public_family_id` remain compatibility/display
+  labels. `group_hypothesis_id` and `peak_hypothesis_id` are the
+  authority-ready identity handles when available.
+- Owner-centered MS1 backfill can change alignment cell status during alignment
+  construction. That is still not broad ProductWriter authority unless the
+  relevant matrix/activation contract grants it.
+- Broad Backfill remains gated. Diagnostic sidecars, `shadow_gate_ready`, and
+  visual overlay evidence are not production readiness by themselves.
+
+## Score Position
+
+Score is allowed when it makes a bounded ranking decision easier to inspect:
+
+- rank candidates that already passed the same hard gates;
+- provide compatibility parity while legacy public outputs still expose score,
+  confidence, reason, or score breakdown;
+- calibrate thresholds for future policy, with expected-diff review before any
+  public output changes;
+- summarize quality within a typed fact, such as shape similarity or MS2
+  similarity, when the threshold and provenance are explicit.
+- act as one seed-quality feature in alignment, provided seed events, scan
+  support, identity constraints, and other gates still pass.
+
+Score is not allowed to:
+
+- make a candidate product truth by itself;
+- override wrong-peak, ambiguity, missing-provenance, sample-role, or authority
+  blockers;
+- replace a lower-score candidate when typed facts produce worse decision
+  semantics for the higher-score candidate;
+- collapse targeted and untargeted policy into one global weighting scheme;
+- turn diagnostic-only or shadow-only artifacts into matrix values;
+- hide a new product rule behind a numeric threshold without an owner, tests,
+  and expected-diff framing.
+
+When a threshold is unavoidable, name it as a gate with a reason and validation
+tier instead of treating it as a universal weight.
+
+Names that contain `score` need extra care:
+
+- `raw_score`, `EvidenceScore.confidence`, support labels, concern labels, and
+  cap labels are compatibility or audit projections unless wrapped by typed
+  evidence semantics and an approved product policy.
+- `select_candidate_with_confidence` is a legacy compatibility selector while
+  public behavior still exposes legacy confidence and reason fields.
+- Alignment `evidence_score` is a seed-quality score feature, not same-peak
+  identity proof and not ProductWriter authority.
+- `legacy_peak_scoring_current_oracle` is a parity baseline, not a product
+  owner.
+
+## Decision Trace Requirements
+
+New or promoted decision paths should emit or preserve enough information to
+reconstruct the policy:
+
+| Field class | Examples |
+| --- | --- |
+| Unit identity | `target_label`, sample, `peak_hypothesis_id`, `group_hypothesis_id`, matrix row/cell identity |
+| Required evidence status | present/missing/inconclusive typed facts and source artifact hashes |
+| Blockers | conflict, ambiguity, stale source, unsupported projection, missing activation |
+| Support | RT, shape, MS2/NL, standard/library, paired-context, group/coherence support |
+| Tie-break basis | score, RT distance, abundance, deterministic order, compatibility fallback |
+| Projection authority | targeted projection, alignment projection, Backfill authority, ProductWriter scope |
+| Validation status | synthetic, focused tests, targeted benchmark, 8RAW, 85RAW, manual review, expected diff |
+
+The trace can live in different artifacts for different workflows, but the
+meaning must remain stable: evidence explains, policy gates, score ranks, and
+projection writes.
+
+## Red Lines
+
+- Do not say "the score decided the peak." Say which typed facts passed, which
+  blockers were absent, and which projection wrote the output.
+- Do not let a shared evidence provider carry workflow-specific authority.
+- Do not move targeted-only role policy into shared evidence semantics unless
+  the output stays role-neutral or the projection layer still owns authority.
+- Do not treat review labels, display tokens, family labels, galleries, or
+  lockbox labels as product writes.
+- Do not count multiple derived facts as independent evidence when they come
+  from the same physical observation.
+- Do not change selected peak, selected area, counted detection, matrix values,
+  identity sidecars, or output schemas without expected-diff framing and focused
+  output tests.
+
+## See Also
+
+- [Evidence spine](evidence-spine.md)
+- [Targeted selection](targeted-selection.md)
+- [Backfill](backfill.md)
+- [Alignment](alignment.md)
+- [Peak model selection](peak-model-selection.md)
+- [Peak anchor and group boundary](family-hypothesis-boundary.md)
+- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [Architecture contract](../architecture-contract.md)
