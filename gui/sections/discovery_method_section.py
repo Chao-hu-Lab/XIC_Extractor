@@ -35,6 +35,17 @@ ADVANCED_NUMERIC_FIELDS: tuple[tuple[str, str, float, float, int, float], ...] =
 ADVANCED_FIELDS = tuple(name for name, *_ in ADVANCED_NUMERIC_FIELDS) + (
     "resolver_mode",
 )
+POSITIVE_DISCOVERY_OVERRIDE_FIELDS = frozenset(
+    {
+        "nl_tolerance_ppm",
+        "precursor_mz_tolerance_ppm",
+        "product_mz_tolerance_ppm",
+        "product_search_ppm",
+        "nl_min_intensity_ratio",
+        "seed_rt_gap_min",
+        "ms1_search_padding_min",
+    }
+)
 
 
 class DiscoveryMethodSection(QWidget):
@@ -83,8 +94,8 @@ class DiscoveryMethodSection(QWidget):
         ):
             advanced_layout.addWidget(QLabel(label), row, 0)
             spin = QDoubleSpinBox()
-            spin.setRange(minimum, maximum)
             spin.setDecimals(decimals)
+            spin.setRange(_minimum_for_field(name, minimum, decimals), maximum)
             spin.setSingleStep(step)
             spin.valueChanged.connect(lambda _value, key=name: self._mark_edited(key))
             advanced_layout.addWidget(spin, row, 1)
@@ -144,6 +155,9 @@ class DiscoveryMethodSection(QWidget):
     def is_valid(self) -> bool:
         if not self._preset_value():
             return False
+        for key in POSITIVE_DISCOVERY_OVERRIDE_FIELDS:
+            if self._spins[key].value() <= 0:
+                return False
         return self._spins["rt_min"].value() <= self._spins["rt_max"].value()
 
     def set_enabled(self, enabled: bool) -> None:
@@ -265,6 +279,12 @@ def _chip(text: str) -> str:
         f'padding:2px 7px; border-radius:8px; font-weight:600;">'
         f"{_escape(text)}</span>"
     )
+
+
+def _minimum_for_field(name: str, minimum: float, decimals: int) -> float:
+    if name not in POSITIVE_DISCOVERY_OVERRIDE_FIELDS:
+        return minimum
+    return max(minimum, 10**-decimals)
 
 
 def _sanitized_persisted_overrides(value: object) -> dict[str, object]:

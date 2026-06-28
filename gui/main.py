@@ -12,13 +12,19 @@ from gui.wheel_guard import WheelGuard
 def configure_application(app) -> None:
     app.setApplicationName("XIC Extractor")
     font = QFont(APPLICATION_FONT_FAMILY, APPLICATION_FONT_POINT_SIZE)
+    _enable_tabular_figures(font)
+    app.setFont(font)
+
+
+def _enable_tabular_figures(font: QFont) -> None:
     # Tabular (fixed-width) figures so numeric columns — the targets table, the
     # resolver spin grid, the result tiles — align digit-to-digit instead of
     # jittering on a narrow '1' vs a wide '8'. Qt QSS cannot express this, so it
     # is set as an OpenType feature on the application font (inherited by every
     # widget that does not replace its font outright).
+    if not hasattr(font, "setFeature") or not hasattr(QFont, "Tag"):
+        return
     font.setFeature(QFont.Tag("tnum"), 1)
-    app.setFont(font)
 
 
 def install_wheel_guard(app: QApplication) -> WheelGuard:
