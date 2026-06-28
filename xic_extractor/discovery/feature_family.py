@@ -15,7 +15,11 @@ def assign_feature_families(
     settings: DiscoverySettings | None = None,
 ) -> tuple[DiscoveryCandidate, ...]:
     family_assigned = _assign_strict_families(candidates)
-    return _assign_superfamilies(family_assigned, settings=settings)
+    superfamily_assigned = _assign_superfamilies(
+        family_assigned,
+        settings=settings,
+    )
+    return _score_all_evidence(superfamily_assigned, settings=settings)
 
 
 def _assign_strict_families(
@@ -85,12 +89,25 @@ def _assign_superfamilies(
                 feature_superfamily_confidence=confidence,
                 feature_superfamily_evidence=evidence_token,
             )
-            discovery_evidence = score_discovery_evidence(
-                assigned,
-                settings=settings,
-            )
-            assigned_by_candidate_id[candidate.candidate_id] = replace(
-                assigned,
+            assigned_by_candidate_id[candidate.candidate_id] = assigned
+
+    return tuple(
+        assigned_by_candidate_id[candidate.candidate_id]
+        for candidate in candidates
+    )
+
+
+def _score_all_evidence(
+    candidates: tuple[DiscoveryCandidate, ...],
+    *,
+    settings: DiscoverySettings | None = None,
+) -> tuple[DiscoveryCandidate, ...]:
+    scored: list[DiscoveryCandidate] = []
+    for candidate in candidates:
+        discovery_evidence = score_discovery_evidence(candidate, settings=settings)
+        scored.append(
+            replace(
+                candidate,
                 evidence_score=discovery_evidence.score,
                 evidence_tier=discovery_evidence.tier,
                 ms2_support=discovery_evidence.ms2_support,
@@ -98,11 +115,8 @@ def _assign_superfamilies(
                 rt_alignment=discovery_evidence.rt_alignment,
                 family_context=discovery_evidence.family_context,
             )
-
-    return tuple(
-        assigned_by_candidate_id[candidate.candidate_id]
-        for candidate in candidates
-    )
+        )
+    return tuple(scored)
 
 
 def _matching_family_index(
