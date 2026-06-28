@@ -56,6 +56,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_summary as gallery_summary,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_target_benchmark as gallery_target_benchmark,
 )
 from xic_extractor.diagnostics.backfill_shadow_policy import (
@@ -274,6 +277,21 @@ def test_gallery_output_rows_stay_out_of_reconciliation_orchestrator() -> None:
     assert gallery._representative_as_row is gallery_output_rows._representative_as_row
     assert gallery._summary is gallery_output_rows._summary
     assert gallery._string_object_mapping is gallery_output_rows._string_object_mapping
+
+
+def test_gallery_summary_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._summary_html is gallery_summary._summary_html
+    assert gallery._decision_legend_html is gallery_summary._decision_legend_html
+    assert gallery._summary_item is gallery_summary._summary_item
+    assert gallery._string_int_mapping is gallery_summary._string_int_mapping
+    assert (
+        gallery._activation_summary_text
+        is gallery_summary._activation_summary_text
+    )
+    assert (
+        gallery._current_rescue_summary_text
+        is gallery_summary._current_rescue_summary_text
+    )
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
