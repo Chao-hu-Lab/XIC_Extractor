@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -47,6 +46,9 @@ from xic_extractor.diagnostics import (
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_output_rows as _gallery_output_rows,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_output_writer as _gallery_output_writer,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_overlay_links as _gallery_overlay_links,
@@ -94,16 +96,6 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_html import (
     escape_html as _escape,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
-    _activation_value_delta_matrix_effect_counts,
-    _group_sort_key,
-    _representative_sort_key,
-    _shadow_policy_decision_counts,
-    _shadow_policy_production_gap_counts,
-    _shadow_projection_decision_counts,
-    _shadow_projection_matrix_counts,
-    _target_benchmark_context_counts,
-)
-from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
     _activation_written_cell_keys as _activation_written_cell_keys,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
@@ -140,17 +132,15 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     EVIDENCE_AUTHORITY_STATES as EVIDENCE_AUTHORITY_STATES,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
-    GROUP_TSV_COLUMNS,
-    REPRESENTATIVE_CELL_TSV_COLUMNS,
-    ReconciliationGroup,
-    ReconciliationIndex,
-    ReconciliationOutputs,
-)
-from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     RECONCILIATION_CLASS_PRIORITY as RECONCILIATION_CLASS_PRIORITY,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     RECONCILIATION_CLASSES as RECONCILIATION_CLASSES,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    ReconciliationGroup,
+    ReconciliationIndex,
+    ReconciliationOutputs,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     _SeedRecord as _SeedRecord,
@@ -165,9 +155,6 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context im
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context import (
     _html_render_groups as _html_render_groups,
 )
-from xic_extractor.diagnostics.diagnostic_io import (
-    write_tsv,
-)
 
 _read_required_tsv = _gallery_inputs._read_required_tsv
 _input_artifact_summary = _gallery_inputs._input_artifact_summary
@@ -175,6 +162,11 @@ _input_artifact_hashes = _gallery_inputs._input_artifact_hashes
 build_reconciliation_index = (
     _gallery_index_builder.build_reconciliation_index
 )
+write_reconciliation_outputs = (
+    _gallery_output_writer.write_reconciliation_outputs
+)
+GROUP_TSV_COLUMNS = _gallery_models.GROUP_TSV_COLUMNS
+REPRESENTATIVE_CELL_TSV_COLUMNS = _gallery_models.REPRESENTATIVE_CELL_TSV_COLUMNS
 _REQUIRED_ALIGNMENT_REVIEW_COLUMNS = (
     _gallery_inputs._REQUIRED_ALIGNMENT_REVIEW_COLUMNS
 )
@@ -556,80 +548,6 @@ def run_reconciliation_gallery(
         summary_json=paths["summary_json"],
         gallery_html=gallery_html,
     )
-
-
-def write_reconciliation_outputs(
-    output_dir: Path,
-    index: ReconciliationIndex,
-) -> dict[str, Path]:
-    """Write groups TSV, representative-cells TSV, and summary JSON."""
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    groups = sorted(index.groups, key=_group_sort_key)
-    representatives = sorted(index.representative_cells, key=_representative_sort_key)
-    group_rows = [
-        _group_as_row(group, priority_rank=priority)
-        for priority, group in enumerate(groups, start=1)
-    ]
-    representative_rows = [_representative_as_row(row) for row in representatives]
-    summary = _summary(
-        groups,
-        representatives,
-        _string_object_mapping(index.summary.get("input_artifacts")),
-    )
-    summary.update(
-        {
-            key: value
-            for key, value in index.summary.items()
-            if key not in {"group_count", "representative_cell_count"}
-        },
-    )
-    if index.shadow_policy_cells:
-        summary["shadow_policy_decision_counts"] = _shadow_policy_decision_counts(
-            index.shadow_policy_cells,
-        )
-        summary["shadow_policy_production_gap_counts"] = (
-            _shadow_policy_production_gap_counts(index.shadow_policy_cells)
-        )
-    if index.shadow_projection_cells:
-        summary["shadow_projection_decision_counts"] = (
-            _shadow_projection_decision_counts(index.shadow_projection_cells)
-        )
-        summary["shadow_projection_matrix_counts"] = (
-            _shadow_projection_matrix_counts(index.shadow_projection_cells)
-        )
-    if index.activation_delta_cells:
-        summary["activation_value_delta_matrix_effect_counts"] = (
-            _activation_value_delta_matrix_effect_counts(index.activation_delta_cells)
-        )
-    if index.target_benchmark_contexts:
-        summary["target_benchmark_context_counts"] = _target_benchmark_context_counts(
-            index.target_benchmark_contexts,
-        )
-    summary["group_count"] = len(groups)
-    summary["representative_cell_count"] = len(representatives)
-
-    groups_tsv = output_dir / "backfill_evidence_reconciliation_groups.tsv"
-    representative_cells_tsv = (
-        output_dir / "backfill_evidence_reconciliation_representative_cells.tsv"
-    )
-    summary_json = output_dir / "backfill_evidence_reconciliation_summary.json"
-    write_tsv(groups_tsv, group_rows, GROUP_TSV_COLUMNS, lineterminator="\n")
-    write_tsv(
-        representative_cells_tsv,
-        representative_rows,
-        REPRESENTATIVE_CELL_TSV_COLUMNS,
-        lineterminator="\n",
-    )
-    summary_json.write_text(
-        json.dumps(summary, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return {
-        "groups_tsv": groups_tsv,
-        "representative_cells_tsv": representative_cells_tsv,
-        "summary_json": summary_json,
-    }
 
 
 def write_reconciliation_gallery_html(

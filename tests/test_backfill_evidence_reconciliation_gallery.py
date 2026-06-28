@@ -62,6 +62,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_output_rows as gallery_output_rows,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_output_writer as gallery_output_writer,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_overlay_links as gallery_overlay_links,
 )
 from xic_extractor.diagnostics import (
@@ -323,6 +326,13 @@ def test_gallery_output_rows_stay_out_of_reconciliation_orchestrator() -> None:
     assert gallery._representative_as_row is gallery_output_rows._representative_as_row
     assert gallery._summary is gallery_output_rows._summary
     assert gallery._string_object_mapping is gallery_output_rows._string_object_mapping
+
+
+def test_gallery_output_writer_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.write_reconciliation_outputs
+        is gallery_output_writer.write_reconciliation_outputs
+    )
 
 
 def test_gallery_summary_stays_out_of_reconciliation_orchestrator() -> None:
