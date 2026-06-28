@@ -20,6 +20,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_assets as gallery_assets,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_chain_html as gallery_chain_html,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
@@ -291,6 +294,21 @@ def test_gallery_summary_stays_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._current_rescue_summary_text
         is gallery_summary._current_rescue_summary_text
+    )
+
+
+def test_gallery_chain_html_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._compact_issue_label is gallery_chain_html._compact_issue_label
+    assert gallery._compact_product_reason is gallery_chain_html._compact_product_reason
+    assert gallery._chain_item_html is gallery_chain_html._chain_item_html
+    assert gallery._component_list_html is gallery_chain_html._component_list_html
+    assert (
+        gallery._secondary_chain_details_html
+        is gallery_chain_html._secondary_chain_details_html
+    )
+    assert (
+        gallery._component_summary_text
+        is gallery_chain_html._component_summary_text
     )
 
 
