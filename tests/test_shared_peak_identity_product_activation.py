@@ -846,6 +846,35 @@ def test_activation_application_formal_mode_excludes_projections_by_default(
     assert summary["all_family_split_science_ready"] == "FALSE"
 
 
+def test_formal_matrix_helper_excludes_projections_by_default() -> None:
+    rows, stats = product_activation._peak_hypothesis_matrix_rows(
+        matrix_by_family={
+            "FAM_BLOCK": {
+                "feature_family_id": "FAM_BLOCK",
+                "S1": "100",
+            },
+        },
+        review_by_family={
+            "FAM_BLOCK": {
+                "feature_family_id": "FAM_BLOCK",
+                "neutral_loss_tag": "DNA_dR",
+                "family_center_mz": "100.1",
+                "family_center_rt": "7.1",
+            },
+        },
+        decisions_by_key={},
+        sample_columns=("S1",),
+        legacy_rt_row_oracle=(),
+        legacy_rt_row_oracle_mz_ppm=20.0,
+        legacy_rt_row_oracle_rt_tolerance_min=1.0,
+    )
+
+    assert rows == []
+    assert stats.family_projection_rows == 0
+    assert stats.family_projection_rows_excluded == 1
+    assert stats.family_projection_cells_excluded == 1
+
+
 def test_activation_application_formal_mode_refuses_excluded_projections_as_complete(
     tmp_path: Path,
 ) -> None:

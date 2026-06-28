@@ -65,6 +65,9 @@ display labels. Treat this as an adapter state:
 - Do not treat `family_projection` rows as canonical identity proof. They are
   unresolved projection rows until replaced by explicit PeakHypothesis
   assignments or an approved product contract says they are out of scope.
+- Helpers that can emit or include `family_projection` rows must default to
+  excluding them. Any inclusion path needs an explicit diagnostic or compatibility
+  opt-in and must keep canonical identity readiness fail-closed.
 
 ## Codebase Smells To Audit
 
