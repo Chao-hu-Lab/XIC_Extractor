@@ -29,6 +29,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_detail_cards as gallery_detail_cards,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_detail_drawer as gallery_detail_drawer,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
@@ -537,6 +540,10 @@ def test_gallery_detail_cards_stay_out_of_reconciliation_orchestrator() -> None:
         gallery._representative_cells_table_html
         is gallery_detail_cards._representative_cells_table_html
     )
+
+
+def test_gallery_detail_drawer_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._details_html is gallery_detail_drawer._details_html
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (

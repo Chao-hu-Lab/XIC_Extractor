@@ -17,6 +17,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_detail_cards as _gallery_detail_cards,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_detail_drawer as _gallery_detail_drawer,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as _gallery_evidence,
 )
 from xic_extractor.diagnostics import (
@@ -106,7 +109,6 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
     _shadow_projection_cell_sort_key,
     _shadow_projection_cells_for_family_groups,
     _shadow_projection_cells_for_group,
-    _shadow_projection_compact_summary,
     _shadow_projection_decision_counts,
     _shadow_projection_matrix_counts,
     _target_benchmark_context_counts,
@@ -454,6 +456,7 @@ _overlay_evidence_notes_html = _gallery_detail_cards._overlay_evidence_notes_htm
 _representative_cells_table_html = (
     _gallery_detail_cards._representative_cells_table_html
 )
+_details_html = _gallery_detail_drawer._details_html
 
 _HIGH_SEED_ALIAS_COUNT = 5
 
@@ -2005,153 +2008,3 @@ def _seed_issue_text(group: ReconciliationGroup) -> str:
 def _seed_detail_summary(group: ReconciliationGroup, index: int) -> str:
     issue = _compact_issue_label(_seed_issue_text(group))
     return f"H{index} · RT {group.seed_rt or 'unknown'} · {issue}"
-
-
-def _details_html(
-    group: ReconciliationGroup,
-    representatives: Sequence[RepresentativeCell],
-    *,
-    shadow_policy_cells: Sequence[ShadowPolicyCell] = (),
-    shadow_projection_cells: Sequence[ShadowProjectionCell] = (),
-    target_benchmark_contexts: Sequence[TargetBenchmarkContext] = (),
-    html_path: Path,
-    input_artifacts: object,
-    include_seed_context: bool = True,
-) -> str:
-    seed_context_item = (
-        _chain_item_html(
-            "seed / request",
-            "dependent context",
-            (
-                f"basis={_escape(group.seed_group_basis)}<br>"
-                f"m/z={_escape(group.seed_mz or 'unknown')} · "
-                f"RT={_escape(group.seed_rt or 'unknown')} · "
-                f"window={_escape(group.seed_rt_window or 'unknown')} · "
-                f"ppm={_escape(group.seed_ppm or 'unknown')}"
-            ),
-        )
-        if include_seed_context
-        else ""
-    )
-    secondary_items = (
-        seed_context_item
-        + _chain_item_html(
-            "Target benchmark",
-            _target_benchmark_compact_summary(
-                target_benchmark_contexts,
-                input_artifacts,
-            ),
-            _target_benchmark_contexts_html(
-                target_benchmark_contexts,
-                input_artifacts,
-            ),
-            css_class="target-benchmark-chain",
-        )
-        + _chain_item_html(
-            "source artifacts",
-            "provenance",
-            _source_artifacts_html(group.source_artifacts, input_artifacts, html_path),
-        )
-    )
-    return (
-        _review_answer_html(
-            group,
-            html_path,
-            input_artifacts,
-            shadow_projection_cells=shadow_projection_cells,
-        )
-        + _detail_summary_html(
-            group,
-            representatives,
-            html_path=html_path,
-            input_artifacts=input_artifacts,
-            shadow_policy_cells=shadow_policy_cells,
-            shadow_projection_cells=shadow_projection_cells,
-        )
-        + '<div class="details-grid evidence-chain">'
-        + _chain_item_html(
-            "product behavior",
-            group.product_behavior_state,
-            (
-                f"{_badge(group.product_behavior_state)}"
-                '<p class="chain-note">'
-                f"{_escape(_compact_product_reason(group.top_product_reason))}"
-                "</p>"
-            ),
-        )
-        + _chain_item_html(
-            "RT / alignment context",
-            "context",
-            _component_list_html(group.dependent_context_components)
-            or (
-                '<p class="chain-note">'
-                "No dependent RT/alignment component supplied.</p>"
-            ),
-        )
-        + _chain_item_html(
-            "Hypothesis MS1 evidence",
-            "visual evidence",
-            _overlay_evidence_notes_html(group.overlay_evidence_notes)
-            or '<p class="chain-note">No overlay metric notes supplied.</p>',
-        )
-        + (
-            _chain_item_html(
-                "Shadow production projection",
-                _shadow_projection_compact_summary(shadow_projection_cells),
-                _shadow_projection_cells_html(shadow_projection_cells, html_path),
-                css_class="shadow-projection-chain",
-            )
-            if shadow_projection_cells
-            else ""
-        )
-        + (
-            _chain_item_html(
-                _shadow_policy_chain_title(shadow_projection_cells),
-                _shadow_policy_chain_subtitle(
-                    shadow_policy_cells,
-                    shadow_projection_cells,
-                ),
-                _shadow_policy_cells_html(
-                    shadow_policy_cells,
-                    html_path,
-                    legacy_reference=bool(shadow_projection_cells),
-                ),
-                css_class="shadow-policy-chain",
-            )
-            if shadow_policy_cells or shadow_projection_cells
-            else ""
-        )
-        + _chain_item_html(
-            "Optional Candidate MS2 / review context",
-            "not a backfill gate",
-            _component_list_html(group.product_grade_support_components)
-            or _component_list_html(group.review_only_visual_components)
-            or '<p class="chain-note">No optional MS2/review context supplied.</p>',
-        )
-        + _chain_item_html(
-            "blockers / missing evidence",
-            "fail closed",
-            _component_list_html(
-                (
-                    *group.blocker_components,
-                    *group.missing_evidence,
-                    *group.source_warnings,
-                ),
-            )
-            or (
-                '<p class="chain-note">'
-                "No blocker or missing-evidence token supplied.</p>"
-            ),
-        )
-        + _chain_item_html(
-            "representative cells",
-            f"{len(representatives)} cells",
-            _representative_cells_table_html(representatives),
-        )
-        + _secondary_chain_details_html(
-            "provenance / benchmark",
-            "seed request, target benchmark, source artifacts",
-            secondary_items,
-        )
-        + "</div>"
-    )
