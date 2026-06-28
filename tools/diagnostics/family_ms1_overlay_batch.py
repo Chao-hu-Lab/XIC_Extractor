@@ -9,7 +9,7 @@ import json
 import shutil
 import sys
 from collections import Counter
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +19,10 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.diagnostics import family_ms1_overlay_plot as overlay_plot
+from xic_extractor.alignment.scan_retention_times import (
+    ScanRetentionTimeCache,
+    cached_retention_time_for_scan,
+)
 from xic_extractor.tabular_io import write_tsv  # noqa: E402,I001
 
 _DEFAULT_LOAD_FAMILY_CELLS = overlay_plot.load_family_cells
@@ -40,9 +44,6 @@ OVERLAY_SUPERWINDOW_SPAN_FACTOR = 2
 OVERLAY_EVIDENCE_CACHE_SCHEMA = "family_ms1_overlay_evidence_cache_v3"
 OverlayTraceItem = tuple[int, overlay_plot.FamilyCell, str, Any]
 WindowedOverlayTraceItem = tuple[int, OverlayTraceItem, tuple[int, int]]
-ScanRetentionTimeCache = MutableMapping[int, float | None]
-
-
 class _BatchRawReader(Protocol):
     def extract_xic_many(self, requests: Sequence[Any]) -> Sequence[Any]: ...
 
@@ -1337,7 +1338,7 @@ def _crop_trace_to_scan_window(
     *,
     retention_time_by_scan: ScanRetentionTimeCache,
 ):
-    from xic_extractor.xic_models import XICTrace
+    from xic_extractor.xic_models import crop_xic_trace_by_rt
 
     rt_min = _retention_time_for_scan(
         raw,
@@ -1351,10 +1352,7 @@ def _crop_trace_to_scan_window(
     )
     if rt_min is None or rt_max is None:
         return trace
-    if rt_min > rt_max:
-        rt_min, rt_max = rt_max, rt_min
-    mask = (trace.rt >= rt_min) & (trace.rt <= rt_max)
-    return XICTrace.from_arrays(trace.rt[mask], trace.intensity[mask])
+    return crop_xic_trace_by_rt(trace, rt_min, rt_max, assume_sorted_rt=True)
 
 
 def _scan_window_for_request(raw: object, request: Any) -> tuple[int, int] | None:
@@ -1374,22 +1372,11 @@ def _retention_time_for_scan(
     *,
     retention_time_by_scan: ScanRetentionTimeCache | None = None,
 ) -> float | None:
-    if retention_time_by_scan is not None and scan_number in retention_time_by_scan:
-        return retention_time_by_scan[scan_number]
-    resolver = getattr(raw, "retention_time_for_scan", None)
-    if not callable(resolver):
-        if retention_time_by_scan is not None:
-            retention_time_by_scan[scan_number] = None
-        return None
-    try:
-        retention_time = float(resolver(scan_number))
-    except (AttributeError, NotImplementedError):
-        if retention_time_by_scan is not None:
-            retention_time_by_scan[scan_number] = None
-        return None
-    if retention_time_by_scan is not None:
-        retention_time_by_scan[scan_number] = retention_time
-    return retention_time
+    return cached_retention_time_for_scan(
+        raw,
+        scan_number,
+        retention_time_by_scan=retention_time_by_scan,
+    )
 
 
 def _scan_span(start_scan: int, end_scan: int) -> int:

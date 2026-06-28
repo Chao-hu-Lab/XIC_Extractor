@@ -28,11 +28,15 @@ from xic_extractor.alignment.owner_group_delivery import (
     delivery_cell_projection,
 )
 from xic_extractor.alignment.ownership_models import SampleLocalMS1Owner
+from xic_extractor.alignment.scan_retention_times import (
+    ScanRetentionTimeCache,
+    cached_retention_time_for_scan,
+)
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
-from xic_extractor.xic_models import XICRequest, XICTrace
+from xic_extractor.xic_models import XICRequest, XICTrace, crop_xic_trace_by_rt
 
 _RequestItem = OwnerBackfillRequestItem
 _RequestGroupKey = tuple[str, int | float, int | float]
@@ -371,16 +375,22 @@ def _iter_extracted_request_traces(
     superwindow_span_factor: int,
 ):
     if window_strategy == "super-window":
+        retention_time_by_scan: dict[int, float | None] = {}
         groups = _superwindow_groups(
             source,
             items,
             superwindow_span_factor=superwindow_span_factor,
+            retention_time_by_scan=retention_time_by_scan,
         )
         if groups is not None:
             for group in groups:
                 group_items = tuple(item for item, _scan_window in group)
                 try:
-                    yield group_items, _extract_superwindow_group(source, group)
+                    yield group_items, _extract_superwindow_group(
+                        source,
+                        group,
+                        retention_time_by_scan=retention_time_by_scan,
+                    )
                 except OSError:
                     yield from _iter_exact_request_traces(
                         source,
@@ -539,15 +549,30 @@ def _superwindow_groups(
     items: tuple[_RequestItem, ...],
     *,
     superwindow_span_factor: int,
+    retention_time_by_scan: ScanRetentionTimeCache,
 ) -> tuple[tuple[_WindowedRequestItem, ...], ...] | None:
     windowed_items: list[_WindowedRequestItem] = []
     for item in items:
         scan_window = _source_scan_window_for_request(source, item[2])
         if scan_window is None:
             return None
-        if _source_retention_time_for_scan(source, scan_window[0]) is None:
+        if (
+            _source_retention_time_for_scan(
+                source,
+                scan_window[0],
+                retention_time_by_scan=retention_time_by_scan,
+            )
+            is None
+        ):
             return None
-        if _source_retention_time_for_scan(source, scan_window[1]) is None:
+        if (
+            _source_retention_time_for_scan(
+                source,
+                scan_window[1],
+                retention_time_by_scan=retention_time_by_scan,
+            )
+            is None
+        ):
             return None
         windowed_items.append((item, scan_window))
     if not windowed_items:
@@ -611,11 +636,21 @@ def _windowed_request_sort_key(
 def _extract_superwindow_group(
     source: OwnerBackfillSource,
     group: tuple[_WindowedRequestItem, ...],
+    *,
+    retention_time_by_scan: ScanRetentionTimeCache,
 ) -> tuple[XICTrace, ...]:
     union_start = min(scan_window[0] for _item, scan_window in group)
     union_end = max(scan_window[1] for _item, scan_window in group)
-    union_rt_min = _source_retention_time_for_scan(source, union_start)
-    union_rt_max = _source_retention_time_for_scan(source, union_end)
+    union_rt_min = _source_retention_time_for_scan(
+        source,
+        union_start,
+        retention_time_by_scan=retention_time_by_scan,
+    )
+    union_rt_max = _source_retention_time_for_scan(
+        source,
+        union_end,
+        retention_time_by_scan=retention_time_by_scan,
+    )
     if union_rt_min is None or union_rt_max is None:
         raise AttributeError("scan RT lookup is unavailable")
     if union_rt_min > union_rt_max:
@@ -631,7 +666,12 @@ def _extract_superwindow_group(
     )
     union_traces = _extract_many(source, union_requests)
     return tuple(
-        _crop_trace_to_scan_window(source, trace, scan_window)
+        _crop_trace_to_scan_window(
+            source,
+            trace,
+            scan_window,
+            retention_time_by_scan=retention_time_by_scan,
+        )
         for trace, (_item, scan_window) in zip(union_traces, group, strict=True)
     )
 
@@ -640,15 +680,22 @@ def _crop_trace_to_scan_window(
     source: OwnerBackfillSource,
     trace: XICTrace,
     scan_window: tuple[int, int],
+    *,
+    retention_time_by_scan: ScanRetentionTimeCache | None = None,
 ) -> XICTrace:
-    rt_min = _source_retention_time_for_scan(source, scan_window[0])
-    rt_max = _source_retention_time_for_scan(source, scan_window[1])
+    rt_min = _source_retention_time_for_scan(
+        source,
+        scan_window[0],
+        retention_time_by_scan=retention_time_by_scan,
+    )
+    rt_max = _source_retention_time_for_scan(
+        source,
+        scan_window[1],
+        retention_time_by_scan=retention_time_by_scan,
+    )
     if rt_min is None or rt_max is None:
         return trace
-    if rt_min > rt_max:
-        rt_min, rt_max = rt_max, rt_min
-    mask = (trace.rt >= rt_min) & (trace.rt <= rt_max)
-    return XICTrace.from_arrays(trace.rt[mask], trace.intensity[mask])
+    return crop_xic_trace_by_rt(trace, rt_min, rt_max, assume_sorted_rt=True)
 
 
 def _scan_span(start_scan: int, end_scan: int) -> int:
@@ -672,14 +719,14 @@ def _source_scan_window_for_request(
 def _source_retention_time_for_scan(
     source: OwnerBackfillSource,
     scan_number: int,
+    *,
+    retention_time_by_scan: ScanRetentionTimeCache | None = None,
 ) -> float | None:
-    resolver = getattr(source, "retention_time_for_scan", None)
-    if not callable(resolver):
-        return None
-    try:
-        return float(resolver(scan_number))
-    except (AttributeError, NotImplementedError):
-        return None
+    return cached_retention_time_for_scan(
+        source,
+        scan_number,
+        retention_time_by_scan=retention_time_by_scan,
+    )
 
 
 def _backfill_feature_sample_trace(

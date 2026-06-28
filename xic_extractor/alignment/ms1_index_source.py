@@ -7,7 +7,7 @@ from typing import Any, Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from xic_extractor.xic_models import XICRequest, XICTrace
+from xic_extractor.xic_models import XICRequest, XICTrace, crop_xic_trace_by_rt
 
 OwnerBuildXicBackend = Literal["raw", "raw_superwindow", "ms1_index"]
 OwnerBackfillXicBackend = Literal["raw", "ms1_index", "ms1_index_hybrid"]
@@ -430,10 +430,7 @@ def _crop_trace_to_scan_window(
 ) -> XICTrace:
     rt_min = source.retention_time_for_scan(scan_window[0])
     rt_max = source.retention_time_for_scan(scan_window[1])
-    if rt_min > rt_max:
-        rt_min, rt_max = rt_max, rt_min
-    mask = (trace.rt >= rt_min) & (trace.rt <= rt_max)
-    return XICTrace.from_arrays(trace.rt[mask], trace.intensity[mask])
+    return crop_xic_trace_by_rt(trace, rt_min, rt_max, assume_sorted_rt=True)
 
 
 def _scan_span(start_scan: int, end_scan: int) -> int:
