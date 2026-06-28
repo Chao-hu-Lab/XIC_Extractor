@@ -20,6 +20,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_assets as gallery_assets,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_evidence as gallery_evidence,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_html as gallery_html,
 )
 from xic_extractor.diagnostics import (
@@ -147,6 +150,12 @@ def test_gallery_source_context_stays_out_of_reconciliation_orchestrator() -> No
         gallery._source_hashes_from_input_artifacts
         is gallery_source_context._source_hashes_from_input_artifacts
     )
+
+
+def test_gallery_evidence_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._classify_evidence is gallery_evidence._classify_evidence
+    assert gallery._product_behavior is gallery_evidence._product_behavior
+    assert gallery._reconciliation_class is gallery_evidence._reconciliation_class
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
