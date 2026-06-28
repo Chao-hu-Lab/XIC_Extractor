@@ -1,7 +1,14 @@
 import inspect
 
+from xic_extractor import decision_policy as shared_decision_policy
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
-from xic_extractor.peak_detection import candidate_selection, model_selection
+from xic_extractor.peak_detection import (
+    candidate_selection,
+    model_selection,
+)
+from xic_extractor.peak_detection import (
+    decision_policy as peak_decision_policy,
+)
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
     EvidenceVector,
@@ -78,6 +85,12 @@ def test_active_selector_source_has_no_legacy_raw_score_or_label_tie_break() -> 
     assert "support_labels" not in source
     assert "concern_labels" not in source
     assert "evidence_score" not in source
+
+
+def test_decision_policy_exposes_no_shared_record_ordering_helper() -> None:
+    helper_name = "decision_record_" "ordering_key"
+    assert not hasattr(shared_decision_policy, helper_name)
+    assert not hasattr(peak_decision_policy, helper_name)
 
 
 def _hypothesis(

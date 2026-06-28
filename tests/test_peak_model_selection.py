@@ -1,7 +1,6 @@
 from dataclasses import replace
 from pathlib import Path
 
-from xic_extractor.decision_policy import decision_record_ordering_key
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
@@ -151,14 +150,16 @@ def test_peak_hypothesis_decision_record_exposes_model_selection_order() -> None
         "legacy_selection_rank",
     ]
     assert not hasattr(record, "key")
-    assert decision_record_ordering_key(record) == (
-        0.0,
-        0.0,
-        0.0,
-        -2.0,
-        2.0,
-        0.0,
-        2.0,
+    assert record.gate == (
+        ("decision_class_rank", 0.0),
+        ("blocker_count", 0.0),
+    )
+    assert record.tie_break == (
+        ("projected_confidence_rank", 0.0),
+        ("negative_selection_reason_count", -2.0),
+        ("chemical_evidence_rank", 2.0),
+        ("selection_reference_distance", 0.0),
+        ("legacy_selection_rank", 2.0),
     )
 
 
@@ -185,9 +186,8 @@ def test_peak_hypothesis_record_ordering_ignores_legacy_score_payload() -> None:
     base_record = peak_hypothesis_decision_record(hypothesis)
     adversarial_record = peak_hypothesis_decision_record(adversarial)
 
-    assert decision_record_ordering_key(adversarial_record) == (
-        decision_record_ordering_key(base_record)
-    )
+    assert adversarial_record.gate == base_record.gate
+    assert adversarial_record.tie_break == base_record.tie_break
     assert adversarial_record.support == base_record.support
     assert adversarial_record.blockers == base_record.blockers
 

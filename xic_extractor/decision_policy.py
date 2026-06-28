@@ -51,7 +51,3 @@ def decision_gate_terms(
         ("decision_class_rank", float(DECISION_CLASS_RANK[semantics.decision_class])),
         ("blocker_count", float(len(blockers))),
     )
-
-
-def decision_record_ordering_key(record: DecisionRecord) -> tuple[float, ...]:
-    return tuple(value for _name, value in (*record.gate, *record.tie_break))

@@ -7,7 +7,6 @@ from xic_extractor.decision_policy import (
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
-    decision_record_ordering_key,
 )
 from xic_extractor.peak_detection.evidence_facts import (
     CandidateEvidenceFacts,
@@ -231,7 +230,11 @@ def _typed_selection_key(
         selection_rt=selection_rt,
         strict_selection_rt=strict_selection_rt,
     )
-    return decision_record_ordering_key(record)
+    return _candidate_selection_ordering_key(record)
+
+
+def _candidate_selection_ordering_key(record: DecisionRecord) -> tuple[float, ...]:
+    return tuple(value for _name, value in (*record.gate, *record.tie_break))
 
 
 def candidate_selection_decision_record(

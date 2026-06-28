@@ -3,7 +3,6 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from xic_extractor.decision_policy import decision_record_ordering_key
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
     candidate_selection_decision_record,
@@ -290,16 +289,18 @@ def test_typed_selection_decision_record_exposes_gate_support_and_projection() -
         "negative_abundance",
     ]
     assert not hasattr(record, "key")
-    assert decision_record_ordering_key(record) == (
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        -1200.0,
+    assert record.gate == (
+        ("decision_class_rank", 0.0),
+        ("blocker_count", 0.0),
+    )
+    assert record.tie_break == (
+        ("abundance_demotion_rank", 0.0),
+        ("chemical_evidence_rank", 0.0),
+        ("trace_strength_rank", 0.0),
+        ("selection_quality_penalty", 0.0),
+        ("selection_rt_distance", 0.0),
+        ("rt_prior_distance", 0.0),
+        ("negative_abundance", -1200.0),
     )
 
 
@@ -339,9 +340,8 @@ def test_typed_selection_record_ordering_ignores_legacy_score_payload() -> None:
         selection_rt=10.0,
     )
 
-    assert decision_record_ordering_key(adversarial_record) == (
-        decision_record_ordering_key(base_record)
-    )
+    assert adversarial_record.gate == base_record.gate
+    assert adversarial_record.tie_break == base_record.tie_break
     assert adversarial_record.support == base_record.support
     assert adversarial_record.blockers == base_record.blockers
 
@@ -379,12 +379,20 @@ def test_strict_decision_record_places_anchor_gate_before_tie_breaks() -> None:
         "blocker_count",
     ]
     assert record.tie_break[0][0] == "strict_anchor_area_demotion_rank"
-    assert decision_record_ordering_key(record) == tuple(
-        value for _name, value in (*record.gate, *record.tie_break)
+    assert record.gate == (
+        ("anchor_selection_completeness_rank", 0.0),
+        ("decision_class_rank", 1.0),
+        ("blocker_count", 1.0),
     )
-    assert decision_record_ordering_key(record) == pytest.approx(
-        (0.0, 1.0, 1.0, 0.0, 0.0, 3.0, 3.0, 0.02, -900.0)
+    assert record.tie_break[:4] == (
+        ("strict_anchor_area_demotion_rank", 0.0),
+        ("selection_quality_penalty", 0.0),
+        ("chemical_evidence_rank", 3.0),
+        ("trace_strength_rank", 3.0),
     )
+    assert record.tie_break[4][0] == "selection_rt_distance"
+    assert record.tie_break[4][1] == pytest.approx(0.02)
+    assert record.tie_break[5] == ("negative_abundance", -900.0)
 
 
 def _scored_with_facts(

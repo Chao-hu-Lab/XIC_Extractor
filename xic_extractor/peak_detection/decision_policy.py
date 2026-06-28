@@ -6,7 +6,6 @@ from xic_extractor.decision_policy import (
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
-    decision_record_ordering_key,
 )
 
 __all__ = [
@@ -15,5 +14,4 @@ __all__ = [
     "DecisionTerm",
     "decision_blockers",
     "decision_gate_terms",
-    "decision_record_ordering_key",
 ]

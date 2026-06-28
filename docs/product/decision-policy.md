@@ -219,6 +219,9 @@ The decision record can live in different artifacts for different workflows,
 but the meaning must remain stable: evidence explains, policy gates, score
 ranks, and projection writes. Reserve `Trace` for LC-MS chromatogram signals;
 do not use it as shorthand for decision records.
+`DecisionRecord.gate` and `DecisionRecord.tie_break` are audit-visible policy
+terms, not a generic selection key. Only workflow-owned selection modules may
+convert those terms into ordering keys.
 
 ## Red Lines
 

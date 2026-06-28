@@ -10,7 +10,6 @@ from xic_extractor.decision_policy import (
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
-    decision_record_ordering_key,
 )
 from xic_extractor.evidence_semantics import DecisionClass
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
@@ -330,7 +329,15 @@ def _successor_selected_hypothesis(
 
 
 def _successor_selection_key(hypothesis: PeakHypothesis) -> tuple[float, ...]:
-    return decision_record_ordering_key(peak_hypothesis_decision_record(hypothesis))
+    return _peak_hypothesis_selection_ordering_key(
+        peak_hypothesis_decision_record(hypothesis)
+    )
+
+
+def _peak_hypothesis_selection_ordering_key(
+    record: DecisionRecord,
+) -> tuple[float, ...]:
+    return tuple(value for _name, value in (*record.gate, *record.tie_break))
 
 
 def peak_hypothesis_decision_record(
