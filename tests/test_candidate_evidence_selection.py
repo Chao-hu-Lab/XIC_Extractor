@@ -1,9 +1,11 @@
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
+    candidate_selection_policy_trace,
     select_candidate_by_evidence,
 )
 from xic_extractor.peak_detection.evidence_facts import (
@@ -234,6 +236,137 @@ def test_strict_selector_demotes_late_small_peak_when_anchor_aligned_area_exists
     )
 
     assert selected.candidate is anchor_aligned_area
+
+
+def test_typed_selection_policy_trace_exposes_gate_support_and_projection() -> None:
+    candidate = _candidate(
+        10.0,
+        area=1200.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.0,
+            abundance=1200.0,
+            ms2_trace_strength="strong",
+            shape_quality="clean",
+        ),
+    )
+
+    trace = candidate_selection_policy_trace([scored][0], [scored], selection_rt=10.0)
+
+    assert trace.workflow == "targeted_candidate_selection"
+    assert trace.unit_id == "candidate@10.0"
+    assert trace.required_evidence == (
+        "typed_candidate_evidence_facts",
+        "selected_apex_rt",
+        "trace_evidence",
+        "chemical_evidence",
+        "rt_evidence",
+        "boundary_evidence",
+    )
+    assert trace.decision_class == "accepted"
+    assert trace.blockers == ()
+    assert "candidate_aligned_ms2_nl" in trace.support
+    assert trace.projection_authority == "select_candidate_by_evidence"
+    assert [name for name, _value in trace.gate] == [
+        "decision_class_rank",
+        "blocker_count",
+    ]
+    assert [name for name, _value in trace.tie_break] == [
+        "abundance_demotion_rank",
+        "chemical_evidence_rank",
+        "trace_strength_rank",
+        "selection_quality_penalty",
+        "selection_rt_distance",
+        "rt_prior_distance",
+        "negative_abundance",
+    ]
+    assert trace.key == (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1200.0)
+
+
+def test_typed_selection_policy_trace_key_ignores_legacy_score_payload() -> None:
+    candidate = _candidate(
+        10.0,
+        area=1200.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    base_scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.0,
+            abundance=1200.0,
+            ms2_trace_strength="strong",
+            shape_quality="clean",
+        ),
+    )
+    adversarial_scored = replace(
+        base_scored,
+        evidence_score=_legacy_score(
+            raw_score=999,
+            support_labels=("fake_score_support", "strict_nl_ok"),
+            concern_labels=("fake_score_concern",),
+        ),
+    )
+
+    base_trace = candidate_selection_policy_trace(
+        base_scored,
+        [base_scored],
+        selection_rt=10.0,
+    )
+    adversarial_trace = candidate_selection_policy_trace(
+        adversarial_scored,
+        [adversarial_scored],
+        selection_rt=10.0,
+    )
+
+    assert adversarial_trace.key == base_trace.key
+    assert adversarial_trace.support == base_trace.support
+    assert adversarial_trace.blockers == base_trace.blockers
+
+
+def test_strict_policy_trace_places_anchor_gate_before_tie_breaks() -> None:
+    candidate = _candidate(
+        10.02,
+        area=900.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.02,
+            abundance=900.0,
+            ms2_trace_strength="none",
+            shape_quality="clean",
+            nl_match=False,
+            paired_istd_delta_min=0.02,
+            paired_istd_status="close",
+        ),
+    )
+
+    trace = candidate_selection_policy_trace(
+        scored,
+        [scored],
+        selection_rt=10.0,
+        strict_selection_rt=True,
+    )
+
+    assert [name for name, _value in trace.gate] == [
+        "anchor_selection_completeness_rank",
+        "decision_class_rank",
+        "blocker_count",
+    ]
+    assert trace.tie_break[0][0] == "strict_anchor_area_demotion_rank"
+    assert trace.key == tuple(
+        value for _name, value in (*trace.gate, *trace.tie_break)
+    )
+    assert trace.key == pytest.approx(
+        (0.0, 1.0, 1.0, 0.0, 0.0, 3.0, 3.0, 0.02, -900.0)
+    )
 
 
 def _scored_with_facts(
