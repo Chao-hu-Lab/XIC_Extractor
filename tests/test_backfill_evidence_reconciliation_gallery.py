@@ -71,6 +71,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_state as gallery_state,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_summary as gallery_summary,
 )
 from xic_extractor.diagnostics import (
@@ -376,6 +379,28 @@ def test_gallery_counts_stay_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._consolidated_counts_html
         is gallery_counts._consolidated_counts_html
+    )
+
+
+def test_gallery_state_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._state_html is gallery_state._state_html
+    assert gallery._state_aria_label is gallery_state._state_aria_label
+    assert gallery._state_html_for_shadow is gallery_state._state_html_for_shadow
+    assert (
+        gallery._shadow_policy_state_label
+        is gallery_state._shadow_policy_state_label
+    )
+    assert (
+        gallery._shadow_policy_chain_title
+        is gallery_state._shadow_policy_chain_title
+    )
+    assert (
+        gallery._shadow_policy_chain_subtitle
+        is gallery_state._shadow_policy_chain_subtitle
+    )
+    assert (
+        gallery._projection_matrix_state_html
+        is gallery_state._projection_matrix_state_html
     )
 
 
