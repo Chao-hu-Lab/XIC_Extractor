@@ -4,7 +4,7 @@ import csv
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -13,13 +13,19 @@ from gui.workers.backfill_gallery import (
     build_backfill_review_gallery,
 )
 from xic_extractor.alignment.config import AlignmentConfig
+from xic_extractor.alignment.ms1_index_source import OwnerBuildXicBackend
 from xic_extractor.alignment.pipeline import run_alignment
 from xic_extractor.alignment.pipeline_outputs import AlignmentRunOutputs
 from xic_extractor.alignment.process_backend import AlignmentProcessExecutionError
 from xic_extractor.config import ExtractionConfig
 from xic_extractor.discovery.models import DiscoverySettings
 from xic_extractor.discovery.pipeline import run_discovery, run_discovery_batch
-from xic_extractor.presets import PresetError, apply_to_discovery, load_preset
+from xic_extractor.presets import (
+    PresetError,
+    apply_to_alignment,
+    apply_to_discovery,
+    load_preset,
+)
 from xic_extractor.raw_reader import RawReaderError
 from xic_extractor.settings_schema import CANONICAL_SETTINGS_DEFAULTS
 
@@ -117,14 +123,10 @@ class DiscoveryWorker(QThread):
             return None
 
         self.progress.emit(1, 3, "Alignment...")
-        outputs = run_alignment(
-            discovery_batch_index=index_path,
+        outputs, standard_peak_outputs = self._run_alignment(
+            request,
+            index_path=index_path,
             raw_dir=raw_dir,
-            dll_dir=request.dll_dir,
-            output_dir=request.output_dir,
-            alignment_config=AlignmentConfig(),
-            peak_config=self._alignment_peak_config(request),
-            **_GALLERY_ALIGNMENT_KWARGS,
         )
         if self.isInterruptionRequested():
             return None
@@ -134,7 +136,7 @@ class DiscoveryWorker(QThread):
         self.progress.emit(3, 3, "完成")
 
         summary = self._discovery_summary(request, index_path=index_path)
-        summary.update(_alignment_summary(outputs))
+        summary.update(_alignment_summary(outputs, standard_peak_outputs))
         summary.update(gallery)
         return summary
 
@@ -194,14 +196,10 @@ class DiscoveryWorker(QThread):
         candidate_counts, sample_count = _read_batch_counts(index_path)
 
         self.progress.emit(0, 2, "Alignment...")
-        outputs = run_alignment(
-            discovery_batch_index=index_path,
+        outputs, standard_peak_outputs = self._run_alignment(
+            request,
+            index_path=index_path,
             raw_dir=request.raw_dir,
-            dll_dir=request.dll_dir,
-            output_dir=request.output_dir,
-            alignment_config=AlignmentConfig(),
-            peak_config=self._alignment_peak_config(request),
-            **_GALLERY_ALIGNMENT_KWARGS,
         )
         if self.isInterruptionRequested():
             return None
@@ -222,9 +220,96 @@ class DiscoveryWorker(QThread):
             "matrix_tsv": None,
             "gallery_html": None,
         }
-        summary.update(_alignment_summary(outputs))
+        summary.update(_alignment_summary(outputs, standard_peak_outputs))
         summary.update(gallery)
         return summary
+
+    def _run_alignment(
+        self,
+        request: DiscoveryRequest,
+        *,
+        index_path: Path,
+        raw_dir: Path,
+    ) -> tuple[AlignmentRunOutputs, Any | None]:
+        alignment_config, runtime_options, source_run_id = self._alignment_runtime(
+            request,
+        )
+        outputs = run_alignment(
+            discovery_batch_index=index_path,
+            raw_dir=raw_dir,
+            dll_dir=request.dll_dir,
+            output_dir=request.output_dir,
+            alignment_config=alignment_config,
+            peak_config=self._alignment_peak_config(request),
+            owner_build_xic_backend=_owner_build_xic_backend(
+                runtime_options.get("owner_build_xic_backend", "raw"),
+            ),
+            **_GALLERY_ALIGNMENT_KWARGS,
+        )
+        if self.isInterruptionRequested():
+            return outputs, None
+        standard_peak_outputs = self._run_standard_peak_backfill_if_enabled(
+            request,
+            raw_dir=raw_dir,
+            runtime_options=runtime_options,
+            source_run_id=source_run_id,
+        )
+        return outputs, standard_peak_outputs
+
+    def _alignment_runtime(
+        self,
+        request: DiscoveryRequest,
+    ) -> tuple[AlignmentConfig, dict[str, object], str]:
+        preset = load_preset(request.preset)
+        alignment_config, runtime_options = apply_to_alignment(preset)
+        return (
+            alignment_config,
+            runtime_options,
+            _standard_peak_source_run_id(str(preset.source)),
+        )
+
+    def _run_standard_peak_backfill_if_enabled(
+        self,
+        request: DiscoveryRequest,
+        *,
+        raw_dir: Path,
+        runtime_options: dict[str, object],
+        source_run_id: str,
+    ) -> Any | None:
+        if not bool(runtime_options.get("standard_peak_backfill", False)):
+            return None
+        backfill_expansion_mode = str(
+            runtime_options.get("backfill_expansion_productization", "off"),
+        )
+        if backfill_expansion_mode != "off":
+            raise ValueError(
+                "GUI untargeted presets do not support "
+                "backfill_expansion_productization yet; use scripts.run_alignment "
+                "for this preset",
+            )
+        return run_standard_peak_backfill_preset(
+            alignment_dir=request.output_dir,
+            raw_dir=raw_dir,
+            dll_dir=request.dll_dir,
+            source_run_id=source_run_id,
+            chunk_size=_runtime_int(
+                runtime_options,
+                "standard_peak_backfill_chunk_size",
+            ),
+            reuse_existing=bool(
+                runtime_options["standard_peak_backfill_reuse_existing"],
+            ),
+            write_gallery=bool(
+                runtime_options["standard_peak_backfill_write_gallery"],
+            ),
+            publication_mode=str(
+                runtime_options["standard_peak_backfill_publication_mode"],
+            ),
+            min_shape_r=_runtime_float(
+                runtime_options,
+                "standard_peak_backfill_min_shape_r",
+            ),
+        )
 
     def _build_gallery(
         self,
@@ -379,12 +464,54 @@ def _batch_index_path(batch_outputs: Any, output_dir: Path) -> Path:
     )
 
 
-def _alignment_summary(outputs: Any) -> dict[str, Any]:
+def run_standard_peak_backfill_preset(**kwargs: Any) -> Any:
+    from tools.diagnostics.standard_peak_backfill_preset import (
+        run_standard_peak_backfill_preset as runner,
+    )
+
+    return runner(**kwargs)
+
+
+def _standard_peak_source_run_id(preset_source: str) -> str:
+    safe_source = preset_source.replace("\\", "/")
+    return f"alignment-preset:{safe_source}:standard-peak-backfill"
+
+
+def _owner_build_xic_backend(value: object) -> OwnerBuildXicBackend:
+    text = str(value)
+    if text == "raw-super-window":
+        return "raw_superwindow"
+    if text == "ms1-index":
+        return "ms1_index"
+    if text in {"raw", "raw_superwindow", "ms1_index"}:
+        return cast(OwnerBuildXicBackend, text)
+    raise ValueError(f"unsupported owner_build_xic_backend: {text}")
+
+
+def _runtime_int(options: dict[str, object], key: str) -> int:
+    value = options[key]
+    if isinstance(value, int):
+        return value
+    raise TypeError(f"{key} must be an int")
+
+
+def _runtime_float(options: dict[str, object], key: str) -> float:
+    value = options[key]
+    if isinstance(value, int | float):
+        return float(value)
+    raise TypeError(f"{key} must be numeric")
+
+
+def _alignment_summary(
+    outputs: Any,
+    standard_peak_outputs: Any | None = None,
+) -> dict[str, Any]:
     alignment_outputs: dict[str, str] = {}
     for attr in _ALIGNMENT_OUTPUT_ATTRS:
         value = getattr(outputs, attr, None)
         if value is not None:
             alignment_outputs[attr] = str(value)
+    alignment_outputs.update(_standard_peak_output_paths(standard_peak_outputs))
 
     matrix = getattr(outputs, "matrix_tsv", None)
     gallery = getattr(outputs, "gallery_html", None)
@@ -395,6 +522,25 @@ def _alignment_summary(outputs: Any) -> dict[str, Any]:
         "gallery_html": str(gallery) if gallery is not None else None,
         "run_metadata_json": str(run_metadata) if run_metadata is not None else None,
     }
+
+
+def _standard_peak_output_paths(outputs: Any | None) -> dict[str, str]:
+    if outputs is None:
+        return {}
+    paths: dict[str, str] = {}
+    for attr in (
+        "summary_json",
+        "retained_gate_tsv",
+        "review_queue_tsv",
+        "consolidated_output_dir",
+        "consolidation_summary_json",
+        "published_alignment_manifest_json",
+        "gallery_html",
+    ):
+        value = getattr(outputs, attr, None)
+        if value is not None:
+            paths[f"standard_peak_{attr}"] = str(value)
+    return paths
 
 
 def _raw_paths_from_dir(raw_dir: Path | None) -> tuple[Path, ...]:

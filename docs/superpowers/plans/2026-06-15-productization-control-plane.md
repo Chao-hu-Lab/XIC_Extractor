@@ -5222,9 +5222,14 @@ the later low-height writer entry above as the current tier source.
   against the just-finished alignment output instead of re-reading a fixed
   validation folder.
 - Future preset requirement: future batches should use a single CLI/GUI preset
-  once an alignment GUI surface exists. The current update adds the CLI preset
-  path only; it does not invent a second GUI flow because the existing GUI is
-  not an alignment/discovery launcher.
+  surface instead of separate ad hoc runners. The original update added the CLI
+  preset path first. The 2026-06-28 Untargeted GUI refresh now routes GUI
+  `full` / `align_only` runs through the same preset alignment runtime and
+  standard-peak publisher when the preset enables `standard_peak_backfill`.
+  This is GUI reachability for existing preset behavior, not a second product
+  authority path: GUI still rejects `backfill_expansion_productization` modes
+  other than `off` and tells users to use `scripts.run_alignment` for those
+  reviewed clean-target selective activation flows.
 - Evidence:
   `python -m scripts.build_backfill_expansion_clean_target_selective_product_activation`
   and
@@ -5233,11 +5238,12 @@ the later low-height writer entry above as the current tier source.
   `0` and reports `Active clean-target activation: 84 cells`. Focused tests
   cover stable counts, artifact hash binding, registered authority scope,
   runner ordering, and fail-closed product-surface underclaims.
-- Control-plane decision: updated for the 84-cell authority scope. The follow-up
-  CLI preset wiring does not change maturity tier, active lane, authority scope,
-  workbook/GUI behavior, selected peak/area, or counted detection; it only
-  exposes the already registered clean-target selective activation through the
-  normal `run_alignment` preset surface.
+- Control-plane decision: updated for the 84-cell authority scope. The preset
+  routing follow-ups do not change maturity tier, active lane, authority scope,
+  output schema, ProductWriter authority, selected peak/area, matrix authority,
+  or counted detection. The CLI remains the owner for clean-target selective
+  backfill-expansion activation; the GUI only reaches the existing
+  standard-peak preset path.
 
 ### 2026-06-23 - Row-Completion Confidence Shadow Gate v1
 
