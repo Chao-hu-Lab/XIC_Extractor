@@ -21,6 +21,12 @@ from xic_extractor.alignment.promotion_policy import (
     NEIGHBOR_INTERFERENCE_BLOCKED_REASON,
     cell_evidence_from_aligned,
 )
+from xic_extractor.decision_policy import (
+    DECISION_CLASS_RANK,
+    DecisionPolicyTrace,
+    DecisionTerm,
+)
+from xic_extractor.evidence_semantics import DecisionClass
 
 ProductionStatus = Literal[
     "detected",
@@ -42,6 +48,10 @@ class ProductionCellDecision:
     write_matrix_value: bool
     matrix_value: float | None
     blank_reason: str
+
+    @property
+    def decision_policy_trace(self) -> DecisionPolicyTrace:
+        return production_cell_policy_trace(self)
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,47 @@ class ProductionDecisionSet:
 
     def row(self, feature_family_id: str) -> ProductionRowDecision:
         return self.rows[feature_family_id]
+
+
+def production_cell_policy_trace(
+    decision: ProductionCellDecision,
+) -> DecisionPolicyTrace:
+    decision_class = _production_cell_decision_class(decision)
+    blockers = _production_cell_blockers(decision)
+    gate: tuple[DecisionTerm, ...] = (
+        ("decision_class_rank", float(DECISION_CLASS_RANK[decision_class])),
+        (
+            "matrix_value_projection_rank",
+            0.0 if decision.write_matrix_value else 1.0,
+        ),
+        ("blocker_count", float(len(blockers))),
+    )
+    tie_break: tuple[DecisionTerm, ...] = (
+        (
+            "production_status_rank",
+            float(_PRODUCTION_STATUS_RANK[decision.production_status]),
+        ),
+        ("rescue_tier_rank", float(_RESCUE_TIER_RANK[decision.rescue_tier])),
+        (
+            "matrix_value_present_rank",
+            0.0 if decision.matrix_value is not None else 1.0,
+        ),
+    )
+    return DecisionPolicyTrace(
+        workflow="alignment_production_cell",
+        unit_id=f"{decision.feature_family_id}:{decision.sample_stem}",
+        required_evidence=(
+            "production_cell_decision",
+            "cell_quality_decision",
+            "matrix_identity_row_decision",
+        ),
+        decision_class=decision_class,
+        blockers=blockers,
+        support=_production_cell_support(decision),
+        gate=gate,
+        tie_break=tie_break,
+        projection_authority="build_production_decisions",
+    )
 
 
 def build_production_decisions(
@@ -111,6 +162,68 @@ def build_production_decisions(
         )
 
     return ProductionDecisionSet(cells=cell_decisions, rows=row_decisions)
+
+
+_PRODUCTION_STATUS_RANK: dict[ProductionStatus, int] = {
+    "detected": 0,
+    "accepted_rescue": 1,
+    "review_rescue": 2,
+    "rejected_rescue": 3,
+    "blank": 4,
+}
+_RESCUE_TIER_RANK: dict[RescueTier, int] = {
+    "": 0,
+    "accepted_rescue": 1,
+    "review_rescue": 2,
+    "rejected_rescue": 3,
+}
+
+
+def _production_cell_decision_class(
+    decision: ProductionCellDecision,
+) -> DecisionClass:
+    if decision.write_matrix_value:
+        return "accepted"
+    if decision.production_status == "review_rescue":
+        return "review"
+    if decision.blank_reason == "ambiguous_ms1_owner":
+        return "ambiguous"
+    if decision.production_status == "rejected_rescue":
+        return "excluded"
+    return "not_counted"
+
+
+def _production_cell_blockers(
+    decision: ProductionCellDecision,
+) -> tuple[str, ...]:
+    if decision.write_matrix_value:
+        return ()
+    return tuple(
+        dict.fromkeys(
+            part
+            for part in (
+                decision.blank_reason,
+                "" if decision.blank_reason else "matrix_value_not_written",
+            )
+            if part
+        )
+    )
+
+
+def _production_cell_support(
+    decision: ProductionCellDecision,
+) -> tuple[str, ...]:
+    support = [
+        f"raw_status:{decision.raw_status}",
+        f"production_status:{decision.production_status}",
+    ]
+    if decision.rescue_tier:
+        support.append(f"rescue_tier:{decision.rescue_tier}")
+    if decision.write_matrix_value:
+        support.append("write_matrix_value")
+    if decision.matrix_value is not None:
+        support.append("matrix_value_present")
+    return tuple(dict.fromkeys(support))
 
 
 def _cell_decision(

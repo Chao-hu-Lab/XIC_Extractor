@@ -4,14 +4,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from xic_extractor.evidence_semantics import DecisionClass
-from xic_extractor.peak_detection.decision_policy import (
+from xic_extractor.decision_policy import (
     DECISION_CLASS_RANK,
     DecisionPolicyTrace,
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
 )
+from xic_extractor.evidence_semantics import DecisionClass
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
 from xic_extractor.peak_detection.selection_decision import (
     SelectionDecisionCompatibilityOracle,

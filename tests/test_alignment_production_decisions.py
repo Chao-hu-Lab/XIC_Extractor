@@ -9,7 +9,10 @@ from xic_extractor.alignment.matrix import (
     AlignmentMatrix,
     AlignmentRowLike,
 )
-from xic_extractor.alignment.production_decisions import build_production_decisions
+from xic_extractor.alignment.production_decisions import (
+    build_production_decisions,
+    production_cell_policy_trace,
+)
 from xic_extractor.alignment.promotion_policy import (
     ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
     BACKFILL_CELL_EVIDENCE_REQUIRED_FLAG,
@@ -55,6 +58,51 @@ def test_detected_and_supported_rescue_write_numeric_values():
     assert decisions.row("FAM001").row_flags == ()
 
 
+def test_production_cell_policy_trace_exposes_matrix_value_projection() -> None:
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "detected", 95.0),
+        ),
+        sample_order=("s1", "s2"),
+    )
+
+    decision = build_production_decisions(matrix, AlignmentConfig()).cell(
+        "FAM001",
+        "s1",
+    )
+    trace = production_cell_policy_trace(decision)
+
+    assert decision.decision_policy_trace == trace
+    assert trace.workflow == "alignment_production_cell"
+    assert trace.unit_id == "FAM001:s1"
+    assert trace.required_evidence == (
+        "production_cell_decision",
+        "cell_quality_decision",
+        "matrix_identity_row_decision",
+    )
+    assert trace.decision_class == "accepted"
+    assert trace.blockers == ()
+    assert trace.support == (
+        "raw_status:detected",
+        "production_status:detected",
+        "write_matrix_value",
+        "matrix_value_present",
+    )
+    assert trace.gate == (
+        ("decision_class_rank", 0.0),
+        ("matrix_value_projection_rank", 0.0),
+        ("blocker_count", 0.0),
+    )
+    assert trace.tie_break == (
+        ("production_status_rank", 0.0),
+        ("rescue_tier_rank", 0.0),
+        ("matrix_value_present_rank", 0.0),
+    )
+    assert trace.projection_authority == "build_production_decisions"
+
+
 def test_production_matrix_value_uses_asls_selected_integration_area_when_present():
     matrix = _matrix(
         clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
@@ -98,6 +146,36 @@ def test_single_sample_local_owner_does_not_create_primary_identity():
     assert decisions.row("FAM001").identity_decision == "provisional_discovery"
     assert decisions.row("FAM001").identity_reason == "single_sample_local_owner"
     assert "single_sample_local_owner" in decisions.row("FAM001").row_flags
+
+
+def test_production_cell_policy_trace_explains_missing_row_identity_blank() -> None:
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="single_sample_local_owner"),),
+        cells=(
+            _cell("s1", "FAM001", "detected", 100.0),
+            _cell("s2", "FAM001", "rescued", 90.0),
+        ),
+        sample_order=("s1", "s2"),
+    )
+
+    decisions = build_production_decisions(matrix, AlignmentConfig())
+    detected_trace = decisions.cell("FAM001", "s1").decision_policy_trace
+    rescue_trace = decisions.cell("FAM001", "s2").decision_policy_trace
+
+    assert detected_trace.decision_class == "not_counted"
+    assert detected_trace.blockers == ("missing_row_identity_support",)
+    assert detected_trace.gate == (
+        ("decision_class_rank", 2.0),
+        ("matrix_value_projection_rank", 1.0),
+        ("blocker_count", 1.0),
+    )
+    assert rescue_trace.decision_class == "review"
+    assert rescue_trace.blockers == ("missing_row_identity_support",)
+    assert rescue_trace.support == (
+        "raw_status:rescued",
+        "production_status:review_rescue",
+        "rescue_tier:review_rescue",
+    )
 
 
 def test_rescue_heavy_row_needs_multiple_detected_owners_for_primary_promotion():
@@ -272,6 +350,49 @@ def test_scan_support_only_backfill_keeps_seeds_and_reviews_rescues():
     assert decisions.cell("FAM001", "rescue01").write_matrix_value is False
     assert decisions.cell("FAM001", "rescue01").blank_reason == (
         BACKFILL_MS1_PATTERN_BLOCKED_REASON
+    )
+
+
+def test_production_cell_policy_trace_keeps_review_rescue_out_of_matrix() -> None:
+    matrix = _matrix(
+        clusters=(_feature("FAM001", evidence="owner_complete_link;owner_count=2"),),
+        cells=(
+            _cell("seed1", "FAM001", "detected", 100.0),
+            _cell("seed2", "FAM001", "detected", 95.0),
+            *tuple(
+                _cell(
+                    f"rescue{i:02d}",
+                    "FAM001",
+                    "rescued",
+                    80.0 + i,
+                    backfill_evidence=False,
+                )
+                for i in range(1, 84)
+            ),
+        ),
+        sample_order=(
+            "seed1",
+            "seed2",
+            *(f"rescue{i:02d}" for i in range(1, 84)),
+        ),
+    )
+
+    trace = build_production_decisions(
+        matrix,
+        AlignmentConfig(),
+    ).cell("FAM001", "rescue01").decision_policy_trace
+
+    assert trace.decision_class == "review"
+    assert trace.blockers == (BACKFILL_MS1_PATTERN_BLOCKED_REASON,)
+    assert trace.gate == (
+        ("decision_class_rank", 1.0),
+        ("matrix_value_projection_rank", 1.0),
+        ("blocker_count", 1.0),
+    )
+    assert trace.tie_break == (
+        ("production_status_rank", 2.0),
+        ("rescue_tier_rank", 2.0),
+        ("matrix_value_present_rank", 1.0),
     )
 
 
