@@ -34,6 +34,9 @@ from xic_extractor.diagnostics import (
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_render_context as gallery_render_context,
 )
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_source_context as gallery_source_context,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -129,6 +132,21 @@ def test_gallery_render_context_stays_out_of_reconciliation_orchestrator() -> No
         is gallery_render_context._gallery_render_context
     )
     assert gallery._html_scope_notice is gallery_render_context._html_scope_notice
+
+
+def test_gallery_source_context_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._cells_by_family_seed_group
+        is gallery_source_context._cells_by_family_seed_group
+    )
+    assert (
+        gallery._seed_records_by_family
+        is gallery_source_context._seed_records_by_family
+    )
+    assert (
+        gallery._source_hashes_from_input_artifacts
+        is gallery_source_context._source_hashes_from_input_artifacts
+    )
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
