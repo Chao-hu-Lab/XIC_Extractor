@@ -1,6 +1,10 @@
 import inspect
 
 from xic_extractor import decision_policy as shared_decision_policy
+from xic_extractor.alignment import (
+    matrix_identity,
+    production_decisions,
+)
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.peak_detection import (
     candidate_selection,
@@ -91,6 +95,27 @@ def test_decision_policy_exposes_no_shared_record_ordering_helper() -> None:
     helper_name = "decision_record_" "ordering_key"
     assert not hasattr(shared_decision_policy, helper_name)
     assert not hasattr(peak_decision_policy, helper_name)
+
+
+def test_decision_record_ordering_stays_selection_local() -> None:
+    flatten_expression = "(*record.gate, *record.tie_break)"
+    selection_sources = (
+        inspect.getsource(candidate_selection._candidate_selection_ordering_key),
+        inspect.getsource(model_selection._peak_hypothesis_selection_ordering_key),
+    )
+
+    assert all(flatten_expression in source for source in selection_sources)
+
+    non_selection_sources = (
+        inspect.getsource(shared_decision_policy),
+        inspect.getsource(peak_decision_policy),
+        inspect.getsource(matrix_identity),
+        inspect.getsource(production_decisions),
+    )
+    non_selection_source = "\n".join(non_selection_sources)
+
+    assert flatten_expression not in non_selection_source
+    assert "ordering_key" not in non_selection_source
 
 
 def _hypothesis(
