@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+import pytest
 
 from xic_extractor.presets import list_presets
 
@@ -29,7 +29,8 @@ def test_pyinstaller_spec_includes_builtin_preset_tomls() -> None:
 
 
 def test_pyinstaller_collects_builtin_preset_tomls() -> None:
-    datas = collect_data_files("xic_extractor.presets", includes=["data/*.toml"])
+    hooks = pytest.importorskip("PyInstaller.utils.hooks")
+    datas = hooks.collect_data_files("xic_extractor.presets", includes=["data/*.toml"])
     collected = {
         (Path(source).name, Path(destination).as_posix())
         for source, destination in datas
