@@ -50,7 +50,6 @@ def _candidate(
         ms2_support="seed",
         ms1_support="owner",
         rt_alignment="local",
-        family_context="single",
         candidate_id=candidate_id,
         precursor_mz=precursor_mz,
         product_mz=product_mz,

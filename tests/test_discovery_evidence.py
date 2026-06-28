@@ -33,8 +33,6 @@ def test_default_evidence_profile_pins_v1_weights() -> None:
     assert weights.scan_support_low == -10
     assert weights.legacy_trace_quality_high == 5
     assert weights.legacy_trace_quality_low == -10
-    assert weights.superfamily_representative == 5
-    assert weights.superfamily_member == -5
 
 
 def test_default_evidence_profile_pins_v1_thresholds() -> None:
@@ -217,7 +215,6 @@ def _candidate() -> DiscoveryCandidate:
         ms2_support="weak",
         ms1_support="missing",
         rt_alignment="missing",
-        family_context="singleton",
         candidate_id="Sample#1",
         precursor_mz=258.108,
         product_mz=142.061,

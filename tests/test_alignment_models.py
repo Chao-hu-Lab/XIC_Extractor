@@ -267,7 +267,6 @@ def _discovery_candidate(
         ms2_support="weak",
         ms1_support="missing",
         rt_alignment="missing",
-        family_context="singleton",
         candidate_id=candidate_id,
         precursor_mz=precursor_mz,
         product_mz=product_mz,

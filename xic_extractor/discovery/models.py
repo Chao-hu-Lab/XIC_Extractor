@@ -41,15 +41,9 @@ DISCOVERY_CANDIDATE_REVIEW_COLUMNS = (
     "ms2_support",
     "ms1_support",
     "rt_alignment",
-    "family_context",
     "candidate_id",
     "feature_family_id",
     "feature_family_size",
-    "feature_superfamily_id",
-    "feature_superfamily_size",
-    "feature_superfamily_role",
-    "feature_superfamily_confidence",
-    "feature_superfamily_evidence",
     "precursor_mz",
     "product_mz",
     "observed_neutral_loss_da",
@@ -116,7 +110,6 @@ DISCOVERY_BRIEF_COLUMNS = (
     "ms2_support",
     "ms1_support",
     "rt_alignment",
-    "family_context",
     "candidate_id",
     "precursor_mz",
     "best_seed_rt",
@@ -222,7 +215,6 @@ class DiscoveryCandidate:
     ms2_support: str
     ms1_support: str
     rt_alignment: str
-    family_context: str
     candidate_id: str
     precursor_mz: float
     product_mz: float
@@ -260,11 +252,6 @@ class DiscoveryCandidate:
     max_scan_precursor_abs_delta_da: float | None = None
     feature_family_id: str = ""
     feature_family_size: int = 1
-    feature_superfamily_id: str = ""
-    feature_superfamily_size: int = 1
-    feature_superfamily_role: str = "representative"
-    feature_superfamily_confidence: str = "LOW"
-    feature_superfamily_evidence: str = "single_candidate"
     selected_tag_count: int = 1
     matched_tag_count: int = 1
     matched_tag_names: tuple[str, ...] = ()
@@ -329,7 +316,6 @@ class DiscoveryCandidate:
             ms2_support="weak",
             ms1_support="missing",
             rt_alignment="missing",
-            family_context="singleton",
             candidate_id=_candidate_id(
                 sample_stem=sample_stem,
                 best_seed=best_seed,

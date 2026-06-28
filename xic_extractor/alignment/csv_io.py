@@ -26,14 +26,12 @@ _CANDIDATE_UNESCAPE_FIELDS = {
     "raw_file",
     "candidate_id",
     "feature_family_id",
-    "feature_superfamily_id",
     "ms1_feature_row_id",
 }
 
 _INT_FIELDS = {
     "evidence_score",
     "feature_family_size",
-    "feature_superfamily_size",
     "seed_event_count",
     "best_ms2_scan_id",
     "selected_tag_count",
@@ -315,25 +313,11 @@ def _parse_candidate_row(
         ms2_support=_required_text(path, row_number, row, "ms2_support"),
         ms1_support=_required_text(path, row_number, row, "ms1_support"),
         rt_alignment=_required_text(path, row_number, row, "rt_alignment"),
-        family_context=_required_text(path, row_number, row, "family_context"),
         discovery_candidate_state=discovery_candidate_state,
         ms1_feature_row_id=ms1_feature_row_id,
         candidate_id=candidate_id,
         feature_family_id=_machine_field(row, "feature_family_id"),
         feature_family_size=_parse_int(path, row_number, row, "feature_family_size"),
-        feature_superfamily_id=_machine_field(row, "feature_superfamily_id"),
-        feature_superfamily_size=_parse_int(
-            path, row_number, row, "feature_superfamily_size"
-        ),
-        feature_superfamily_role=_required_text(
-            path, row_number, row, "feature_superfamily_role"
-        ),
-        feature_superfamily_confidence=_required_text(
-            path, row_number, row, "feature_superfamily_confidence"
-        ),
-        feature_superfamily_evidence=_required_text(
-            path, row_number, row, "feature_superfamily_evidence"
-        ),
         precursor_mz=precursor_mz,
         product_mz=product_mz,
         observed_neutral_loss_da=_parse_float(
