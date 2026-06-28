@@ -81,9 +81,17 @@ User-visible outputs surfaced by the GUI:
 Full PR gate:
 
 ```powershell
-uv run ruff check xic_extractor tests
-uv run mypy xic_extractor
-uv run pytest -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
+$env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards --check
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards docs-config -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards gui -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards targeted-core -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards alignment-core -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards product-gates-activation -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards product-gates-evidence -- -v --tb=short -x
+$env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards diagnostics-tools -- -v --tb=short -x
 ```
 
 ## Pitfalls
