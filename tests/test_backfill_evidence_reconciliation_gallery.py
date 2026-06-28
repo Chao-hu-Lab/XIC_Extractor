@@ -23,6 +23,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_filters as gallery_filters,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_html as gallery_html,
 )
 from xic_extractor.diagnostics import (
@@ -246,6 +249,20 @@ def test_gallery_review_modes_stay_out_of_reconciliation_orchestrator() -> None:
         gallery._is_cid_nl_successor_review_index
         is gallery_review_modes._is_cid_nl_successor_review_index
     )
+
+
+def test_gallery_filters_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._filter_html is gallery_filters._filter_html
+    assert (
+        gallery._default_visible_family_count
+        is gallery_filters._default_visible_family_count
+    )
+    assert (
+        gallery._family_filter_categories
+        is gallery_filters._family_filter_categories
+    )
+    assert gallery._group_filter_categories is gallery_filters._group_filter_categories
+    assert gallery._review_category_counts is gallery_filters._review_category_counts
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
