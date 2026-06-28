@@ -13,7 +13,12 @@ from xic_extractor.alignment.tsv_writer import (
     ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS,
     ALIGNMENT_REVIEW_COLUMNS,
 )
-from xic_extractor.diagnostics import backfill_reconciliation_gallery as gallery
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery as gallery,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_assets as gallery_assets,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -47,6 +52,12 @@ EXPECTED_GROUP_COLUMNS = (
     "source_artifacts",
     "source_warnings",
 )
+
+
+def test_gallery_static_assets_stay_out_of_reconciliation_logic() -> None:
+    assert gallery._gallery_css is gallery_assets.gallery_css
+    assert gallery._lightbox_html is gallery_assets.lightbox_html
+    assert gallery._lightbox_script is gallery_assets.lightbox_script
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
     "schema_version",
