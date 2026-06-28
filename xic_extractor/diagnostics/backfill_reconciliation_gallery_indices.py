@@ -6,17 +6,32 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    RECONCILIATION_CLASS_PRIORITY,
     ActivationDeltaCell,
     ReconciliationGroup,
+    RepresentativeCell,
     ShadowPolicyCell,
     ShadowProjectionCell,
     TargetBenchmarkContext,
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     bool_value,
+    optional_float,
     split_semicolon_labels,
     text_value,
 )
+
+_CLASS_PRIORITY = {
+    name: index for index, name in enumerate(RECONCILIATION_CLASS_PRIORITY)
+}
+_ROLE_PRIORITY = {
+    "strongest_support": 0,
+    "strongest_blocker": 1,
+    "lowest_similarity": 2,
+    "highest_interference": 3,
+    "seed_representative": 4,
+    "product_disagreement_example": 5,
+}
 
 
 def _shadow_policy_cell_from_row(row: Mapping[str, str]) -> ShadowPolicyCell:
@@ -419,3 +434,130 @@ def _shadow_projection_cell_sort_key(
     cell: ShadowProjectionCell,
 ) -> tuple[str, str, str]:
     return (cell.feature_family_id, cell.seed_group_id, cell.sample_stem)
+
+
+def _shadow_projection_accept_group_keys(
+    cells: Sequence[ShadowProjectionCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in cells
+        if _is_projected_new_accept(cell)
+    }
+
+
+def _activation_written_projection_group_keys(
+    projection_cells: Sequence[ShadowProjectionCell],
+    activation_cells: Sequence[ActivationDeltaCell],
+) -> set[tuple[str, str]]:
+    written_cell_keys = _activation_written_cell_keys(activation_cells)
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in projection_cells
+        if _is_projected_new_accept(cell)
+        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
+    }
+
+
+def _activation_written_projection_cell_count(
+    projection_cells: Sequence[ShadowProjectionCell],
+    activation_cells: Sequence[ActivationDeltaCell],
+) -> int:
+    written_cell_keys = _activation_written_cell_keys(activation_cells)
+    return sum(
+        1
+        for cell in projection_cells
+        if _is_projected_new_accept(cell)
+        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
+    )
+
+
+def _current_matrix_written_projection_group_keys(
+    projection_cells: Sequence[ShadowProjectionCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.seed_group_id)
+        for cell in projection_cells
+        if _is_current_backfill_matrix_write(cell)
+    }
+
+
+def _current_matrix_written_projection_cell_count(
+    projection_cells: Sequence[ShadowProjectionCell],
+) -> int:
+    return sum(
+        1 for cell in projection_cells if _is_current_backfill_matrix_write(cell)
+    )
+
+
+def _is_current_backfill_matrix_write(cell: ShadowProjectionCell) -> bool:
+    return (
+        cell.current_matrix_written
+        and cell.current_raw_status == "rescued"
+        and cell.current_production_status == "accepted_rescue"
+    )
+
+
+def _activation_written_cell_keys(
+    cells: Sequence[ActivationDeltaCell],
+) -> set[tuple[str, str]]:
+    return {
+        (cell.feature_family_id, cell.sample_id)
+        for cell in cells
+        if _is_activation_matrix_write(cell)
+    }
+
+
+def _is_activation_matrix_write(cell: ActivationDeltaCell) -> bool:
+    activated_value = optional_float(cell.activated_matrix_value)
+    return (
+        cell.activation_status == "auto_activate"
+        and cell.matrix_value_effect == "written"
+        and cell.product_effect in {"", "accept_label_or_rescue"}
+        and activated_value is not None
+        and activated_value > 0
+    )
+
+
+def _is_projected_new_accept(cell: ShadowProjectionCell) -> bool:
+    projected_value = optional_float(cell.projected_matrix_value)
+    return (
+        cell.shadow_decision == "accept"
+        and cell.projected_matrix_written
+        and not cell.current_matrix_written
+        and projected_value is not None
+        and projected_value > 0
+    )
+
+
+def _group_sort_key(group: ReconciliationGroup) -> tuple[int, str, str]:
+    return (
+        _CLASS_PRIORITY.get(group.reconciliation_class, len(_CLASS_PRIORITY)),
+        group.feature_family_id,
+        group.seed_group_id,
+    )
+
+
+def _representative_sort_key(cell: RepresentativeCell) -> tuple[str, str, str, int]:
+    role = cell.representative_roles[0] if cell.representative_roles else ""
+    return (
+        cell.feature_family_id,
+        cell.seed_group_id,
+        cell.sample_stem,
+        _ROLE_PRIORITY.get(role, len(_ROLE_PRIORITY)),
+    )
+
+
+def _representatives_by_group(
+    cells: Sequence[RepresentativeCell],
+) -> dict[tuple[str, str], tuple[RepresentativeCell, ...]]:
+    grouped: dict[tuple[str, str], list[RepresentativeCell]] = {}
+    for cell in cells:
+        grouped.setdefault(
+            (cell.feature_family_id, cell.seed_group_id),
+            [],
+        ).append(cell)
+    return {
+        key: tuple(sorted(items, key=_representative_sort_key))
+        for key, items in grouped.items()
+    }

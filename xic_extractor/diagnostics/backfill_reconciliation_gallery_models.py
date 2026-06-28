@@ -8,6 +8,89 @@ from pathlib import Path
 
 from xic_extractor.diagnostics.diagnostic_io import text_value
 
+GROUP_TSV_COLUMNS = (
+    "schema_version",
+    "priority_rank",
+    "feature_family_id",
+    "seed_group_id",
+    "seed_group_basis",
+    "seed_mz",
+    "seed_rt",
+    "seed_rt_window",
+    "seed_ppm",
+    "tag_or_class",
+    "product_behavior_state",
+    "evidence_authority_state",
+    "reconciliation_class",
+    "detected_cell_count",
+    "rescued_cell_count",
+    "provisional_cell_count",
+    "top_product_reason",
+    "top_support_component",
+    "top_blocker",
+    "missing_evidence",
+    "overlay_png_path",
+    "overlay_trace_json_path",
+    "source_artifacts",
+    "source_warnings",
+)
+
+REPRESENTATIVE_CELL_TSV_COLUMNS = (
+    "schema_version",
+    "feature_family_id",
+    "seed_group_id",
+    "representative_roles",
+    "sample_stem",
+    "cell_status",
+    "product_cell_state",
+    "shape_similarity",
+    "scan_support_score",
+    "apex_delta_sec",
+    "boundary_overlap",
+    "interference_signal",
+    "representative_reason",
+    "source_row_key",
+)
+
+EVIDENCE_AUTHORITY_STATES = (
+    "product_grade_support",
+    "review_only_visual_support",
+    "machine_support_no_overlay",
+    "dependent_context_only",
+    "human_visual_judgment_only",
+    "evidence_blocks_backfill",
+    "evidence_inconclusive",
+    "not_assessable",
+)
+
+RECONCILIATION_CLASSES = (
+    "product_accepts_and_product_grade_supports",
+    "product_accepts_and_visual_supports",
+    "product_rejects_but_product_grade_supports",
+    "product_rejects_but_visual_supports",
+    "product_accepts_but_evidence_conflicts",
+    "product_rejects_and_evidence_blocks",
+    "machine_support_no_overlay",
+    "evidence_inconclusive",
+    "not_assessable_missing_overlay",
+    "not_assessable_missing_seed_provenance",
+    "not_assessable_join_gap",
+)
+
+RECONCILIATION_CLASS_PRIORITY = (
+    "product_rejects_but_product_grade_supports",
+    "product_rejects_but_visual_supports",
+    "product_accepts_but_evidence_conflicts",
+    "not_assessable_missing_overlay",
+    "not_assessable_missing_seed_provenance",
+    "not_assessable_join_gap",
+    "evidence_inconclusive",
+    "product_accepts_and_visual_supports",
+    "machine_support_no_overlay",
+    "product_accepts_and_product_grade_supports",
+    "product_rejects_and_evidence_blocks",
+)
+
 
 @dataclass(frozen=True)
 class RepresentativeCell:

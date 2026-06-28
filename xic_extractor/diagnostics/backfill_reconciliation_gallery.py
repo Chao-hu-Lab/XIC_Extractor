@@ -9,9 +9,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from xic_extractor.alignment.shared_peak_identity_explanation.schema import (
-    ACTIVATION_APPLICATION_SUMMARY_COLUMNS,
-    ACTIVATION_VALUE_DELTA_COLUMNS,
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_inputs as _gallery_inputs,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_assets import (
     gallery_css as _gallery_css,
@@ -53,10 +52,15 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
     _activation_application_summary,
     _activation_delta_cell_from_row,
     _activation_value_delta_matrix_effect_counts,
+    _activation_written_projection_cell_count,
+    _activation_written_projection_group_keys,
+    _current_matrix_written_projection_cell_count,
+    _current_matrix_written_projection_group_keys,
+    _group_sort_key,
+    _is_projected_new_accept,
+    _representative_sort_key,
     _shadow_policy_cell_from_row,
     _shadow_policy_cell_sort_key,
-    _shadow_policy_cells_by_family,
-    _shadow_policy_cells_by_group,
     _shadow_policy_cells_for_family_groups,
     _shadow_policy_cells_for_group,
     _shadow_policy_compact_summary,
@@ -64,8 +68,6 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
     _shadow_policy_production_gap_counts,
     _shadow_projection_cell_from_row,
     _shadow_projection_cell_sort_key,
-    _shadow_projection_cells_by_family,
-    _shadow_projection_cells_by_group,
     _shadow_projection_cells_for_family_groups,
     _shadow_projection_cells_for_group,
     _shadow_projection_compact_summary,
@@ -74,10 +76,46 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
     _target_benchmark_context_counts,
     _target_benchmark_context_from_row,
     _target_benchmark_context_sort_key,
-    _target_benchmark_contexts_by_family,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _activation_written_cell_keys as _activation_written_cell_keys,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _is_activation_matrix_write as _is_activation_matrix_write,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _is_current_backfill_matrix_write as _is_current_backfill_matrix_write,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _representatives_by_group as _representatives_by_group,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _shadow_policy_cells_by_family as _shadow_policy_cells_by_family,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _shadow_policy_cells_by_group as _shadow_policy_cells_by_group,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _shadow_projection_accept_group_keys as _shadow_projection_accept_group_keys,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _shadow_projection_cells_by_family as _shadow_projection_cells_by_family,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _shadow_projection_cells_by_group as _shadow_projection_cells_by_group,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_indices import (
+    _target_benchmark_contexts_by_family as _target_benchmark_contexts_by_family,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_inputs import (
+    load_reconciliation_input_rows,
 )
 from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
-    ActivationDeltaCell,
+    EVIDENCE_AUTHORITY_STATES as EVIDENCE_AUTHORITY_STATES,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    GROUP_TSV_COLUMNS,
+    REPRESENTATIVE_CELL_TSV_COLUMNS,
     ReconciliationGroup,
     ReconciliationIndex,
     ReconciliationOutputs,
@@ -85,27 +123,57 @@ from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
     ShadowPolicyCell,
     ShadowProjectionCell,
     TargetBenchmarkContext,
-    _GalleryRenderContext,
     _ordered_unique,
     _SeedRecord,
     _ShiftAwareSamePatternEvidence,
 )
-from xic_extractor.diagnostics.backfill_shadow_policy import (
-    BACKFILL_SHADOW_POLICY_COLUMNS,
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    RECONCILIATION_CLASS_PRIORITY as RECONCILIATION_CLASS_PRIORITY,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_models import (
+    RECONCILIATION_CLASSES as RECONCILIATION_CLASSES,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context import (
+    _gallery_render_context,
+    _html_scope_notice,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context import (
+    _html_priority_group as _html_priority_group,
+)
+from xic_extractor.diagnostics.backfill_reconciliation_gallery_render_context import (
+    _html_render_groups as _html_render_groups,
 )
 from xic_extractor.diagnostics.diagnostic_io import (
     bool_value,
-    file_sha256,
     optional_float,
-    read_tsv_required,
     rows_by_text_field,
     split_semicolon_labels,
     text_value,
     write_tsv,
 )
-from xic_extractor.diagnostics.shadow_production_projection import (
-    SHADOW_PRODUCTION_PROJECTION_COLUMNS,
+
+_read_required_tsv = _gallery_inputs._read_required_tsv
+_input_artifact_summary = _gallery_inputs._input_artifact_summary
+_input_artifact_hashes = _gallery_inputs._input_artifact_hashes
+_REQUIRED_ALIGNMENT_REVIEW_COLUMNS = (
+    _gallery_inputs._REQUIRED_ALIGNMENT_REVIEW_COLUMNS
 )
+_REQUIRED_ALIGNMENT_CELLS_COLUMNS = (
+    _gallery_inputs._REQUIRED_ALIGNMENT_CELLS_COLUMNS
+)
+_REQUIRED_ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
+    _gallery_inputs._REQUIRED_ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS
+)
+_REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS = (
+    _gallery_inputs._REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS
+)
+_REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS = (
+    _gallery_inputs._REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS
+)
+_REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS = (
+    _gallery_inputs._REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS
+)
+_INPUT_ARTIFACT_LABEL_BY_KEY = _gallery_inputs._INPUT_ARTIFACT_LABEL_BY_KEY
 
 SCHEMA_VERSION = "backfill_evidence_reconciliation_v0"
 OVERLAY_INTERPRETATION_GUIDE_PATH = Path(
@@ -114,92 +182,6 @@ OVERLAY_INTERPRETATION_GUIDE_PATH = Path(
 SHIFT_AWARE_SAME_PATTERN_SUPPORT_MIN_R = 0.98
 SHIFT_AWARE_SAME_PATTERN_CONFLICT_MAX_R = 0.90
 
-GROUP_TSV_COLUMNS = (
-    "schema_version",
-    "priority_rank",
-    "feature_family_id",
-    "seed_group_id",
-    "seed_group_basis",
-    "seed_mz",
-    "seed_rt",
-    "seed_rt_window",
-    "seed_ppm",
-    "tag_or_class",
-    "product_behavior_state",
-    "evidence_authority_state",
-    "reconciliation_class",
-    "detected_cell_count",
-    "rescued_cell_count",
-    "provisional_cell_count",
-    "top_product_reason",
-    "top_support_component",
-    "top_blocker",
-    "missing_evidence",
-    "overlay_png_path",
-    "overlay_trace_json_path",
-    "source_artifacts",
-    "source_warnings",
-)
-
-REPRESENTATIVE_CELL_TSV_COLUMNS = (
-    "schema_version",
-    "feature_family_id",
-    "seed_group_id",
-    "representative_roles",
-    "sample_stem",
-    "cell_status",
-    "product_cell_state",
-    "shape_similarity",
-    "scan_support_score",
-    "apex_delta_sec",
-    "boundary_overlap",
-    "interference_signal",
-    "representative_reason",
-    "source_row_key",
-)
-
-EVIDENCE_AUTHORITY_STATES = (
-    "product_grade_support",
-    "review_only_visual_support",
-    "machine_support_no_overlay",
-    "dependent_context_only",
-    "human_visual_judgment_only",
-    "evidence_blocks_backfill",
-    "evidence_inconclusive",
-    "not_assessable",
-)
-
-RECONCILIATION_CLASSES = (
-    "product_accepts_and_product_grade_supports",
-    "product_accepts_and_visual_supports",
-    "product_rejects_but_product_grade_supports",
-    "product_rejects_but_visual_supports",
-    "product_accepts_but_evidence_conflicts",
-    "product_rejects_and_evidence_blocks",
-    "machine_support_no_overlay",
-    "evidence_inconclusive",
-    "not_assessable_missing_overlay",
-    "not_assessable_missing_seed_provenance",
-    "not_assessable_join_gap",
-)
-
-RECONCILIATION_CLASS_PRIORITY = (
-    "product_rejects_but_product_grade_supports",
-    "product_rejects_but_visual_supports",
-    "product_accepts_but_evidence_conflicts",
-    "not_assessable_missing_overlay",
-    "not_assessable_missing_seed_provenance",
-    "not_assessable_join_gap",
-    "evidence_inconclusive",
-    "product_accepts_and_visual_supports",
-    "machine_support_no_overlay",
-    "product_accepts_and_product_grade_supports",
-    "product_rejects_and_evidence_blocks",
-)
-
-_CLASS_PRIORITY = {
-    name: index for index, name in enumerate(RECONCILIATION_CLASS_PRIORITY)
-}
 _REVIEW_CATEGORY_LABELS = {
     "needs_review": "Needs review",
     "accepted_supported": "Evidence-supported rows",
@@ -207,12 +189,6 @@ _REVIEW_CATEGORY_LABELS = {
     "missing_evidence": "Missing evidence",
 }
 _DEFAULT_FILTER_CATEGORY = "product_rows"
-_HTML_FULL_RENDER_GROUP_LIMIT = 1500
-_HTML_INCONCLUSIVE_SAMPLE_LIMIT = 200
-_HTML_LOW_INFORMATION_CLASSES = {
-    "evidence_inconclusive",
-    "not_assessable_missing_seed_provenance",
-}
 _REVIEW_FILTER_LABELS = {
     "product_rows": "Review queue",
     "projection_accepts": "Projected matrix writes",
@@ -238,14 +214,6 @@ _REVIEW_CATEGORY_BY_CLASS = {
     "not_assessable_missing_seed_provenance": "missing_evidence",
     "not_assessable_join_gap": "missing_evidence",
 }
-_ROLE_PRIORITY = {
-    "strongest_support": 0,
-    "strongest_blocker": 1,
-    "lowest_similarity": 2,
-    "highest_interference": 3,
-    "seed_representative": 4,
-    "product_disagreement_example": 5,
-}
 _HUMAN_REVIEW_PREFIXES = ("review_required_",)
 _HUMAN_REVIEW_TOKENS = {
     "neighbor_interference_review",
@@ -258,95 +226,6 @@ _ANCHOR_SHAPE_REVIEW_REASON = (
     "family_ms1_overlay_anchor_peak_shape_below_threshold"
 )
 _HIGH_SEED_ALIAS_COUNT = 5
-_REQUIRED_ALIGNMENT_REVIEW_COLUMNS = (
-    "feature_family_id",
-    "group_construction_role",
-    "neutral_loss_tag",
-    "detected_count",
-    "quantifiable_detected_count",
-    "identity_decision",
-    "identity_confidence",
-    "primary_evidence",
-    "identity_reason",
-    "quantifiable_rescue_count",
-    "accepted_rescue_count",
-    "include_in_primary_matrix",
-    "row_flags",
-    "reason",
-)
-_REQUIRED_ALIGNMENT_CELLS_COLUMNS = (
-    "feature_family_id",
-    "sample_stem",
-    "status",
-    "primary_matrix_area_source",
-    "apex_rt",
-    "peak_start_rt",
-    "peak_end_rt",
-    "rt_delta_sec",
-    "trace_quality",
-    "scan_support_score",
-    "gap_fill_state",
-    "gap_fill_reason",
-)
-_REQUIRED_ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS = (
-    "feature_family_id",
-    "sample_stem",
-    "backfill_seed_mz",
-    "backfill_seed_rt",
-    "backfill_request_rt_min",
-    "backfill_request_rt_max",
-    "backfill_request_ppm",
-)
-_REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS = (
-    "feature_family_id",
-    "seed_group_id",
-    "evidence_gate_status",
-    "recommended_action",
-    "support_components",
-    "challenge_blockers",
-    "missing_evidence",
-)
-_REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS = (
-    "feature_family_id",
-    "standard_peak_gate_call",
-    "standard_peak_gate_reasons",
-    "standard_peak_gate_blockers",
-    "calibration_outcome",
-    "min_shape_r_after_best_shift",
-    "max_abs_shift_sec",
-)
-_REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS = (
-    "target_label",
-    "role",
-    "active_tag",
-    "targeted_positive_count",
-    "selected_feature_id",
-    "untargeted_positive_count",
-    "coverage_minimum",
-    "status",
-    "failure_modes",
-)
-_INPUT_ARTIFACT_LABEL_BY_KEY = {
-    "alignment_review_tsv": "alignment_review.tsv",
-    "alignment_cells_tsv": "cell evidence TSV",
-    "alignment_matrix_tsv": "alignment_matrix.tsv",
-    "backfill_seed_audit_tsv": "alignment_owner_backfill_seed_audit.tsv",
-    "overlay_batch_summary_tsvs": "family_ms1_overlay_batch_summary.tsv",
-    "shift_aware_same_pattern_tsvs": "source_family_best_shift_summary.tsv",
-    "shift_aware_standard_peak_gate_tsvs": (
-        "shift_aware_standard_peak_gate_calibration.tsv"
-    ),
-    "seed_aware_family_tsv": "seed_aware_backfill_review_families.tsv",
-    "seed_aware_summary_tsv": "seed_aware_backfill_review_summary.tsv",
-    "candidate_gate_tsv": "alignment_production_candidate_gate.tsv",
-    "retained_backfill_gate_tsv": "alignment_retained_backfill_evidence_gate.tsv",
-    "tier2_trace_evidence_tsv": "alignment_tier2_trace_evidence.tsv",
-    "shadow_policy_cells_tsv": "backfill_shadow_policy_cells.tsv",
-    "shadow_projection_cells_tsv": "shadow_production_projection_cells.tsv",
-    "activation_application_summary_tsv": "activation_application_summary.tsv",
-    "activation_value_delta_tsv": "activation_value_delta.tsv",
-    "targeted_istd_benchmark_summary_tsv": "targeted_istd_benchmark_summary.tsv",
-}
 
 
 def run_reconciliation_gallery(
@@ -373,142 +252,7 @@ def run_reconciliation_gallery(
 ) -> ReconciliationOutputs:
     """Load existing artifacts, write reconciliation indexes, and render HTML."""
 
-    review_rows = _read_required_tsv(
-        alignment_review_tsv,
-        _REQUIRED_ALIGNMENT_REVIEW_COLUMNS,
-    )
-    cell_rows = _read_required_tsv(
-        alignment_cells_tsv,
-        _REQUIRED_ALIGNMENT_CELLS_COLUMNS,
-    )
-    matrix_rows = (
-        _read_required_tsv(alignment_matrix_tsv, ())
-        if alignment_matrix_tsv is not None
-        else ()
-    )
-    seed_audit_rows = (
-        _read_required_tsv(
-            backfill_seed_audit_tsv,
-            _REQUIRED_ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS,
-        )
-        if backfill_seed_audit_tsv is not None
-        else ()
-    )
-    overlay_rows: list[dict[str, str]] = []
-    for path in overlay_batch_summary_tsvs:
-        overlay_rows.extend(
-            _read_required_tsv(
-                path,
-                (
-                    "feature_family_id",
-                    "family_verdict",
-                    "png_path",
-                ),
-            ),
-        )
-    shift_aware_rows: list[dict[str, str]] = []
-    for path in shift_aware_same_pattern_tsvs:
-        shift_aware_rows.extend(
-            _read_required_tsv(
-                path,
-                (
-                    "feature_family_id",
-                    "source_family",
-                    "is_reference",
-                    "shift_basis",
-                    "shift_to_reference_sec",
-                    "shape_similarity_to_reference_after_group_shift",
-                ),
-            ),
-        )
-    standard_peak_gate_rows: list[dict[str, str]] = []
-    for path in shift_aware_standard_peak_gate_tsvs:
-        standard_peak_gate_rows.extend(
-            _read_required_tsv(
-                path,
-                _REQUIRED_SHIFT_AWARE_STANDARD_PEAK_GATE_COLUMNS,
-            ),
-        )
-    seed_aware_family_rows = (
-        _read_required_tsv(
-            seed_aware_family_tsv,
-            ("feature_family_id", "review_classification"),
-        )
-        if seed_aware_family_tsv is not None
-        else ()
-    )
-    seed_aware_summary_rows = (
-        _read_required_tsv(seed_aware_summary_tsv, ("feature_family_id",))
-        if seed_aware_summary_tsv is not None
-        else ()
-    )
-    candidate_gate_rows = (
-        _read_required_tsv(
-            candidate_gate_tsv,
-            (
-                "feature_family_id",
-                "candidate_gate_status",
-                "support_components",
-                "challenge_blockers",
-            ),
-        )
-        if candidate_gate_tsv is not None
-        else ()
-    )
-    retained_gate_rows = (
-        _read_required_tsv(
-            retained_backfill_gate_tsv,
-            _REQUIRED_RETAINED_BACKFILL_GATE_COLUMNS,
-        )
-        if retained_backfill_gate_tsv is not None
-        else ()
-    )
-    tier2_trace_evidence_rows = (
-        _read_required_tsv(tier2_trace_evidence_tsv, ("feature_family_id",))
-        if tier2_trace_evidence_tsv is not None
-        else ()
-    )
-    shadow_policy_rows = (
-        _read_required_tsv(
-            shadow_policy_cells_tsv,
-            BACKFILL_SHADOW_POLICY_COLUMNS,
-        )
-        if shadow_policy_cells_tsv is not None
-        else ()
-    )
-    shadow_projection_rows = (
-        _read_required_tsv(
-            shadow_projection_cells_tsv,
-            SHADOW_PRODUCTION_PROJECTION_COLUMNS,
-        )
-        if shadow_projection_cells_tsv is not None
-        else ()
-    )
-    activation_application_summary_rows = (
-        _read_required_tsv(
-            activation_application_summary_tsv,
-            ACTIVATION_APPLICATION_SUMMARY_COLUMNS,
-        )
-        if activation_application_summary_tsv is not None
-        else ()
-    )
-    activation_value_delta_rows = (
-        _read_required_tsv(
-            activation_value_delta_tsv,
-            ACTIVATION_VALUE_DELTA_COLUMNS,
-        )
-        if activation_value_delta_tsv is not None
-        else ()
-    )
-    target_benchmark_rows = (
-        _read_required_tsv(
-            targeted_istd_benchmark_summary_tsv,
-            _REQUIRED_TARGETED_ISTD_BENCHMARK_SUMMARY_COLUMNS,
-        )
-        if targeted_istd_benchmark_summary_tsv is not None
-        else ()
-    )
-    input_artifacts = _input_artifact_summary(
+    input_rows = load_reconciliation_input_rows(
         alignment_review_tsv=alignment_review_tsv,
         alignment_cells_tsv=alignment_cells_tsv,
         alignment_matrix_tsv=alignment_matrix_tsv,
@@ -528,48 +272,27 @@ def run_reconciliation_gallery(
         targeted_istd_benchmark_summary_tsv=targeted_istd_benchmark_summary_tsv,
         source_run_id=source_run_id,
     )
-    input_artifacts.update(
-        _input_artifact_hashes(
-            alignment_review_tsv=alignment_review_tsv,
-            alignment_cells_tsv=alignment_cells_tsv,
-            alignment_matrix_tsv=alignment_matrix_tsv,
-            backfill_seed_audit_tsv=backfill_seed_audit_tsv,
-            overlay_batch_summary_tsvs=overlay_batch_summary_tsvs,
-            shift_aware_same_pattern_tsvs=shift_aware_same_pattern_tsvs,
-            shift_aware_standard_peak_gate_tsvs=(
-                shift_aware_standard_peak_gate_tsvs
-            ),
-            seed_aware_family_tsv=seed_aware_family_tsv,
-            seed_aware_summary_tsv=seed_aware_summary_tsv,
-            candidate_gate_tsv=candidate_gate_tsv,
-            retained_backfill_gate_tsv=retained_backfill_gate_tsv,
-            tier2_trace_evidence_tsv=tier2_trace_evidence_tsv,
-            shadow_policy_cells_tsv=shadow_policy_cells_tsv,
-            shadow_projection_cells_tsv=shadow_projection_cells_tsv,
-            activation_application_summary_tsv=activation_application_summary_tsv,
-            activation_value_delta_tsv=activation_value_delta_tsv,
-            targeted_istd_benchmark_summary_tsv=targeted_istd_benchmark_summary_tsv,
-        ),
-    )
     index = build_reconciliation_index(
-        review_rows=review_rows,
-        cell_rows=cell_rows,
-        alignment_matrix_rows=matrix_rows,
-        seed_audit_rows=seed_audit_rows,
-        overlay_rows=overlay_rows,
-        shift_aware_same_pattern_rows=shift_aware_rows,
-        shift_aware_standard_peak_gate_rows=standard_peak_gate_rows,
-        seed_aware_family_rows=seed_aware_family_rows,
-        seed_aware_summary_rows=seed_aware_summary_rows,
-        candidate_gate_rows=candidate_gate_rows,
-        retained_gate_rows=retained_gate_rows,
-        tier2_trace_evidence_rows=tier2_trace_evidence_rows,
-        shadow_policy_rows=shadow_policy_rows,
-        shadow_projection_rows=shadow_projection_rows,
-        activation_application_summary_rows=activation_application_summary_rows,
-        activation_value_delta_rows=activation_value_delta_rows,
-        target_benchmark_rows=target_benchmark_rows,
-        input_artifacts=input_artifacts,
+        review_rows=input_rows.review_rows,
+        cell_rows=input_rows.cell_rows,
+        alignment_matrix_rows=input_rows.matrix_rows,
+        seed_audit_rows=input_rows.seed_audit_rows,
+        overlay_rows=input_rows.overlay_rows,
+        shift_aware_same_pattern_rows=input_rows.shift_aware_rows,
+        shift_aware_standard_peak_gate_rows=input_rows.standard_peak_gate_rows,
+        seed_aware_family_rows=input_rows.seed_aware_family_rows,
+        seed_aware_summary_rows=input_rows.seed_aware_summary_rows,
+        candidate_gate_rows=input_rows.candidate_gate_rows,
+        retained_gate_rows=input_rows.retained_gate_rows,
+        tier2_trace_evidence_rows=input_rows.tier2_trace_evidence_rows,
+        shadow_policy_rows=input_rows.shadow_policy_rows,
+        shadow_projection_rows=input_rows.shadow_projection_rows,
+        activation_application_summary_rows=(
+            input_rows.activation_application_summary_rows
+        ),
+        activation_value_delta_rows=input_rows.activation_value_delta_rows,
+        target_benchmark_rows=input_rows.target_benchmark_rows,
+        input_artifacts=input_rows.input_artifacts,
     )
     paths = write_reconciliation_outputs(output_dir, index)
     gallery_html = output_dir / "backfill_evidence_reconciliation_gallery.html"
@@ -1109,250 +832,28 @@ def _gallery_hero_copy(
     }
 
 
-def _gallery_render_context(index: ReconciliationIndex) -> _GalleryRenderContext:
-    groups = tuple(sorted(index.groups, key=_group_sort_key))
-    projection_accept_keys = _shadow_projection_accept_group_keys(
-        index.shadow_projection_cells,
-    )
-    html_groups = _html_render_groups(
-        groups,
-        projection_accept_keys=projection_accept_keys,
-    )
-    html_group_keys = {
-        (group.feature_family_id, group.seed_group_id) for group in html_groups
-    }
-    html_family_ids = {group.feature_family_id for group in html_groups}
-    html_shadow_policy_cells = tuple(
-        cell
-        for cell in index.shadow_policy_cells
-        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
-    )
-    html_shadow_projection_cells = tuple(
-        cell
-        for cell in index.shadow_projection_cells
-        if (cell.feature_family_id, cell.seed_group_id) in html_group_keys
-    )
-    target_contexts = tuple(
-        context
-        for context in index.target_benchmark_contexts
-        if any(family in html_family_ids for family in context.feature_family_ids)
-    )
-    return _GalleryRenderContext(
-        all_groups=groups,
-        html_groups=html_groups,
-        html_shadow_policy_cells=html_shadow_policy_cells,
-        html_shadow_projection_cells=html_shadow_projection_cells,
-        representatives_by_group=_representatives_by_group(
-            index.representative_cells,
-        ),
-        shadow_policy_cells_by_group=_shadow_policy_cells_by_group(
-            html_shadow_policy_cells,
-        ),
-        shadow_policy_cells_by_family=_shadow_policy_cells_by_family(
-            html_shadow_policy_cells,
-        ),
-        shadow_projection_cells_by_group=_shadow_projection_cells_by_group(
-            html_shadow_projection_cells,
-        ),
-        shadow_projection_cells_by_family=_shadow_projection_cells_by_family(
-            html_shadow_projection_cells,
-        ),
-        target_benchmark_contexts_by_family=(
-            _target_benchmark_contexts_by_family(target_contexts)
-        ),
-    )
 
 
-def _html_render_groups(
-    groups: Sequence[ReconciliationGroup],
-    *,
-    projection_accept_keys: set[tuple[str, str]] | None = None,
-) -> tuple[ReconciliationGroup, ...]:
-    projection_accept_keys = projection_accept_keys or set()
-    sorted_groups = tuple(sorted(groups, key=_group_sort_key))
-    if len(sorted_groups) <= _HTML_FULL_RENDER_GROUP_LIMIT:
-        return sorted_groups
-    priority_groups = [
-        group
-        for group in sorted_groups
-        if _html_priority_group(group, projection_accept_keys=projection_accept_keys)
-    ]
-    priority_keys = {
-        (group.feature_family_id, group.seed_group_id) for group in priority_groups
-    }
-    low_information_sample = [
-        group
-        for group in sorted_groups
-        if (group.feature_family_id, group.seed_group_id) not in priority_keys
-    ][: _HTML_INCONCLUSIVE_SAMPLE_LIMIT]
-    return tuple(
-        sorted((*priority_groups, *low_information_sample), key=_group_sort_key),
-    )
 
 
-def _html_priority_group(
-    group: ReconciliationGroup,
-    *,
-    projection_accept_keys: set[tuple[str, str]],
-) -> bool:
-    return (
-        (group.feature_family_id, group.seed_group_id) in projection_accept_keys
-        or group.reconciliation_class not in _HTML_LOW_INFORMATION_CLASSES
-        or bool(group.overlay_png_path)
-        or bool(group.overlay_trace_json_path)
-        or bool(group.family_pattern_png_path)
-        or bool(group.family_pattern_trace_json_path)
-        or group.evidence_authority_state == "human_visual_judgment_only"
-    )
 
 
-def _shadow_projection_accept_group_keys(
-    cells: Sequence[ShadowProjectionCell],
-) -> set[tuple[str, str]]:
-    return {
-        (cell.feature_family_id, cell.seed_group_id)
-        for cell in cells
-        if _is_projected_new_accept(cell)
-    }
 
 
-def _activation_written_projection_group_keys(
-    projection_cells: Sequence[ShadowProjectionCell],
-    activation_cells: Sequence[ActivationDeltaCell],
-) -> set[tuple[str, str]]:
-    written_cell_keys = _activation_written_cell_keys(activation_cells)
-    return {
-        (cell.feature_family_id, cell.seed_group_id)
-        for cell in projection_cells
-        if _is_projected_new_accept(cell)
-        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
-    }
 
 
-def _activation_written_projection_cell_count(
-    projection_cells: Sequence[ShadowProjectionCell],
-    activation_cells: Sequence[ActivationDeltaCell],
-) -> int:
-    written_cell_keys = _activation_written_cell_keys(activation_cells)
-    return sum(
-        1
-        for cell in projection_cells
-        if _is_projected_new_accept(cell)
-        and (cell.feature_family_id, cell.sample_stem) in written_cell_keys
-    )
 
 
-def _current_matrix_written_projection_group_keys(
-    projection_cells: Sequence[ShadowProjectionCell],
-) -> set[tuple[str, str]]:
-    return {
-        (cell.feature_family_id, cell.seed_group_id)
-        for cell in projection_cells
-        if _is_current_backfill_matrix_write(cell)
-    }
 
 
-def _current_matrix_written_projection_cell_count(
-    projection_cells: Sequence[ShadowProjectionCell],
-) -> int:
-    return sum(
-        1 for cell in projection_cells if _is_current_backfill_matrix_write(cell)
-    )
 
 
-def _is_current_backfill_matrix_write(cell: ShadowProjectionCell) -> bool:
-    return (
-        cell.current_matrix_written
-        and cell.current_raw_status == "rescued"
-        and cell.current_production_status == "accepted_rescue"
-    )
 
 
-def _activation_written_cell_keys(
-    cells: Sequence[ActivationDeltaCell],
-) -> set[tuple[str, str]]:
-    return {
-        (cell.feature_family_id, cell.sample_id)
-        for cell in cells
-        if _is_activation_matrix_write(cell)
-    }
 
 
-def _is_activation_matrix_write(cell: ActivationDeltaCell) -> bool:
-    activated_value = optional_float(cell.activated_matrix_value)
-    return (
-        cell.activation_status == "auto_activate"
-        and cell.matrix_value_effect == "written"
-        and cell.product_effect in {"", "accept_label_or_rescue"}
-        and activated_value is not None
-        and activated_value > 0
-    )
 
 
-def _html_scope_notice(
-    all_groups: Sequence[ReconciliationGroup],
-    html_groups: Sequence[ReconciliationGroup],
-) -> list[str]:
-    if len(all_groups) == len(html_groups):
-        return []
-    hidden = len(all_groups) - len(html_groups)
-    return [
-        '<div class="html-scope-note" role="note">',
-        (
-            f"HTML 顯示 {_escape(str(len(html_groups)))} / "
-            f"{_escape(str(len(all_groups)))} groups；"
-            f"{_escape(str(hidden))} 個低資訊量 rows 只保留在 TSV/JSON。"
-        ),
-        "完整機器索引仍在 groups TSV 與 representatives TSV，產品決策未改變。",
-        "</div>",
-    ]
-
-
-def _read_required_tsv(
-    path: Path | None,
-    required_columns: Sequence[str],
-) -> tuple[dict[str, str], ...]:
-    if path is None:
-        return ()
-    try:
-        return read_tsv_required(path, required_columns)
-    except FileNotFoundError as exc:
-        raise ValueError(f"Required TSV not found: {path}") from exc
-
-
-def _input_artifact_summary(**paths: object) -> dict[str, object]:
-    summary: dict[str, object] = {}
-    for key, value in paths.items():
-        if isinstance(value, Path):
-            summary[key] = str(value)
-        elif isinstance(value, Sequence) and not isinstance(value, str):
-            summary[key] = [str(item) for item in value if isinstance(item, Path)]
-        elif value:
-            summary[key] = value
-    return summary
-
-
-def _input_artifact_hashes(**paths: object) -> dict[str, object]:
-    hashes: dict[str, object] = {}
-    for key, value in paths.items():
-        if value is None:
-            continue
-        if isinstance(value, Path):
-            hashes[f"{key.removesuffix('_tsv')}_sha256"] = file_sha256(
-                value,
-                uppercase=False,
-            )
-            continue
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            artifact_hashes = [
-                {"path": str(path), "sha256": file_sha256(path, uppercase=False)}
-                for path in value
-                if isinstance(path, Path)
-            ]
-            if artifact_hashes:
-                key_base = key.removesuffix("_tsvs").removesuffix("_tsv")
-                hashes[f"{key_base}_hashes"] = artifact_hashes
-    return hashes
 
 
 def _source_hashes_from_input_artifacts(
@@ -2972,15 +2473,6 @@ def _shadow_projection_filter_categories(
     return ()
 
 
-def _is_projected_new_accept(cell: ShadowProjectionCell) -> bool:
-    projected_value = optional_float(cell.projected_matrix_value)
-    return (
-        cell.shadow_decision == "accept"
-        and cell.projected_matrix_written
-        and not cell.current_matrix_written
-        and projected_value is not None
-        and projected_value > 0
-    )
 
 
 def _review_category_counts(
@@ -5609,22 +5101,8 @@ def _representative_cells_table_html(
     )
 
 
-def _group_sort_key(group: ReconciliationGroup) -> tuple[int, str, str]:
-    return (
-        _CLASS_PRIORITY.get(group.reconciliation_class, len(_CLASS_PRIORITY)),
-        group.feature_family_id,
-        group.seed_group_id,
-    )
 
 
-def _representative_sort_key(cell: RepresentativeCell) -> tuple[str, str, str, int]:
-    role = cell.representative_roles[0] if cell.representative_roles else ""
-    return (
-        cell.feature_family_id,
-        cell.seed_group_id,
-        cell.sample_stem,
-        _ROLE_PRIORITY.get(role, len(_ROLE_PRIORITY)),
-    )
 
 
 def _product_cell_state(row: Mapping[str, str], group_state: str) -> str:
@@ -5775,19 +5253,6 @@ def _shadow_projection_search_blob(
     return " ".join(term for term in terms if term)
 
 
-def _representatives_by_group(
-    cells: Sequence[RepresentativeCell],
-) -> dict[tuple[str, str], tuple[RepresentativeCell, ...]]:
-    grouped: dict[tuple[str, str], list[RepresentativeCell]] = {}
-    for cell in cells:
-        grouped.setdefault(
-            (cell.feature_family_id, cell.seed_group_id),
-            [],
-        ).append(cell)
-    return {
-        key: tuple(sorted(items, key=_representative_sort_key))
-        for key, items in grouped.items()
-    }
 
 
 def _count_token_prefix(counts: object, prefix: str) -> int:

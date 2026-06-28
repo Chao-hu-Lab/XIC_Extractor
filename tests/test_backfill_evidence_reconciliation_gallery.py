@@ -26,7 +26,13 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_indices as gallery_indices,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_inputs as gallery_inputs,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_models as gallery_models,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_render_context as gallery_render_context,
 )
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
@@ -84,6 +90,18 @@ def test_gallery_html_helpers_stay_out_of_reconciliation_orchestrator(
     assert gallery._href_for_path("javascript:alert(1)", tmp_path / "index.html") == ""
 
 
+def test_gallery_inputs_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.load_reconciliation_input_rows
+        is gallery_inputs.load_reconciliation_input_rows
+    )
+    assert gallery._read_required_tsv is gallery_inputs._read_required_tsv
+    assert (
+        gallery._INPUT_ARTIFACT_LABEL_BY_KEY
+        is gallery_inputs._INPUT_ARTIFACT_LABEL_BY_KEY
+    )
+
+
 def test_gallery_indices_stay_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._shadow_policy_cell_from_row
@@ -103,6 +121,14 @@ def test_gallery_indices_stay_out_of_reconciliation_orchestrator() -> None:
     assert (
         gallery._shadow_policy_cell_from_row(row).shadow_policy_decision == "fill_now"
     )
+
+
+def test_gallery_render_context_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._gallery_render_context
+        is gallery_render_context._gallery_render_context
+    )
+    assert gallery._html_scope_notice is gallery_render_context._html_scope_notice
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
