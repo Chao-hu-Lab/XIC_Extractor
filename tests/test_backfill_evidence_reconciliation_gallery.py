@@ -53,6 +53,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_provenance as gallery_provenance,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_ranges as gallery_ranges,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_render_context as gallery_render_context,
 )
 from xic_extractor.diagnostics import (
@@ -338,6 +341,20 @@ def test_gallery_search_stays_out_of_reconciliation_orchestrator() -> None:
         gallery._shadow_projection_search_blob
         is gallery_search._shadow_projection_search_blob
     )
+
+
+def test_gallery_ranges_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._family_seed_summary is gallery_ranges._family_seed_summary
+    assert gallery._family_window_summary is gallery_ranges._family_window_summary
+    assert gallery._compact_value_range is gallery_ranges._compact_value_range
+    assert gallery._compact_text_values is gallery_ranges._compact_text_values
+    assert gallery._seed_mz_range is gallery_ranges._seed_mz_range
+    assert gallery._seed_rt_range is gallery_ranges._seed_rt_range
+    assert gallery._seed_window_range is gallery_ranges._seed_window_range
+    assert gallery._numeric_range_text is gallery_ranges._numeric_range_text
+    assert gallery._numeric_range_start is gallery_ranges._numeric_range_start
+    assert gallery._numeric_range_end is gallery_ranges._numeric_range_end
+    assert gallery._parsed_numeric_values is gallery_ranges._parsed_numeric_values
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
