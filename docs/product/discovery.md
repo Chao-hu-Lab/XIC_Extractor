@@ -12,9 +12,11 @@ path.
   support, and future evidence providers.
 - Standard per-sample outputs: `discovery_candidates.csv` (archival/alignment
   detail) and `discovery_review.csv` (compact human review).
-- Discovery `feature_family_id` and `feature_superfamily_id` are per-sample
-  grouping/review context. They must not be treated as cross-sample identity,
-  selected-peak truth, or Backfill promotion authority by themselves.
+- Discovery `feature_family_id` remains a public output header and dataclass
+  field, but its Discovery meaning is a per-sample peak anchor label for
+  candidates sharing the same discovered MS1 peak. It must not be treated as
+  cross-sample identity, selected-peak truth, or Backfill promotion authority by
+  itself.
 - Batch discovery handoff uses explicit index files. Do not depend on old
   worktree-local output directories as durable inputs.
 - Minimal output modes are for fast inspection; standard outputs are the public
