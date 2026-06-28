@@ -200,7 +200,7 @@ Names that contain `score` need extra care:
 - `legacy_peak_scoring_current_oracle` is a parity baseline, not a product
   owner.
 
-## Decision Trace Requirements
+## Decision Record Requirements
 
 New or promoted decision paths should emit or preserve enough information to
 reconstruct the policy:
@@ -215,9 +215,10 @@ reconstruct the policy:
 | Projection authority | targeted projection, alignment projection, Backfill authority, ProductWriter scope |
 | Validation status | synthetic, focused tests, targeted benchmark, 8RAW, 85RAW, manual review, expected diff |
 
-The trace can live in different artifacts for different workflows, but the
-meaning must remain stable: evidence explains, policy gates, score ranks, and
-projection writes.
+The decision record can live in different artifacts for different workflows,
+but the meaning must remain stable: evidence explains, policy gates, score
+ranks, and projection writes. Reserve `Trace` for LC-MS chromatogram signals;
+do not use it as shorthand for decision records.
 
 ## Red Lines
 

@@ -23,7 +23,7 @@ from xic_extractor.alignment.promotion_policy import (
 )
 from xic_extractor.decision_policy import (
     DECISION_CLASS_RANK,
-    DecisionPolicyTrace,
+    DecisionRecord,
     DecisionTerm,
 )
 from xic_extractor.evidence_semantics import DecisionClass
@@ -50,8 +50,8 @@ class ProductionCellDecision:
     blank_reason: str
 
     @property
-    def decision_policy_trace(self) -> DecisionPolicyTrace:
-        return production_cell_policy_trace(self)
+    def decision_record(self) -> DecisionRecord:
+        return production_cell_decision_record(self)
 
 
 @dataclass(frozen=True)
@@ -85,9 +85,9 @@ class ProductionDecisionSet:
         return self.rows[feature_family_id]
 
 
-def production_cell_policy_trace(
+def production_cell_decision_record(
     decision: ProductionCellDecision,
-) -> DecisionPolicyTrace:
+) -> DecisionRecord:
     decision_class = _production_cell_decision_class(decision)
     blockers = _production_cell_blockers(decision)
     gate: tuple[DecisionTerm, ...] = (
@@ -109,7 +109,7 @@ def production_cell_policy_trace(
             0.0 if decision.matrix_value is not None else 1.0,
         ),
     )
-    return DecisionPolicyTrace(
+    return DecisionRecord(
         workflow="alignment_production_cell",
         unit_id=f"{decision.feature_family_id}:{decision.sample_stem}",
         required_evidence=(

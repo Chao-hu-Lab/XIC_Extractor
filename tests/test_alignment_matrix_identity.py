@@ -8,7 +8,7 @@ from xic_extractor.alignment.matrix import AlignedCell, AlignmentMatrix
 from xic_extractor.alignment.matrix_identity import (
     MatrixIdentityRowDecision,
     build_matrix_identity_decisions,
-    matrix_identity_row_policy_trace,
+    matrix_identity_row_decision_record,
 )
 from xic_extractor.alignment.promotion_policy import (
     ANCHOR_OWN_MAX_MS1_SUPPORT_REASON,
@@ -65,7 +65,7 @@ def test_owner_complete_link_with_two_detected_cells_is_production_family() -> N
     assert decision.quantifiable_detected_count == 2
 
 
-def test_matrix_identity_policy_trace_exposes_row_projection_order() -> None:
+def test_matrix_identity_decision_record_explains_row_projection_policy() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
         (
@@ -76,20 +76,20 @@ def test_matrix_identity_policy_trace_exposes_row_projection_order() -> None:
     )
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
-    trace = matrix_identity_row_policy_trace(decision)
+    record = matrix_identity_row_decision_record(decision)
 
-    assert decision.decision_policy_trace == trace
-    assert trace.workflow == "alignment_matrix_identity_row"
-    assert trace.unit_id == "FAM001"
-    assert trace.required_evidence == (
+    assert decision.decision_record == record
+    assert record.workflow == "alignment_matrix_identity_row"
+    assert record.unit_id == "FAM001"
+    assert record.required_evidence == (
         "matrix_identity_row",
         "cell_quality_decisions",
         "row_identity_evidence",
         "backfill_promotion_policy",
     )
-    assert trace.decision_class == "accepted"
-    assert trace.blockers == ()
-    assert trace.support == (
+    assert record.decision_class == "accepted"
+    assert record.blockers == ()
+    assert record.support == (
         "identity_decision:production_family",
         "identity_confidence:high",
         "include_in_primary_matrix",
@@ -97,19 +97,20 @@ def test_matrix_identity_policy_trace_exposes_row_projection_order() -> None:
         "detected_identity_cells:2",
         "quantifiable_rescue_cells:1",
     )
-    assert trace.gate == (
+    assert record.gate == (
         ("decision_class_rank", 0.0),
         ("primary_matrix_projection_rank", 0.0),
         ("blocker_count", 0.0),
     )
-    assert trace.tie_break == (
+    assert record.tie_break == (
         ("identity_confidence_rank", 0.0),
         ("negative_detected_identity_cells", -2.0),
         ("negative_quantifiable_rescue_cells", -1.0),
         ("duplicate_pressure_count", 0.0),
         ("ambiguous_owner_count", 0.0),
     )
-    assert trace.projection_authority == "build_matrix_identity_decisions"
+    assert record.projection_authority == "build_matrix_identity_decisions"
+    assert not hasattr(record, "key")
 
 
 def test_extreme_dr_backfill_dependency_with_cell_evidence_promotes() -> None:
@@ -691,18 +692,22 @@ def test_high_score_low_event_seeds_do_not_bypass_weak_seed_gate() -> None:
     assert "backfill_cell_evidence_required" in decision.row_flags
 
 
-def test_matrix_identity_policy_trace_key_ignores_seed_evidence_score_payload() -> None:
+def test_matrix_identity_decision_record_ignores_seed_evidence_score_payload() -> None:
     base = _weak_seed_backfill_decision(low_event_seed_score=80)
     adversarial = _weak_seed_backfill_decision(low_event_seed_score=100)
 
-    base_trace = matrix_identity_row_policy_trace(base)
-    adversarial_trace = matrix_identity_row_policy_trace(adversarial)
+    base_record = matrix_identity_row_decision_record(base)
+    adversarial_record = matrix_identity_row_decision_record(adversarial)
 
-    assert base_trace.key == adversarial_trace.key
-    assert base_trace.blockers == adversarial_trace.blockers
-    assert base_trace.support == adversarial_trace.support
-    assert all("evidence_score" not in name for name, _value in base_trace.gate)
-    assert all("evidence_score" not in name for name, _value in base_trace.tie_break)
+    assert base_record.gate == adversarial_record.gate
+    assert base_record.tie_break == adversarial_record.tie_break
+    assert base_record.blockers == adversarial_record.blockers
+    assert base_record.support == adversarial_record.support
+    assert all("evidence_score" not in name for name, _value in base_record.gate)
+    assert all(
+        "evidence_score" not in name for name, _value in base_record.tie_break
+    )
+    assert not hasattr(base_record, "key")
 
 
 def test_weak_seed_gate_reads_owner_events_when_trusted_support_is_thin() -> None:
@@ -916,7 +921,7 @@ def test_rescue_only_backfill_only_family_is_audit() -> None:
     assert "rescue_only" in decision.row_flags
 
 
-def test_matrix_identity_policy_trace_marks_rescue_only_as_not_counted() -> None:
+def test_matrix_identity_decision_record_marks_rescue_only_as_not_counted() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
         (
@@ -926,28 +931,28 @@ def test_matrix_identity_policy_trace_marks_rescue_only_as_not_counted() -> None
     )
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
-    trace = decision.decision_policy_trace
+    record = decision.decision_record
 
-    assert trace.decision_class == "not_counted"
-    assert trace.blockers == (RESCUE_ONLY_BLOCKED_REASON, "rescue_only")
-    assert trace.gate == (
+    assert record.decision_class == "not_counted"
+    assert record.blockers == (RESCUE_ONLY_BLOCKED_REASON, "rescue_only")
+    assert record.gate == (
         ("decision_class_rank", 2.0),
         ("primary_matrix_projection_rank", 1.0),
         ("blocker_count", 2.0),
     )
 
 
-def test_matrix_identity_policy_trace_marks_ambiguous_owner_as_ambiguous() -> None:
+def test_matrix_identity_decision_record_marks_ambiguous_owner_as_ambiguous() -> None:
     matrix = _matrix(
         _feature("FAM001", evidence="owner_complete_link;owner_count=2"),
         (_cell("s1", "FAM001", "ambiguous_ms1_owner", 100.0),),
     )
 
     decision = build_matrix_identity_decisions(matrix, AlignmentConfig()).row("FAM001")
-    trace = decision.decision_policy_trace
+    record = decision.decision_record
 
-    assert trace.decision_class == "ambiguous"
-    assert trace.blockers == (
+    assert record.decision_class == "ambiguous"
+    assert record.blockers == (
         "ambiguous_only",
         "ambiguous_ms1_owner_pressure",
         "zero_present",

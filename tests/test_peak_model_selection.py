@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from xic_extractor.decision_policy import decision_record_ordering_key
 from xic_extractor.evidence_semantics import EvidenceDecisionSemantics
 from xic_extractor.peak_detection.hypotheses import (
     AuditTrail,
@@ -13,7 +14,7 @@ from xic_extractor.peak_detection.model_selection import (
     expected_diff_approval_for_result,
     expected_diff_stable_row_id,
     model_select_peak_hypothesis,
-    peak_hypothesis_selection_policy_trace,
+    peak_hypothesis_decision_record,
 )
 
 PEAK_MODEL_SELECTION_DOC = Path("docs/product/peak-model-selection.md")
@@ -115,7 +116,7 @@ def test_expected_diff_without_approval_record_cannot_product_switch() -> None:
     assert "missing_expected_diff_approval_record" in result.diff_reasons
 
 
-def test_peak_hypothesis_policy_trace_exposes_model_selection_order() -> None:
+def test_peak_hypothesis_decision_record_exposes_model_selection_order() -> None:
     hypothesis = _hypothesis(
         "successor",
         selected=False,
@@ -124,35 +125,44 @@ def test_peak_hypothesis_policy_trace_exposes_model_selection_order() -> None:
         support_reasons=("ms1_coherent", "candidate_aligned_ms2_nl"),
     )
 
-    trace = peak_hypothesis_selection_policy_trace(hypothesis)
+    record = peak_hypothesis_decision_record(hypothesis)
 
-    assert trace.workflow == "peak_hypothesis_model_selection"
-    assert trace.unit_id == hypothesis.hypothesis_id
-    assert trace.required_evidence == (
+    assert record.workflow == "peak_hypothesis_model_selection"
+    assert record.unit_id == hypothesis.hypothesis_id
+    assert record.required_evidence == (
         "peak_hypothesis",
         "integration_result",
         "evidence_vector",
         "audit_trail",
     )
-    assert trace.decision_class == "accepted"
-    assert trace.blockers == ()
-    assert trace.support == ("ms1_coherent", "candidate_aligned_ms2_nl")
-    assert trace.projection_authority == "selected_hypothesis_model_selection_v1"
-    assert [name for name, _value in trace.gate] == [
+    assert record.decision_class == "accepted"
+    assert record.blockers == ()
+    assert record.support == ("ms1_coherent", "candidate_aligned_ms2_nl")
+    assert record.projection_authority == "selected_hypothesis_model_selection_v1"
+    assert [name for name, _value in record.gate] == [
         "decision_class_rank",
         "blocker_count",
     ]
-    assert [name for name, _value in trace.tie_break] == [
+    assert [name for name, _value in record.tie_break] == [
         "projected_confidence_rank",
         "negative_selection_reason_count",
         "chemical_evidence_rank",
         "selection_reference_distance",
         "legacy_selection_rank",
     ]
-    assert trace.key == (0.0, 0.0, 0.0, -2.0, 2.0, 0.0, 2.0)
+    assert not hasattr(record, "key")
+    assert decision_record_ordering_key(record) == (
+        0.0,
+        0.0,
+        0.0,
+        -2.0,
+        2.0,
+        0.0,
+        2.0,
+    )
 
 
-def test_peak_hypothesis_policy_trace_key_ignores_legacy_score_payload() -> None:
+def test_peak_hypothesis_record_ordering_ignores_legacy_score_payload() -> None:
     hypothesis = _hypothesis(
         "successor",
         selected=False,
@@ -172,12 +182,14 @@ def test_peak_hypothesis_policy_trace_key_ignores_legacy_score_payload() -> None
         ),
     )
 
-    base_trace = peak_hypothesis_selection_policy_trace(hypothesis)
-    adversarial_trace = peak_hypothesis_selection_policy_trace(adversarial)
+    base_record = peak_hypothesis_decision_record(hypothesis)
+    adversarial_record = peak_hypothesis_decision_record(adversarial)
 
-    assert adversarial_trace.key == base_trace.key
-    assert adversarial_trace.support == base_trace.support
-    assert adversarial_trace.blockers == base_trace.blockers
+    assert decision_record_ordering_key(adversarial_record) == (
+        decision_record_ordering_key(base_record)
+    )
+    assert adversarial_record.support == base_record.support
+    assert adversarial_record.blockers == base_record.blockers
 
 
 def test_blocked_and_inconclusive_statuses_cannot_product_switch() -> None:

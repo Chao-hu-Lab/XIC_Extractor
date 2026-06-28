@@ -31,6 +31,9 @@ Use these terms consistently:
   integration basis.
 - `EvidenceVector`: structured evidence used for scoring or model selection.
 - `IntegrationResult`: selected boundaries, area, and integration diagnostics.
+- `DecisionRecord`: audit/explanation record of how evidence, policy gates,
+  blockers, tie-breaks, and projection authority produced a decision. It is not
+  an LC-MS `Trace` and not analytical evidence.
 - `AuditTrail`: reproducible record of how evidence became a decision.
 - `ProductWriter`: the narrow product output writer. It must only consume
   explicitly authorized scopes.

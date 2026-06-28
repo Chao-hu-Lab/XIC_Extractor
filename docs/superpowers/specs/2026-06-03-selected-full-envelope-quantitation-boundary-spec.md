@@ -146,12 +146,13 @@ The intended boundary policy is:
 ```text
 selected candidate / PeakHypothesis
   -> raw XIC and AsLS baseline over a named quantitation context
-  -> morphology trace for boundary decisions
+  -> morphology decision record for boundary decisions
   -> selected elution-envelope boundary
   -> raw/original XIC integration with AsLS baseline subtraction
 ```
 
-The morphology trace is a decision trace, not an area trace. Its first
+The morphology decision record is an explanation record for boundary selection,
+not an area trace and not an LC-MS chromatogram `Trace`. Its first
 production-candidate calibration should mimic the analyst's Xcalibur review
 practice as closely as the repo can support, starting with a `gaussian_15`
 window as the named default candidate. Xcalibur's smoothing implementation is
@@ -198,7 +199,7 @@ Required inputs:
 | selected candidate or hypothesis id | Prevents unrelated context peaks from being integrated. |
 | raw/original XIC points | Final area source. |
 | AsLS baseline over the quantitation context | Primary baseline/background model. |
-| morphology trace such as `gaussian_15` | OpenMS-style elution-envelope and boundary decision source. |
+| morphology decision record such as `gaussian_15` | OpenMS-style elution-envelope and boundary decision source. |
 | resolver interval | Starting evidence, not final truth. |
 | SG / CWT / local-minimum / derivative / WIS / shape/SN evidence | Boundary proposal and conflict evidence. |
 
@@ -303,7 +304,7 @@ must expose equivalent information:
 | `resolver_rt_start/end` | Historical selected resolver interval. |
 | `envelope_rt_start/end` | Final selected envelope interval when available. |
 | `quantitation_context_rt_start/end` | Domain context fence used for envelope evaluation. |
-| `morphology_trace_method` / `morphology_trace_window_points` / `morphology_trace_effective_points` | Named decision trace used for OpenMS-style boundary morphology, such as `gaussian_15`, including the configured window and row-level effective point count. |
+| `morphology_trace_method` / `morphology_trace_window_points` / `morphology_trace_effective_points` | Legacy-named schema fields for the boundary morphology decision record, such as `gaussian_15`, including the configured window and row-level effective point count. They are not LC-MS chromatogram trace data. |
 | `policy_snapshot` / `resolved_baseline_return_threshold` | The named thresholds actually used for the row, so writers do not need to recompute policy. |
 | `boundary_change_class` | no change, flank recovered, internal dip bridged, split supported, neighbor apex, tail uncertain, overmerge rejected, malformed. |
 | `boundary_evidence_sources` | SG, CWT, local minimum, derivative, WIS, baseline return, RT, shape/SN as applicable. |

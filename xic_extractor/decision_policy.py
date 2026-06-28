@@ -19,7 +19,7 @@ DecisionTerm = tuple[str, float]
 
 
 @dataclass(frozen=True)
-class DecisionPolicyTrace:
+class DecisionRecord:
     workflow: str
     unit_id: str
     required_evidence: tuple[str, ...]
@@ -29,10 +29,6 @@ class DecisionPolicyTrace:
     gate: tuple[DecisionTerm, ...]
     tie_break: tuple[DecisionTerm, ...]
     projection_authority: str
-
-    @property
-    def key(self) -> tuple[float, ...]:
-        return tuple(value for _name, value in (*self.gate, *self.tie_break))
 
 
 def decision_blockers(
@@ -55,3 +51,7 @@ def decision_gate_terms(
         ("decision_class_rank", float(DECISION_CLASS_RANK[semantics.decision_class])),
         ("blocker_count", float(len(blockers))),
     )
+
+
+def decision_record_ordering_key(record: DecisionRecord) -> tuple[float, ...]:
+    return tuple(value for _name, value in (*record.gate, *record.tie_break))

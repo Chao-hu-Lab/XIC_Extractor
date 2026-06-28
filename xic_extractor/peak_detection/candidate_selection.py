@@ -3,10 +3,11 @@ from __future__ import annotations
 import math
 
 from xic_extractor.decision_policy import (
-    DecisionPolicyTrace,
+    DecisionRecord,
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
+    decision_record_ordering_key,
 )
 from xic_extractor.peak_detection.evidence_facts import (
     CandidateEvidenceFacts,
@@ -224,21 +225,22 @@ def _typed_selection_key(
     selection_rt: float | None,
     strict_selection_rt: bool,
 ) -> tuple[float, ...]:
-    return candidate_selection_policy_trace(
+    record = candidate_selection_decision_record(
         item,
         scored,
         selection_rt=selection_rt,
         strict_selection_rt=strict_selection_rt,
-    ).key
+    )
+    return decision_record_ordering_key(record)
 
 
-def candidate_selection_policy_trace(
+def candidate_selection_decision_record(
     item: ScoredCandidate,
     scored: list[ScoredCandidate],
     *,
     selection_rt: float | None = None,
     strict_selection_rt: bool = False,
-) -> DecisionPolicyTrace:
+) -> DecisionRecord:
     facts = _facts(item)
     semantics = decision_semantics_from_candidate_facts(
         facts,
@@ -303,7 +305,7 @@ def candidate_selection_policy_trace(
             ("rt_prior_distance", _rt_prior_distance(facts)),
             ("negative_abundance", -facts.abundance),
         )
-    return DecisionPolicyTrace(
+    return DecisionRecord(
         workflow="targeted_candidate_selection",
         unit_id=facts.candidate_id,
         required_evidence=(

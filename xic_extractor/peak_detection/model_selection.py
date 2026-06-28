@@ -6,10 +6,11 @@ from typing import Literal
 
 from xic_extractor.decision_policy import (
     DECISION_CLASS_RANK,
-    DecisionPolicyTrace,
+    DecisionRecord,
     DecisionTerm,
     decision_blockers,
     decision_gate_terms,
+    decision_record_ordering_key,
 )
 from xic_extractor.evidence_semantics import DecisionClass
 from xic_extractor.peak_detection.hypotheses import PeakHypothesis
@@ -329,12 +330,12 @@ def _successor_selected_hypothesis(
 
 
 def _successor_selection_key(hypothesis: PeakHypothesis) -> tuple[float, ...]:
-    return peak_hypothesis_selection_policy_trace(hypothesis).key
+    return decision_record_ordering_key(peak_hypothesis_decision_record(hypothesis))
 
 
-def peak_hypothesis_selection_policy_trace(
+def peak_hypothesis_decision_record(
     hypothesis: PeakHypothesis,
-) -> DecisionPolicyTrace:
+) -> DecisionRecord:
     semantics = hypothesis.evidence.decision_semantics
     reasons = _selection_reasons(hypothesis)
     if semantics is None:
@@ -374,7 +375,7 @@ def peak_hypothesis_selection_policy_trace(
             ),
         ),
     )
-    return DecisionPolicyTrace(
+    return DecisionRecord(
         workflow="peak_hypothesis_model_selection",
         unit_id=hypothesis.hypothesis_id,
         required_evidence=(

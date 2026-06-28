@@ -34,7 +34,7 @@ from xic_extractor.alignment.promotion_policy import (
 )
 from xic_extractor.decision_policy import (
     DECISION_CLASS_RANK,
-    DecisionPolicyTrace,
+    DecisionRecord,
     DecisionTerm,
 )
 from xic_extractor.evidence_semantics import DecisionClass
@@ -62,8 +62,8 @@ class MatrixIdentityRowDecision:
     row_flags: tuple[str, ...]
 
     @property
-    def decision_policy_trace(self) -> DecisionPolicyTrace:
-        return matrix_identity_row_policy_trace(self)
+    def decision_record(self) -> DecisionRecord:
+        return matrix_identity_row_decision_record(self)
 
 
 @dataclass(frozen=True)
@@ -99,9 +99,9 @@ def build_matrix_identity_decisions(
     return MatrixIdentityDecisionSet(rows=rows, cell_quality=quality)
 
 
-def matrix_identity_row_policy_trace(
+def matrix_identity_row_decision_record(
     decision: MatrixIdentityRowDecision,
-) -> DecisionPolicyTrace:
+) -> DecisionRecord:
     decision_class = _matrix_identity_decision_class(decision)
     blockers = _matrix_identity_blockers(decision)
     gate: tuple[DecisionTerm, ...] = (
@@ -128,7 +128,7 @@ def matrix_identity_row_policy_trace(
         ("duplicate_pressure_count", float(decision.duplicate_assigned_count)),
         ("ambiguous_owner_count", float(decision.ambiguous_ms1_owner_count)),
     )
-    return DecisionPolicyTrace(
+    return DecisionRecord(
         workflow="alignment_matrix_identity_row",
         unit_id=decision.feature_family_id,
         required_evidence=(

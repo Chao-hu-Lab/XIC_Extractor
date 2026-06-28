@@ -3,9 +3,10 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from xic_extractor.decision_policy import decision_record_ordering_key
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
-    candidate_selection_policy_trace,
+    candidate_selection_decision_record,
     select_candidate_by_evidence,
 )
 from xic_extractor.peak_detection.evidence_facts import (
@@ -238,7 +239,7 @@ def test_strict_selector_demotes_late_small_peak_when_anchor_aligned_area_exists
     assert selected.candidate is anchor_aligned_area
 
 
-def test_typed_selection_policy_trace_exposes_gate_support_and_projection() -> None:
+def test_typed_selection_decision_record_exposes_gate_support_and_projection() -> None:
     candidate = _candidate(
         10.0,
         area=1200.0,
@@ -255,11 +256,15 @@ def test_typed_selection_policy_trace_exposes_gate_support_and_projection() -> N
         ),
     )
 
-    trace = candidate_selection_policy_trace([scored][0], [scored], selection_rt=10.0)
+    record = candidate_selection_decision_record(
+        [scored][0],
+        [scored],
+        selection_rt=10.0,
+    )
 
-    assert trace.workflow == "targeted_candidate_selection"
-    assert trace.unit_id == "candidate@10.0"
-    assert trace.required_evidence == (
+    assert record.workflow == "targeted_candidate_selection"
+    assert record.unit_id == "candidate@10.0"
+    assert record.required_evidence == (
         "typed_candidate_evidence_facts",
         "selected_apex_rt",
         "trace_evidence",
@@ -267,15 +272,15 @@ def test_typed_selection_policy_trace_exposes_gate_support_and_projection() -> N
         "rt_evidence",
         "boundary_evidence",
     )
-    assert trace.decision_class == "accepted"
-    assert trace.blockers == ()
-    assert "candidate_aligned_ms2_nl" in trace.support
-    assert trace.projection_authority == "select_candidate_by_evidence"
-    assert [name for name, _value in trace.gate] == [
+    assert record.decision_class == "accepted"
+    assert record.blockers == ()
+    assert "candidate_aligned_ms2_nl" in record.support
+    assert record.projection_authority == "select_candidate_by_evidence"
+    assert [name for name, _value in record.gate] == [
         "decision_class_rank",
         "blocker_count",
     ]
-    assert [name for name, _value in trace.tie_break] == [
+    assert [name for name, _value in record.tie_break] == [
         "abundance_demotion_rank",
         "chemical_evidence_rank",
         "trace_strength_rank",
@@ -284,10 +289,21 @@ def test_typed_selection_policy_trace_exposes_gate_support_and_projection() -> N
         "rt_prior_distance",
         "negative_abundance",
     ]
-    assert trace.key == (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1200.0)
+    assert not hasattr(record, "key")
+    assert decision_record_ordering_key(record) == (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -1200.0,
+    )
 
 
-def test_typed_selection_policy_trace_key_ignores_legacy_score_payload() -> None:
+def test_typed_selection_record_ordering_ignores_legacy_score_payload() -> None:
     candidate = _candidate(
         10.0,
         area=1200.0,
@@ -312,23 +328,25 @@ def test_typed_selection_policy_trace_key_ignores_legacy_score_payload() -> None
         ),
     )
 
-    base_trace = candidate_selection_policy_trace(
+    base_record = candidate_selection_decision_record(
         base_scored,
         [base_scored],
         selection_rt=10.0,
     )
-    adversarial_trace = candidate_selection_policy_trace(
+    adversarial_record = candidate_selection_decision_record(
         adversarial_scored,
         [adversarial_scored],
         selection_rt=10.0,
     )
 
-    assert adversarial_trace.key == base_trace.key
-    assert adversarial_trace.support == base_trace.support
-    assert adversarial_trace.blockers == base_trace.blockers
+    assert decision_record_ordering_key(adversarial_record) == (
+        decision_record_ordering_key(base_record)
+    )
+    assert adversarial_record.support == base_record.support
+    assert adversarial_record.blockers == base_record.blockers
 
 
-def test_strict_policy_trace_places_anchor_gate_before_tie_breaks() -> None:
+def test_strict_decision_record_places_anchor_gate_before_tie_breaks() -> None:
     candidate = _candidate(
         10.02,
         area=900.0,
@@ -348,23 +366,23 @@ def test_strict_policy_trace_places_anchor_gate_before_tie_breaks() -> None:
         ),
     )
 
-    trace = candidate_selection_policy_trace(
+    record = candidate_selection_decision_record(
         scored,
         [scored],
         selection_rt=10.0,
         strict_selection_rt=True,
     )
 
-    assert [name for name, _value in trace.gate] == [
+    assert [name for name, _value in record.gate] == [
         "anchor_selection_completeness_rank",
         "decision_class_rank",
         "blocker_count",
     ]
-    assert trace.tie_break[0][0] == "strict_anchor_area_demotion_rank"
-    assert trace.key == tuple(
-        value for _name, value in (*trace.gate, *trace.tie_break)
+    assert record.tie_break[0][0] == "strict_anchor_area_demotion_rank"
+    assert decision_record_ordering_key(record) == tuple(
+        value for _name, value in (*record.gate, *record.tie_break)
     )
-    assert trace.key == pytest.approx(
+    assert decision_record_ordering_key(record) == pytest.approx(
         (0.0, 1.0, 1.0, 0.0, 0.0, 3.0, 3.0, 0.02, -900.0)
     )
 
