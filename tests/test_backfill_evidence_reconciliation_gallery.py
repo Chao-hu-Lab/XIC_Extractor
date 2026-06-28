@@ -23,6 +23,9 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_chain_html as gallery_chain_html,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_counts as gallery_counts,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_evidence as gallery_evidence,
 )
 from xic_extractor.diagnostics import (
@@ -355,6 +358,25 @@ def test_gallery_ranges_stay_out_of_reconciliation_orchestrator() -> None:
     assert gallery._numeric_range_start is gallery_ranges._numeric_range_start
     assert gallery._numeric_range_end is gallery_ranges._numeric_range_end
     assert gallery._parsed_numeric_values is gallery_ranges._parsed_numeric_values
+
+
+def test_gallery_counts_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._counts_html is gallery_counts._counts_html
+    assert (
+        gallery._cid_nl_successor_counts_html
+        is gallery_counts._cid_nl_successor_counts_html
+    )
+    assert gallery._projection_counts_html is gallery_counts._projection_counts_html
+    assert (
+        gallery._projection_impact_counts_html
+        is gallery_counts._projection_impact_counts_html
+    )
+    assert gallery._impact_counts_html is gallery_counts._impact_counts_html
+    assert gallery._count_pill is gallery_counts._count_pill
+    assert (
+        gallery._consolidated_counts_html
+        is gallery_counts._consolidated_counts_html
+    )
 
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
