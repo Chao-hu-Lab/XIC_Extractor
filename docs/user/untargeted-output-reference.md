@@ -152,13 +152,16 @@ injection order when an injection-order source is provided).
 
 ### `alignment_review.tsv`
 
-One row per feature family. Alignment quality and identity decisions.
+One row per cross-sample group. Alignment quality and identity decisions.
+`feature_family_id` is the stable public row/display label retained for output
+compatibility; pipeline identity decisions should use `group_hypothesis_id`
+where that internal or sidecar identity is available.
 
 #### Core Identity
 
 | Column | Type | Description |
 | --- | --- | --- |
-| feature_family_id | string | Unique family ID |
+| feature_family_id | string | Stable public row/display label for the cross-sample group |
 | neutral_loss_tag | string | NL identifier |
 | family_center_mz | float | Center m/z |
 | family_center_rt | float | Center RT (min) |

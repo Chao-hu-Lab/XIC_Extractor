@@ -47,7 +47,10 @@ Checker result:
 - `status=pass`.
 - `expected_row_count=157`.
 - `discovery_candidates.csv` SHA-256:
-  `B1B4956C3F0296D51E144659DB127CFB453140A66030C97C22FEED8C11326E2B`.
+  `D08CD512410DA303A961CD4CA6D39938FBAAEB32AE0F3FDCEC038E3561455405`.
+- Retained CSV headers were normalized to the current Discovery schema after
+  family-abstraction removal; this refresh did not rerun RAW or change row
+  count.
 
 Boundary: this is a one-RAW discovery-path validation. It does not update the
 existing activated default `quant_matrix.tsv`, does not run 85RAW, and does not

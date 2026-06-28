@@ -5,12 +5,12 @@ from xic_extractor.discovery.evidence_config import (
     DEFAULT_EVIDENCE_PROFILE,
     DiscoveryEvidenceProfile,
 )
-from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 from xic_extractor.discovery.models import (
     DiscoveryCandidate,
     DiscoverySettings,
     NeutralLossProfile,
 )
+from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 
 
 def test_assign_peak_anchors_groups_candidates_sharing_ms1_peak() -> None:
@@ -39,6 +39,40 @@ def test_assign_peak_anchors_groups_candidates_sharing_ms1_peak() -> None:
         "Sample#20",
         "Sample#10",
     ]
+
+
+def test_assign_peak_anchors_keeps_raw_sample_and_tag_boundaries_separate() -> None:
+    assigned = assign_peak_anchors(
+        (
+            _candidate(
+                candidate_id="Sample#10",
+                raw_file=Path("C:/data/Sample.raw"),
+                sample_stem="Sample",
+                neutral_loss_tag="DNA_dR",
+            ),
+            _candidate(
+                candidate_id="Sample#20",
+                raw_file=Path("C:/data/Other.raw"),
+                sample_stem="Sample",
+                neutral_loss_tag="DNA_dR",
+            ),
+            _candidate(
+                candidate_id="Sample#30",
+                raw_file=Path("C:/data/Sample.raw"),
+                sample_stem="OtherSample",
+                neutral_loss_tag="DNA_dR",
+            ),
+            _candidate(
+                candidate_id="Sample#40",
+                raw_file=Path("C:/data/Sample.raw"),
+                sample_stem="Sample",
+                neutral_loss_tag="RNA_r",
+            ),
+        )
+    )
+
+    assert [candidate.feature_family_size for candidate in assigned] == [1, 1, 1, 1]
+    assert len({candidate.feature_family_id for candidate in assigned}) == 4
 
 
 def test_assign_peak_anchors_keeps_distinct_ms1_peaks_separate() -> None:
@@ -156,6 +190,8 @@ def _candidate(
     candidate_id: str,
     review_priority: str = "MEDIUM",
     sample_stem: str = "Sample",
+    raw_file: Path | None = None,
+    neutral_loss_tag: str = "DNA_dR",
     precursor_mz: float = 258.1085,
     product_mz: float = 142.0611,
     apex_rt: float | None = 7.84,
@@ -188,11 +224,11 @@ def _candidate(
         ),
         ms2_product_max_intensity=ms2_product_max_intensity,
         reason="single MS2 NL seed; MS1 peak found",
-        raw_file=Path("C:/data/Sample.raw"),
+        raw_file=raw_file or Path("C:/data/Sample.raw"),
         sample_stem=sample_stem,
         best_ms2_scan_id=10,
         seed_scan_ids=(10,),
-        neutral_loss_tag="DNA_dR",
+        neutral_loss_tag=neutral_loss_tag,
         configured_neutral_loss_da=116.0474,
         neutral_loss_mass_error_ppm=0.0,
         rt_seed_min=apex_rt or 7.84,

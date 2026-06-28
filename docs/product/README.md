@@ -25,7 +25,7 @@ For definitions of domain-specific terms used in these pages, see the
 | --- | --- | --- |
 | Quant Matrix | [`quant-matrix.md`](quant-matrix.md) | Product-facing matrix values, Backfill activation boundaries, authority routing |
 | Evidence Spine | [`evidence-spine.md`](evidence-spine.md) | Shared evidence carriers, peak hypotheses, projection boundaries |
-| Family And Hypothesis Boundary | [`family-hypothesis-boundary.md`](family-hypothesis-boundary.md) | Legacy family IDs, group hypotheses, PeakHypothesis, and projection authority |
+| Peak Anchor And Group Boundary | [`family-hypothesis-boundary.md`](family-hypothesis-boundary.md) | Discovery peak anchors, cross-sample groups, PeakHypothesis, and projection authority |
 | Backfill | [`backfill.md`](backfill.md) | ProductWriter authority, accepted quant values, expansion gates |
 | Run Provenance | [`run-provenance.md`](run-provenance.md) | Method manifests, run metadata, replay context |
 

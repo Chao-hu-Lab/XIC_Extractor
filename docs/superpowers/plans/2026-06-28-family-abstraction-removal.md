@@ -1,6 +1,6 @@
 # Family Abstraction Removal — Structural Refactoring Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]` / `- [x]`) syntax for tracking.
 
 **Goal:** Remove the "family" abstraction layer from the discovery and alignment pipeline, replacing it with correctly-scoped concepts (peak anchor, cross-sample group, typed evidence facts).
 
@@ -36,7 +36,7 @@ Currently `score_discovery_evidence` is called inside `_assign_superfamilies` (f
 - Consumes: `DiscoveryCandidate`, `DiscoverySettings`, `score_discovery_evidence`
 - Produces: `assign_feature_families` unchanged public signature, same output values
 
-- [ ] **Step 1: Refactor `assign_feature_families` to separate scoring from superfamily grouping**
+- [x] **Step 1: Refactor `assign_feature_families` to separate scoring from superfamily grouping**
 
 Extract the `score_discovery_evidence` call from inside `_assign_superfamilies` into `assign_feature_families` as a third step:
 
@@ -78,12 +78,12 @@ def _score_all_evidence(
 
 And remove the scoring lines from `_assign_superfamilies` — it should only assign superfamily fields (id, size, role, confidence, evidence), not call `score_discovery_evidence`.
 
-- [ ] **Step 2: Run tests to verify zero behavior change**
+- [x] **Step 2: Run tests to verify zero behavior change**
 
 Run: `uv run pytest tests/test_discovery_feature_family.py -v`
 Expected: ALL PASS, identical evidence_score and family_context values.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```
 git add xic_extractor/discovery/feature_family.py
@@ -110,7 +110,7 @@ Superfamily was a band-aid for raw-trace peak fragmentation. With gaussian-smoot
 - Consumes: Task 1's refactored `assign_feature_families`
 - Produces: `assign_feature_families` still returns `tuple[DiscoveryCandidate, ...]` but without superfamily fields populated
 
-- [ ] **Step 1: Remove superfamily fields from DiscoveryCandidate and column schemas**
+- [x] **Step 1: Remove superfamily fields from DiscoveryCandidate and column schemas**
 
 In `xic_extractor/discovery/models.py`:
 
@@ -148,7 +148,7 @@ Remove `family_context` field (line 225):
 
 In `from_values()` (line 332), remove the `family_context="singleton"` kwarg.
 
-- [ ] **Step 2: Remove superfamily logic from feature_family.py**
+- [x] **Step 2: Remove superfamily logic from feature_family.py**
 
 Delete these functions entirely:
 - `_assign_superfamilies` (lines 49–105)
@@ -171,7 +171,7 @@ def assign_feature_families(
     return _score_all_evidence(family_assigned, settings=settings)
 ```
 
-- [ ] **Step 3: Remove superfamily scoring from evidence_score.py**
+- [x] **Step 3: Remove superfamily scoring from evidence_score.py**
 
 Delete `classify_family_context` (lines 169–174).
 
@@ -215,7 +215,7 @@ Remove superfamily weights from `evidence_config.py`:
     superfamily_member: int = -5
 ```
 
-- [ ] **Step 4: Update csv_writer.py**
+- [x] **Step 4: Update csv_writer.py**
 
 Remove superfamily sort keys from `_candidate_sort_key`:
 ```python
@@ -245,7 +245,7 @@ def build_discovery_review_note(candidate: DiscoveryCandidate) -> str:
     )
 ```
 
-- [ ] **Step 5: Update `_score_all_evidence` to match new DiscoveryEvidence**
+- [x] **Step 5: Update `_score_all_evidence` to match new DiscoveryEvidence**
 
 In `feature_family.py`, the `_score_all_evidence` function (from Task 1) no longer needs to set `family_context`:
 ```python
@@ -270,7 +270,7 @@ def _score_all_evidence(
     return tuple(scored)
 ```
 
-- [ ] **Step 6: Update `alignment/csv_io.py` to remove superfamily constructor kwargs**
+- [x] **Step 6: Update `alignment/csv_io.py` to remove superfamily constructor kwargs**
 
 In `xic_extractor/alignment/csv_io.py`:
 
@@ -293,7 +293,7 @@ In `xic_extractor/alignment/csv_io.py`:
 
 **Note:** `feature_family_id` and `feature_family_size` kwargs STAY — they are NOT superfamily fields.
 
-- [ ] **Step 7: Update tests**
+- [x] **Step 7: Update tests**
 
 In `tests/test_discovery_feature_family.py`:
 
@@ -316,12 +316,12 @@ In `tests/test_discovery_feature_family.py`:
 **Update `test_assign_feature_families_threads_custom_evidence_settings`:**
 - The score delta is no longer affected by superfamily weight. Verify the new expected delta (+5 from ms1_peak_present 30 vs 25).
 
-- [ ] **Step 8: Run full test suite**
+- [x] **Step 8: Run full test suite**
 
 Run: `uv run pytest --tb=short -q`
 Expected: ALL PASS
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```
 git add -A
@@ -353,7 +353,7 @@ The remaining "strict family" in discovery is really "peak anchor" — candidate
 
 **Key constraint:** `feature_family_id` and `feature_family_size` stay as the sole dataclass field names. No @property alias is added — the "peak anchor" semantic shift is expressed through module/function names only. All existing `replace(candidate, feature_family_id=...)` calls and `csv_io.py` constructor kwargs continue to work unchanged.
 
-- [ ] **Step 1: Rename feature_family.py → peak_anchor.py and update functions**
+- [x] **Step 1: Rename feature_family.py → peak_anchor.py and update functions**
 
 Rename file:
 ```
@@ -443,7 +443,7 @@ def _anchor_ids(groups: list[list[DiscoveryCandidate]]) -> list[str]:
 
 Note: the ID format `@F{index:04d}` stays the same for output compatibility.
 
-- [ ] **Step 2: Update pipeline.py import**
+- [x] **Step 2: Update pipeline.py import**
 
 ```python
 # OLD:
@@ -471,7 +471,7 @@ Update timing stage name:
     with recorder.stage("discover.peak_anchor", ...):
 ```
 
-- [ ] **Step 3: Rename test file and update**
+- [x] **Step 3: Rename test file and update**
 
 ```
 git mv tests/test_discovery_feature_family.py tests/test_discovery_peak_anchor.py
@@ -485,12 +485,12 @@ from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 # Assertions keep using candidate.feature_family_id (it's the actual field)
 ```
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `uv run pytest --tb=short -q`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```
 git add -A
@@ -522,7 +522,7 @@ Alignment's "family" is actually "cross-sample chemical-entity group" and uses c
 - Consumes: nothing from Phase 1 (alignment is independent)
 - Produces: no API changes, only documentation and docstrings
 
-- [ ] **Step 1: Add clarifying docstrings to CrossSamplePeakGroupHypothesis**
+- [x] **Step 1: Add clarifying docstrings to CrossSamplePeakGroupHypothesis**
 
 In `xic_extractor/alignment/cross_sample_peak_groups.py`, add module docstring:
 
@@ -554,7 +554,7 @@ class CrossSamplePeakGroupHypothesis:
     """
 ```
 
-- [ ] **Step 2: Add clarifying docstrings to OwnerAlignedFeature**
+- [x] **Step 2: Add clarifying docstrings to OwnerAlignedFeature**
 
 In `xic_extractor/alignment/owner_clustering.py`, add docstring:
 
@@ -571,7 +571,7 @@ class OwnerAlignedFeature:
     """
 ```
 
-- [ ] **Step 3: Add module docstring to family_compatibility.py**
+- [x] **Step 3: Add module docstring to family_compatibility.py**
 
 ```python
 """Cross-sample group compatibility checks.
@@ -586,7 +586,7 @@ minimize merge conflicts with active branches.
 """
 ```
 
-- [ ] **Step 4: Update family-hypothesis-boundary.md**
+- [x] **Step 4: Update family-hypothesis-boundary.md**
 
 Replace the current document with updated framing that reflects the new naming:
 
@@ -622,12 +622,12 @@ cross-sample group hypotheses, peak hypotheses, and product projections.
 
 (Keep remaining sections — Migration Rule, Design Red Lines, Verification, See Also — updated to use "peak anchor" and "cross-sample group" terminology.)
 
-- [ ] **Step 5: Run alignment tests to verify zero change**
+- [x] **Step 5: Run alignment tests to verify zero change**
 
 Run: `uv run pytest tests/test_alignment_family_compatibility.py tests/test_alignment_owner_family_successor_contract.py -v`
 Expected: ALL PASS (no logic changed, only docstrings and docs)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 git add -A

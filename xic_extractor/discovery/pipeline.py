@@ -12,7 +12,6 @@ from xic_extractor.discovery.csv_writer import (
     write_discovery_candidates_csv,
     write_discovery_review_csv,
 )
-from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 from xic_extractor.discovery.grouping import group_discovery_seeds
 from xic_extractor.discovery.models import (
     DiscoveryBatchOutputs,
@@ -23,6 +22,7 @@ from xic_extractor.discovery.models import (
 )
 from xic_extractor.discovery.ms1_backfill import MS1XicSource, backfill_ms1_candidates
 from xic_extractor.discovery.ms2_seeds import MS2ScanSource, collect_strict_nl_seeds
+from xic_extractor.discovery.peak_anchor import assign_peak_anchors
 from xic_extractor.tabular_io import write_delimited_rows
 
 _BATCH_INDEX_COLUMNS = (
