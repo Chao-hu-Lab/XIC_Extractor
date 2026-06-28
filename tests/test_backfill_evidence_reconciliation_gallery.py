@@ -35,10 +35,16 @@ from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_models as gallery_models,
 )
 from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_overlay_links as gallery_overlay_links,
+)
+from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_provenance as gallery_provenance,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_render_context as gallery_render_context,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_review_modes as gallery_review_modes,
 )
 from xic_extractor.diagnostics import (
     backfill_reconciliation_gallery_source_context as gallery_source_context,
@@ -192,6 +198,53 @@ def test_gallery_target_benchmark_stays_out_of_reconciliation_orchestrator() -> 
     assert (
         gallery._family_target_summary_html
         is gallery_target_benchmark._family_target_summary_html
+    )
+
+
+def test_gallery_overlay_links_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._missing_overlay_reason_text
+        is gallery_overlay_links._missing_overlay_reason_text
+    )
+    assert (
+        gallery._family_pattern_link_html
+        is gallery_overlay_links._family_pattern_link_html
+    )
+    assert gallery._overlay_link_html is gallery_overlay_links._overlay_link_html
+    assert (
+        gallery._hypothesis_overlay_link_html
+        is gallery_overlay_links._hypothesis_overlay_link_html
+    )
+    assert (
+        gallery._seed_overlay_cell_html
+        is gallery_overlay_links._seed_overlay_cell_html
+    )
+    assert (
+        gallery._shadow_policy_overlay_link_html
+        is gallery_overlay_links._shadow_policy_overlay_link_html
+    )
+    assert (
+        gallery._shadow_projection_overlay_link_html
+        is gallery_overlay_links._shadow_projection_overlay_link_html
+    )
+
+
+def test_gallery_review_modes_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._is_cid_nl_successor_review_group
+        is gallery_review_modes._is_cid_nl_successor_review_group
+    )
+    assert (
+        gallery._is_cid_nl_differential_review_group
+        is gallery_review_modes._is_cid_nl_differential_review_group
+    )
+    assert (
+        gallery._cid_nl_transition_label
+        is gallery_review_modes._cid_nl_transition_label
+    )
+    assert (
+        gallery._is_cid_nl_successor_review_index
+        is gallery_review_modes._is_cid_nl_successor_review_index
     )
 
 
