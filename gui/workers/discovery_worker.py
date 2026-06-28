@@ -158,7 +158,7 @@ class DiscoveryWorker(QThread):
                 "mode": "discovery_only",
                 "output_dir": str(request.output_dir),
                 "sample_count": 1,
-                "candidate_counts": None,
+                "candidate_counts": _read_review_counts(outputs.review_csv),
                 "discovery_candidates_csv": str(outputs.candidates_csv),
                 "discovery_review_csv": str(outputs.review_csv),
                 "discovery_batch_index": None,
@@ -572,6 +572,20 @@ def _read_batch_counts(index_path: Path) -> tuple[dict[str, int] | None, int]:
             totals["LOW"] += _int_csv_value(row, "low_count")
             totals["total"] += _int_csv_value(row, "candidate_count")
     return totals, sample_count
+
+
+def _read_review_counts(review_path: Path) -> dict[str, int] | None:
+    if not review_path.exists():
+        return None
+
+    totals = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "total": 0}
+    with review_path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            priority = (row.get("review_priority") or "").upper()
+            if priority in {"HIGH", "MEDIUM", "LOW"}:
+                totals[priority] += 1
+            totals["total"] += 1
+    return totals
 
 
 def _int_csv_value(row: dict[str, str | None], key: str) -> int:

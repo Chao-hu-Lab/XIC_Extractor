@@ -88,6 +88,65 @@ def test_align_only_summary_uses_existing_batch_index_counts(
     assert summary["discovery_batch_index"] == str(index_path)
 
 
+def test_single_file_discovery_only_summary_counts_review_priorities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    raw_file = tmp_path / "Sample_A.raw"
+    raw_file.write_bytes(b"raw")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    candidates_csv = output_dir / "discovery_candidates.csv"
+    review_csv = output_dir / "discovery_review.csv"
+    candidates_csv.write_text("candidate_id\nc1\nc2\nc3\nc4\n", encoding="utf-8")
+    review_csv.write_text(
+        "\n".join(
+            [
+                "review_priority,candidate_id",
+                "HIGH,c1",
+                "MEDIUM,c2",
+                "LOW,c3",
+                "LOW,c4",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fake_run_discovery(*_args, **_kwargs):
+        return SimpleNamespace(
+            candidates_csv=candidates_csv,
+            review_csv=review_csv,
+        )
+
+    monkeypatch.setattr(module, "run_discovery", fake_run_discovery)
+    request = DiscoveryRequest(
+        mode="discovery_only",
+        preset="dna_dr",
+        tuning_overrides={},
+        raw_dir=None,
+        raw_file=raw_file,
+        dll_dir=tmp_path / "dll",
+        output_dir=output_dir,
+        discovery_batch_index=None,
+    )
+    worker = DiscoveryWorker(request)
+
+    summary = worker._run_discovery_only(request)
+
+    assert summary is not None
+    assert summary["sample_count"] == 1
+    assert summary["candidate_counts"] == {
+        "HIGH": 1,
+        "MEDIUM": 1,
+        "LOW": 2,
+        "total": 4,
+    }
+    assert summary["discovery_candidates_csv"] == str(candidates_csv)
+    assert summary["discovery_review_csv"] == str(review_csv)
+    assert summary["discovery_batch_index"] is None
+
+
 @pytest.mark.parametrize("mode", ["align_only", "full"])
 def test_gui_alignment_modes_apply_product_ready_preset_alignment_runtime(
     mode: str,
