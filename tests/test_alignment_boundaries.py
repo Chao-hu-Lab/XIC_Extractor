@@ -79,6 +79,28 @@ def test_alignment_raw_sources_do_not_import_raw_reader():
     assert raw_reader_imports == []
 
 
+def test_alignment_process_backend_delegates_execution_mechanics():
+    root = Path(__file__).parents[1] / "xic_extractor" / "alignment"
+    process_backend_source = (root / "process_backend.py").read_text(
+        encoding="utf-8"
+    )
+    process_execution_source = (root / "process_execution.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from xic_extractor.alignment.process_execution import" in (
+        process_backend_source
+    )
+    assert "ProcessPoolExecutor" not in process_backend_source
+    assert "def _run_process_jobs" not in process_backend_source
+    assert "def _validate_payload_value" not in process_backend_source
+    assert "class _TimedProcessRawSource" not in process_backend_source
+
+    assert "def run_process_jobs" in process_execution_source
+    assert "def process_job_payload_size_bytes" in process_execution_source
+    assert "class TimedProcessRawSource" in process_execution_source
+
+
 def test_alignment_ownership_module_stays_domain_focused():
     source = (
         Path(__file__).parents[1]
