@@ -312,6 +312,10 @@ full overlay/gallery behavior. `review-gallery` keeps RAW overlay evidence
 compact, but renders shift-aware review evidence and the activation-synced HTML
 review surface without changing the standard-peak acceptance policy.
 Non-standard peaks remain outside this preset's automatic publication policy.
+For repeated method-development reruns, `--standard-peak-evidence-cache-dir`
+can point at a cache seeded from matching overlay evidence; this is an opt-in
+accelerator for the standard-peak matrix-only overlay evidence path, not a
+default one-shot production setting.
 
 When `--timing-output` or `--timing-live-output` is supplied, timing spans include
 the base alignment plus the post-alignment preset stages. Backfill expansion

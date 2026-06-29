@@ -735,6 +735,7 @@ def test_run_alignment_cli_dna_dr_preset_runs_standard_peak_backfill(
     assert captured_preset["reuse_existing"] is False
     assert captured_preset["render_workers"] == 1
     assert captured_preset["chunk_workers"] == 1
+    assert captured_preset["evidence_cache_dir"] is None
     assert captured_preset["min_shape_r"] == pytest.approx(0.95)
 
 
@@ -1145,6 +1146,7 @@ def test_run_alignment_cli_publication_mode_overrides_preset(
     dll_dir = tmp_path / "dll"
     dll_dir.mkdir()
     output_dir = tmp_path / "alignment"
+    cache_dir = tmp_path / "standard_peak_cache"
     captured_preset: dict[str, object] = {}
 
     def fake_run_alignment(**_kwargs):
@@ -1191,12 +1193,43 @@ def test_run_alignment_cli_publication_mode_overrides_preset(
             "dna_dr",
             "--standard-peak-backfill-publication-mode",
             "deep-audit",
+            "--standard-peak-evidence-cache-dir",
+            str(cache_dir),
         ]
     )
 
     assert code == 0
     assert captured_preset["publication_mode"] == "deep-audit"
     assert captured_preset["write_gallery"] is True
+    assert captured_preset["evidence_cache_dir"] == cache_dir.resolve()
+
+
+def test_run_alignment_cli_rejects_standard_peak_cache_without_standard_peak_preset(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    batch_index = tmp_path / "discovery_batch_index.csv"
+    batch_index.write_text("sample_stem,raw_file,candidate_csv\n", encoding="utf-8")
+    raw_dir = tmp_path / "raws"
+    raw_dir.mkdir()
+    dll_dir = tmp_path / "dll"
+    dll_dir.mkdir()
+
+    code = run_alignment.main(
+        [
+            "--discovery-batch-index",
+            str(batch_index),
+            "--raw-dir",
+            str(raw_dir),
+            "--dll-dir",
+            str(dll_dir),
+            "--standard-peak-evidence-cache-dir",
+            str(tmp_path / "cache"),
+        ]
+    )
+
+    assert code == 2
+    assert "--standard-peak-evidence-cache-dir requires" in capsys.readouterr().err
 
 
 def test_run_alignment_cli_dna_dr_preset_uses_light_cells_for_validation_minimal(
