@@ -113,13 +113,13 @@ def test_alignment_process_backend_delegates_identity_trace_process():
     assert "from xic_extractor.alignment.identity_trace_process import" in (
         process_backend_source
     )
-    assert "def run_identity_trace_process" not in process_backend_source
-    assert "def extract_identity_trace_sample_job" not in process_backend_source
     assert "def _identity_trace_" not in process_backend_source
     assert "class IdentityTraceSampleJob" not in process_backend_source
+    assert "from xic_extractor.raw_reader import open_raw" in process_backend_source
+    assert "from xic_extractor.raw_reader import open_raw" not in identity_trace_source
 
     assert "def run_identity_trace_process" in identity_trace_source
-    assert "def extract_identity_trace_sample_job" in identity_trace_source
+    assert "def extract_identity_trace_sample_from_raw" in identity_trace_source
     assert "class IdentityTraceSampleJob" in identity_trace_source
 
 

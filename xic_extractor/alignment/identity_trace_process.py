@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import TracebackType
 from typing import Any
 
 from xic_extractor.alignment.identity_coherence.models import (
@@ -78,7 +77,7 @@ def run_identity_trace_process(
     dll_dir: Path,
     max_workers: int,
     raw_xic_batch_size: int = 1,
-    runner: Callable[..., list[IdentityTraceWorkerResult]] | None = None,
+    runner: Callable[..., list[IdentityTraceWorkerResult]],
 ) -> IdentityTraceProcessOutput:
     if max_workers < 1:
         raise ValueError("max_workers must be >= 1")
@@ -124,8 +123,7 @@ def run_identity_trace_process(
             )
         )
 
-    active_runner = runner or run_identity_trace_jobs
-    worker_results = active_runner(jobs, max_workers=max_workers) if jobs else []
+    worker_results = runner(jobs, max_workers=max_workers) if jobs else []
     return collect_identity_trace_results(
         (*parent_results, *worker_results),
         request_count=len(indexed_requests),
@@ -135,12 +133,13 @@ def run_identity_trace_process(
 def run_identity_trace_jobs(
     jobs: Iterable[IdentityTraceSampleJob],
     *,
+    worker: Callable[[IdentityTraceSampleJob], IdentityTraceWorkerResult],
     max_workers: int,
     executor_factory: Callable[..., Any] | None = None,
 ) -> list[IdentityTraceWorkerResult]:
     return _run_process_jobs(
         jobs,
-        worker=extract_identity_trace_sample_job,
+        worker=worker,
         error_factory=_identity_trace_worker_error,
         max_workers=max_workers,
         executor_factory=executor_factory,
@@ -183,46 +182,43 @@ def collect_identity_trace_results(
     )
 
 
-def extract_identity_trace_sample_job(
+def identity_trace_blocked_sample_result(
     job: IdentityTraceSampleJob,
-) -> IdentityTraceWorkerResult:
-    from xic_extractor.raw_reader import open_raw
-
+) -> IdentityTraceSampleResult:
     stats = _TimedProcessStats(sample_stem=job.sample_stem)
-    try:
-        raw_context = open_raw(job.raw_path, job.dll_dir)
-        raw = raw_context.__enter__()
-    except Exception:
-        indexed_results = tuple(
-            (
-                index,
-                _identity_trace_blocked_result(
-                    request,
-                    "raw_xic_extraction_error",
-                    raw_xic_request_count=1,
-                ),
-            )
-            for index, request in job.requests
+    indexed_results = tuple(
+        (
+            index,
+            _identity_trace_blocked_result(
+                request,
+                "raw_xic_extraction_error",
+                raw_xic_request_count=1,
+            ),
         )
-    else:
-        exc_info: tuple[
-            type[BaseException] | None,
-            BaseException | None,
-            TracebackType | None,
-        ] = (None, None, None)
-        try:
-            timed_raw = _TimedProcessRawSource(raw, stats=stats)
-            indexed_results = _extract_identity_trace_results_for_sample(
-                job.requests,
-                timed_raw,
-                raw_xic_batch_size=job.raw_xic_batch_size,
-            )
-        except BaseException as error:
-            exc_info = (type(error), error, error.__traceback__)
-            raise
-        finally:
-            raw_context.__exit__(*exc_info)
+        for index, request in job.requests
+    )
+    return _identity_trace_sample_result(job, indexed_results, stats)
 
+
+def extract_identity_trace_sample_from_raw(
+    job: IdentityTraceSampleJob,
+    raw: Any,
+) -> IdentityTraceSampleResult:
+    stats = _TimedProcessStats(sample_stem=job.sample_stem)
+    timed_raw = _TimedProcessRawSource(raw, stats=stats)
+    indexed_results = _extract_identity_trace_results_for_sample(
+        job.requests,
+        timed_raw,
+        raw_xic_batch_size=job.raw_xic_batch_size,
+    )
+    return _identity_trace_sample_result(job, indexed_results, stats)
+
+
+def _identity_trace_sample_result(
+    job: IdentityTraceSampleJob,
+    indexed_results: tuple[tuple[int, IdentityCoherenceTraceResult], ...],
+    stats: _TimedProcessStats,
+) -> IdentityTraceSampleResult:
     return IdentityTraceSampleResult(
         sample_index=job.sample_index,
         sample_stem=job.sample_stem,
