@@ -34,6 +34,7 @@ from xic_extractor.alignment.scan_retention_times import (
 )
 from xic_extractor.alignment.trace_context import alignment_trace_group
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection.ms1_trace_detection import detect_ms1_trace_peak
 from xic_extractor.peak_detection.region_audit import build_peak_region_audit_summary
 from xic_extractor.signal_processing import find_peak_and_area
 from xic_extractor.xic_models import XICRequest, XICTrace, crop_xic_trace_by_rt
@@ -739,9 +740,18 @@ def _backfill_feature_sample_trace(
     peak_config: ExtractionConfig,
     emit_region_audit: bool = False,
 ) -> AlignedCell | None:
-    try:
-        rt_array, intensity_array = _validated_trace_arrays(trace.rt, trace.intensity)
-    except ValueError:
+    peak_preferred_rt = (
+        feature.family_center_rt if preferred_rt is None else preferred_rt
+    )
+    detection = detect_ms1_trace_peak(
+        trace.rt,
+        trace.intensity,
+        peak_config=peak_config,
+        preferred_rt=peak_preferred_rt,
+        strict_preferred_rt=False,
+        peak_finder=find_peak_and_area,
+    )
+    if detection.status == "unassessable_trace":
         return _backfill_unchecked_cell(
             feature,
             sample_stem,
@@ -750,16 +760,11 @@ def _backfill_feature_sample_trace(
             trace_quality="owner_backfill_unassessable",
             reason="owner-centered MS1 backfill query was not assessable",
         )
-    result = find_peak_and_area(
-        rt_array,
-        intensity_array,
-        peak_config,
-        preferred_rt=(
-            feature.family_center_rt if preferred_rt is None else preferred_rt
-        ),
-        strict_preferred_rt=False,
-    )
-    if result.status != "OK" or result.peak is None:
+    if (
+        detection.status != "detected"
+        or detection.result is None
+        or detection.peak is None
+    ):
         return _backfill_unchecked_cell(
             feature,
             sample_stem,
@@ -768,6 +773,10 @@ def _backfill_feature_sample_trace(
             trace_quality="owner_backfill_not_detected",
             reason="owner-centered MS1 backfill query found no accepted peak",
         )
+    rt_array = detection.rt
+    intensity_array = detection.intensity
+    result = detection.result
+    peak = detection.peak
     trace_group = (
         alignment_trace_group(
             sample_stem=sample_stem,
@@ -798,7 +807,6 @@ def _backfill_feature_sample_trace(
         if emit_region_audit
         else None
     )
-    peak = result.peak
     cell = AlignedCell(
         sample_stem=sample_stem,
         cluster_id=feature.feature_family_id,
@@ -976,23 +984,6 @@ def _extract_unique_many(
         )
         traces.append(XICTrace.from_arrays(rt, intensity))
     return tuple(traces)
-
-
-def _validated_trace_arrays(
-    rt: object,
-    intensity: object,
-) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    rt_array = np.asarray(rt, dtype=float)
-    intensity_array = np.asarray(intensity, dtype=float)
-    if (
-        rt_array.ndim != 1
-        or intensity_array.ndim != 1
-        or rt_array.shape != intensity_array.shape
-        or not np.all(np.isfinite(rt_array))
-        or not np.all(np.isfinite(intensity_array))
-    ):
-        raise ValueError("owner backfill trace arrays must be finite 1D pairs")
-    return rt_array, intensity_array
 
 
 def _scan_support_score(

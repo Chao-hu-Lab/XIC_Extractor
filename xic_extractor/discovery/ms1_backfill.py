@@ -21,6 +21,7 @@ from xic_extractor.discovery.priority import (
     assign_review_priority,
     build_candidate_reason,
 )
+from xic_extractor.peak_detection.ms1_trace_detection import detect_ms1_trace_peak
 from xic_extractor.signal_processing import PeakResult, find_peak_and_area
 
 _TagIntersectionStatus = Literal["not_required", "complete", "incomplete"]
@@ -645,20 +646,19 @@ def _detect_ms1_peak(
     best_seed: DiscoverySeed,
     settings: DiscoverySettings,
 ) -> _Ms1Fields:
-    if rt.size == 0 or intensity.size == 0:
-        return _missing_ms1_fields()
-    result = find_peak_and_area(
+    detection = detect_ms1_trace_peak(
         rt,
         intensity,
-        peak_config,
+        peak_config=peak_config,
         preferred_rt=best_seed.rt,
         strict_preferred_rt=False,
+        peak_finder=find_peak_and_area,
     )
-    if result.status != "OK" or result.peak is None:
+    if detection.status != "detected" or detection.peak is None:
         return _missing_ms1_fields()
-    peak = result.peak
+    peak = detection.peak
     scan_support_score = compute_ms1_scan_support_score(
-        rt,
+        detection.rt,
         peak,
         scans_target=settings.evidence_profile.thresholds.scan_support_target,
     )

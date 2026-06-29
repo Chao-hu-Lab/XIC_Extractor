@@ -3,404 +3,142 @@ from __future__ import annotations
 import csv
 import hashlib
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
+from xic_extractor.review_actions_models import (
+    ReviewAction,
+    ReviewActionApplication,
+    ReviewActionApplyChangeset,
+    ReviewActionApplyChangesetPlan,
+    ReviewActionApplyOutput,
+    ReviewActionApplyReadiness,
+    ReviewActionApplyReadinessPlan,
+    ReviewActionCandidateSidecarCheck,
+    ReviewActionError,
+    ReviewActionExpectedDiffApproval,
+    ReviewActionExpectedDiffTemplate,
+    ReviewActionTargetState,
+)
+from xic_extractor.review_actions_rows import (
+    review_action_application_to_row,
+    review_action_apply_changeset_to_row,
+    review_action_apply_readiness_to_row,
+    review_action_candidate_sidecar_to_row,
+    review_action_expected_diff_template_to_row,
+    summarize_review_action_applications,
+    summarize_review_action_apply_changeset_plan,
+    summarize_review_action_apply_output,
+    summarize_review_action_apply_readiness_plan,
+    summarize_review_action_candidate_sidecars,
+    summarize_review_action_expected_diff_approvals,
+    summarize_review_actions,
+)
+from xic_extractor.review_actions_schema import (
+    _EXPECTED_DIFF_MATRIX_IMPACT_BY_ACTION,
+    _EXPECTED_DIFF_OUTPUTS_BY_ACTION,
+    PEAK_CANDIDATE_SIDECAR_REQUIRED_COLUMNS,
+    PRODUCT_MUTATING_REVIEW_ACTIONS,
+    REVIEW_ACTION_APPLICATION_PLAN_COLUMNS,
+    REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION,
+    REVIEW_ACTION_APPLY_AUDIT_COLUMNS,
+    REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
+    REVIEW_ACTION_APPLY_CHANGESET_COLUMNS,
+    REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
+    REVIEW_ACTION_APPLY_READINESS_COLUMNS,
+    REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION,
+    REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS,
+    REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION,
+    REVIEW_ACTION_COLUMNS,
+    REVIEW_ACTION_EXPECTED_DIFF_COLUMNS,
+    REVIEW_ACTION_EXPECTED_DIFF_FINAL_LABELS,
+    REVIEW_ACTION_EXPECTED_DIFF_MATRIX_VALUE_IMPACTS,
+    REVIEW_ACTION_EXPECTED_DIFF_REVIEWER_VERDICTS,
+    REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION,
+    REVIEW_ACTION_EXPECTED_DIFF_VALIDATION_TIERS,
+    REVIEW_ACTION_SCHEMA_VERSION,
+    REVIEW_ACTION_TARGETED_APPLY_AUDIT_COLUMNS,
+    REVIEW_ACTION_TYPES,
+    TARGETED_REVIEW_STATE_COLUMNS,
+    ReviewActionType,
+)
 from xic_extractor.tabular_io import (
     read_delimited_rows,
     write_delimited_rows,
     write_tsv,
 )
 
-REVIEW_ACTION_SCHEMA_VERSION = "review_action_v1"
-REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION = "review_action_application_plan_v1"
-REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION = "review_action_expected_diff_v1"
-REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION = "review_action_apply_readiness_v1"
-REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION = "review_action_apply_changeset_v1"
-REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION = "review_action_apply_audit_v1"
-REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION = (
-    "review_action_candidate_sidecar_v1"
-)
-REVIEW_ACTION_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "candidate_id",
-    "boundary_id",
-    "rt_left_min",
-    "rt_apex_min",
-    "rt_right_min",
-    "comment",
-    "reviewer",
-    "reviewed_at",
-    "expected_diff_required",
-)
-ReviewActionType = Literal[
-    "accept_current",
-    "mark_unresolved",
-    "reject_current",
-    "select_candidate",
-    "set_manual_boundary",
+__all__ = [
+    "PEAK_CANDIDATE_SIDECAR_REQUIRED_COLUMNS",
+    "PRODUCT_MUTATING_REVIEW_ACTIONS",
+    "REVIEW_ACTION_APPLICATION_PLAN_COLUMNS",
+    "REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION",
+    "REVIEW_ACTION_APPLY_AUDIT_COLUMNS",
+    "REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION",
+    "REVIEW_ACTION_APPLY_CHANGESET_COLUMNS",
+    "REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION",
+    "REVIEW_ACTION_APPLY_READINESS_COLUMNS",
+    "REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION",
+    "REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS",
+    "REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION",
+    "REVIEW_ACTION_COLUMNS",
+    "REVIEW_ACTION_EXPECTED_DIFF_COLUMNS",
+    "REVIEW_ACTION_EXPECTED_DIFF_FINAL_LABELS",
+    "REVIEW_ACTION_EXPECTED_DIFF_MATRIX_VALUE_IMPACTS",
+    "REVIEW_ACTION_EXPECTED_DIFF_REVIEWER_VERDICTS",
+    "REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION",
+    "REVIEW_ACTION_EXPECTED_DIFF_VALIDATION_TIERS",
+    "REVIEW_ACTION_SCHEMA_VERSION",
+    "REVIEW_ACTION_TARGETED_APPLY_AUDIT_COLUMNS",
+    "REVIEW_ACTION_TYPES",
+    "TARGETED_REVIEW_STATE_COLUMNS",
+    "ReviewAction",
+    "ReviewActionApplication",
+    "ReviewActionApplyChangeset",
+    "ReviewActionApplyChangesetPlan",
+    "ReviewActionApplyOutput",
+    "ReviewActionApplyReadiness",
+    "ReviewActionApplyReadinessPlan",
+    "ReviewActionCandidateSidecarCheck",
+    "ReviewActionError",
+    "ReviewActionExpectedDiffApproval",
+    "ReviewActionExpectedDiffTemplate",
+    "ReviewActionTargetState",
+    "ReviewActionType",
+    "apply_review_action_changeset_rows",
+    "load_review_action_expected_diff_approvals",
+    "load_review_action_apply_changeset_rows",
+    "load_review_action_peak_candidate_rows",
+    "load_review_action_target_states",
+    "load_targeted_long_rows",
+    "load_review_actions",
+    "parse_review_actions",
+    "plan_review_action_applications",
+    "plan_review_action_candidate_sidecars",
+    "plan_review_action_expected_diff_templates",
+    "plan_review_action_apply_changesets",
+    "plan_review_action_apply_readiness",
+    "review_action_application_to_row",
+    "review_action_apply_changeset_to_row",
+    "review_action_apply_readiness_to_row",
+    "review_action_candidate_sidecar_to_row",
+    "review_action_expected_diff_template_to_row",
+    "review_action_expected_diff_stable_row_id",
+    "summarize_review_action_applications",
+    "summarize_review_action_apply_changeset_plan",
+    "summarize_review_action_apply_output",
+    "summarize_review_action_apply_readiness_plan",
+    "summarize_review_action_candidate_sidecars",
+    "summarize_review_action_expected_diff_approvals",
+    "summarize_review_actions",
+    "write_review_action_application_plan",
+    "write_review_action_applied_targeted_long",
+    "write_review_action_apply_audit",
+    "write_review_action_apply_readiness_plan",
+    "write_review_action_apply_changeset_plan",
+    "write_review_action_candidate_sidecar_plan",
+    "write_review_action_expected_diff_template",
 ]
-REVIEW_ACTION_TYPES: frozenset[str] = frozenset(
-    {
-        "accept_current",
-        "mark_unresolved",
-        "reject_current",
-        "select_candidate",
-        "set_manual_boundary",
-    }
-)
-PRODUCT_MUTATING_REVIEW_ACTIONS: frozenset[str] = frozenset(
-    {
-        "reject_current",
-        "select_candidate",
-        "set_manual_boundary",
-    }
-)
-TARGETED_REVIEW_STATE_COLUMNS: tuple[str, ...] = (
-    "Product State",
-    "Counted Detection",
-    "Review State",
-)
-REVIEW_ACTION_APPLICATION_PLAN_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "application_status",
-    "product_mutating",
-    "current_product_state",
-    "current_counted_detection",
-    "current_review_state",
-    "candidate_id",
-    "boundary_id",
-    "rt_left_min",
-    "rt_apex_min",
-    "rt_right_min",
-    "expected_diff_required",
-    "expected_diff_status",
-    "reason",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-)
-REVIEW_ACTION_EXPECTED_DIFF_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "stable_row_id",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "candidate_id",
-    "boundary_id",
-    "rt_left_min",
-    "rt_apex_min",
-    "rt_right_min",
-    "expected_public_outputs_touched",
-    "expected_matrix_value_impact",
-    "baseline_product_state",
-    "baseline_counted_detection",
-    "baseline_review_state",
-    "evidence_sources",
-    "evidence_summary",
-    "validation_tier",
-    "reviewer_verdict",
-    "final_label",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-    "approval_notes",
-)
-REVIEW_ACTION_APPLY_READINESS_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "apply_readiness_status",
-    "product_mutating",
-    "current_product_state",
-    "current_counted_detection",
-    "current_review_state",
-    "expected_diff_stable_row_id",
-    "expected_diff_approval_status",
-    "expected_diff_validation_tier",
-    "expected_matrix_value_impact",
-    "expected_public_outputs_touched",
-    "evidence_sources",
-    "evidence_summary",
-    "candidate_id",
-    "boundary_id",
-    "rt_left_min",
-    "rt_apex_min",
-    "rt_right_min",
-    "reason",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-    "approval_notes",
-)
-REVIEW_ACTION_APPLY_CHANGESET_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "changeset_status",
-    "apply_readiness_status",
-    "operation",
-    "product_mutating",
-    "output_scope",
-    "requires_expected_diff_approval",
-    "expected_diff_stable_row_id",
-    "expected_diff_validation_tier",
-    "expected_matrix_value_impact",
-    "expected_public_outputs_touched",
-    "evidence_sources",
-    "evidence_summary",
-    "candidate_id",
-    "boundary_id",
-    "rt_left_min",
-    "rt_apex_min",
-    "rt_right_min",
-    "proposed_product_state",
-    "proposed_counted_detection",
-    "proposed_review_state",
-    "requires_area_recompute",
-    "requires_candidate_sidecar",
-    "reason",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-    "approval_notes",
-)
-REVIEW_ACTION_TARGETED_APPLY_AUDIT_COLUMNS: tuple[str, ...] = (
-    "Review Action Apply Status",
-    "Review Action Operation",
-    "Review Action Reason",
-    "Review Action Reviewer",
-    "Review Action Reviewed At",
-    "Review Action Expected Diff Stable Row ID",
-    "Review Action Requires Area Recompute",
-    "Review Action Requires Candidate Sidecar",
-)
-REVIEW_ACTION_APPLY_AUDIT_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "operation",
-    "apply_status",
-    "changed_targeted_long",
-    "product_mutating",
-    "previous_product_state",
-    "previous_counted_detection",
-    "previous_review_state",
-    "new_product_state",
-    "new_counted_detection",
-    "new_review_state",
-    "requires_area_recompute",
-    "requires_candidate_sidecar",
-    "expected_diff_stable_row_id",
-    "expected_diff_validation_tier",
-    "reason",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-)
-PEAK_CANDIDATE_SIDECAR_REQUIRED_COLUMNS: tuple[str, ...] = (
-    "sample_name",
-    "target_label",
-    "candidate_id",
-    "selected",
-)
-REVIEW_ACTION_CANDIDATE_SIDECAR_COLUMNS: tuple[str, ...] = (
-    "schema_version",
-    "sample_name",
-    "target_label",
-    "action_type",
-    "candidate_id",
-    "candidate_sidecar_status",
-    "candidate_sidecar_reason",
-    "candidate_row_sha256",
-    "candidate_selected",
-    "candidate_confidence",
-    "candidate_rt_left_min",
-    "candidate_rt_apex_min",
-    "candidate_rt_right_min",
-    "candidate_area_baseline_corrected",
-    "reviewer",
-    "reviewed_at",
-    "comment",
-)
-REVIEW_ACTION_EXPECTED_DIFF_FINAL_LABELS = frozenset(
-    {"expected_diff", "blocked_diff", "inconclusive"}
-)
-REVIEW_ACTION_EXPECTED_DIFF_REVIEWER_VERDICTS = frozenset(
-    {"approved", "blocked", "inconclusive"}
-)
-REVIEW_ACTION_EXPECTED_DIFF_VALIDATION_TIERS = frozenset(
-    {
-        "synthetic_fixture",
-        "targeted_benchmark",
-        "8raw",
-        "manual_eic_ms2_review",
-        "not_validated",
-    }
-)
-REVIEW_ACTION_EXPECTED_DIFF_MATRIX_VALUE_IMPACTS = frozenset(
-    {"none", "area_value_changed", "presence_changed", "not_assessed"}
-)
-_EXPECTED_DIFF_OUTPUTS_BY_ACTION: dict[str, tuple[str, ...]] = {
-    "reject_current": ("targeted_long_csv", "workbook", "final_matrix"),
-    "select_candidate": ("targeted_long_csv", "workbook", "final_matrix"),
-    "set_manual_boundary": ("targeted_long_csv", "workbook", "final_matrix"),
-}
-_EXPECTED_DIFF_MATRIX_IMPACT_BY_ACTION: dict[str, str] = {
-    "reject_current": "presence_changed",
-    "select_candidate": "area_value_changed",
-    "set_manual_boundary": "area_value_changed",
-}
-
-
-@dataclass(frozen=True)
-class ReviewAction:
-    sample_name: str
-    target_label: str
-    action_type: ReviewActionType
-    candidate_id: str = ""
-    boundary_id: str = ""
-    rt_left_min: float | None = None
-    rt_apex_min: float | None = None
-    rt_right_min: float | None = None
-    comment: str = ""
-    reviewer: str = ""
-    reviewed_at: str = ""
-    expected_diff_required: bool = False
-
-    @property
-    def product_mutating(self) -> bool:
-        return self.action_type in PRODUCT_MUTATING_REVIEW_ACTIONS
-
-
-@dataclass(frozen=True)
-class ReviewActionTargetState:
-    sample_name: str
-    target_label: str
-    product_state: str = ""
-    counted_detection: str = ""
-    review_state: str = ""
-
-
-@dataclass(frozen=True)
-class ReviewActionApplication:
-    action: ReviewAction
-    application_status: str
-    expected_diff_status: str
-    reason: str
-    target_state: ReviewActionTargetState | None = None
-
-    @property
-    def product_mutating(self) -> bool:
-        return self.action.product_mutating
-
-
-@dataclass(frozen=True)
-class ReviewActionExpectedDiffTemplate:
-    application: ReviewActionApplication
-    stable_row_id: str
-    expected_public_outputs_touched: tuple[str, ...]
-    expected_matrix_value_impact: str
-
-
-@dataclass(frozen=True)
-class ReviewActionExpectedDiffApproval:
-    stable_row_id: str
-    sample_name: str
-    target_label: str
-    action_type: ReviewActionType
-    candidate_id: str
-    boundary_id: str
-    rt_left_min: float | None
-    rt_apex_min: float | None
-    rt_right_min: float | None
-    expected_public_outputs_touched: tuple[str, ...]
-    expected_matrix_value_impact: str
-    baseline_product_state: str
-    baseline_counted_detection: str
-    baseline_review_state: str
-    evidence_sources: tuple[str, ...]
-    evidence_summary: str
-    validation_tier: str
-    reviewer_verdict: str
-    final_label: str
-    reviewer: str
-    reviewed_at: str
-    comment: str
-    approval_notes: str
-
-
-@dataclass(frozen=True)
-class ReviewActionApplyReadiness:
-    application: ReviewActionApplication
-    apply_readiness_status: str
-    reason: str
-    expected_diff_stable_row_id: str = ""
-    expected_diff_approval: ReviewActionExpectedDiffApproval | None = None
-
-
-@dataclass(frozen=True)
-class ReviewActionApplyReadinessPlan:
-    rows: tuple[ReviewActionApplyReadiness, ...]
-    unused_expected_diff_approvals: tuple[ReviewActionExpectedDiffApproval, ...]
-
-
-@dataclass(frozen=True)
-class ReviewActionCandidateSidecarCheck:
-    action: ReviewAction
-    candidate_sidecar_status: str
-    candidate_sidecar_reason: str
-    candidate_row_sha256: str = ""
-    candidate_selected: str = ""
-    candidate_confidence: str = ""
-    candidate_rt_left_min: str = ""
-    candidate_rt_apex_min: str = ""
-    candidate_rt_right_min: str = ""
-    candidate_area_baseline_corrected: str = ""
-
-
-@dataclass(frozen=True)
-class ReviewActionApplyChangeset:
-    readiness: ReviewActionApplyReadiness
-    changeset_status: str
-    operation: str
-    output_scope: tuple[str, ...]
-    proposed_product_state: str = ""
-    proposed_counted_detection: str = ""
-    proposed_review_state: str = ""
-    requires_area_recompute: bool = False
-    requires_candidate_sidecar: bool = False
-    reason: str = ""
-
-
-@dataclass(frozen=True)
-class ReviewActionApplyChangesetPlan:
-    rows: tuple[ReviewActionApplyChangeset, ...]
-
-
-@dataclass(frozen=True)
-class ReviewActionApplyOutput:
-    targeted_rows: tuple[dict[str, str], ...]
-    targeted_fieldnames: tuple[str, ...]
-    audit_rows: tuple[dict[str, object], ...]
-
-    @property
-    def summary(self) -> dict[str, object]:
-        return summarize_review_action_apply_output(self)
-
-
-class ReviewActionError(ValueError):
-    """Raised when a review action import cannot be trusted."""
 
 
 def load_review_actions(path: Path) -> tuple[ReviewAction, ...]:
@@ -1705,386 +1443,3 @@ def _changeset_from_readiness(
         output_scope=(),
         reason="unsupported_ready_review_action",
     )
-
-
-def summarize_review_actions(actions: Sequence[ReviewAction]) -> dict[str, object]:
-    counts_by_type = {action_type: 0 for action_type in sorted(REVIEW_ACTION_TYPES)}
-    product_mutating_count = 0
-    for action in actions:
-        counts_by_type[action.action_type] += 1
-        if action.product_mutating:
-            product_mutating_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_SCHEMA_VERSION,
-        "action_count": len(actions),
-        "product_mutating_action_count": product_mutating_count,
-        "counts_by_type": counts_by_type,
-    }
-
-
-def summarize_review_action_applications(
-    applications: Sequence[ReviewActionApplication],
-) -> dict[str, object]:
-    counts_by_status: dict[str, int] = {}
-    expected_diff_required_count = 0
-    product_mutating_count = 0
-    blocked_count = 0
-    for application in applications:
-        counts_by_status[application.application_status] = (
-            counts_by_status.get(application.application_status, 0) + 1
-        )
-        if application.expected_diff_status == "required_before_apply":
-            expected_diff_required_count += 1
-        if application.product_mutating:
-            product_mutating_count += 1
-        if application.application_status.startswith("blocked"):
-            blocked_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION,
-        "application_count": len(applications),
-        "blocked_application_count": blocked_count,
-        "product_mutating_action_count": product_mutating_count,
-        "expected_diff_required_count": expected_diff_required_count,
-        "counts_by_status": dict(sorted(counts_by_status.items())),
-    }
-
-
-def summarize_review_action_expected_diff_approvals(
-    approvals: Mapping[str, ReviewActionExpectedDiffApproval],
-) -> dict[str, object]:
-    counts_by_action_type: dict[str, int] = {}
-    counts_by_validation_tier: dict[str, int] = {}
-    counts_by_matrix_value_impact: dict[str, int] = {}
-    for approval in approvals.values():
-        counts_by_action_type[approval.action_type] = (
-            counts_by_action_type.get(approval.action_type, 0) + 1
-        )
-        counts_by_validation_tier[approval.validation_tier] = (
-            counts_by_validation_tier.get(approval.validation_tier, 0) + 1
-        )
-        counts_by_matrix_value_impact[approval.expected_matrix_value_impact] = (
-            counts_by_matrix_value_impact.get(
-                approval.expected_matrix_value_impact,
-                0,
-            )
-            + 1
-        )
-    return {
-        "schema_version": REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION,
-        "approval_count": len(approvals),
-        "counts_by_action_type": dict(sorted(counts_by_action_type.items())),
-        "counts_by_validation_tier": dict(sorted(counts_by_validation_tier.items())),
-        "counts_by_matrix_value_impact": dict(
-            sorted(counts_by_matrix_value_impact.items())
-        ),
-    }
-
-
-def summarize_review_action_apply_readiness_plan(
-    plan: ReviewActionApplyReadinessPlan,
-) -> dict[str, object]:
-    counts_by_status: dict[str, int] = {}
-    ready_count = 0
-    blocked_count = 0
-    for row in plan.rows:
-        counts_by_status[row.apply_readiness_status] = (
-            counts_by_status.get(row.apply_readiness_status, 0) + 1
-        )
-        if row.apply_readiness_status.startswith("ready"):
-            ready_count += 1
-        if row.apply_readiness_status.startswith("blocked"):
-            blocked_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION,
-        "row_count": len(plan.rows),
-        "ready_count": ready_count,
-        "blocked_count": blocked_count,
-        "unused_expected_diff_approval_count": len(
-            plan.unused_expected_diff_approvals
-        ),
-        "counts_by_status": dict(sorted(counts_by_status.items())),
-    }
-
-
-def summarize_review_action_candidate_sidecars(
-    checks: Sequence[ReviewActionCandidateSidecarCheck],
-) -> dict[str, object]:
-    counts_by_status: dict[str, int] = {}
-    verified_count = 0
-    blocked_count = 0
-    noop_current_selection_count = 0
-    for check in checks:
-        status = check.candidate_sidecar_status
-        counts_by_status[status] = counts_by_status.get(status, 0) + 1
-        if status == "candidate_verified":
-            verified_count += 1
-        elif status == "candidate_current_selection":
-            noop_current_selection_count += 1
-        else:
-            blocked_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION,
-        "row_count": len(checks),
-        "verified_count": verified_count,
-        "blocked_count": blocked_count,
-        "noop_current_selection_count": noop_current_selection_count,
-        "counts_by_status": dict(sorted(counts_by_status.items())),
-    }
-
-
-def summarize_review_action_apply_changeset_plan(
-    plan: ReviewActionApplyChangesetPlan,
-) -> dict[str, object]:
-    counts_by_status: dict[str, int] = {}
-    counts_by_operation: dict[str, int] = {}
-    ready_count = 0
-    blocked_count = 0
-    area_recompute_count = 0
-    candidate_sidecar_count = 0
-    for row in plan.rows:
-        counts_by_status[row.changeset_status] = (
-            counts_by_status.get(row.changeset_status, 0) + 1
-        )
-        if row.operation:
-            counts_by_operation[row.operation] = (
-                counts_by_operation.get(row.operation, 0) + 1
-            )
-        if row.changeset_status.startswith("ready"):
-            ready_count += 1
-        if row.changeset_status.startswith("blocked"):
-            blocked_count += 1
-        if row.requires_area_recompute:
-            area_recompute_count += 1
-        if row.requires_candidate_sidecar:
-            candidate_sidecar_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
-        "row_count": len(plan.rows),
-        "ready_count": ready_count,
-        "blocked_count": blocked_count,
-        "requires_area_recompute_count": area_recompute_count,
-        "requires_candidate_sidecar_count": candidate_sidecar_count,
-        "counts_by_status": dict(sorted(counts_by_status.items())),
-        "counts_by_operation": dict(sorted(counts_by_operation.items())),
-    }
-
-
-def summarize_review_action_apply_output(
-    output: ReviewActionApplyOutput,
-) -> dict[str, object]:
-    counts_by_status: dict[str, int] = {}
-    applied_count = 0
-    audit_only_count = 0
-    deferred_count = 0
-    blocked_count = 0
-    for row in output.audit_rows:
-        status = str(row["apply_status"])
-        counts_by_status[status] = counts_by_status.get(status, 0) + 1
-        if status.startswith("applied_"):
-            applied_count += 1
-        elif status == "audit_recorded":
-            audit_only_count += 1
-        elif status.startswith("deferred_"):
-            deferred_count += 1
-        elif status.startswith("blocked"):
-            blocked_count += 1
-    return {
-        "schema_version": REVIEW_ACTION_APPLY_AUDIT_SCHEMA_VERSION,
-        "targeted_row_count": len(output.targeted_rows),
-        "audit_row_count": len(output.audit_rows),
-        "applied_count": applied_count,
-        "audit_only_count": audit_only_count,
-        "deferred_count": deferred_count,
-        "blocked_count": blocked_count,
-        "counts_by_status": dict(sorted(counts_by_status.items())),
-    }
-
-
-def review_action_application_to_row(
-    application: ReviewActionApplication,
-) -> dict[str, object]:
-    action = application.action
-    target_state = application.target_state
-    return {
-        "schema_version": REVIEW_ACTION_APPLICATION_PLAN_SCHEMA_VERSION,
-        "sample_name": action.sample_name,
-        "target_label": action.target_label,
-        "action_type": action.action_type,
-        "application_status": application.application_status,
-        "product_mutating": action.product_mutating,
-        "current_product_state": target_state.product_state if target_state else "",
-        "current_counted_detection": (
-            target_state.counted_detection if target_state else ""
-        ),
-        "current_review_state": target_state.review_state if target_state else "",
-        "candidate_id": action.candidate_id,
-        "boundary_id": action.boundary_id,
-        "rt_left_min": action.rt_left_min,
-        "rt_apex_min": action.rt_apex_min,
-        "rt_right_min": action.rt_right_min,
-        "expected_diff_required": action.expected_diff_required,
-        "expected_diff_status": application.expected_diff_status,
-        "reason": application.reason,
-        "reviewer": action.reviewer,
-        "reviewed_at": action.reviewed_at,
-        "comment": action.comment,
-    }
-
-
-def review_action_candidate_sidecar_to_row(
-    check: ReviewActionCandidateSidecarCheck,
-) -> dict[str, object]:
-    action = check.action
-    return {
-        "schema_version": REVIEW_ACTION_CANDIDATE_SIDECAR_SCHEMA_VERSION,
-        "sample_name": action.sample_name,
-        "target_label": action.target_label,
-        "action_type": action.action_type,
-        "candidate_id": action.candidate_id,
-        "candidate_sidecar_status": check.candidate_sidecar_status,
-        "candidate_sidecar_reason": check.candidate_sidecar_reason,
-        "candidate_row_sha256": check.candidate_row_sha256,
-        "candidate_selected": check.candidate_selected,
-        "candidate_confidence": check.candidate_confidence,
-        "candidate_rt_left_min": check.candidate_rt_left_min,
-        "candidate_rt_apex_min": check.candidate_rt_apex_min,
-        "candidate_rt_right_min": check.candidate_rt_right_min,
-        "candidate_area_baseline_corrected": (
-            check.candidate_area_baseline_corrected
-        ),
-        "reviewer": action.reviewer,
-        "reviewed_at": action.reviewed_at,
-        "comment": action.comment,
-    }
-
-
-def review_action_apply_changeset_to_row(
-    changeset: ReviewActionApplyChangeset,
-) -> dict[str, object]:
-    readiness = changeset.readiness
-    application = readiness.application
-    action = application.action
-    approval = readiness.expected_diff_approval
-    expected_public_outputs_touched = (
-        ";".join(approval.expected_public_outputs_touched) if approval else ""
-    )
-    evidence_sources = ";".join(approval.evidence_sources) if approval else ""
-    return {
-        "schema_version": REVIEW_ACTION_APPLY_CHANGESET_SCHEMA_VERSION,
-        "sample_name": action.sample_name,
-        "target_label": action.target_label,
-        "action_type": action.action_type,
-        "changeset_status": changeset.changeset_status,
-        "apply_readiness_status": readiness.apply_readiness_status,
-        "operation": changeset.operation,
-        "product_mutating": action.product_mutating,
-        "output_scope": ";".join(changeset.output_scope),
-        "requires_expected_diff_approval": action.product_mutating,
-        "expected_diff_stable_row_id": readiness.expected_diff_stable_row_id,
-        "expected_diff_validation_tier": approval.validation_tier if approval else "",
-        "expected_matrix_value_impact": (
-            approval.expected_matrix_value_impact if approval else ""
-        ),
-        "expected_public_outputs_touched": expected_public_outputs_touched,
-        "evidence_sources": evidence_sources,
-        "evidence_summary": approval.evidence_summary if approval else "",
-        "candidate_id": action.candidate_id,
-        "boundary_id": action.boundary_id,
-        "rt_left_min": action.rt_left_min,
-        "rt_apex_min": action.rt_apex_min,
-        "rt_right_min": action.rt_right_min,
-        "proposed_product_state": changeset.proposed_product_state,
-        "proposed_counted_detection": changeset.proposed_counted_detection,
-        "proposed_review_state": changeset.proposed_review_state,
-        "requires_area_recompute": changeset.requires_area_recompute,
-        "requires_candidate_sidecar": changeset.requires_candidate_sidecar,
-        "reason": changeset.reason,
-        "reviewer": action.reviewer,
-        "reviewed_at": action.reviewed_at,
-        "comment": action.comment,
-        "approval_notes": approval.approval_notes if approval else "",
-    }
-
-
-def review_action_apply_readiness_to_row(
-    readiness: ReviewActionApplyReadiness,
-) -> dict[str, object]:
-    application = readiness.application
-    action = application.action
-    target_state = application.target_state
-    approval = readiness.expected_diff_approval
-    expected_public_outputs_touched = (
-        ";".join(approval.expected_public_outputs_touched) if approval else ""
-    )
-    evidence_sources = ";".join(approval.evidence_sources) if approval else ""
-    return {
-        "schema_version": REVIEW_ACTION_APPLY_READINESS_SCHEMA_VERSION,
-        "sample_name": action.sample_name,
-        "target_label": action.target_label,
-        "action_type": action.action_type,
-        "apply_readiness_status": readiness.apply_readiness_status,
-        "product_mutating": action.product_mutating,
-        "current_product_state": target_state.product_state if target_state else "",
-        "current_counted_detection": (
-            target_state.counted_detection if target_state else ""
-        ),
-        "current_review_state": target_state.review_state if target_state else "",
-        "expected_diff_stable_row_id": readiness.expected_diff_stable_row_id,
-        "expected_diff_approval_status": (
-            approval.reviewer_verdict if approval else ""
-        ),
-        "expected_diff_validation_tier": approval.validation_tier if approval else "",
-        "expected_matrix_value_impact": (
-            approval.expected_matrix_value_impact if approval else ""
-        ),
-        "expected_public_outputs_touched": expected_public_outputs_touched,
-        "evidence_sources": evidence_sources,
-        "evidence_summary": approval.evidence_summary if approval else "",
-        "candidate_id": action.candidate_id,
-        "boundary_id": action.boundary_id,
-        "rt_left_min": action.rt_left_min,
-        "rt_apex_min": action.rt_apex_min,
-        "rt_right_min": action.rt_right_min,
-        "reason": readiness.reason,
-        "reviewer": action.reviewer,
-        "reviewed_at": action.reviewed_at,
-        "comment": action.comment,
-        "approval_notes": approval.approval_notes if approval else "",
-    }
-
-
-def review_action_expected_diff_template_to_row(
-    template: ReviewActionExpectedDiffTemplate,
-) -> dict[str, object]:
-    action = template.application.action
-    target_state = template.application.target_state
-    return {
-        "schema_version": REVIEW_ACTION_EXPECTED_DIFF_SCHEMA_VERSION,
-        "stable_row_id": template.stable_row_id,
-        "sample_name": action.sample_name,
-        "target_label": action.target_label,
-        "action_type": action.action_type,
-        "candidate_id": action.candidate_id,
-        "boundary_id": action.boundary_id,
-        "rt_left_min": action.rt_left_min,
-        "rt_apex_min": action.rt_apex_min,
-        "rt_right_min": action.rt_right_min,
-        "expected_public_outputs_touched": ";".join(
-            template.expected_public_outputs_touched
-        ),
-        "expected_matrix_value_impact": template.expected_matrix_value_impact,
-        "baseline_product_state": target_state.product_state if target_state else "",
-        "baseline_counted_detection": (
-            target_state.counted_detection if target_state else ""
-        ),
-        "baseline_review_state": target_state.review_state if target_state else "",
-        "evidence_sources": "",
-        "evidence_summary": "",
-        "validation_tier": "not_validated",
-        "reviewer_verdict": "inconclusive",
-        "final_label": "inconclusive",
-        "reviewer": action.reviewer,
-        "reviewed_at": action.reviewed_at,
-        "comment": action.comment,
-        "approval_notes": "",
-    }
