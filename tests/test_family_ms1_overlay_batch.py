@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -266,6 +267,7 @@ def test_batch_evidence_only_reuses_content_keyed_cache_across_output_dirs(
     cache_dir = tmp_path / "overlay_cache"
     alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
     _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
 
     monkeypatch.setattr(
         batch.overlay_plot,
@@ -374,6 +376,7 @@ def test_batch_evidence_cache_stale_index_entry_falls_back(
     cache_dir = tmp_path / "overlay_cache"
     alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
     _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
 
     monkeypatch.setattr(
         batch.overlay_plot,
@@ -473,6 +476,7 @@ def test_batch_evidence_cache_rejects_same_size_trace_payload_mismatch(
     cache_dir = tmp_path / "overlay_cache"
     alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
     _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
 
     monkeypatch.setattr(
         batch.overlay_plot,
@@ -579,6 +583,7 @@ def test_batch_evidence_cache_reuses_same_request_across_copied_inputs(
     cells_b.write_text(cells_a.read_text(encoding="utf-8"), encoding="utf-8")
     _write_queue(queue_a, [_queue_row("FAM001")])
     queue_b.write_text(queue_a.read_text(encoding="utf-8"), encoding="utf-8")
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
 
     monkeypatch.setattr(
         batch.overlay_plot,
@@ -660,6 +665,109 @@ def test_batch_evidence_cache_reuses_same_request_across_copied_inputs(
     assert metrics["evidence_cache_miss_count"] == 0
 
 
+def test_batch_evidence_cache_rejects_replaced_raw_file_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    first_output = tmp_path / "out_first"
+    second_output = tmp_path / "out_second"
+    cache_dir = tmp_path / "overlay_cache"
+    alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
+
+    render_count = _install_fake_cache_renderer(monkeypatch)
+
+    batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=first_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+    )
+    assert render_count() == 1
+
+    _write_raw_identity_file(raw_dir, "S1", "raw-v2-replaced")
+    metrics: dict[str, object] = {}
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=second_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+        metrics=metrics,
+    )
+
+    assert rows[0]["status"] == "success"
+    assert metrics["evidence_cache_hit_count"] == 0
+    assert metrics["evidence_cache_miss_count"] == 1
+    assert render_count() == 2
+    trace_path = Path(str(rows[0]["trace_data_json"]))
+    assert second_output in trace_path.parents
+
+
+def test_batch_evidence_cache_manifest_fallback_rejects_replaced_raw_file_identity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    first_output = tmp_path / "out_first"
+    second_output = tmp_path / "out_second"
+    cache_dir = tmp_path / "overlay_cache"
+    alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
+
+    render_count = _install_fake_cache_renderer(monkeypatch)
+
+    batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=first_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+    )
+    assert render_count() == 1
+
+    batch._cache_index_path(cache_dir).unlink()
+    _write_raw_identity_file(raw_dir, "S1", "raw-v2-replaced")
+    metrics: dict[str, object] = {}
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=second_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+        metrics=metrics,
+    )
+
+    assert rows[0]["status"] == "success"
+    assert metrics["evidence_cache_hit_count"] == 0
+    assert metrics["evidence_cache_miss_count"] == 1
+    assert render_count() == 2
+    trace_path = Path(str(rows[0]["trace_data_json"]))
+    assert second_output in trace_path.parents
+
+
 def test_seed_evidence_cache_from_existing_overlay_summary(
     tmp_path: Path,
     monkeypatch,
@@ -674,6 +782,7 @@ def test_seed_evidence_cache_from_existing_overlay_summary(
     overlay_dir.mkdir()
     alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
     _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
     (overlay_dir / "fam001_overlay_trace_summary.tsv").write_text(
         "sample_stem\tstatus\nS1\trescued\n",
         encoding="utf-8",
@@ -1691,6 +1800,63 @@ def _write_queue(path: Path, rows: list[dict[str, str]]) -> None:
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _install_fake_cache_renderer(monkeypatch) -> Callable[[], int]:
+    render_count = 0
+
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "load_family_cells",
+        lambda _alignment_cells, family_id: [family_id],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "extract_family_trace_rows",
+        lambda **_kwargs: ["trace-row"],
+    )
+    monkeypatch.setattr(
+        batch.overlay_plot,
+        "build_family_ms1_evidence_summary",
+        lambda _rows: {
+            "family_verdict": batch.SUPPORT_FAMILY_VERDICT,
+            "detected_count": 1,
+        },
+    )
+
+    def fake_write_summary(path: Path, _rows) -> None:
+        path.write_text("sample_stem\tstatus\nS1\trescued\n", encoding="utf-8")
+
+    def fake_write_trace_data(path: Path, **_kwargs) -> None:
+        nonlocal render_count
+        render_count += 1
+        path.write_text(
+            json.dumps(
+                {
+                    "family_id": "FAM001",
+                    "mz": 251.165,
+                    "ppm": 10.0,
+                    "rt_min": 1.0,
+                    "rt_max": 1.2,
+                    "provenance": dict(_kwargs["provenance"]),
+                    "evidence_summary": {
+                        "family_verdict": batch.SUPPORT_FAMILY_VERDICT,
+                        "detected_count": 1,
+                    },
+                    "traces": [],
+                },
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(batch.overlay_plot, "_write_summary", fake_write_summary)
+    monkeypatch.setattr(batch.overlay_plot, "_write_trace_data", fake_write_trace_data)
+    return lambda: render_count
+
+
+def _write_raw_identity_file(raw_dir: Path, sample_stem: str, content: str) -> None:
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    (raw_dir / f"{sample_stem}.raw").write_text(content, encoding="utf-8")
 
 
 def _cell_row(

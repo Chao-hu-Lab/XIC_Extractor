@@ -315,7 +315,9 @@ Non-standard peaks remain outside this preset's automatic publication policy.
 For repeated method-development reruns, `--standard-peak-evidence-cache-dir`
 can point at a cache seeded from matching overlay evidence; this is an opt-in
 accelerator for the standard-peak matrix-only overlay evidence path, not a
-default one-shot production setting.
+default one-shot production setting. Cache hits require the current per-sample
+RAW identity to match the cached trace provenance; missing or mismatched RAW
+identity falls back to normal RAW extraction instead of reusing stale evidence.
 
 When `--timing-output` or `--timing-live-output` is supplied, timing spans include
 the base alignment plus the post-alignment preset stages. Backfill expansion

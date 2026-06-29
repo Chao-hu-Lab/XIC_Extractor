@@ -41,7 +41,8 @@ TOP30_EXPANSION_ELIGIBLE = "eligible"
 TOP30_EXPANSION_BLOCKED = "blocked"
 OVERLAY_BATCH_SOURCE = "family_ms1_overlay_batch_v1"
 OVERLAY_SUPERWINDOW_SPAN_FACTOR = 2
-OVERLAY_EVIDENCE_CACHE_SCHEMA = "family_ms1_overlay_evidence_cache_v3"
+OVERLAY_EVIDENCE_CACHE_SCHEMA = "family_ms1_overlay_evidence_cache_v4"
+RAW_IDENTITY_METHOD = "path_stat_v1"
 OverlayTraceItem = tuple[int, overlay_plot.FamilyCell, str, Any]
 WindowedOverlayTraceItem = tuple[int, OverlayTraceItem, tuple[int, int]]
 class _BatchRawReader(Protocol):
@@ -487,6 +488,7 @@ def _cached_success_row(
             trace_data_json,
             request=request,
             source_provenance=source_provenance,
+            trace_summary_tsv=Path(str(indexed_entry.get("trace_summary_tsv"))),
         )
         if evidence is None:
             return None
@@ -511,15 +513,14 @@ def _cached_success_row(
         paths=paths,
     ):
         return None
-    evidence = manifest.get("evidence_summary")
-    if not isinstance(evidence, Mapping):
-        evidence = _cache_payload_evidence(
-            paths["trace_data_json"],
-            request=request,
-            source_provenance=source_provenance,
-        )
-        if evidence is None:
-            return None
+    evidence = _cache_payload_evidence(
+        paths["trace_data_json"],
+        request=request,
+        source_provenance=source_provenance,
+        trace_summary_tsv=paths["trace_summary_tsv"],
+    )
+    if evidence is None:
+        return None
     outputs = {
         "png_path": None,
         "pdf_path": None,
@@ -601,6 +602,13 @@ def _store_success_row_in_cache(
         return None
     if not _cached_payload_matches_request(trace_payload, request):
         return None
+    raw_identity_by_sample = _raw_identity_by_sample_for_payload(
+        trace_payload,
+        source_provenance=source_provenance,
+        trace_summary_tsv=summary_tsv,
+    )
+    if raw_identity_by_sample is None:
+        return None
     evidence_summary = trace_payload.get("evidence_summary")
     if not isinstance(evidence_summary, Mapping):
         return None
@@ -617,6 +625,7 @@ def _store_success_row_in_cache(
     cache_payload["provenance"] = _request_provenance(
         request,
         source_provenance=source_provenance,
+        raw_identity_by_sample=raw_identity_by_sample,
     )
     paths["trace_data_json"].write_text(
         json.dumps(cache_payload, indent=2, sort_keys=True),
@@ -747,6 +756,7 @@ def _cache_payload_evidence(
     *,
     request: OverlayBatchRequest,
     source_provenance: Mapping[str, object],
+    trace_summary_tsv: Path | None,
 ) -> Mapping[str, Any] | None:
     try:
         payload = json.loads(trace_data_json.read_text(encoding="utf-8"))
@@ -756,10 +766,18 @@ def _cache_payload_evidence(
         return None
     if not _cached_payload_matches_request(payload, request):
         return None
+    raw_identity_by_sample = _raw_identity_by_sample_for_payload(
+        payload,
+        source_provenance=source_provenance,
+        trace_summary_tsv=trace_summary_tsv,
+    )
+    if raw_identity_by_sample is None:
+        return None
     if not _cached_provenance_matches_request(
         payload.get("provenance"),
         request,
         source_provenance=source_provenance,
+        raw_identity_by_sample=raw_identity_by_sample,
     ):
         return None
     evidence = payload.get("evidence_summary")
@@ -846,6 +864,7 @@ def _cached_provenance_matches_request(
     request: OverlayBatchRequest,
     *,
     source_provenance: Mapping[str, object],
+    raw_identity_by_sample: Mapping[str, Mapping[str, object]],
 ) -> bool:
     if not isinstance(provenance, Mapping):
         return False
@@ -859,9 +878,14 @@ def _cached_provenance_matches_request(
         "seed_group_id": request.seed_group_id,
         "output_prefix": request.output_prefix,
     }
-    return all(
+    if not all(
         str(provenance.get(key, "")).strip() == value
         for key, value in expected.items()
+    ):
+        return False
+    return _raw_identity_matches_provenance(
+        provenance,
+        raw_identity_by_sample=raw_identity_by_sample,
     )
 
 
@@ -950,9 +974,14 @@ def _render_family(
             ppm=request.ppm,
             max_highlight_rescued=max_highlight_rescued,
         )
+    raw_identity_by_sample = _raw_identity_by_sample(
+        _trace_row_sample_stems(trace_rows),
+        raw_dir=raw_dir,
+    )
     provenance = _request_provenance(
         request,
         source_provenance=source_provenance,
+        raw_identity_by_sample=raw_identity_by_sample,
     )
     outputs: Mapping[str, Path | None] | overlay_plot.FamilyMs1OverlayOutputs
     if evidence_only:
@@ -1596,12 +1625,17 @@ def _request_provenance(
     request: OverlayBatchRequest,
     *,
     source_provenance: Mapping[str, object],
+    raw_identity_by_sample: Mapping[str, Mapping[str, object]] | None = None,
 ) -> dict[str, object]:
-    return {
+    provenance: dict[str, object] = {
         **dict(source_provenance),
         "seed_group_id": request.seed_group_id,
         "output_prefix": request.output_prefix,
     }
+    if raw_identity_by_sample is not None:
+        provenance["raw_identity_method"] = RAW_IDENTITY_METHOD
+        provenance["raw_identity_by_sample"] = dict(raw_identity_by_sample)
+    return provenance
 
 
 def _existing_provenance_matches_request(
@@ -1618,6 +1652,136 @@ def _existing_provenance_matches_request(
         str(provenance.get(key, "")).strip() == str(value)
         for key, value in expected.items()
     )
+
+
+def _trace_row_sample_stems(rows: Sequence[object]) -> tuple[str, ...]:
+    sample_stems: set[str] = set()
+    for row in rows:
+        sample_stem = str(getattr(row, "sample_stem", "")).strip()
+        if sample_stem:
+            sample_stems.add(sample_stem)
+    return tuple(sorted(sample_stems))
+
+
+def _raw_identity_by_sample_for_payload(
+    payload: Mapping[str, Any],
+    *,
+    source_provenance: Mapping[str, object],
+    trace_summary_tsv: Path | None,
+) -> dict[str, dict[str, object]] | None:
+    sample_stems = _payload_sample_stems(payload)
+    if not sample_stems and trace_summary_tsv is not None:
+        sample_stems = _summary_sample_stems(trace_summary_tsv)
+    if not sample_stems:
+        provenance = payload.get("provenance")
+        if isinstance(provenance, Mapping):
+            raw_identity = provenance.get("raw_identity_by_sample")
+            if isinstance(raw_identity, Mapping):
+                sample_stems = tuple(sorted(str(key) for key in raw_identity))
+    raw_dir_text = str(source_provenance.get("raw_dir", "")).strip()
+    if not sample_stems or not raw_dir_text:
+        return None
+    return _raw_identity_by_sample(sample_stems, raw_dir=Path(raw_dir_text))
+
+
+def _payload_sample_stems(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    traces = payload.get("traces")
+    if not isinstance(traces, Sequence) or isinstance(traces, (str, bytes)):
+        return ()
+    sample_stems: set[str] = set()
+    for trace in traces:
+        if not isinstance(trace, Mapping):
+            continue
+        sample_stem = str(trace.get("sample_stem", "")).strip()
+        if sample_stem:
+            sample_stems.add(sample_stem)
+    return tuple(sorted(sample_stems))
+
+
+def _summary_sample_stems(path: Path) -> tuple[str, ...]:
+    try:
+        with path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            sample_stems = {
+                str(row.get("sample_stem", "")).strip()
+                for row in reader
+                if str(row.get("sample_stem", "")).strip()
+            }
+    except OSError:
+        return ()
+    return tuple(sorted(sample_stems))
+
+
+def _raw_identity_by_sample(
+    sample_stems: Sequence[str],
+    *,
+    raw_dir: Path,
+) -> dict[str, dict[str, object]] | None:
+    identities: dict[str, dict[str, object]] = {}
+    for sample_stem in sorted({str(sample).strip() for sample in sample_stems}):
+        if not sample_stem:
+            continue
+        raw_path = raw_dir / f"{sample_stem}.raw"
+        if not raw_path.is_file():
+            uppercase_raw_path = raw_dir / f"{sample_stem}.RAW"
+            if uppercase_raw_path.is_file():
+                raw_path = uppercase_raw_path
+        try:
+            if not raw_path.is_file():
+                return None
+            stat = raw_path.stat()
+            resolved_path = raw_path.resolve(strict=True)
+        except OSError:
+            return None
+        identities[sample_stem] = {
+            "raw_path": str(raw_path),
+            "resolved_path": str(resolved_path),
+            "size_bytes": int(stat.st_size),
+            "mtime_ns": int(stat.st_mtime_ns),
+            "st_dev": int(getattr(stat, "st_dev", 0)),
+            "st_ino": int(getattr(stat, "st_ino", 0)),
+        }
+    return identities or None
+
+
+def _raw_identity_matches_provenance(
+    provenance: Mapping[str, object],
+    *,
+    raw_identity_by_sample: Mapping[str, Mapping[str, object]],
+) -> bool:
+    if str(provenance.get("raw_identity_method", "")).strip() != RAW_IDENTITY_METHOD:
+        return False
+    observed = provenance.get("raw_identity_by_sample")
+    if not isinstance(observed, Mapping):
+        return False
+    return _normalize_raw_identity_map(observed) == _normalize_raw_identity_map(
+        raw_identity_by_sample,
+    )
+
+
+def _normalize_raw_identity_map(
+    raw_identity_by_sample: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    normalized: dict[str, dict[str, object]] = {}
+    for sample_stem, identity in raw_identity_by_sample.items():
+        if not isinstance(identity, Mapping):
+            continue
+        normalized[str(sample_stem)] = {
+            "raw_path": str(identity.get("raw_path", "")),
+            "resolved_path": str(identity.get("resolved_path", "")),
+            "size_bytes": _identity_int(identity.get("size_bytes")),
+            "mtime_ns": _identity_int(identity.get("mtime_ns")),
+            "st_dev": _identity_int(identity.get("st_dev")),
+            "st_ino": _identity_int(identity.get("st_ino")),
+        }
+    return normalized
+
+
+def _identity_int(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
 
 
 def _sha256_file(path: Path) -> str:

@@ -1489,9 +1489,11 @@ multiple MS1 peak modes.
 `--evidence-cache-dir` is an opt-in evidence-only accelerator for repeated
 modeling validation. Cache keys bind the alignment-cell hash, RAW/DLL paths,
 overlay source, rank/output prefix, legacy family/sample/seed request, mz/ppm/RT
-window, and peak-group center RT. Warm hits reuse cached trace TSV/JSON evidence
-without opening RAW files only after the cached trace payload and stable
-provenance still match the current request; misses fall back to normal RAW
+window, and peak-group center RT. Cache v4 also records per-sample RAW identity
+with `path_stat_v1` (`resolved_path`, size, mtime, device, inode). Warm hits
+reuse cached trace TSV/JSON evidence without opening RAW files only after the
+cached trace payload, stable provenance, and current RAW identities still match
+the request; missing or mismatched RAW identity fails closed to normal RAW
 extraction and can store exact evidence for future runs. Rendered PNG/PDF runs
 ignore the evidence cache. Cache rows remain evidence-provider inputs only and
 must still flow through the retained gate, shift-aware gate, consolidation, and
@@ -1507,8 +1509,10 @@ already-reviewed overlay summary and its trace TSV/JSON artifacts.
 **Status note**: This is a no-RAW cache warm-up helper for repeated
 8RAW/85RAW validation loops. It verifies the same request/key inputs as the
 overlay batch cache, copies trace summaries, writes normalized trace JSON
-provenance into the cache, and writes the shared cache index. It does not render
-overlays, re-extract RAW, modify source summaries, or prove product readiness.
+provenance with the same per-sample RAW identity binding into the cache, and
+writes the shared cache index. If RAW identity cannot be verified, the row is
+not seeded as a reusable cache hit. It does not render overlays, re-extract RAW,
+modify source summaries, or prove product readiness.
 
 ---
 
