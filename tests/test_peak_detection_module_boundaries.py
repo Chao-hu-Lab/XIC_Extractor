@@ -232,13 +232,6 @@ def test_peak_detection_engine_owns_public_peak_flow() -> None:
         "_detection_failure",
         "_append_or_merge_recovery_candidate",
         "_with_candidates",
-    } <= engine_functions
-    assert {
-        "_score_with_context",
-        "_detection_success",
-        "_detection_failure",
-        "_append_or_merge_recovery_candidate",
-        "_with_candidates",
     }.isdisjoint(signal_functions)
 
     facade_source = facade_path.read_text(encoding="utf-8")
@@ -249,6 +242,91 @@ def test_peak_detection_engine_owns_public_peak_flow() -> None:
     assert "select_candidate_with_confidence" not in facade_source
     assert "savgol_filter" not in facade_source
     assert "find_peaks" not in facade_source
+    assert "savgol_filter" not in engine_source
+    assert "find_peaks" not in engine_source
+
+
+def test_peak_detection_engine_candidates_owns_candidate_flow() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.engine_candidates")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    candidates_path = (
+        ROOT / "xic_extractor" / "peak_detection" / "engine_candidates.py"
+    )
+
+    signal_functions = _function_names(signal_processing_path)
+    candidates_functions = _function_names(candidates_path)
+
+    expected_helpers = {
+        "find_peak_candidates",
+        "augment_with_chrom_peak_segment_candidates",
+        "append_or_merge_chrom_peak_segment_candidate",
+        "append_or_merge_recovery_candidate",
+        "mark_recovery_candidate",
+        "with_candidates",
+    }
+    assert expected_helpers <= candidates_functions
+    assert {
+        "_append_or_merge_chrom_peak_segment_candidate",
+        "_append_or_merge_recovery_candidate",
+        "_mark_recovery_candidate",
+        "_with_candidates",
+    }.isdisjoint(signal_functions)
+
+    candidates_source = candidates_path.read_text(encoding="utf-8")
+    assert "find_peak_candidates_local_minimum" in candidates_source
+    assert "find_peak_candidates_legacy_savgol" in candidates_source
+    assert "chrom_peak_segment_candidates" in candidates_source
+    assert "score_candidate" not in candidates_source
+    assert "PeakDetectionResult" not in candidates_source
+
+
+def test_peak_detection_engine_scoring_owns_evidence_score_projection() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.engine_scoring")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    scoring_path = ROOT / "xic_extractor" / "peak_detection" / "engine_scoring.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    scoring_functions = _function_names(scoring_path)
+
+    assert {"score_with_context", "candidate_score_summary"} <= scoring_functions
+    assert {"_score_with_context", "_candidate_score_summary"}.isdisjoint(
+        signal_functions
+    )
+
+    scoring_source = scoring_path.read_text(encoding="utf-8")
+    assert "score_candidate" in scoring_source
+    assert "build_candidate_evidence_facts" in scoring_source
+    assert "PeakDetectionResult" not in scoring_source
+    assert "find_peak_candidates" not in scoring_source
+
+
+def test_peak_detection_engine_output_owns_result_projection() -> None:
+    assert importlib.util.find_spec("xic_extractor.peak_detection.engine_output")
+
+    signal_processing_path = ROOT / "xic_extractor" / "signal_processing.py"
+    output_path = ROOT / "xic_extractor" / "peak_detection" / "engine_output.py"
+
+    signal_functions = _function_names(signal_processing_path)
+    output_functions = _function_names(output_path)
+
+    assert {
+        "apply_region_first_safe_merge_if_enabled",
+        "detection_success",
+        "detection_failure",
+    } <= output_functions
+    assert {
+        "_apply_region_first_safe_merge_if_enabled",
+        "_detection_success",
+        "_detection_failure",
+    }.isdisjoint(signal_functions)
+
+    output_source = output_path.read_text(encoding="utf-8")
+    assert "PeakDetectionResult" in output_source
+    assert "apply_region_first_safe_merge" in output_source
+    assert "score_candidate" not in output_source
+    assert "preferred_rt_recovery" not in output_source
 
 
 def _class_names(path: Path) -> set[str]:

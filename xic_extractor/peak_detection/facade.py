@@ -5,12 +5,10 @@ from collections.abc import Callable
 import numpy as np
 
 from xic_extractor.config import ExtractionConfig
+from xic_extractor.peak_detection import engine_candidates as candidate_flow
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
     select_candidate_by_evidence,
-)
-from xic_extractor.peak_detection.engine import (
-    _append_or_merge_chrom_peak_segment_candidate,
 )
 from xic_extractor.peak_detection.engine import (
     find_peak_and_area as _find_peak_and_area,
@@ -23,13 +21,28 @@ from xic_extractor.peak_detection.models import (
     PeakCandidatesResult,
     PeakDetectionResult,
 )
+from xic_extractor.peak_detection.region_safe_merge import apply_region_first_safe_merge
 from xic_extractor.peak_detection.scoring_models import ScoringContext
+
+find_peak_candidates_legacy_savgol = (
+    candidate_flow.find_peak_candidates_legacy_savgol
+)
+find_peak_candidates_local_minimum = (
+    candidate_flow.find_peak_candidates_local_minimum
+)
+
+_append_or_merge_chrom_peak_segment_candidate = (
+    candidate_flow.append_or_merge_chrom_peak_segment_candidate
+)
 
 __all__ = [
     "find_peak_and_area",
     "find_peak_candidates",
     "score_candidate",
     "select_candidate_by_evidence",
+    "apply_region_first_safe_merge",
+    "find_peak_candidates_legacy_savgol",
+    "find_peak_candidates_local_minimum",
     "_append_or_merge_chrom_peak_segment_candidate",
 ]
 
@@ -61,6 +74,7 @@ def find_peak_and_area(
         candidate_finder=find_peak_candidates,
         score_candidate_func=score_candidate,
         evidence_selector=select_candidate_by_evidence,
+        safe_merge_func=apply_region_first_safe_merge,
     )
 
 
@@ -76,4 +90,6 @@ def find_peak_candidates(
         intensity,
         config,
         peak_min_prominence_ratio=peak_min_prominence_ratio,
+        local_minimum_finder=find_peak_candidates_local_minimum,
+        legacy_savgol_finder=find_peak_candidates_legacy_savgol,
     )
