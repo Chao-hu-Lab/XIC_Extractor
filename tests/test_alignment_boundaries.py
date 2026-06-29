@@ -101,6 +101,28 @@ def test_alignment_process_backend_delegates_execution_mechanics():
     assert "class TimedProcessRawSource" in process_execution_source
 
 
+def test_alignment_process_backend_delegates_identity_trace_process():
+    root = Path(__file__).parents[1] / "xic_extractor" / "alignment"
+    process_backend_source = (root / "process_backend.py").read_text(
+        encoding="utf-8"
+    )
+    identity_trace_source = (root / "identity_trace_process.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "from xic_extractor.alignment.identity_trace_process import" in (
+        process_backend_source
+    )
+    assert "def run_identity_trace_process" not in process_backend_source
+    assert "def extract_identity_trace_sample_job" not in process_backend_source
+    assert "def _identity_trace_" not in process_backend_source
+    assert "class IdentityTraceSampleJob" not in process_backend_source
+
+    assert "def run_identity_trace_process" in identity_trace_source
+    assert "def extract_identity_trace_sample_job" in identity_trace_source
+    assert "class IdentityTraceSampleJob" in identity_trace_source
+
+
 def test_alignment_ownership_module_stays_domain_focused():
     source = (
         Path(__file__).parents[1]
