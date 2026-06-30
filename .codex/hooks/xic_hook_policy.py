@@ -6,17 +6,88 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-CONTROL_PLANE_PATH = "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
-HANDOFF_CURRENT_DIR = "docs/superpowers/handoffs/current/"
-HANDOFF_ARCHIVE_DIR = "docs/superpowers/handoffs/archive/"
-DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH = f"{HANDOFF_CURRENT_DIR}ACTIVE.local.md"
-PRODUCTIZATION_STATUS_ANCHOR_PATH = (
-    "docs/superpowers/productization/status/cc-framework-improvements-productization.md"
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.diagnostics import docs_policy as _doc_policy  # noqa: E402
+
+CLOSEOUT_DIR = _doc_policy.CLOSEOUT_DIR
+CONTROL_PLANE_PATH = _doc_policy.CONTROL_PLANE_PATH
+DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH = _doc_policy.DEFAULT_LOCAL_ACTIVE_HANDOFF_PATH
+DOC_CANONICAL_OWNER_DIRS = _doc_policy.DOC_CANONICAL_OWNER_DIRS
+DOC_CANONICAL_OWNER_FILES = _doc_policy.DOC_CANONICAL_OWNER_FILES
+DOC_EXIT_RULE_MARKER = _doc_policy.DOC_EXIT_RULE_MARKER
+DOC_KIND_MARKER = _doc_policy.DOC_KIND_MARKER
+DOC_KIND_VALUES = _doc_policy.DOC_KIND_VALUES
+DOC_LIFECYCLES_REQUIRING_EXIT_RULE = _doc_policy.DOC_LIFECYCLES_REQUIRING_EXIT_RULE
+DOC_LIFECYCLE_MARKER = _doc_policy.DOC_LIFECYCLE_MARKER
+DOC_LIFECYCLE_VALUES = _doc_policy.DOC_LIFECYCLE_VALUES
+DOC_PLACEMENTS_REQUIRING_REPO_OWNER = (
+    _doc_policy.DOC_PLACEMENTS_REQUIRING_REPO_OWNER
 )
-# Backward-compatible import name for existing hook code. The file is no longer
-# a handoff; keep the alias until hook call sites are renamed in a focused pass.
-PRODUCTIZATION_STATUS_HANDOFF_PATH = PRODUCTIZATION_STATUS_ANCHOR_PATH
+DOC_PLACEMENT_MARKER = _doc_policy.DOC_PLACEMENT_MARKER
+DOC_PLACEMENT_VALUES = _doc_policy.DOC_PLACEMENT_VALUES
+DOC_REPO_OWNER_MARKER = _doc_policy.DOC_REPO_OWNER_MARKER
+DOC_ROUTING_GOVERNANCE_PREFIXES = _doc_policy.DOC_ROUTING_GOVERNANCE_PREFIXES
+DOC_ROUTING_HANDOFF_PREFIX = _doc_policy.DOC_ROUTING_HANDOFF_PREFIX
+DOC_ROUTING_LEGACY_HISTORY_PREFIXES = _doc_policy.DOC_ROUTING_LEGACY_HISTORY_PREFIXES
+DOC_ROUTING_MECHANICAL_REFERRER_PREFIXES = (
+    _doc_policy.DOC_ROUTING_MECHANICAL_REFERRER_PREFIXES
+)
+DOC_ROUTING_SCAN_PREFIXES = _doc_policy.DOC_ROUTING_SCAN_PREFIXES
+DOC_ROUTING_AUTHORITY_REFERRER_PATHS = (
+    _doc_policy.DOC_ROUTING_AUTHORITY_REFERRER_PATHS
+)
+DOC_ROUTING_SPECS_INDEX_PATH = _doc_policy.DOC_ROUTING_SPECS_INDEX_PATH
+DOC_ROUTING_TOPIC_PREFIX = _doc_policy.DOC_ROUTING_TOPIC_PREFIX
+DOC_ROUTING_VALIDATION_PREFIXES = _doc_policy.DOC_ROUTING_VALIDATION_PREFIXES
+HANDOFF_ARCHIVE_DIR = _doc_policy.HANDOFF_ARCHIVE_DIR
+HANDOFF_CURRENT_DIR = _doc_policy.HANDOFF_CURRENT_DIR
+HIGH_RISK_DOC_DIRS = _doc_policy.HIGH_RISK_DOC_DIRS
+MECHANICAL_ADJUDICATION_INDEX_REL = _doc_policy.MECHANICAL_ADJUDICATION_INDEX_REL
+MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS = (
+    _doc_policy.MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS
+)
+NON_REPO_DOC_PLACEMENTS = _doc_policy.NON_REPO_DOC_PLACEMENTS
+PRIVATE_HISTORY_SIGNALS = _doc_policy.PRIVATE_HISTORY_SIGNALS
+PRODUCTIZATION_AUTHORITY_MANIFEST_REL = (
+    _doc_policy.PRODUCTIZATION_AUTHORITY_MANIFEST_REL
+)
+PRODUCTIZATION_SCHEMA_REL = _doc_policy.PRODUCTIZATION_SCHEMA_REL
+PRODUCTIZATION_STATUS_ANCHOR_PATH = _doc_policy.PRODUCTIZATION_STATUS_ANCHOR_PATH
+PRODUCTIZATION_STATUS_HANDOFF_PATH = _doc_policy.PRODUCTIZATION_STATUS_HANDOFF_PATH
+PRODUCTIZATION_STATUS_INDEX_REL = _doc_policy.PRODUCTIZATION_STATUS_INDEX_REL
+classify_doc = _doc_policy.classify_doc
+classify_doc_path = _doc_policy.classify_doc_path
+doc_exit_rule_value = _doc_policy.doc_exit_rule_value
+doc_kind_value = _doc_policy.doc_kind_value
+doc_lifecycle_requires_exit_rule = _doc_policy.doc_lifecycle_requires_exit_rule
+doc_lifecycle_value = _doc_policy.doc_lifecycle_value
+doc_placement_is_non_repo = _doc_policy.doc_placement_is_non_repo
+doc_placement_requires_repo_owner = _doc_policy.doc_placement_requires_repo_owner
+doc_placement_value = _doc_policy.doc_placement_value
+has_private_history_signal = _doc_policy.has_private_history_signal
+infer_doc_kind_from_path = _doc_policy.infer_doc_kind_from_path
+is_branch_closeout_summary_path = _doc_policy.is_branch_closeout_summary_path
+is_canonical_doc_owner_path = _doc_policy.is_canonical_doc_owner_path
+is_high_risk_repo_doc_path = _doc_policy.is_high_risk_repo_doc_path
+is_lifecycle_managed_doc_path = _doc_policy.is_lifecycle_managed_doc_path
+is_markdown_path = _doc_policy.is_markdown_path
+is_misplaced_handoff_public_record_path = (
+    _doc_policy.is_misplaced_handoff_public_record_path
+)
+is_public_handoff_archive_evidence_path = (
+    _doc_policy.is_public_handoff_archive_evidence_path
+)
+is_repo_doc_path = _doc_policy.is_repo_doc_path
+marker_value = _doc_policy.marker_value
+normalize_path_text = _doc_policy.normalize_path_text
+path_is_under = _doc_policy.path_is_under
+repo_owner_value = _doc_policy.repo_owner_value
+
 HANDOFF_MAX_LINES = 200
 
 PRODUCT_SURFACE_PATHS = [
@@ -39,90 +110,6 @@ PRODUCT_SURFACE_PATHS = [
     "xic_extractor/settings_schema.py",
     "scripts/",
     "gui/",
-]
-
-DOC_PLACEMENT_MARKER = "Doc placement:"
-DOC_REPO_OWNER_MARKER = "Repo owner:"
-DOC_PLACEMENT_VALUES = {
-    "formal_repo_doc",
-    "repo_active_stub",
-    "branch_closeout_summary",
-    "repo_stub_plus_obsidian",
-    "private_obsidian_note",
-    "ignored_artifact",
-    "throwaway_scratch",
-}
-DOC_PLACEMENTS_REQUIRING_REPO_OWNER = {
-    "formal_repo_doc",
-    "repo_active_stub",
-    "branch_closeout_summary",
-    "repo_stub_plus_obsidian",
-    "ignored_artifact",
-}
-NON_REPO_DOC_PLACEMENTS = {
-    "private_obsidian_note",
-    "throwaway_scratch",
-}
-DOC_CANONICAL_OWNER_DIRS = [
-    "docs/product/",
-    "docs/user/",
-    "docs/agent/",
-    "docs/engineering-skills/",
-    "docs/solutions/",
-    "docs/superpowers/specs/",
-    "docs/superpowers/validation/",
-    "docs/superpowers/fixtures/",
-    "docs/superpowers/productization/",
-    "docs/superpowers/file-management/",
-    "docs/superpowers/closeouts/",
-    "docs/validation/",
-    "tests/fixtures/",
-]
-DOC_CANONICAL_OWNER_FILES = {
-    "AGENTS.md",
-    "CONTEXT.md",
-    "README.md",
-    "docs/architecture-contract.md",
-    "docs/confidence-reason-precedence-contract.md",
-    "docs/deepresearch/README.md",
-    "docs/diagnostic-ledger.md",
-    "docs/lcms-msms-evidence-rules.md",
-    "docs/project-layout.md",
-    "docs/research-line-triage.md",
-    "docs/superpowers/README.md",
-    PRODUCTIZATION_STATUS_HANDOFF_PATH,
-    "docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md",
-    "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
-    "docs/superpowers/plans/README.md",
-}
-HIGH_RISK_DOC_DIRS = [
-    "docs/deepresearch/",
-    "docs/superpowers/deepresearch/",
-    "docs/superpowers/handoffs/current/",
-    "docs/superpowers/handoffs/archive/",
-    "docs/superpowers/notes/",
-    "docs/superpowers/plans/",
-    "docs/superpowers/reports/",
-]
-PRIVATE_HISTORY_SIGNALS = [
-    "implementation diary",
-    "command log",
-    "command transcript",
-    "review rationale",
-    "branch sequencing",
-    "development diary",
-    "private obsidian",
-    "raw transcript",
-]
-CLOSEOUT_DIR = "docs/superpowers/closeouts/"
-MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS = [
-    re.compile(r"(?:^|[_-])branch-closeout-summary(?:\.|$)", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])file-management-approval-plan(?:\.|$)", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])git-rm-candidate-manifest(?:\.|$)", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])historical-referrer", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])productization_handoff-prune(?:[_\-.]|$)", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])public-surface-stub-audit(?:\.|$)", re.IGNORECASE),
-    re.compile(r"(?:^|[_-])source-of-truth-queue(?:\.|$)", re.IGNORECASE),
 ]
 GIT_GLOBAL_OPTIONS_WITH_VALUE = {
     "-C",
@@ -169,13 +156,6 @@ class CommandResult:
     stderr: str
 
 
-def normalize_path_text(text: str) -> str:
-    normalized = text.replace("\\", "/")
-    while "/./" in normalized:
-        normalized = normalized.replace("/./", "/")
-    return normalized
-
-
 def path_match_text(text: str) -> str:
     normalized = normalize_path_text(text)
     return normalized.replace("../", "").replace("./", "")
@@ -188,14 +168,6 @@ def mentions_path(text: str, path: str) -> bool:
 
 def mentions_any_path(text: str, paths: list[str]) -> bool:
     return any(mentions_path(text, path) for path in paths)
-
-
-def path_is_under(path: str, root: str) -> bool:
-    normalized_path = normalize_path_text(path).lstrip("./")
-    normalized_root = normalize_path_text(root).lstrip("./")
-    if normalized_root.endswith("/"):
-        return normalized_path.startswith(normalized_root)
-    return normalized_path == normalized_root
 
 
 def touches_product_surface(paths: list[str]) -> bool:
@@ -228,91 +200,6 @@ def touched_handoff_paths(paths: list[str]) -> list[str]:
         for path in paths
         if path_is_under(path, HANDOFF_CURRENT_DIR)
     ]
-
-
-def is_markdown_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lower()
-    return normalized.endswith((".md", ".markdown"))
-
-
-def is_repo_doc_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lstrip("./")
-    return is_markdown_path(normalized) and (
-        normalized in DOC_CANONICAL_OWNER_FILES or normalized.startswith("docs/")
-    )
-
-
-def is_branch_closeout_summary_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lstrip("./").lower()
-    return normalized.startswith(CLOSEOUT_DIR) and normalized.endswith(
-        "_branch-closeout-summary.md"
-    )
-
-
-def is_public_handoff_archive_evidence_path(path: str) -> bool:
-    return False
-
-
-def is_misplaced_handoff_public_record_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lstrip("./")
-    if not (
-        normalized.startswith(HANDOFF_CURRENT_DIR)
-        or normalized.startswith(HANDOFF_ARCHIVE_DIR)
-    ):
-        return False
-    filename = os.path.basename(normalized)
-    return any(
-        pattern.search(filename)
-        for pattern in MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS
-    )
-
-
-def is_canonical_doc_owner_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lstrip("./")
-    if normalized in DOC_CANONICAL_OWNER_FILES:
-        return True
-    if is_public_handoff_archive_evidence_path(normalized):
-        return True
-    return any(path_is_under(normalized, root) for root in DOC_CANONICAL_OWNER_DIRS)
-
-
-def is_high_risk_repo_doc_path(path: str) -> bool:
-    normalized = normalize_path_text(path).lstrip("./")
-    if normalized in DOC_CANONICAL_OWNER_FILES:
-        return False
-    if is_branch_closeout_summary_path(normalized):
-        return False
-    return any(path_is_under(normalized, root) for root in HIGH_RISK_DOC_DIRS)
-
-
-def marker_value(text: str, marker: str) -> str:
-    marker_lower = marker.lower()
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith(marker_lower):
-            return stripped.split(":", 1)[1].strip().strip("`")
-    return ""
-
-
-def doc_placement_value(text: str) -> str:
-    return marker_value(text, DOC_PLACEMENT_MARKER)
-
-
-def repo_owner_value(text: str) -> str:
-    return marker_value(text, DOC_REPO_OWNER_MARKER)
-
-
-def doc_placement_requires_repo_owner(placement: str) -> bool:
-    return placement in DOC_PLACEMENTS_REQUIRING_REPO_OWNER
-
-
-def doc_placement_is_non_repo(placement: str) -> bool:
-    return placement in NON_REPO_DOC_PLACEMENTS
-
-
-def has_private_history_signal(text: str) -> bool:
-    lowered = text.lower()
-    return any(signal in lowered for signal in PRIVATE_HISTORY_SIGNALS)
 
 
 def is_git_add_command(command: str) -> bool:

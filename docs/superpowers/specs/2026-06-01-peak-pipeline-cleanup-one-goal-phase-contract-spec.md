@@ -1,5 +1,11 @@
 # Peak Pipeline Cleanup One-Goal Phase Contract Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: archived
+Repo owner: docs/architecture-contract.md
+Doc exit rule: Retire or move to Obsidian after active architecture docs and current cleanup goals no longer need this historical phase contract.
+
 **Date:** 2026-06-01
 **Status:** Draft v0.1 - rules for a future one-goal cleanup execution
 **Readiness label:** `diagnostic_only`

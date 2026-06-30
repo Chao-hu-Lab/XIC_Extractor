@@ -47,7 +47,10 @@ def test_repo_active_stub_with_required_fields_passes(tmp_path: Path) -> None:
                 "# Active work stub",
                 "",
                 "Doc placement: repo_active_stub",
+                "Doc kind: plan",
+                "Doc lifecycle: active",
                 "Repo owner: docs/superpowers/handoffs/current/example.md",
+                "Doc exit rule: replace with branch closeout after implementation.",
                 "",
                 "Objective: keep the next action recoverable.",
                 "Scope: docs workflow only.",
@@ -56,6 +59,45 @@ def test_repo_active_stub_with_required_fields_passes(tmp_path: Path) -> None:
                 "1. Run the checker.",
                 "Verification: focused pytest.",
                 "Stop rule: stop if the repo stub is not self-sufficient.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_new_lifecycle_managed_doc_requires_kind_lifecycle_and_exit_rule(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/specs/2026-07-01-example-contract.md"
+    _write(
+        tmp_path,
+        path,
+        "# Example Contract\n\nPublic behavior contract draft.\n",
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("missing Doc kind" in problem for problem in problems)
+    assert any("missing Doc lifecycle" in problem for problem in problems)
+
+
+def test_new_lifecycle_managed_spec_with_metadata_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/specs/2026-07-01-example-contract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example Contract",
+                "",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Doc exit rule: promote accepted behavior to docs/product/example.md.",
+                "",
+                "Public behavior contract draft.",
             ]
         ),
     )
@@ -101,6 +143,7 @@ def test_user_guide_with_non_user_placement_fails(tmp_path: Path) -> None:
         "repo_active_stub",
         "branch_closeout_summary",
         "repo_stub_plus_obsidian",
+        "repo_stub_plus_formal_doc",
         "ignored_artifact",
     ):
         path = f"docs/user/{placement}.md"
@@ -157,7 +200,10 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
                 "# Example contract",
                 "",
                 "Doc placement: formal_repo_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
                 "Repo owner: docs/product/example.md",
+                "Doc exit rule: promote accepted behavior to docs/product/example.md.",
                 "",
                 "This is a public contract.",
             ]
@@ -167,6 +213,102 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
     result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
 
     assert result.problems == ()
+
+
+def test_repo_support_doc_requires_owner_and_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/notes/example-support-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example support note",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: validation_artifact",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/backfill.md",
+                "",
+                "Compact validation note supporting the Backfill owner.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_repo_support_doc_without_owner_fails(tmp_path: Path) -> None:
+    path = "docs/superpowers/notes/example-support-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example support note",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: validation_artifact",
+                "Doc lifecycle: archived",
+                "",
+                "Compact validation note supporting the Backfill owner.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("requires a repo owner" in problem for problem in problems)
+
+
+def test_repo_subcontract_doc_requires_owner_and_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/specs/example-subcontract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example subcontract",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after the canonical owner absorbs it.",
+                "",
+                "Bounded Backfill contract.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_repo_subcontract_doc_without_owner_fails(tmp_path: Path) -> None:
+    path = "docs/superpowers/specs/example-subcontract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example subcontract",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Doc exit rule: retire after the canonical owner absorbs it.",
+                "",
+                "Bounded Backfill contract.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("requires a repo owner" in problem for problem in problems)
 
 
 def test_branch_closeout_summary_with_pr_body_seed_passes(tmp_path: Path) -> None:
@@ -347,6 +489,8 @@ def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
                 "# Private review note",
                 "",
                 "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
                 "Repo owner: docs/product/review-roundtrip.md",
                 "",
                 "This file is a sanitized public stub.",
@@ -392,7 +536,10 @@ def test_cli_reads_staged_blob_not_worktree_after_divergence(tmp_path: Path) -> 
                 "# Active work stub",
                 "",
                 "Doc placement: repo_active_stub",
+                "Doc kind: plan",
+                "Doc lifecycle: active",
                 "Repo owner: docs/superpowers/handoffs/current/example.md",
+                "Doc exit rule: replace with branch closeout after implementation.",
                 "",
                 "Objective: keep the next action recoverable.",
                 "Scope: docs workflow only.",

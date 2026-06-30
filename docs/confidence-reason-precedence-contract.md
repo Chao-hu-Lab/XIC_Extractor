@@ -1,5 +1,11 @@
 # Confidence / Reason / Detection Precedence Contract
 
+Doc placement: formal_repo_doc
+Doc kind: product_doc
+Doc lifecycle: active
+Repo owner: docs/confidence-reason-precedence-contract.md
+Doc exit rule: Keep active while targeted workbook confidence/reason precedence is a separate quick-reference; retire only after the same code-anchored map is absorbed by docs/product/alignment.md or docs/product/evidence-spine.md.
+
 This is the single quick-reference for **where the final `Confidence`, `Reason`,
 and counted-detection values on a targeted workbook row come from**. It is a
 code-anchored map, not a rationale document.

@@ -1,5 +1,11 @@
 # Untargeted Performance Architecture Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/discovery.md
+Doc exit rule: Retire or convert to support after docs/product/discovery.md and current performance validation artifacts absorb the remaining discovery runtime decisions.
+
 > **For future agents:** This is the repo-local replacement for
 > `<agent-private-plans>/untargeted-45-min-target-workers-tidy-phoenix.md`.
 > The Claude-local file mixed valid optimization direction with non-repo-native

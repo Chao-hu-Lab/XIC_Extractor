@@ -1,5 +1,11 @@
 # C6 - Alignment Stage Semantics And Value Assessment Design
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/alignment.md
+Doc exit rule: Retire or convert to support after docs/product/alignment.md carries the current stage-semantics contract and retained validation fixtures preserve the historical C6 evidence.
+
 **Date:** 2026-06-01
 **Status:** Phase 5 implementation snapshot v1.8 — C6-M successor-constructor migration
 **Readiness label:** `diagnostic_only`

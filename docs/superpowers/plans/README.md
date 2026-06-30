@@ -1,5 +1,11 @@
 # Productization Plans
 
+Doc placement: repo_support_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/superpowers/plans/2026-06-15-productization-control-plane.md
+Doc exit rule: Update when productization plan routing or active reading order changes.
+
 Status: routing index
 
 This directory contains a mix of active control-plane documents, current

@@ -20,6 +20,7 @@ from scripts.check_productization_state import (
     artifact_sha256,
     check_productization_state,
 )
+from tools.diagnostics.docs_policy import PRODUCTIZATION_STATUS_INDEX_REL
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = (
@@ -28,10 +29,8 @@ DEFAULT_SCHEMA = (
 DEFAULT_ACCEPTANCE = (
     ROOT / "docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv"
 )
-DEFAULT_STATUS_INDEX = (
-    ROOT / "docs/superpowers/validation/productization_status_index_v1.tsv"
-)
-STATUS_INDEX_SOURCE = "docs/superpowers/validation/productization_status_index_v1.tsv"
+DEFAULT_STATUS_INDEX = ROOT / PRODUCTIZATION_STATUS_INDEX_REL
+STATUS_INDEX_SOURCE = PRODUCTIZATION_STATUS_INDEX_REL
 
 EXPECTED_LANE_IDS = {
     "targeted_ms1_shape_identity_limited_rescue_v1",

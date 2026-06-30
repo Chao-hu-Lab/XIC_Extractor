@@ -1,5 +1,11 @@
 # Sidecar To Product Label Activation Contract
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md; docs/product/quant-matrix.md
+Doc exit rule: Retire after sidecar activation authority and matrix projection rules are fully represented in the Backfill and Quant Matrix product docs.
+
 ## Verdict
 
 `shared_peak_identity_*` sidecars are now treated as activation inputs, not as

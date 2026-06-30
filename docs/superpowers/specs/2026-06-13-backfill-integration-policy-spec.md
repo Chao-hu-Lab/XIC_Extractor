@@ -1,5 +1,11 @@
 # Backfill Integration Policy Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md
+Doc exit rule: Retire or convert to support after standard-path and non-standard Backfill integration policy is represented in docs/product/backfill.md and validation artifacts cover the retained gates.
+
 ## Status
 
 Design draft after critical review, with first standard-path seed guard slice

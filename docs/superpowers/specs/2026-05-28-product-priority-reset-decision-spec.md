@@ -1,5 +1,10 @@
 # Product Priority Reset: Qualitative Selection Decision Contract
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: archived
+Repo owner: docs/product/productization.md
+
 **Date:** 2026-05-28
 **Status:** decision + same-PR behavior correction spec
 **Working branch:** `codex/product-priority-reset`

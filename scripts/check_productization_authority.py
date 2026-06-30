@@ -18,17 +18,17 @@ from pathlib import Path
 from typing import Any
 
 from scripts.check_productization_state import artifact_sha256
+from tools.diagnostics.docs_policy import (
+    MECHANICAL_ADJUDICATION_INDEX_REL,
+    PRODUCTIZATION_AUTHORITY_MANIFEST_REL,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MANIFEST = (
-    ROOT / "docs/superpowers/specs/productization_authority_manifest.v1.json"
-)
+DEFAULT_MANIFEST = ROOT / PRODUCTIZATION_AUTHORITY_MANIFEST_REL
 DEFAULT_SCHEMA = (
     ROOT / "docs/superpowers/specs/mechanical_adjudication_schema.v1.json"
 )
-DEFAULT_INDEX = (
-    ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
-)
+DEFAULT_INDEX = ROOT / MECHANICAL_ADJUDICATION_INDEX_REL
 
 APPROVED_SCOPE = "backfill_policy_write_ready_rows"
 CID_NL_APPROVED_SCOPE = "cid_nl_adopt_ready_feature_inclusion_95_cells"

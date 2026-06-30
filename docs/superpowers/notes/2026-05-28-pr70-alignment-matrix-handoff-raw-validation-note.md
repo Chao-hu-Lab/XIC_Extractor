@@ -1,5 +1,11 @@
 # PR70 Alignment Matrix Handoff RAW Validation Note
 
+Doc placement: repo_support_doc
+Doc kind: validation_artifact
+Doc lifecycle: active
+Repo owner: docs/product/quant-matrix.md
+Doc exit rule: Retire or demote after the product-priority reset spec points to a newer quant-matrix validation oracle or the diagnostic ledger owns the replacement rerun contract.
+
 ## Verdict
 
 Status: `production_ready` for this PR's alignment matrix handoff behavior.

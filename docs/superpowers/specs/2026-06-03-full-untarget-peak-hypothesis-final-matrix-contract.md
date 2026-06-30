@@ -1,5 +1,11 @@
 # Full Untarget PeakHypothesis Final Matrix Contract
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/quant-matrix.md
+Doc exit rule: Retire or convert to support after PeakHypothesis final-matrix identity and projection rules are represented in docs/product/quant-matrix.md and linked evidence docs.
+
 ## Status
 
 Product writer contract active; full upstream split construction remains

@@ -1,5 +1,11 @@
 # method_manifest_v1 productization spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/run-provenance.md
+Doc exit rule: Retire or convert to support after method_manifest_v1 replay/provenance contract is fully represented in docs/product/run-provenance.md and productization status artifacts.
+
 日期: 2026-06-15
 狀態: replay_executor_checkpoint
 目標 tier: `missing` -> `production_ready` for targeted CLI replay parity

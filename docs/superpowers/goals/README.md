@@ -1,5 +1,11 @@
 # Productization Goals
 
+Doc placement: repo_support_doc
+Doc kind: goal
+Doc lifecycle: active
+Repo owner: docs/product/productization.md
+Doc exit rule: Update when productization goal routing changes or this directory no longer carries active goal indexes.
+
 Status: routing index
 
 Use this directory for executable, phase-sized goal contracts. A dated goal file

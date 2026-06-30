@@ -1,5 +1,11 @@
 # XIC Productization Pulse Reports
 
+Doc placement: repo_support_doc
+Doc kind: report
+Doc lifecycle: active
+Repo owner: docs/product/productization.md
+Doc exit rule: Update when the productization pulse workflow changes or this directory stops carrying generated pulse reports.
+
 This folder holds short, time-windowed productization status reports generated
 by the `xic-productization-pulse` skill.
 

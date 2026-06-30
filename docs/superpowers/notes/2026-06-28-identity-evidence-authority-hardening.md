@@ -1,13 +1,14 @@
 # Identity, Evidence, and Authority Hardening
 
-Doc placement: formal_repo_doc
+Doc placement: repo_support_doc
+Doc kind: note
+Doc lifecycle: active
+Repo owner: docs/product/evidence-spine.md
+Doc exit rule: Retire or move to Obsidian after the listed hardening follow-ups are represented in product docs, specs, or tracked issues.
+
 This note records follow-up implementation risks found while closing the
 family-abstraction-removal branch. Stable rules belong in
 `docs/product/family-hypothesis-boundary.md` and `docs/product/evidence-spine.md`.
-
-Repo owner: `docs/product/family-hypothesis-boundary.md`;
-`docs/product/evidence-spine.md`; productization tier changes, if any, belong in
-`docs/superpowers/plans/2026-06-15-productization-control-plane.md`.
 
 ## Current Branch Change
 

@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from scripts.check_productization_state import artifact_sha256
+from tools.diagnostics.docs_policy import MECHANICAL_ADJUDICATION_INDEX_REL
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX_PATH = ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
+INDEX_PATH = ROOT / MECHANICAL_ADJUDICATION_INDEX_REL
 DEFAULT_OUTPUT_DIR = ROOT / "docs/superpowers/validation"
 TRACE_ROOTS = [
     ROOT

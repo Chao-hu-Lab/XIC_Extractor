@@ -1,5 +1,11 @@
 # Selected Full-Envelope Quantitation Boundary Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/quant-matrix.md
+Doc exit rule: Retire or convert to support after selected-envelope quantitation boundary rules are represented in docs/product/quant-matrix.md or a linked quantitation product owner.
+
 **Date:** 2026-06-03
 **Status:** Draft v0.4 - selected-full-envelope remains externalized;
 `ChromPeakSegment` is the scoped product-candidate pivot

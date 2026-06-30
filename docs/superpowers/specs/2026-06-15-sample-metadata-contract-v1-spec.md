@@ -1,5 +1,11 @@
 # Sample metadata contract v1 spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/sample-metadata-qc.md
+Doc exit rule: Retire or convert to support after sample metadata, injection-order, and instrument-QC contract details are represented in docs/product/sample-metadata-qc.md.
+
 日期: 2026-06-15
 狀態: runtime_parity_adapter
 目標 tier: `partial_internal` -> `production_ready` for no-output injection-order parity; `blocked` for role-aware value behavior

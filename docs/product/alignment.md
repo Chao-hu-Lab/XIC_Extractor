@@ -33,6 +33,19 @@ contracts for review and downstream product decisions.
   grouping, ownership, identity, writer, and sidecar behavior belongs in
   package modules or explicit specs.
 
+## Retained Validation Anchors
+
+- The 2026-05-28 targeted GT alignment audit fixtures for `5-medC` are
+  diagnostic anchors for the 8RAW validation-minimal and primary-delivery-fix
+  alignment slices. Both recorded `PASS 8/8`, zero `SPLIT`, zero `DRIFT`, zero
+  `DUPLICATE`, and zero `MISS` against the targeted GT RT rows.
+- Those fixture reports prove the audited alignment slice did not lose the
+  `5-medC` targeted rows, but they do not grant ProductWriter authority,
+  broaden matrix publication, or replace stronger 85RAW/product gates.
+- Historical `FAM*` labels in those reports are compatibility traceability for
+  the audited run. They are not canonical cross-sample identity proof when a
+  successor group or PeakHypothesis surface exists.
+
 ## Surfaces
 
 | Output | Role |

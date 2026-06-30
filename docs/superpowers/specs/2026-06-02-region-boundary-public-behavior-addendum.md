@@ -1,5 +1,11 @@
 # Region-Boundary Public Behavior Addendum
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/evidence-spine.md
+Doc exit rule: Retire after region-boundary decision semantics and public projection rules are represented in the evidence/model-selection product docs.
+
 **Date:** 2026-06-02
 **Parent launch contract:**
 [C4 / C6 / Region Public Behavior Retirement Productization Design](2026-06-02-public-behavior-retirement-productization-design.md)

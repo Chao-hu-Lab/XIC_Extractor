@@ -1,0 +1,27 @@
+interface:
+  display_name: "XIC Docs Compression"
+  short_description: "Digest XIC docs by lifecycle, route, owner, value, and Obsidian role"
+  default_prompt: "Use $xic-docs-compression for XIC documentation digestion: classify lifecycle, route, current information value, duplication, staleness, topic owner, support/stub role, Obsidian action, referrer action, and destructive gate before moving, stubbing, deleting, or retargeting docs."
+compatibility:
+  canonical_format: "agent-skills"
+  adapter_targets:
+    - "openai"
+    - "claude"
+    - "generic"
+  activation:
+    mode: "manual"
+    paths:
+      - "docs/superpowers/"
+      - "docs/product/"
+      - "docs/agent/"
+  execution:
+    context: "inline"
+    shell: "powershell"
+  trust:
+    source_tier: "repo-local"
+    remote_inline_execution: "forbid"
+    remote_metadata_policy: "allow-metadata-only"
+  degradation:
+    openai: "neutral-source-plus-adapter"
+    claude: "neutral-source-plus-adapter"
+    generic: "neutral-source"

@@ -14,6 +14,25 @@ The quant matrix is the product-facing numeric matrix. It separates detected val
 - Historical AsLS primary-matrix policy is superseded by LC-MS/MS evidence rules and morphology-aware area policy.
 - Row-completion confidence and downstream-impact benchmarks are readiness evidence; they do not change default matrix authority without a separate activation decision.
 
+## Retained Validation Anchors
+
+Archived validation notes stay in repo only when they still anchor exact product
+or oracle references. They are support packets, not matrix authority by
+themselves.
+
+- PR70 matrix-handoff validation remains the scoped oracle for the
+  `AlignedCell.matrix_area` handoff behavior: 8RAW and 85RAW foreground runs
+  produced byte-identical `alignment_matrix.tsv`, `alignment_review.tsv`, and
+  `alignment_cells.tsv` against accepted P8b outputs.
+- That PR70 claim is limited to the alignment matrix handoff behavior. It does
+  not promote baseline policy, resolver defaults, broader Phase2 cleanup, or any
+  new matrix writer scope.
+- Future branches should use stable `local_validation_artifacts/` discovery
+  batch indexes for this validation shape rather than another worktree's
+  ignored `output/` paths.
+- If the validation note is ever compressed or moved, exact repo refs must first
+  retarget to this owner or to a compact oracle artifact.
+
 ## Surfaces
 
 | Surface | Role |

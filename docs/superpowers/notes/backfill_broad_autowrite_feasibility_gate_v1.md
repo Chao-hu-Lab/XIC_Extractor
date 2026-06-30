@@ -1,5 +1,10 @@
 # Backfill Broad Auto-Write Feasibility Gate v1
 
+Doc placement: repo_support_doc
+Doc kind: note
+Doc lifecycle: archived
+Repo owner: docs/product/backfill.md
+
 > Historical decision packet: retained as evidence/provenance, not live
 > source-of-truth by itself. Its park decision is indexed by
 > `docs/superpowers/validation/productization_status_index_v1.tsv` and

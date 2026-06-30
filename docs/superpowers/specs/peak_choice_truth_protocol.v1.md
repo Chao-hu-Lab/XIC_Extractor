@@ -1,5 +1,11 @@
 # Peak-Choice Truth Set / Lockbox v1
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md
+Doc exit rule: Retire or convert to support after the lockbox truth-set protocol is represented in docs/product/backfill.md and retained validation artifacts.
+
 Status: `production_candidate` evidence-acquisition contract, not product
 write authority.
 

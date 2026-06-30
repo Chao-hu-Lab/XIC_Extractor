@@ -1,5 +1,11 @@
 # CID-NL Discovery Full-Scope Classification v1
 
+Doc placement: repo_support_doc
+Doc kind: validation_artifact
+Doc lifecycle: archived
+Repo owner: docs/product/discovery.md
+Doc exit rule: Keep until Discovery product docs or newer validation artifacts supersede this full-scope CID-NL classification gate.
+
 Status: `pass`.
 
 This is a no-RAW classification contract for the current CID-NL Discovery candidate universe. It proves that the 147 candidate cells are fully partitioned before any future product gate is considered.

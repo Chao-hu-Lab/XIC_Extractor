@@ -1,5 +1,11 @@
 # Target Pair RT Auto-Reselection Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/targeted-selection.md
+Doc exit rule: Retire or convert to support after target-pair RT reselection authority, expected-diff gates, and production-ready row-specific behavior are represented in docs/product/targeted-selection.md.
+
 **Date:** 2026-06-03
 **Status:** Draft v0.7 - row-specific expected-diff approval is production-ready for BC1055/8-oxodG; full candidate-switch promotion still gated
 **Readiness label:** `row_specific_expected_diff_production_ready`; paired-anchor projection is `production_ready` via the targeted evidence-chain alignment spec; broad Phase 3 candidate switching remains `blocked_until_expected_diff_and_transfer_gate`

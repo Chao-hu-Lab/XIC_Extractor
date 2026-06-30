@@ -1,5 +1,11 @@
 # Final Matrix Row Completion Confidence Benchmark
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md; docs/product/quant-matrix.md
+Doc exit rule: Retire or convert to support after row-completion confidence benchmark gates are represented in Backfill/Quant Matrix product docs and retained validation artifacts.
+
 Status: implemented diagnostic contract plus baseline-bound shadow gate.
 Date: 2026-06-23
 Branch: `cc/framework-improvements`

@@ -1,5 +1,11 @@
 # Git-Rm Candidate Manifest
 
+Doc placement: repo_support_doc
+Doc kind: manifest
+Doc lifecycle: archived
+Repo owner: docs/agent/obsidian-handoff-contract.md
+Doc exit rule: Keep as the exact historical approval set for commit 634d568c unless a future retained index preserves the same candidate set and referrer rationale.
+
 Status: `committed_approved_removal_set`
 
 This manifest is a historical explicit review set. The approved 254-path and

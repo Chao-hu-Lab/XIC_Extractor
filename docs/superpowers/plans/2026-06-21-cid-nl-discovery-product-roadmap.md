@@ -1,5 +1,11 @@
 # CID-NL Discovery Product Roadmap - 2026-06-21
 
+Doc placement: repo_support_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/product/discovery.md
+Doc exit rule: Retire or move to Obsidian after docs/product/discovery.md and the productization control plane absorb the active lane boundary.
+
 ## Purpose
 
 Make CID-NL Discovery product-ready without dragging Backfill into the same

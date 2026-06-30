@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-26
+**Last refreshed:** 2026-06-29
 **Total entry-points:** 104
-**Total files (incl. helpers):** 183 Python files under `tools/diagnostics/`
+**Total files (incl. helpers):** 186 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/architecture-contract.md`; the retired dated
 diagnostic lifecycle spec remains only as a same-path public stub.
 **Provenance note:** `Originating spec/plan`, `Recent doc`, and similar fields
@@ -1662,17 +1662,34 @@ markers without auto-fixing.
 ### `docs_management_audit.py`
 
 **Purpose**: Audit the repo/Obsidian documentation management system after
-cleanup. It catches stale post-commit handoff wording, manifest stats drift,
-pending vault raw/staged files, missing vault lifecycle metadata, approximate
-broken wikilinks, handoff retention drift, and local/private path exposure that
-needs focused retention/privacy review.
+cleanup. It orchestrates the read-only repo/vault audit and delegates
+`docs/superpowers` routing, topic clustering, text-scan mechanics, and generated
+topic README rendering to focused helper modules. Its report covers routing
+candidates with three-route doc-route, key-concept, repo-owner, document
+kind/lifecycle/exit-rule status, topic-owner collision clusters, Obsidian-lane,
+digestion status/action, and `source_repo_path` original-lookup hints plus wiki
+skill routing for query, ingest/update, lint, and staged promotion, stale
+post-commit handoff wording, manifest stats drift, pending vault raw/staged
+files, missing vault lifecycle metadata, approximate broken wikilinks, handoff
+retention drift, and local/private path exposure that needs focused
+retention/privacy review.
+
+Use `--routing-manifest-tsv` for file-level cleanup rows and
+`--topic-clusters-tsv` for big-direction folder/index consolidation. Use
+`--topic-index-dir docs/superpowers/topics` to regenerate index-only topic
+README files from the current cluster summary.
 **Topic group**: `docs_management_audit.py` + `docs_placement_guard.py` +
 `handoff_retention_audit.py`
 **Governing doc**: `docs/agent/obsidian-handoff-contract.md`
 **Status note**: Read-only docs governance audit. It does not move files, write
 to Obsidian, stage changes, mutate product output, or authorize tracked
-deletion. Use it after major docs cleanup and before PR closeout when the
-repo/vault split changed.
+deletion. It can write a full candidate review TSV with
+`--routing-manifest-tsv`; that TSV is a file-management control table, not
+deletion approval. `repo_product_doc`, `kept_files`, and route-retained counts
+mean "not automatically movable", not "fully digested"; use
+`digestion_status`, `digestion_next_action`, and topic-cluster digestion review
+counts before treating retained docs as cleaned-up knowledge. Use it after major
+docs cleanup and before PR closeout when the repo/vault split changed.
 
 ---
 
@@ -1698,6 +1715,9 @@ Not entry-points, but referenced by multiple topic groups:
 
 - `xic_extractor/tabular_io.py` — package-neutral shared delimited/TSV read-write, file SHA256 hashing, scalar parsing, numeric equality, header validation, label splitting, text grouping, and value formatting. `xic_extractor/diagnostics/diagnostic_io.py` and `tools/diagnostics/diagnostic_io.py` re-export it as compatibility shims for existing diagnostic imports. Cluster 1, the listed Cluster 3 loaders, alignment backfill authority/projection modules, and backfill/standard-peak diagnostics now reuse this helper; use it before adding local `_read_required_tsv`, `_bool_value`, `_optional_float`, `_text`, `_required_indexes`, `_write_tsv`, `_sha256_file`, `_numeric_equal`, or `_group_by_family` copies.
 - `xic_extractor/diagnostics/backfill_overlay.py` — package-owned shared selector for seed-specific backfill overlay rows. It keeps retained backfill gates, shadow policy, and shadow projection on one fail-closed selection rule: exact seed rows beat legacy family rows when allowed, and conflict/review verdicts outrank support verdicts when duplicate rows exist for the same seed. Use it before adding local `_selected_overlay_row` or `_overlay_sort_key` copies.
+- `tools/diagnostics/docs_scan.py` — shared text-file discovery/read helpers for docs diagnostics. Reuse it before adding another `git ls-files` fallback, repo-relative path helper, or text-file scan predicate.
+- `tools/diagnostics/docs_routing_review.py` — docs/superpowers routing domain logic: route classification, lifecycle metadata, topic hints, topic-owner clustering, exact-referrer status, and TSV field contracts. Keep docs-route/product-authority rules here instead of rebuilding them inside CLI wrappers.
+- `tools/diagnostics/docs_topic_indexes.py` — generated topic-index README renderer. It writes navigation-only `docs/superpowers/topics/<topic>/README.md` files from the topic-cluster summary and must not define product behavior, validation policy, matrix authority, or selected values.
 
 Large diagnostics refactor reviews should use
 `.codex/skills/xic-large-pr-review/SKILL.md`. Start from high blast-radius

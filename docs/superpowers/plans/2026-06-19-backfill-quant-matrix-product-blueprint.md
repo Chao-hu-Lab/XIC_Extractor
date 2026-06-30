@@ -1,5 +1,11 @@
 # Backfill Quant Matrix Product Blueprint
 
+Doc placement: repo_subcontract_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md; docs/product/quant-matrix.md
+Doc exit rule: Promote accepted contract pieces into docs/product/backfill.md, docs/product/quant-matrix.md, and productization authority artifacts, then retire or convert this blueprint to historical support.
+
 Date: 2026-06-19
 Status: `diagnostic_only` authoritative planning blueprint
 Authority: active Backfill / quant-matrix roadmap. Productization tier and

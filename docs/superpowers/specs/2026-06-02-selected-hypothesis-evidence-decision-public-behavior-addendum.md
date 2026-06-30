@@ -1,5 +1,11 @@
 # Selected-Hypothesis Evidence Decision Public Behavior Addendum
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/evidence-spine.md
+Doc exit rule: Retire or convert to support after selected-hypothesis evidence-decision behavior is fully represented in docs/product/evidence-spine.md and related model-selection docs.
+
 **Date:** 2026-06-02
 **Branch:** `codex/cleanup-retirement-foundation`
 **Status:** Revised after xhigh spec review

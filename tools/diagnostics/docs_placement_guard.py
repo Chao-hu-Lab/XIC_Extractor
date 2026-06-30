@@ -8,25 +8,28 @@ from pathlib import Path
 from typing import Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
-HOOKS = ROOT / ".codex" / "hooks"
-if str(HOOKS) not in sys.path:
-    sys.path.insert(0, str(HOOKS))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from xic_hook_policy import (  # noqa: E402
+from tools.diagnostics.docs_policy import (  # noqa: E402
+    DOC_EXIT_RULE_MARKER,
+    DOC_KIND_MARKER,
+    DOC_KIND_VALUES,
+    DOC_LIFECYCLE_MARKER,
+    DOC_LIFECYCLE_VALUES,
     DOC_PLACEMENT_MARKER,
     DOC_PLACEMENT_VALUES,
     DOC_REPO_OWNER_MARKER,
+    classify_doc,
+    classify_doc_path,
+    doc_exit_rule_value,
+    doc_kind_value,
+    doc_lifecycle_requires_exit_rule,
+    doc_lifecycle_value,
     doc_placement_is_non_repo,
     doc_placement_requires_repo_owner,
-    doc_placement_value,
     has_private_history_signal,
-    is_branch_closeout_summary_path,
-    is_canonical_doc_owner_path,
-    is_high_risk_repo_doc_path,
     is_markdown_path,
-    is_misplaced_handoff_public_record_path,
-    is_repo_doc_path,
-    repo_owner_value,
 )
 
 ACTIVE_STUB_FIELDS = {
@@ -149,10 +152,74 @@ def missing_active_stub_fields(text: str) -> list[str]:
     ]
 
 
+def lifecycle_metadata_problems(path: str, text: str) -> list[PlacementProblem]:
+    problems: list[PlacementProblem] = []
+    doc_kind = doc_kind_value(text)
+    lifecycle = doc_lifecycle_value(text)
+    exit_rule = doc_exit_rule_value(text)
+    if not doc_kind:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason="lifecycle-managed doc is missing Doc kind",
+                required_marker=(
+                    f"{DOC_KIND_MARKER} <one of "
+                    f"{', '.join(sorted(DOC_KIND_VALUES))}>"
+                ),
+            )
+        )
+    elif doc_kind not in DOC_KIND_VALUES:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=f"unknown doc kind value: {doc_kind}",
+                required_marker=(
+                    f"{DOC_KIND_MARKER} <one of "
+                    f"{', '.join(sorted(DOC_KIND_VALUES))}>"
+                ),
+            )
+        )
+    if not lifecycle:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason="lifecycle-managed doc is missing Doc lifecycle",
+                required_marker=(
+                    f"{DOC_LIFECYCLE_MARKER} <one of "
+                    f"{', '.join(sorted(DOC_LIFECYCLE_VALUES))}>"
+                ),
+            )
+        )
+    elif lifecycle not in DOC_LIFECYCLE_VALUES:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=f"unknown doc lifecycle value: {lifecycle}",
+                required_marker=(
+                    f"{DOC_LIFECYCLE_MARKER} <one of "
+                    f"{', '.join(sorted(DOC_LIFECYCLE_VALUES))}>"
+                ),
+            )
+        )
+    elif doc_lifecycle_requires_exit_rule(lifecycle) and not exit_rule:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=f"{lifecycle} lifecycle requires Doc exit rule",
+                required_marker=(
+                    f"{DOC_EXIT_RULE_MARKER} <closeout, promotion, retirement, "
+                    "or Obsidian migration condition>"
+                ),
+            )
+        )
+    return problems
+
+
 def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
     path = entry.path.replace("\\", "/")
     status = normalize_status(entry.status)
-    if status == "D" or not is_repo_doc_path(path):
+    path_classification = classify_doc_path(path)
+    if status == "D" or not path_classification.is_repo_doc:
         return []
 
     try:
@@ -174,79 +241,13 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
             )
         ]
 
+    classification = classify_doc(path, text)
     problems: list[PlacementProblem] = []
-    placement = doc_placement_value(text)
-    repo_owner = repo_owner_value(text)
-
-    if is_canonical_doc_owner_path(path) and not is_branch_closeout_summary_path(path):
-        if path.startswith("docs/user/"):
-            if placement and placement not in DOC_PLACEMENT_VALUES:
-                problems.append(
-                    PlacementProblem(
-                        path=path,
-                        reason=f"unknown doc placement value: {placement}",
-                        required_marker=(
-                            f"{DOC_PLACEMENT_MARKER} <one of "
-                            f"{', '.join(sorted(DOC_PLACEMENT_VALUES))}>"
-                        ),
-                    )
-                )
-            elif placement and placement != "formal_repo_doc":
-                problems.append(
-                    PlacementProblem(
-                        path=path,
-                        reason=(
-                            f"{placement} is not valid in docs/user; user docs "
-                            "must be public user guides, not branch stubs, "
-                            "Obsidian stubs, closeouts, or artifact records"
-                        ),
-                        required_marker=(
-                            f"{DOC_PLACEMENT_MARKER} formal_repo_doc "
-                            "or omit the marker for canonical user guides"
-                        ),
-                    )
-                )
-            elif placement and doc_placement_is_non_repo(placement):
-                problems.append(
-                    PlacementProblem(
-                        path=path,
-                        reason=(
-                            f"{placement} is not a repo-trackable user guide; "
-                            "write private history to Obsidian staged draft or "
-                            "ignored scratch instead"
-                        ),
-                        required_marker=required_marker_text("formal_repo_doc"),
-                    )
-                )
-            if has_private_history_signal(text):
-                problems.append(
-                    PlacementProblem(
-                        path=path,
-                        reason=(
-                            "user guide contains private-history signals; "
-                            "move implementation diary, command transcript, "
-                            "or review rationale to Obsidian"
-                        ),
-                        required_marker=required_marker_text("formal_repo_doc"),
-                    )
-                )
-        return problems
-
-    if is_misplaced_handoff_public_record_path(path):
-        problems.append(
-            PlacementProblem(
-                path=path,
-                reason=(
-                    "public productization/file-management/closeout records "
-                    "do not belong under handoffs/current or handoffs/archive"
-                ),
-                required_marker=(
-                    "Move to docs/superpowers/productization/, "
-                    "docs/superpowers/file-management/, or "
-                    "docs/superpowers/closeouts/."
-                ),
-            )
-        )
+    placement = classification.placement
+    repo_owner = classification.repo_owner
+    lifecycle_problems: list[PlacementProblem] = []
+    if status in NEWLY_STAGED_STATUSES and classification.is_lifecycle_managed:
+        lifecycle_problems = lifecycle_metadata_problems(path, text)
 
     if placement and placement not in DOC_PLACEMENT_VALUES:
         problems.append(
@@ -259,7 +260,7 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
                 ),
             )
         )
-        return problems
+        return [*problems, *lifecycle_problems]
 
     if placement and doc_placement_is_non_repo(placement):
         problems.append(
@@ -282,6 +283,56 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
             )
         )
 
+    if (
+        classification.is_canonical_owner
+        and not classification.is_branch_closeout_summary
+    ):
+        if path.startswith("docs/user/"):
+            if placement and placement != "formal_repo_doc":
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=(
+                            f"{placement} is not valid in docs/user; user docs "
+                            "must be public user guides, not branch stubs, "
+                            "Obsidian stubs, closeouts, or artifact records"
+                        ),
+                        required_marker=(
+                            f"{DOC_PLACEMENT_MARKER} formal_repo_doc "
+                            "or omit the marker for canonical user guides"
+                        ),
+                    )
+                )
+            if has_private_history_signal(text):
+                problems.append(
+                    PlacementProblem(
+                        path=path,
+                        reason=(
+                            "user guide contains private-history signals; "
+                            "move implementation diary, command transcript, "
+                            "or review rationale to Obsidian"
+                        ),
+                        required_marker=required_marker_text("formal_repo_doc"),
+                    )
+                )
+        return [*problems, *lifecycle_problems]
+
+    if classification.is_misplaced_handoff_public_record:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=(
+                    "public productization/file-management/closeout records "
+                    "do not belong under handoffs/current or handoffs/archive"
+                ),
+                required_marker=(
+                    "Move to docs/superpowers/productization/, "
+                    "docs/superpowers/file-management/, or "
+                    "docs/superpowers/closeouts/."
+                ),
+            )
+        )
+
     if placement == "repo_active_stub":
         missing = missing_active_stub_fields(text)
         if missing:
@@ -298,7 +349,7 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
 
     if (
         placement == "branch_closeout_summary"
-        or is_branch_closeout_summary_path(path)
+        or classification.is_branch_closeout_summary
     ) and "pr body seed" not in text.lower():
         problems.append(
             PlacementProblem(
@@ -309,13 +360,13 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
         )
 
     if problems:
-        return problems
+        return [*problems, *lifecycle_problems]
 
-    if is_canonical_doc_owner_path(path):
+    if classification.is_canonical_owner:
         return []
 
     if status in NEWLY_STAGED_STATUSES and not placement:
-        if is_high_risk_repo_doc_path(path):
+        if classification.is_high_risk_repo_doc:
             problems.append(
                 PlacementProblem(
                     path=path,
@@ -348,7 +399,7 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
     elif (
         status == "M"
         and not placement
-        and is_high_risk_repo_doc_path(path)
+        and classification.is_high_risk_repo_doc
         and has_private_history_signal(text)
     ):
         problems.append(
@@ -365,7 +416,7 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
             )
         )
 
-    return problems
+    return [*problems, *lifecycle_problems]
 
 
 def check_doc_placement(

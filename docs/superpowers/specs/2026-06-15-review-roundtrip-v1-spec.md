@@ -1,5 +1,11 @@
 # Review roundtrip v1 spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/review-roundtrip.md
+Doc exit rule: Retire or move to Obsidian after review-roundtrip v1 contracts are fully absorbed by docs/product/review-roundtrip.md and maintained schemas/tests.
+
 日期: 2026-06-15
 狀態: first_slice_review_action_import + second_slice_application_plan +
 third_slice_expected_diff_template + fourth_slice_apply_readiness_plan +

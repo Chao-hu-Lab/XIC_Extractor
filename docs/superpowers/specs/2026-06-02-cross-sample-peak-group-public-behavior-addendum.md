@@ -1,5 +1,11 @@
 # Cross-Sample Peak Group Public Behavior Addendum
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/family-hypothesis-boundary.md
+Doc exit rule: Retire or move to Obsidian after the current family-hypothesis boundary docs and compatibility notes fully cover this addendum.
+
 **Date:** 2026-06-02
 **Status:** Reviewed implementation contract
 **Parent launch contract:** `2026-06-02-public-behavior-retirement-productization-design.md`

@@ -60,6 +60,20 @@ Rules:
 - Non-standard peaks and candidate-only evidence stay outside automatic
   publication policy unless the authority manifest says otherwise.
 
+### Performance Anchors
+
+- The 2026-06-22 `dna_dr_product_ready` 8RAW performance pass is retained as an
+  exact-output-preserving preset/runtime anchor: total wall time improved from
+  about 252.5s to 170.5s while public TSV hashes and product-ready preset
+  checks stayed matched.
+- The durable lesson is call-shape discipline, not a new product contract:
+  reuse generated overlays where provenance matches, batch or slice existing
+  summaries instead of regenerating them per chunk, keep RAW/render worker caps
+  conservative, and keep payload validation cheap for scalar leaves.
+- Performance archives and timing packets do not change preset defaults,
+  matrix authority, Backfill scope, or GUI behavior. They are evidence for safe
+  runtime implementation choices under the same preset contract.
+
 ## Boundaries
 
 - **Owns**: preset loading, resolver/alignment preset behavior definitions,

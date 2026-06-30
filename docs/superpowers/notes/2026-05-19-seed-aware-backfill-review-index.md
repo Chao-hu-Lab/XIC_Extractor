@@ -1,5 +1,11 @@
 # Seed-Aware Backfill Review Index
 
+Doc placement: repo_support_doc
+Doc kind: validation_artifact
+Doc lifecycle: active
+Repo owner: docs/product/backfill.md
+Doc exit rule: Retire or move to Obsidian after the seed-aware Backfill gate is promoted into a formal product contract or killed.
+
 ## Verdict
 
 `shadow_gate_ready`

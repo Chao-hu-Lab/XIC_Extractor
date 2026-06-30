@@ -1,5 +1,11 @@
 # XIC Extractor Productization Roadmap Review
 
+Doc placement: repo_support_doc
+Doc kind: goal
+Doc lifecycle: active
+Repo owner: docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md
+Doc exit rule: Retire or move to Obsidian after the Backfill quant-matrix blueprint and productization control plane fully absorb this roadmap direction.
+
 Updated: 2026-06-19
 Status: direction-reset roadmap
 

@@ -1,5 +1,11 @@
 # Discovery precursor inference validation v1
 
+Doc placement: repo_support_doc
+Doc kind: validation_artifact
+Doc lifecycle: archived
+Repo owner: docs/product/discovery.md
+Doc exit rule: Keep until Discovery product docs or newer validation artifacts cover the same precursor-inference root cause and replay evidence.
+
 Date: 2026-06-19
 
 Purpose: root-cause and validate the missing `d4-N6-2HE-dA`

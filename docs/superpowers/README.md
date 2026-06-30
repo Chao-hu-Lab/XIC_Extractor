@@ -1,5 +1,11 @@
 # Superpowers Documentation Layout
 
+Doc placement: repo_support_doc
+Doc kind: manifest
+Doc lifecycle: active
+Repo owner: docs/project-layout.md
+Doc exit rule: Update when docs/superpowers directory routing or repo/Obsidian boundary rules change.
+
 Status: `routing_index`
 
 `docs/superpowers/` keeps public, repo-readable planning and evidence artifacts
@@ -46,15 +52,27 @@ repo deliberately keeps it as a public artifact.
 
 ## Current Cleanup Evidence
 
-The docs-cleanup public evidence now lives under
-`docs/superpowers/file-management/docs-cleanup/`:
+The current docs-cleanup control surface lives under
+`docs/superpowers/file-management/docs-cleanup/` and
+`docs/superpowers/topics/`.
 
+Current routing queue:
+
+- `docs/superpowers/file-management/docs-cleanup/2026-06-29_docs-superpowers-routing-manifest.md`
+- `docs/superpowers/file-management/docs-cleanup/2026-06-29_docs-superpowers-topic-clusters.tsv`
+- `docs/superpowers/topics/docs-workflow/README.md`
+
+Completed or archived support:
+
+- `docs/superpowers/file-management/docs-cleanup/2026-06-29_obsidian-source-copy-stub-batch.md`
 - `docs/superpowers/file-management/docs-cleanup/audits/2026-06-25_codex-docs-cleanup_public-surface-stub-audit.md`
 - `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_git-rm-candidate-manifest.md`
 - `docs/superpowers/file-management/docs-cleanup/2026-06-25_codex-docs-cleanup_file-management-approval-plan.md`
 
-No file deletion is authorized by these artifacts. Any removal requires an
-explicit approved path set and a separate file-management patch.
+The 6/25 files are archived approval and audit evidence. They are not the
+current routing queue, and they do not authorize additional deletion. Any
+removal still requires an exact approved path set and a separate
+file-management patch.
 
 ## Validation Layout Debt
 

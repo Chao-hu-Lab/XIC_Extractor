@@ -9,7 +9,25 @@ Targeted selection is the product-facing decision path for known targets. It tur
 - Selected-hypothesis public behavior must preserve compatibility projections unless an explicit schema/versioning plan changes downstream contracts.
 - MS1 shape-identity limited rescue is production-ready only for the headless limited `5-hmdC + 5-medC` policy and only writes `detected_flagged` under its expected-diff gate. Broader targets, GUI wiring, and default broad NL_FAIL rescue remain blocked without a new target-family evidence gate.
 - Target-pair RT auto-reselection and calibration artifacts are activation-gated selection aids, not default authority unless the control plane and focused tests say so.
+- Targeted expected-diff approvals must reference runtime product
+  `PeakHypothesis` candidate IDs. Overlay-only or audit-table candidate IDs can
+  explain support, but they are not valid product-switch inputs.
 - Product action or verdict tables are review/reason surfaces; they must not hide the evidence chain or grant writer authority.
+
+## Retained Validation Anchors
+
+- The 2026-06-04 `BenignfatBC1055_DNA / 8-oxodG` closeout is a row-specific
+  expected-diff activation, not a general target-pair RT auto-reselection rule.
+  It changed one targeted product row after the approved successor existed in
+  runtime product hypotheses and had role-aware RT, paired-area-ratio, MS1, and
+  trace support.
+- The visible product decision surface for that slice is `Product State`,
+  `Counted Detection`, `Review State`, and projection-backed `Reason`. Legacy
+  `Confidence`, score, and cap evidence remain technical audit material while
+  this projection contract is active.
+- The observed 8RAW count change for that slice was `8-oxodG: 3/8 -> 4/8`,
+  with all other target labels unchanged. Treat it as a validation anchor for
+  the activation gate, not as broad target-pair policy.
 
 ## Surfaces
 

@@ -1,5 +1,11 @@
 # C4 / C6 / Region Public Behavior Retirement Productization Design
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: implemented
+Repo owner: docs/product/productization.md
+Doc exit rule: Retire or move to Obsidian after the active product docs and addenda cover the retained public behavior contracts.
+
 **Date:** 2026-06-02
 **Branch:** `codex/cleanup-retirement-foundation`
 **Status:** Reviewed launch contract; Phase 1 addendum required before

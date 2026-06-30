@@ -1,5 +1,11 @@
 # XIC Extractor productization control plane
 
+Doc placement: formal_repo_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/superpowers/plans/2026-06-15-productization-control-plane.md
+Doc exit rule: Keep current; update directly when productization tier, active lane, authority, or promotion gates change.
+
 日期: 2026-06-15
 狀態: living plan / maintenance checklist
 目前 readiness: `diagnostic_only` for this control document

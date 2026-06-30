@@ -44,7 +44,7 @@
 | `xic_extractor/` | 主程式庫（domain logic、所有 pipeline 階段） | 經由 `packages.find` |
 | `gui/` | PyQt6 GUI 層；entry: `gui/main.py` | entry script |
 | `scripts/` | CLI 入口（`run_*.py`）+ 開發 / 驗證腳本 | 經由 `datas` |
-| `tools/diagnostics/` | 一次性診斷工具，**不打包** | 否 |
+| `tools/diagnostics/` | 一次性診斷工具，**不打包**。`docs_policy.py` 是 docs governance 路徑常數與分類邏輯的中央模組；hooks 和 scripts 應從該模組 import，不另行硬寫路徑 | 否 |
 | `tests/` | pytest 測試（扁平結構 + `fixtures/`） | 否，exclude |
 | `docs/` | 使用者文件（`docs/user/`）、產品主題文件（`docs/product/`）、規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
@@ -61,6 +61,46 @@ diary、分支過程、私人 local context。
 Obsidian-backed migration and repo-stub rules live in
 `docs/agent/obsidian-handoff-contract.md`; that contract is the standing policy,
 not a one-branch experiment.
+Durable docs routing has only three final routes:
+
+- `obsidian_original`: original full text belongs in Obsidian; repo keeps no
+  long body, only a compact pointer/stub if referrers or provenance require it.
+- `repo_distilled_plus_obsidian_original`: stable claims are distilled into a
+  repo owner; original full text and private reasoning go to Obsidian.
+- `repo_product_doc`: the file itself is the compact product, validation,
+  governance, or operating document and stays in repo.
+
+Audit-only `needs_route_decision` rows must be resolved to one of those routes
+before move/delete work. When a repo document points to a private original, use
+`source_repo_path:<repo path>` as the stable lookup key; do not write private
+vault absolute paths into repo docs.
+Routes are final destinations, not lifecycle. New lifecycle-managed plans,
+specs, notes, goals, reports, pulse reports, and deepresearch docs must also
+carry `Doc kind:`, `Doc lifecycle:`, and `Doc exit rule:` so an active execution
+plan can live in repo while it is useful, then close out into a product owner,
+stub, closeout, or Obsidian original instead of becoming permanent residue.
+Routes are also not topic uniqueness. `repo_product_doc` only means the file can
+stay in repo; it does not prove the repo has a single source of truth for that
+subject. Each durable topic should have one canonical owner. Other repo files on
+the same topic must be supporting artifacts, validation packets, manifests,
+closeouts, or active stubs that point back to that owner instead of carrying a
+parallel definition.
+Route-retained files are not automatically digested. The docs-management audit
+reports `route_retained_files` and `digestion_status` separately so public docs,
+checker-readable artifacts, stubs, or referrer-blocked files can still be
+reviewed for owner absorption, support-surface demotion, lifecycle closeout, or
+Obsidian original routing.
+For browsing, a future `docs/superpowers/topics/<topic>/` folder may act as a
+topic index and migration queue, but it must not become a second product owner.
+The index points readers to the canonical owner, support artifacts, and
+Obsidian original lookup keys; it does not redefine the topic. Refresh topic
+indexes through `tools/diagnostics/docs_management_audit.py --topic-index-dir`
+instead of hand-maintaining separate source-of-truth pages.
+When a route needs private-vault work, use the wiki skill chain rather than ad
+hoc file edits: `wiki-status`/`wiki-query` for read-side lookup,
+`wiki-ingest`/`wiki-update` for original or project knowledge writes,
+`obsidian-markdown` for manual note syntax, `wiki-lint` for health checks, and
+`wiki-stage-commit` for staged write promotion.
 For private-vault mechanics, use the installed `obsidian-wiki` model: staged
 writes, `index.md`/`log.md`/`.manifest.json`, frontmatter summaries, provenance
 markers, and compiled project pages. The older flat-root Obsidian convention is
@@ -119,8 +159,12 @@ canonical owner，再把原文當 private context 移交 Obsidian。不能因為
 
 - 先決定 `Doc placement:`：
   `formal_repo_doc`、`repo_active_stub`、`branch_closeout_summary`、
-  `repo_stub_plus_obsidian`、`private_obsidian_note`、`ignored_artifact`，或
+  `repo_stub_plus_obsidian`、`repo_stub_plus_formal_doc`、
+  `private_obsidian_note`、`ignored_artifact`，或
   `throwaway_scratch`。
+- 新增 `docs/superpowers/plans/`、`specs/`、`notes/`、`goals/`、
+  `reports/`、`pulse-reports/`、`deepresearch/` 這類 lifecycle-managed docs 時，
+  同步寫 `Doc kind:`、`Doc lifecycle:`、`Doc exit rule:`。
 - 會改 public behavior、schema、validation policy、product authority、agent
   workflow rule 的內容，寫進上表 canonical owner；若不在 canonical owner
   path，commit 前必須有 `Doc placement:` 與 `Repo owner:`。

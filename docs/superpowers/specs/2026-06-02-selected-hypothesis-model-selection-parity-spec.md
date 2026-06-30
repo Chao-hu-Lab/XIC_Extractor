@@ -1,5 +1,11 @@
 # Selected-Hypothesis Model-Selection Parity Spec
 
+Doc placement: repo_subcontract_doc
+Doc kind: spec
+Doc lifecycle: active
+Repo owner: docs/product/evidence-spine.md
+Doc exit rule: Retire or convert to support after model-selection parity gates and expected-diff rules are represented in the evidence/model-selection product docs.
+
 **Date:** 2026-06-02
 **Branch:** `codex/cleanup-retirement-foundation`
 **Status:** Draft after brainstorming approval
