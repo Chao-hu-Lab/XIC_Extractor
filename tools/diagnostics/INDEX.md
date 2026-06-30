@@ -1648,15 +1648,18 @@ LC-MS evidence diagnostics and must not claim product behavior readiness.
 ### `docs_placement_guard.py`
 
 **Purpose**: Check staged A/M/R/C Markdown files for repo/Obsidian placement
-markers before commit; staged deletions are ignored because tracked removals
-must use manifest/referrer audit and explicit user approval.
+markers before commit and block lifecycle-managed Markdown deletions unless the
+same staged diff includes matching retirement evidence. Non-lifecycle deletions
+are ignored.
 **Topic group**: `docs_placement_guard.py` + `.codex/hooks/xic_hook_policy.py`
 **Governing doc**: `docs/agent/obsidian-handoff-contract.md`
-**Status note**: Reads staged git metadata and Markdown text only. It does not
-read RAW, mutate files, stage changes, alter product output, or adjudicate
-deletion safety. Hook integration runs the same checker after shell `git add`
-and before shell `git commit`; failures report paths, reasons, and required
-markers without auto-fixing.
+**Status note**: Reads staged git metadata, staged Markdown/JSON text, deleted
+source blobs, source hashes, and exact repo referrers only. It does not read RAW,
+mutate files, stage changes, alter product output, copy to Obsidian, or decide
+semantic product absorption. Hook integration runs the same checker after shell
+`git add` and before shell `git commit`; failures report paths, reasons, and
+required markers without auto-fixing. Destructive retirement still belongs to
+`retire_docs.py --evidence`.
 
 ---
 
@@ -1679,12 +1682,16 @@ Use `--routing-manifest-tsv` for file-level cleanup rows and
 `--topic-clusters-tsv` for big-direction consolidation. Use
 `--topic-index-dir output/docs-topic-indexes` to generate temporary,
 ignored index-only topic README files from the current cluster summary.
+Use `--repo-only --fail-on-completed-transient` in CI/PR closeout to fail when
+completed transient originals remain outside allowed stub states without reading
+the private Obsidian vault.
 **Topic group**: `docs_management_audit.py` + `docs_placement_guard.py` +
 `handoff_retention_audit.py`
 **Governing doc**: `docs/agent/obsidian-handoff-contract.md`
 **Status note**: Read-only docs governance audit. It does not move files, write
 to Obsidian, stage changes, mutate product output, or authorize tracked
-deletion. It can write a full candidate review TSV with
+deletion. Repo-only mode skips private vault checks and is safe for CI. It can
+write a full candidate review TSV with
 `--routing-manifest-tsv`; that TSV is a file-management control table, not
 deletion approval. `repo_product_doc`, `kept_files`, and route-retained counts
 mean "not automatically movable", not "fully digested"; use
@@ -1725,17 +1732,19 @@ move vault pages, update manifests, stage changes, or authorize deletion.
 ### `retire_docs.py`
 
 **Purpose**: Retire completed transient docs/superpowers plans, specs, and
-notes after lifecycle metadata, vault backup, and exact repo referrers are
-checked. Unreferenced completed docs leave the repo; referrer-bound docs are
-kept unless `--stub-bound` is explicitly supplied to create a short
-compatibility stub.
+notes after lifecycle metadata, retirement evidence, source-copy readback flag,
+source hash, and exact repo referrers are checked. Unreferenced completed docs
+leave the repo only with matching `pass_can_retire` evidence; referrer-bound
+docs are kept unless `--stub-bound` is explicitly supplied to create a short
+compatibility stub with matching referrer evidence.
 **Topic group**: `docs_management_audit.py` + `retire_docs.py`
 **Governing doc**: `docs/project-layout.md`;
 `docs/agent/obsidian-handoff-contract.md`
 **Status note**: Dry-run unless `--execute` is supplied. It skips README,
 schema, JSON, TSV, active/draft lifecycle docs, missing-metadata docs, and
 control-plane anchors; it does not decide product authority or validation
-readiness. Product absorption review must happen before retirement.
+readiness. Product absorption review must happen before retirement and be
+recorded in the evidence JSON supplied through `--evidence`.
 
 ---
 

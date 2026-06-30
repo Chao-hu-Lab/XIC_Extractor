@@ -133,7 +133,9 @@ def test_obsidian_handoff_contract_defines_doc_placement_taxonomy() -> None:
         "created_at:",
     ):
         assert field in text
-    assert "Staged tracked deletions are not adjudicated by placement markers" in text
+    assert "Staged lifecycle-managed Markdown deletions are guarded" in text
+    assert "pass_can_retire" in text
+    assert "*retirement-evidence*.json" in text
     assert "## Daily document routing" in text
 
 

@@ -14,6 +14,8 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -54,6 +56,8 @@ KEEP_PATTERNS = {
 KEEP_PREFIXES = (
     "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
 )
+RETIREMENT_EVIDENCE_DIR = "docs/superpowers/file-management/docs-cleanup/"
+RETIREMENT_EVIDENCE_TOKENS = ("retirement-evidence", "retirement_evidence")
 
 
 def _normalize_title(filename: str) -> str:
@@ -119,12 +123,91 @@ def _exact_referrers(repo_root: Path, rel_path: str) -> tuple[str, ...]:
         scan_rel = normalize_path_text(scan_rel).lstrip("./")
         if scan_rel == normalized:
             continue
+        if _is_retirement_evidence_path(scan_rel):
+            continue
         scan_path = repo_root / scan_rel
         if not _docs_scan.is_local_path_scan_target(scan_path, scan_rel):
             continue
         if normalized in _docs_scan.read_text(scan_path):
             referrers.append(scan_rel)
     return tuple(sorted(referrers))
+
+
+def _is_retirement_evidence_path(path: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./").lower()
+    filename = Path(normalized).name
+    return (
+        normalized.startswith(RETIREMENT_EVIDENCE_DIR)
+        and normalized.endswith(".json")
+        and any(token in filename for token in RETIREMENT_EVIDENCE_TOKENS)
+    )
+
+
+def _source_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _retirement_evidence_by_path(
+    evidence: dict[str, object] | None,
+) -> dict[str, dict[str, object]]:
+    if evidence is None:
+        return {}
+    entries = evidence.get("entries")
+    if not isinstance(entries, list):
+        return {}
+    indexed: dict[str, dict[str, object]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        source_path = entry.get("source_path")
+        if isinstance(source_path, str) and source_path:
+            indexed[normalize_path_text(source_path).lstrip("./")] = entry
+    return indexed
+
+
+def _retirement_evidence_blocker(
+    rel_path: str,
+    text: str,
+    evidence_by_path: dict[str, dict[str, object]],
+    referrers: tuple[str, ...],
+    *,
+    stub_bound: bool,
+) -> str:
+    entry = evidence_by_path.get(rel_path)
+    if entry is None:
+        return "missing retirement evidence"
+    if entry.get("review_result") != "pass_can_retire":
+        return "retirement evidence review_result is not pass_can_retire"
+    for field_name in (
+        "owner_paths",
+        "owner_anchors",
+        "absorbed_claims",
+        "absorbed_negative_claims",
+    ):
+        if not _string_list(entry.get(field_name)):
+            return f"retirement evidence missing {field_name}"
+    if entry.get("source_copy_readback_verified") is not True:
+        return "retirement evidence source copy readback is not verified"
+    if entry.get("source_hash") != _source_hash(text):
+        return "retirement evidence source_hash mismatch"
+    if _string_list(entry.get("active_followups")):
+        return "retirement evidence still has active followups"
+
+    evidence_referrers = tuple(sorted(_string_list(entry.get("exact_referrers"))))
+    if referrers:
+        if not stub_bound:
+            return "exact repo referrers require retargeting or --stub-bound"
+        if evidence_referrers != tuple(sorted(referrers)):
+            return "retirement evidence exact_referrers mismatch"
+    elif evidence_referrers:
+        return "retirement evidence exact_referrers mismatch"
+    return ""
 
 
 def _vault_destination(fpath: Path, vault_archive: Path) -> Path:
@@ -206,9 +289,11 @@ def retire_files(
     *,
     execute: bool = False,
     stub_bound: bool = False,
+    evidence: dict[str, object] | None = None,
 ) -> RetireResult:
     result = RetireResult()
     vault_archive = vault_path / VAULT_ARCHIVE_DIR
+    evidence_by_path = _retirement_evidence_by_path(evidence)
 
     for fpath in files:
         rel = fpath.relative_to(repo_root).as_posix()
@@ -236,6 +321,17 @@ def retire_files(
                     "exact repo referrers; rerun with --stub-bound or retarget refs",
                 )
             )
+            continue
+
+        evidence_blocker = _retirement_evidence_blocker(
+            rel,
+            text,
+            evidence_by_path,
+            referrers,
+            stub_bound=stub_bound,
+        )
+        if evidence_blocker:
+            result.kept.append((rel, evidence_blocker))
             continue
 
         _ensure_vault_copy(
@@ -302,6 +398,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--vault-path", type=Path, default=None)
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        default=None,
+        help="JSON retirement evidence packet required before repo retirement.",
+    )
     args = parser.parse_args(argv)
 
     vault_path = args.vault_path or _resolve_vault_path()
@@ -330,6 +432,9 @@ def main(argv: list[str] | None = None) -> int:
 
     mode = "EXECUTE" if args.execute else "DRY-RUN"
     print(f"Mode: {mode}\n")
+    evidence = None
+    if args.evidence is not None:
+        evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
 
     result = retire_files(
         files,
@@ -337,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
         vault_path,
         execute=args.execute,
         stub_bound=args.stub_bound,
+        evidence=evidence,
     )
 
     if result.already_in_vault:

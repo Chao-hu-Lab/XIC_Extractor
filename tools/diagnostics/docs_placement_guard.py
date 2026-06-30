@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.diagnostics import docs_scan as _docs_scan  # noqa: E402
 from tools.diagnostics.docs_policy import (  # noqa: E402
     DOC_EXIT_RULE_MARKER,
     DOC_KIND_MARKER,
@@ -33,6 +36,7 @@ from tools.diagnostics.docs_policy import (  # noqa: E402
     is_invalid_superpowers_spec_payload_path,
     is_markdown_path,
     is_superpowers_spec_lane_path,
+    normalize_path_text,
 )
 
 ACTIVE_STUB_FIELDS = {
@@ -44,6 +48,8 @@ ACTIVE_STUB_FIELDS = {
     "stop rule": "stop rule",
 }
 NEWLY_STAGED_STATUSES = {"A", "C", "R"}
+RETIREMENT_EVIDENCE_DIR = "docs/superpowers/file-management/docs-cleanup/"
+RETIREMENT_EVIDENCE_TOKENS = ("retirement-evidence", "retirement_evidence")
 
 
 @dataclass(frozen=True)
@@ -79,15 +85,22 @@ def parse_name_status(output: str) -> tuple[list[StagedMarkdown], int]:
             continue
         parts = line.split("\t")
         status = normalize_status(parts[0])
-        if status == "D":
-            ignored_deletions += 1
-            continue
-        if status not in {"A", "M", "R", "C"}:
-            continue
         if len(parts) < 2:
             continue
         path = parts[-1]
-        if is_markdown_path(path) or is_superpowers_spec_lane_path(path):
+        if status == "D":
+            if is_markdown_path(path):
+                entries.append(StagedMarkdown(status=status, path=path))
+            else:
+                ignored_deletions += 1
+            continue
+        if status not in {"A", "M", "R", "C"}:
+            continue
+        if (
+            is_markdown_path(path)
+            or is_superpowers_spec_lane_path(path)
+            or is_retirement_evidence_path(path)
+        ):
             entries.append(StagedMarkdown(status=status, path=path))
     return entries, ignored_deletions
 
@@ -108,7 +121,11 @@ def staged_markdown(root: Path) -> tuple[list[StagedMarkdown], int]:
         StagedMarkdown(
             status=entry.status,
             path=entry.path,
-            staged_text=read_staged_text(root, entry.path),
+            staged_text=(
+                None
+                if normalize_status(entry.status) == "D"
+                else read_staged_text(root, entry.path)
+            ),
         )
         for entry in entries
     ], ignored_deletions
@@ -153,6 +170,225 @@ def missing_active_stub_fields(text: str) -> list[str]:
         for needle, label in ACTIVE_STUB_FIELDS.items()
         if needle not in lowered
     ]
+
+
+def is_retirement_evidence_path(path: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./").lower()
+    filename = Path(normalized).name
+    return (
+        normalized.startswith(RETIREMENT_EVIDENCE_DIR)
+        and normalized.endswith(".json")
+        and any(token in filename for token in RETIREMENT_EVIDENCE_TOKENS)
+    )
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def _source_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _scan_paths(root: Path) -> tuple[str, ...]:
+    return (
+        _docs_scan.git_visible_paths(root)
+        or _docs_scan.fallback_local_path_scan_paths(root)
+    )
+
+
+def _staged_text_by_path(entries: Sequence[StagedMarkdown]) -> dict[str, str]:
+    return {
+        normalize_path_text(entry.path).lstrip("./"): entry.staged_text
+        for entry in entries
+        if normalize_status(entry.status) != "D" and entry.staged_text is not None
+    }
+
+
+def _deleted_paths(entries: Sequence[StagedMarkdown]) -> frozenset[str]:
+    return frozenset(
+        normalize_path_text(entry.path).lstrip("./")
+        for entry in entries
+        if normalize_status(entry.status) == "D"
+    )
+
+
+def _exact_referrers(
+    root: Path,
+    rel_path: str,
+    entries: Sequence[StagedMarkdown],
+) -> tuple[str, ...]:
+    normalized = normalize_path_text(rel_path).lstrip("./")
+    deleted_paths = _deleted_paths(entries)
+    staged_text_by_path = _staged_text_by_path(entries)
+    scan_paths = set(_scan_paths(root))
+    scan_paths.update(staged_text_by_path)
+    referrers: list[str] = []
+    for scan_rel in sorted(scan_paths):
+        scan_rel = normalize_path_text(scan_rel).lstrip("./")
+        if scan_rel == normalized or scan_rel in deleted_paths:
+            continue
+        if is_retirement_evidence_path(scan_rel):
+            continue
+        scan_path = root / scan_rel
+        if scan_rel in staged_text_by_path:
+            text = staged_text_by_path[scan_rel]
+        else:
+            if not _docs_scan.is_local_path_scan_target(scan_path, scan_rel):
+                continue
+            text = _docs_scan.read_text(scan_path)
+        if normalized in text:
+            referrers.append(scan_rel)
+    return tuple(sorted(referrers))
+
+
+def read_deleted_text(root: Path, entry: StagedMarkdown) -> str | None:
+    if entry.staged_text is not None:
+        return entry.staged_text
+    staged_path = entry.path.replace("\\", "/")
+    result = subprocess.run(
+        ["git", "show", f"HEAD:{staged_path}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=10,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _owner_paths_exist(
+    root: Path,
+    owner_paths: list[str],
+    entries: Sequence[StagedMarkdown],
+) -> bool:
+    staged_text_by_path = _staged_text_by_path(entries)
+    for owner_path in owner_paths:
+        normalized = normalize_path_text(owner_path).lstrip("./")
+        if normalized in staged_text_by_path:
+            continue
+        if not (root / normalized).is_file():
+            return False
+    return True
+
+
+def _is_usable_retirement_evidence_entry(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("review_result") != "pass_can_retire":
+        return False
+    for field_name in (
+        "owner_paths",
+        "owner_anchors",
+        "absorbed_claims",
+        "absorbed_negative_claims",
+    ):
+        if not _string_list(entry.get(field_name)):
+            return False
+    if entry.get("source_copy_readback_verified") is not True:
+        return False
+    source_hash = entry.get("source_hash")
+    if not isinstance(source_hash, str) or not source_hash.strip():
+        return False
+    return not _string_list(entry.get("active_followups"))
+
+
+def retirement_evidence_by_path(
+    entries: Sequence[StagedMarkdown],
+) -> dict[str, dict[str, object]]:
+    evidence_by_path: dict[str, dict[str, object]] = {}
+    for entry in entries:
+        if not is_retirement_evidence_path(entry.path):
+            continue
+        if entry.staged_text is None:
+            continue
+        try:
+            data = json.loads(entry.staged_text)
+        except json.JSONDecodeError:
+            continue
+        evidence_entries = data.get("entries") if isinstance(data, dict) else None
+        if not isinstance(evidence_entries, list):
+            continue
+        for evidence_entry in evidence_entries:
+            if not _is_usable_retirement_evidence_entry(evidence_entry):
+                continue
+            source_path = evidence_entry.get("source_path")
+            if isinstance(source_path, str) and source_path:
+                evidence_by_path[normalize_path_text(source_path).lstrip("./")] = (
+                    evidence_entry
+                )
+    return evidence_by_path
+
+
+def deletion_retirement_problem(
+    root: Path,
+    entry: StagedMarkdown,
+    *,
+    evidence_by_path: dict[str, dict[str, object]],
+    entries: Sequence[StagedMarkdown],
+) -> PlacementProblem | None:
+    path = normalize_path_text(entry.path).lstrip("./")
+    evidence = evidence_by_path.get(path)
+    if evidence is None:
+        return PlacementProblem(
+            path=path,
+            reason="lifecycle-managed doc deletion requires staged retirement evidence",
+            required_marker=(
+                "Stage docs/superpowers/file-management/docs-cleanup/"
+                "*retirement-evidence*.json with a pass_can_retire entry "
+                "for this source_path."
+            ),
+        )
+
+    old_text = read_deleted_text(root, entry)
+    if old_text is None:
+        return PlacementProblem(
+            path=path,
+            reason="deleted lifecycle-managed doc blob could not be read",
+            required_marker=(
+                "Run the deletion from a git worktree with the source in HEAD."
+            ),
+        )
+    if evidence.get("source_hash") != _source_hash(old_text):
+        return PlacementProblem(
+            path=path,
+            reason="retirement evidence source_hash mismatch",
+            required_marker="Regenerate evidence from the exact deleted source text.",
+        )
+
+    owner_paths = _string_list(evidence.get("owner_paths"))
+    if not _owner_paths_exist(root, owner_paths, entries):
+        return PlacementProblem(
+            path=path,
+            reason="retirement evidence owner_paths do not all exist in repo",
+            required_marker=(
+                "Point owner_paths at existing/staged repo owner documents."
+            ),
+        )
+
+    referrers = _exact_referrers(root, path, entries)
+    evidence_referrers = tuple(sorted(_string_list(evidence.get("exact_referrers"))))
+    if referrers:
+        return PlacementProblem(
+            path=path,
+            reason="exact repo referrers require retargeting before deletion",
+            required_marker=(
+                "Retarget repo referrers to the durable owner or keep a stub."
+            ),
+        )
+    if evidence_referrers != tuple(sorted(referrers)):
+        return PlacementProblem(
+            path=path,
+            reason="retirement evidence exact_referrers mismatch",
+            required_marker="Regenerate evidence after the final staged referrer scan.",
+        )
+    return None
 
 
 def lifecycle_metadata_problems(path: str, text: str) -> list[PlacementProblem]:
@@ -218,10 +454,32 @@ def lifecycle_metadata_problems(path: str, text: str) -> list[PlacementProblem]:
     return problems
 
 
-def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
+def check_entry(
+    root: Path,
+    entry: StagedMarkdown,
+    *,
+    evidence_by_path: dict[str, dict[str, object]] | None = None,
+    entries: Sequence[StagedMarkdown] = (),
+) -> list[PlacementProblem]:
     path = entry.path.replace("\\", "/")
     status = normalize_status(entry.status)
-    if status != "D" and is_invalid_superpowers_spec_payload_path(path):
+    path_classification = classify_doc_path(path)
+    if status == "D":
+        if not (
+            is_markdown_path(path)
+            and path_classification.is_repo_doc
+            and path_classification.is_lifecycle_managed
+        ):
+            return []
+        problem = deletion_retirement_problem(
+            root,
+            entry,
+            evidence_by_path=evidence_by_path or {},
+            entries=entries,
+        )
+        return [] if problem is None else [problem]
+
+    if is_invalid_superpowers_spec_payload_path(path):
         return [
             PlacementProblem(
                 path=path,
@@ -235,8 +493,7 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
                 ),
             )
         ]
-    path_classification = classify_doc_path(path)
-    if status == "D" or not path_classification.is_repo_doc:
+    if not path_classification.is_repo_doc:
         return []
 
     try:
@@ -478,10 +735,30 @@ def check_doc_placement(
     problems: list[PlacementProblem] = []
     checked_count = 0
     skipped_deletions = ignored_deletions
+    evidence_by_path = retirement_evidence_by_path(entries)
     for entry in entries:
         status = normalize_status(entry.status)
         if status == "D":
-            skipped_deletions += 1
+            path = entry.path.replace("\\", "/")
+            path_classification = classify_doc_path(path)
+            if not (
+                is_markdown_path(path)
+                and path_classification.is_repo_doc
+                and path_classification.is_lifecycle_managed
+            ):
+                skipped_deletions += 1
+                continue
+            checked_count += 1
+            problems.extend(
+                check_entry(
+                    root,
+                    entry,
+                    evidence_by_path=evidence_by_path,
+                    entries=entries,
+                )
+            )
+            continue
+        if is_retirement_evidence_path(entry.path):
             continue
         if not (
             is_markdown_path(entry.path)
@@ -502,7 +779,7 @@ def format_result(result: PlacementResult) -> str:
         return (
             "docs placement guard passed: "
             f"{result.checked_count} staged Markdown file(s) checked; "
-            f"{result.ignored_deletions} deletion(s) ignored."
+            f"{result.ignored_deletions} non-lifecycle deletion(s) ignored."
         )
     lines = ["docs placement guard failed:"]
     for problem in result.problems:
@@ -516,7 +793,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--staged",
         action="store_true",
-        help="Check staged A/M/R/C Markdown files; staged deletions are ignored.",
+        help=(
+            "Check staged A/M/R/C Markdown files and lifecycle-managed "
+            "Markdown deletions."
+        ),
     )
     parser.add_argument(
         "--root",

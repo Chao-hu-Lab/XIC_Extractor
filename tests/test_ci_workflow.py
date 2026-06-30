@@ -6,6 +6,10 @@ from tools.testing.test_shards import SHARD_PATTERNS
 CORE_CI_COMMANDS = (
     "uv run ruff check xic_extractor tests",
     "uv run python scripts/check_diagnostics_index.py",
+    (
+        "uv run python tools/diagnostics/docs_management_audit.py "
+        "--repo-only --fail-on-completed-transient --json"
+    ),
     "uv run mypy xic_extractor",
     "uv run python -m tools.testing.test_shards --check",
 )

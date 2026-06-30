@@ -85,11 +85,188 @@ def _clean_vault(vault: Path) -> None:
     )
 
 
-def _run_audit(root: Path, vault: Path | None = None):
+def _run_audit(
+    root: Path,
+    vault: Path | None = None,
+    *,
+    repo_only: bool = False,
+    fail_on_completed_transient: bool = False,
+):
     return run_audit(
         root,
         vault,
+        include_vault=not repo_only,
+        fail_on_completed_transient=fail_on_completed_transient,
         allow_filesystem_handoff_fallback=True,
+    )
+
+
+def test_repo_only_audit_skips_vault_blockers(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "missing-vault"
+    _clean_repo(root)
+
+    result = _run_audit(root, vault, repo_only=True)
+
+    assert result.summary["vault"]["vault_skipped"] is True
+    assert not any(msg.path == str(vault) for msg in result.messages)
+    assert not any(msg.path == ".manifest.json" for msg in result.messages)
+
+
+def test_repo_only_completed_transient_spec_is_blocker(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    _clean_repo(root)
+    spec_path = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
+    _write(
+        root / spec_path,
+        "\n".join(
+            [
+                "# Backfill spec",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: implemented",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after product owner absorption.",
+                "",
+                "Durable backfill decision now belongs in product docs.",
+            ]
+        ),
+    )
+
+    result = _run_audit(
+        root,
+        repo_only=True,
+        fail_on_completed_transient=True,
+    )
+
+    review = result.summary["repo"]["completed_transient_review"]
+    assert review["completed_files"] == 1
+    assert review["top_completed_files"][0]["path"] == spec_path
+    assert any(
+        msg.severity == "blocker"
+        and "completed transient docs remain in repo" in msg.message
+        for msg in result.messages
+    )
+
+
+def test_repo_only_active_transient_spec_is_not_completed_blocker(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    _clean_repo(root)
+    _write(
+        root / "docs/superpowers/specs/2026-07-01-backfill-spec.md",
+        "\n".join(
+            [
+                "# Backfill spec",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after implementation and absorption.",
+                "",
+                "Active execution contract.",
+            ]
+        ),
+    )
+
+    result = _run_audit(
+        root,
+        repo_only=True,
+        fail_on_completed_transient=True,
+    )
+
+    review = result.summary["repo"]["completed_transient_review"]
+    assert review["completed_files"] == 0
+    assert not any(
+        "completed transient docs remain in repo" in msg.message
+        for msg in result.messages
+    )
+
+
+def test_repo_only_completed_transient_stub_state_is_allowed(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    _clean_repo(root)
+    stub_path = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
+    _write(
+        root / stub_path,
+        "\n".join(
+            [
+                "# Backfill spec",
+                "",
+                "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: spec",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after exact referrers no longer need this path.",
+                "",
+                "Source-copy stub; current claims live in docs/product/backfill.md.",
+            ]
+        ),
+    )
+
+    result = _run_audit(
+        root,
+        repo_only=True,
+        fail_on_completed_transient=True,
+    )
+
+    review = result.summary["repo"]["completed_transient_review"]
+    assert review["completed_files"] == 0
+    assert review["allowed_stub_files"] == 1
+    assert review["top_allowed_stubs"][0]["path"] == stub_path
+    assert not any(
+        "completed transient docs remain in repo" in msg.message
+        for msg in result.messages
+    )
+
+
+def test_repo_only_completed_active_stub_state_is_blocker(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    _clean_repo(root)
+    stub_path = "docs/superpowers/plans/2026-07-01-backfill-plan.md"
+    _write(
+        root / stub_path,
+        "\n".join(
+            [
+                "# Backfill plan",
+                "",
+                "Doc placement: repo_active_stub",
+                "Doc kind: plan",
+                "Doc lifecycle: implemented",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after implementation and absorption.",
+                "",
+                "Objective: keep work recoverable.",
+                "Scope: docs workflow only.",
+                "Constraints: no private context required.",
+                "Next 1-3 actions: none.",
+                "Verification: focused pytest.",
+                "Stop rule: stop after product owner absorption.",
+            ]
+        ),
+    )
+
+    result = _run_audit(
+        root,
+        repo_only=True,
+        fail_on_completed_transient=True,
+    )
+
+    review = result.summary["repo"]["completed_transient_review"]
+    assert review["completed_files"] == 1
+    assert review["top_completed_files"][0]["path"] == stub_path
+    assert any(
+        "completed transient docs remain in repo" in msg.message
+        for msg in result.blockers
     )
 
 

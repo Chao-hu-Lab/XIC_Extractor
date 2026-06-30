@@ -42,3 +42,22 @@ promotion, or productization gates are historical unless explicitly reactivated.
 Do not treat old implementation checklists as open work. First check the control
 plane and current handoff; then create a fresh plan or goal-shaped runtime
 contract for any reactivation.
+
+## Lifecycle Closeout
+
+Active execution plans are tracked repo documents because another agent must be
+able to resume work without private Obsidian access. They must declare
+`Doc placement`, `Doc kind`, `Doc lifecycle`, `Repo owner`, and `Doc exit rule`.
+
+When a dated plan is complete, do not leave the original as permanent residue
+and do not delete it by hand. Close it out by:
+
+1. moving durable decisions into the declared repo owner;
+2. running product-absorption review and recording `pass_can_retire`;
+3. source-copying the original to Obsidian with readback verified;
+4. retiring it through `tools/diagnostics/retire_docs.py --evidence <json>`;
+5. staging the retirement evidence packet with any lifecycle-managed deletion.
+
+Same-path stubs are temporary exceptions for active continuation or exact
+referrers. Normal completed-plan exit is owner absorption plus Obsidian original,
+not another long tracked plan.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 from tools.diagnostics.retire_docs import (
@@ -30,7 +32,40 @@ def _completed_spec(owner: str = "docs/product/backfill.md") -> str:
     )
 
 
-def test_completed_unreferenced_spec_auto_retires_after_vault_copy(
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _retirement_evidence(
+    rel: str,
+    text: str,
+    *,
+    exact_referrers: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "entries": [
+            {
+                "source_path": rel,
+                "review_result": "pass_can_retire",
+                "owner_paths": ["docs/product/backfill.md"],
+                "owner_anchors": [
+                    "docs/product/backfill.md#current-backfill-direction"
+                ],
+                "absorbed_claims": [
+                    "durable conclusion already lives in product owner"
+                ],
+                "absorbed_negative_claims": ["negative_payload=none"],
+                "source_copy_readback_verified": True,
+                "source_hash": _sha256(text),
+                "exact_referrers": exact_referrers or [],
+                "active_followups": [],
+            }
+        ],
+    }
+
+
+def test_completed_unreferenced_spec_without_retirement_evidence_is_kept(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
@@ -40,13 +75,88 @@ def test_completed_unreferenced_spec_auto_retires_after_vault_copy(
 
     result = retire_files([spec], repo, vault, execute=True)
 
-    assert result.retired == ["docs/superpowers/specs/2026-07-01-backfill-spec.md"]
+    assert result.retired == []
+    assert result.kept == [
+        (
+            "docs/superpowers/specs/2026-07-01-backfill-spec.md",
+            "missing retirement evidence",
+        )
+    ]
+    assert spec.exists()
+
+
+def test_completed_unreferenced_spec_with_pass_can_retire_evidence_retires(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    rel = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
+    spec = repo / rel
+    text = _completed_spec()
+    _write(spec, text)
+
+    result = retire_files(
+        [spec],
+        repo,
+        vault,
+        execute=True,
+        evidence=_retirement_evidence(rel, text),
+    )
+
+    assert result.retired == [rel]
     assert not spec.exists()
-    assert (
-        vault
-        / VAULT_ARCHIVE_DIR
-        / "2026-07-01-backfill-spec.md"
-    ).exists()
+    assert (vault / VAULT_ARCHIVE_DIR / "2026-07-01-backfill-spec.md").exists()
+
+
+def test_retirement_evidence_file_is_not_counted_as_repo_referrer(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    rel = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
+    spec = repo / rel
+    text = _completed_spec()
+    evidence = _retirement_evidence(rel, text)
+    _write(spec, text)
+    _write(
+        repo
+        / (
+            "docs/superpowers/file-management/docs-cleanup/"
+            "2026-07-01-retirement-evidence.json"
+        ),
+        json.dumps(evidence),
+    )
+
+    result = retire_files(
+        [spec],
+        repo,
+        vault,
+        execute=True,
+        evidence=evidence,
+    )
+
+    assert result.referrer_bound == []
+    assert result.retired == [rel]
+    assert not spec.exists()
+
+
+def test_retirement_evidence_hash_mismatch_is_kept(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    rel = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
+    spec = repo / rel
+    text = _completed_spec()
+    _write(spec, text)
+    evidence = _retirement_evidence(rel, text)
+    entry = evidence["entries"][0]
+    assert isinstance(entry, dict)
+    entry["source_hash"] = "not-the-real-hash"
+
+    result = retire_files([spec], repo, vault, execute=True, evidence=evidence)
+
+    assert result.retired == []
+    assert result.kept == [(rel, "retirement evidence source_hash mismatch")]
+    assert spec.exists()
 
 
 def test_active_spec_is_kept_even_when_swept(tmp_path: Path) -> None:
@@ -113,10 +223,22 @@ def test_referrer_bound_spec_can_be_replaced_with_short_stub(
     vault = tmp_path / "vault"
     spec = repo / "docs/superpowers/specs/2026-07-01-backfill-spec.md"
     rel = "docs/superpowers/specs/2026-07-01-backfill-spec.md"
-    _write(spec, _completed_spec())
+    text = _completed_spec()
+    _write(spec, text)
     _write(repo / "docs/product/backfill.md", f"# Backfill\n\nSee `{rel}`.\n")
 
-    result = retire_files([spec], repo, vault, execute=True, stub_bound=True)
+    result = retire_files(
+        [spec],
+        repo,
+        vault,
+        execute=True,
+        stub_bound=True,
+        evidence=_retirement_evidence(
+            rel,
+            text,
+            exact_referrers=["docs/product/backfill.md"],
+        ),
+    )
 
     assert result.retired == []
     assert result.stubbed == [(rel, "docs/product/backfill.md")]

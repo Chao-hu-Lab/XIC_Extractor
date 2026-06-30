@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,37 @@ def _write(root: Path, path: str, text: str) -> None:
     target = root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
+
+
+def _source_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _retirement_evidence(
+    path: str,
+    text: str,
+    *,
+    exact_referrers: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "entries": [
+            {
+                "source_path": path,
+                "review_result": "pass_can_retire",
+                "owner_paths": ["docs/product/backfill.md"],
+                "owner_anchors": ["docs/product/backfill.md#current-direction"],
+                "absorbed_claims": ["claim is present in owner"],
+                "absorbed_negative_claims": ["negative_payload=none"],
+                "source_copy_readback_verified": True,
+                "source_hash": _source_hash(text),
+                "exact_referrers": exact_referrers or [],
+                "active_followups": [],
+            }
+        ],
+    }
 
 
 def _problems(root: Path, status: str, path: str) -> list[str]:
@@ -603,9 +635,9 @@ def test_non_allowlisted_docs_root_markdown_fails(tmp_path: Path) -> None:
     assert any("docs root only allows" in problem for problem in problems)
 
 
-def test_deletions_are_ignored_by_placement_guard() -> None:
+def test_non_lifecycle_deletions_are_ignored_by_placement_guard() -> None:
     entries, ignored_deletions = parse_name_status(
-        "D\tdocs/superpowers/plans/2026-04-07-old-plan.md\n"
+        "D\tdocs/product/backfill.md\n"
     )
 
     result = check_doc_placement(
@@ -617,6 +649,91 @@ def test_deletions_are_ignored_by_placement_guard() -> None:
     assert result.checked_count == 0
     assert result.ignored_deletions == 1
     assert result.problems == ()
+
+
+def test_lifecycle_managed_deletion_requires_retirement_evidence() -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    entries, ignored_deletions = parse_name_status(f"D\t{path}\n")
+
+    result = check_doc_placement(
+        Path("."),
+        entries,
+        ignored_deletions=ignored_deletions,
+    )
+
+    assert result.checked_count == 1
+    assert result.ignored_deletions == 0
+    assert any(
+        problem.path == path
+        and "deletion requires staged retirement evidence" in problem.reason
+        for problem in result.problems
+    )
+
+
+def test_lifecycle_managed_deletion_with_retirement_evidence_passes(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, old_text)
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+        StagedMarkdown("A", "docs/product/backfill.md", "# Backfill\n"),
+    ]
+
+    result = check_doc_placement(tmp_path, entries)
+
+    assert result.checked_count == 2
+    assert result.ignored_deletions == 0
+    assert result.problems == ()
+
+
+def test_lifecycle_managed_deletion_rejects_hash_mismatch() -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, "different text")
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+    ]
+
+    result = check_doc_placement(Path("."), entries)
+
+    assert any("source_hash mismatch" in problem.reason for problem in result.problems)
+
+
+def test_lifecycle_managed_deletion_rejects_remaining_referrers(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    referrer = "docs/product/backfill.md"
+    _write(tmp_path, referrer, f"# Backfill\n\nHistorical source: `{path}`.\n")
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, old_text)
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+    ]
+
+    result = check_doc_placement(tmp_path, entries)
+
+    assert any(
+        "exact repo referrers require retargeting" in problem.reason
+        for problem in result.problems
+    )
 
 
 def test_cli_reads_staged_blob_not_worktree_after_divergence(tmp_path: Path) -> None:

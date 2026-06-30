@@ -77,6 +77,22 @@ LOCAL_PATH_PATTERNS = (
 )
 VALID_LIFECYCLES = {"draft", "reviewed", "verified", "disputed", "archived"}
 VALID_TIERS = {"core", "supporting", "peripheral"}
+COMPLETED_TRANSIENT_SCAN_PREFIXES = (
+    "docs/superpowers/plans/",
+    "docs/superpowers/specs/",
+    "docs/superpowers/notes/",
+)
+COMPLETED_TRANSIENT_LIFECYCLES = {
+    "implemented",
+    "superseded",
+    "rejected",
+    "archived",
+    "retired",
+}
+COMPLETED_TRANSIENT_ALLOWED_STUB_PLACEMENTS = {
+    "repo_stub_plus_obsidian",
+    "repo_stub_plus_formal_doc",
+}
 
 
 @dataclass(frozen=True)
@@ -174,6 +190,7 @@ def audit_repo(
     root: Path,
     *,
     allow_filesystem_handoff_fallback: bool = False,
+    fail_on_completed_transient: bool = False,
 ) -> tuple[list[AuditMessage], dict[str, object]]:
     messages: list[AuditMessage] = []
     docs = sorted((root / "docs").rglob("*.md"))
@@ -240,6 +257,7 @@ def audit_repo(
 
     routing_review = docs_routing_review(root, scan_paths)
     structure_review = docs_structure_review_for_repo(scan_paths)
+    completed_transient_review = completed_transient_review_for_repo(root, scan_paths)
     canonical_metadata_review = canonical_metadata_review_for_repo(root)
     routing_candidates = int(routing_review["candidate_files"])
     metadata_review_files = int(routing_review["metadata_review_files"])
@@ -343,6 +361,20 @@ def audit_repo(
             )
         )
 
+    completed_transient_count = int(completed_transient_review["completed_files"])
+    if fail_on_completed_transient and completed_transient_count:
+        messages.append(
+            AuditMessage(
+                "blocker",
+                "docs",
+                (
+                    "completed transient docs remain in repo; retire with "
+                    "evidence or keep only an allowed same-path stub "
+                    f"({completed_transient_count} file(s))"
+                ),
+            )
+        )
+
     duplicate_topic_owner_groups = int(
         routing_review["topic_cluster_group_counts"].get(
             "potential_duplicate_owner", 0
@@ -383,10 +415,54 @@ def audit_repo(
         "top_local_path_files": top_local_path_files,
         "docs_routing_review": routing_review,
         "docs_structure_review": structure_review,
+        "completed_transient_review": completed_transient_review,
         "canonical_metadata_review": canonical_metadata_review,
         "handoff_retention": handoff_result.summary,
     }
     return messages, summary
+
+
+def completed_transient_review_for_repo(
+    root: Path,
+    scan_paths: Sequence[str],
+) -> dict[str, object]:
+    completed_files: list[dict[str, str]] = []
+    allowed_stubs: list[dict[str, str]] = []
+    for raw_path in sorted(scan_paths):
+        rel_path = raw_path.replace("\\", "/")
+        if not rel_path.startswith(COMPLETED_TRANSIENT_SCAN_PREFIXES):
+            continue
+        if not is_markdown_path(rel_path):
+            continue
+        if Path(rel_path).name.lower() == "readme.md":
+            continue
+        path = root / rel_path
+        if not path.is_file():
+            continue
+
+        classification = classify_doc(rel_path, _read_text(path))
+        if classification.doc_lifecycle not in COMPLETED_TRANSIENT_LIFECYCLES:
+            continue
+
+        row = {
+            "path": rel_path,
+            "doc_kind": classification.doc_kind,
+            "doc_lifecycle": classification.doc_lifecycle,
+            "doc_placement": classification.placement or "missing",
+            "repo_owner": classification.repo_owner or "missing",
+            "doc_exit_rule": classification.doc_exit_rule,
+        }
+        if classification.placement in COMPLETED_TRANSIENT_ALLOWED_STUB_PLACEMENTS:
+            allowed_stubs.append(row)
+        else:
+            completed_files.append(row)
+
+    return {
+        "completed_files": len(completed_files),
+        "top_completed_files": completed_files[:25],
+        "allowed_stub_files": len(allowed_stubs),
+        "top_allowed_stubs": allowed_stubs[:25],
+    }
 
 
 def docs_structure_review_for_repo(scan_paths: Sequence[str]) -> dict[str, object]:
@@ -691,13 +767,23 @@ def run_audit(
     vault: Path | None = None,
     *,
     allow_filesystem_handoff_fallback: bool = False,
+    include_vault: bool = True,
+    fail_on_completed_transient: bool = False,
 ) -> AuditResult:
     repo_messages, repo_summary = audit_repo(
         root,
         allow_filesystem_handoff_fallback=allow_filesystem_handoff_fallback,
+        fail_on_completed_transient=fail_on_completed_transient,
     )
-    resolved_vault = resolve_vault(root, vault)
-    vault_messages, vault_summary = audit_vault(resolved_vault)
+    if include_vault:
+        resolved_vault = resolve_vault(root, vault)
+        vault_messages, vault_summary = audit_vault(resolved_vault)
+    else:
+        vault_messages = []
+        vault_summary = {
+            "vault_configured": vault is not None,
+            "vault_skipped": True,
+        }
     messages = [*repo_messages, *vault_messages]
     summary = {"repo": repo_summary, "vault": vault_summary}
     return AuditResult(tuple(messages), summary)
@@ -769,6 +855,19 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Print machine-readable JSON instead of text.",
     )
     parser.add_argument(
+        "--repo-only",
+        action="store_true",
+        help="Skip private Obsidian vault checks and report repo state only.",
+    )
+    parser.add_argument(
+        "--fail-on-completed-transient",
+        action="store_true",
+        help=(
+            "Fail when implemented/superseded/archived transient docs remain "
+            "outside allowed same-path stub states."
+        ),
+    )
+    parser.add_argument(
         "--routing-manifest-tsv",
         type=Path,
         help="Write actionable docs/superpowers routing candidates as TSV.",
@@ -791,7 +890,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    result = run_audit(args.root.resolve(), args.vault)
+    result = run_audit(
+        args.root.resolve(),
+        args.vault,
+        include_vault=not args.repo_only,
+        fail_on_completed_transient=args.fail_on_completed_transient,
+    )
     if args.routing_manifest_tsv is not None:
         write_routing_manifest_tsv(result, args.routing_manifest_tsv)
     if args.topic_clusters_tsv is not None:

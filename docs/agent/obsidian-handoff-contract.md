@@ -36,9 +36,11 @@ As of 2026-06-25, this is the standing documentation policy, not an experiment:
    exact referrers require them.
 5. Policy-approved automatic retirement is allowed for completed transient docs
    after owner absorption, Obsidian/source-copy handling, and a clean referrer
-   scan. Explicit user approval is reserved for unclear routes, high-risk public
-   contracts, archive moves, and tracked-file deletion outside that safe-retire
-   path.
+   scan. That path now requires a retirement evidence packet with
+   `review_result: pass_can_retire`; staged lifecycle-managed deletions without
+   matching evidence are blocked. Explicit user approval is reserved for unclear
+   routes, high-risk public contracts, archive moves, and tracked-file deletion
+   outside that safe-retire path.
 
 ## Three-route document model
 
@@ -219,6 +221,45 @@ First promote the stable public claim:
 5. Verify that a future agent can continue from repo files alone before any
    removal is proposed.
 
+## Retirement evidence gate
+
+Completed transient docs under `docs/superpowers/plans/`,
+`docs/superpowers/specs/`, and the legacy `docs/superpowers/notes/` lane do not
+leave the repo merely because their lifecycle says `implemented`, `superseded`,
+`rejected`, `archived`, or `retired`. They may retire only after a small
+product-absorption review says `pass_can_retire` and a machine-readable
+retirement evidence packet names the source path.
+
+The evidence packet must include, per source path:
+
+- `review_result: pass_can_retire`;
+- `owner_paths` and `owner_anchors` showing where the durable claims live;
+- `absorbed_claims` and `absorbed_negative_claims`;
+- `source_copy_readback_verified: true`;
+- `source_hash` for the original repo text;
+- empty `active_followups`;
+- exact repo referrers, when a same-path stub is temporarily required.
+
+`tools/diagnostics/retire_docs.py --evidence <json>` is the destructive local
+gate. It verifies the evidence, source hash, Obsidian/source-copy readback flag,
+and referrer state before deleting or stubbing. Retirement evidence packets
+under `docs/superpowers/file-management/docs-cleanup/` are gate artifacts, so
+their `source_path` field is not counted as a live exact referrer. The repo-only
+CI gate is
+`tools/diagnostics/docs_management_audit.py --repo-only
+--fail-on-completed-transient`; it does not read a private vault, but it fails
+when completed transient originals remain outside allowed stub states. The
+staged placement guard blocks lifecycle-managed Markdown deletions unless the
+same staged diff includes
+`docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json` with
+a usable `pass_can_retire` entry for the deleted `source_path`, matching
+`source_hash`, existing owner paths, and no remaining exact repo referrers.
+
+Same-path stubs remain exceptions. Use `repo_active_stub` for active execution
+context and `repo_stub_plus_obsidian` or `repo_stub_plus_formal_doc` only while
+exact-path compatibility or referrers still need that path. After referrers move
+to the owner, the stub goes through the same retirement evidence path.
+
 ## Public/private publication boundary
 
 Treat the public repo like the publication surface: it may disclose the
@@ -330,8 +371,12 @@ Rules:
    next safe action.
 6. `branch_closeout_summary` must include a short PR Body Seed. Do not paste a
    full handoff, raw transcript, or private Obsidian context into a PR body.
-7. Staged tracked deletions are not adjudicated by placement markers. They still
-   require exact manifest, final referrer audit, and explicit user approval.
+7. Staged lifecycle-managed Markdown deletions are guarded. Completed
+   transient docs require a staged
+   `docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json`
+   packet with a usable `pass_can_retire` entry, matching `source_hash`, and no
+   remaining exact repo referrers for the deleted `source_path`; otherwise use
+   `retire_docs.py --evidence <json>` first or keep an allowed stub state.
 8. Commit through explicit staging. `git commit -a`, `git commit --all`,
    `git commit -am ...`, and `git commit <pathspec>` are blocked because they can
    bypass the staged Markdown placement check.
@@ -823,7 +868,9 @@ When future work creates new documentation:
 7. Never make a repo document depend on a private Obsidian note for its core
    meaning. Repo references to Obsidian must be optional pointers.
 8. Before moving or deleting any tracked doc, scan referrers and ensure each
-   remaining repo link lands on a formal owner or sanitized stub.
+   remaining repo link lands on a formal owner or sanitized stub. For completed
+   transient docs, use the retirement evidence gate above instead of manual
+   `git rm`.
 9. Do not rely on a broad wiki source scan to decide placement. A new formal
    repo doc stays in repo by default; a private note is intentionally added to
    the vault raw inbox, staged draft lane, or an approved migration manifest.

@@ -23,7 +23,14 @@ Rules:
 - A spec must name the product owner that will absorb the durable decision.
 - When implementation lands, update the product owner, run product-absorption
   review, source-copy the original long-form spec to Obsidian, then remove the
-  repo original.
+  repo original through `tools/diagnostics/retire_docs.py --evidence <json>`.
+- Stage the matching
+  `docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json`
+  packet with any lifecycle-managed deletion; the placement guard blocks direct
+  deletion without matching `source_hash` and a clean exact-referrer state.
+- `tools/diagnostics/docs_management_audit.py --repo-only
+  --fail-on-completed-transient` is the repo-visible gate for completed specs
+  that were not retired or reduced to an allowed stub state.
 - Keep a same-path repo stub only while the spec is still active or exact repo
   referrers cannot yet be retargeted to the owner.
 

@@ -97,6 +97,25 @@ active/referrer-bound exceptions, not the normal completed-doc exit.
 `docs/superpowers/specs/` is
 Markdown-only; machine-readable JSON contracts belong in
 `docs/superpowers/schemas/`.
+
+Completed transient plans/specs/notes have a mechanical exit:
+
+- while active, keep a short tracked repo plan/spec/stub; do not hide active
+  execution context in `.gitignore` or Obsidian only;
+- at closeout, update the durable owner, run product-absorption review, source
+  copy the original to Obsidian, and produce a retirement evidence JSON packet;
+- use `tools/diagnostics/retire_docs.py --evidence <json> --execute` for the
+  destructive local retirement step;
+- use `tools/diagnostics/docs_management_audit.py --repo-only
+  --fail-on-completed-transient` as the repo-visible gate; it does not require a
+  private vault;
+- staged lifecycle-managed Markdown deletions need a staged
+  `docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json`
+  packet with matching `source_hash` and no remaining exact repo referrers, so
+  accidental `git rm` cannot bypass the evidence gate. That evidence packet is
+  not itself a live referrer; every other exact repo reference still blocks
+  deletion or requires a same-path stub.
+
 Routes are also not topic uniqueness. `repo_product_doc` only means the file can
 stay in repo; it does not prove the repo has a single source of truth for that
 subject. Each durable topic should have one canonical owner. Other repo files on
@@ -200,6 +219,10 @@ canonical owner，再把原文當 private context 移交 Obsidian。不能因為
   Obsidian staged draft 或 ignored artifact，不要先 commit 再回頭 `git rm`。
 - active execution plan 不能 Obsidian-only；repo 必須有短 stub，能交代
   objective、scope、constraints、next 1-3 actions、verification、stop rule。
+- completed transient plan/spec/note 不能只手動 `git rm`；先吸收進 durable
+  owner、備份/讀回 Obsidian 原文，產生 retirement evidence JSON，再用
+  `retire_docs.py --evidence` 退場。repo-only audit 與 staged placement guard
+  會擋掉缺少 evidence 的完成文件或 lifecycle-managed deletion。
 - 如果私人筆記對接手有幫助，repo 只保留短 stub：現在狀態、正式 owner、已跑驗證、
   blocker、下一步。stub 不能要求讀者一定要有私人 vault 才能理解下一步。
 - 不要把整個 `docs/` 設成 Obsidian 自動 ingest 來源；正式 repo docs 預設留在 repo，
