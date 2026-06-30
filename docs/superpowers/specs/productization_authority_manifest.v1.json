@@ -68,7 +68,7 @@
   "parked_lanes": {
     "broad_backfill": {
       "status": "parked",
-      "decision_packet": "docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md",
+      "decision_packet": "vault:Backfill Broad Autowrite Feasibility Gate V1.md",
       "reason": "Existing artifacts do not prove broad analyte peak-choice truth, analyte area truth, or homogeneous separability for the unresolved 3015 trace-matched rows; 1087 rows still lack trace/overlay evidence.",
       "may_grant_write_authority": false
     }

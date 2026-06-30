@@ -90,5 +90,4 @@ Before changing discovery behavior, require the relevant subset of:
 - [Peak anchor and group boundary](family-hypothesis-boundary.md) -- Discovery
   peak anchors, cross-sample groups, and PeakHypothesis authority
 - [Evidence rules](../lcms-msms-evidence-rules.md) -- evidence semantics
-- [CID-NL Discovery roadmap](../superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md) -- product lane boundary
-- [Untargeted performance spec](../superpowers/specs/2026-05-12-untargeted-performance-architecture-spec.md) -- RAW-locality and request-batching direction
+- [Productization](productization.md) -- product lane boundary and CID-NL scope

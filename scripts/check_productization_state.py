@@ -253,7 +253,7 @@ def _check_artifacts(
     for index, row in enumerate(rows, start=2):
         artifact = row.get("current_artifact", "")
         expected_hash = row.get("artifact_sha256", "")
-        if not artifact:
+        if not artifact or artifact.startswith("vault:"):
             continue
         path = repo_root / artifact
         if not path.exists():

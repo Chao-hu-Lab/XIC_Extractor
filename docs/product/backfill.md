@@ -112,8 +112,5 @@ Before changing Backfill product behavior, require the relevant subset of:
 - [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
 - [Adjudication schema](../superpowers/specs/mechanical_adjudication_schema.v1.json)
 - [Adjudication index](../superpowers/validation/mechanical_adjudication_index_v1.tsv)
-- [Broad auto-write feasibility gate](../superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md)
 - [Evidence rules](../lcms-msms-evidence-rules.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)
-- [Backfill quant matrix blueprint](../superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
-- [Seed-aware review index](../superpowers/notes/2026-05-19-seed-aware-backfill-review-index.md)

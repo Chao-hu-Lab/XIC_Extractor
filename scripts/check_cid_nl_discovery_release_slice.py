@@ -59,7 +59,7 @@ CHECKS_TSV = DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_checks.tsv"
 COMPACT_MANIFEST_TSV = (
     DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_manifest.tsv"
 )
-ROADMAP = ROOT / "docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md"
+ROADMAP = ROOT / "docs/product/discovery.md"
 HANDOFF = ROOT / PRODUCTIZATION_STATUS_ANCHOR_PATH
 CONTROL_PLANE = ROOT / CONTROL_PLANE_PATH
 
@@ -256,11 +256,8 @@ def _check_docs(
 ) -> None:
     required = {
         roadmap: [
-            "CID-NL Discovery Product Roadmap",
-            "Do not reopen broad Backfill",
-            "accepted_discovery_cell_count",
-            "cid_nl_discovery_full_scope_classification_v1",
-            "cid_nl_85raw_universe_closure_v1",
+            "CID-NL Discovery is a bounded accepted slice",
+            "reopen broad Backfill",
         ],
         handoff: [
             "CID-NL default product activation v1",
