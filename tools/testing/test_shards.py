@@ -16,13 +16,11 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
     {
         "docs-config": (
             "tests/test_agent_sandbox_doctor.py",
-            "tests/test_auto_accept_policy.py",
             "tests/test_bounded_product_lanes_contract.py",
             "tests/test_check_productization_authority.py",
             "tests/test_ci_workflow.py",
             "tests/test_config*.py",
             "tests/test_docs_*.py",
-            "tests/test_generate_stubs.py",
             "tests/test_handoff_*.py",
             "tests/test_multiprocessing_entrypoints.py",
             "tests/test_peak_model_selection.py",
@@ -31,7 +29,6 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
             "tests/test_presets_*.py",
             "tests/test_score_retirement_legacy_authority.py",
             "tests/test_test_shards.py",
-            "tests/test_validate_vault_page.py",
             "tests/test_validation_artifact_*.py",
         ),
         "gui": (

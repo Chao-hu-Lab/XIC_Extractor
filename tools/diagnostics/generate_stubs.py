@@ -150,7 +150,7 @@ def generate_stubs(
 
         existing_text = target_file.read_text(encoding="utf-8")
 
-        if "Doc placement: repo_stub_plus_obsidian" in existing_text:
+        if marker_value(existing_text, "Doc placement:") == "repo_stub_plus_obsidian":
             result.skipped.append(
                 (row.target_source_path, "already a stub")
             )

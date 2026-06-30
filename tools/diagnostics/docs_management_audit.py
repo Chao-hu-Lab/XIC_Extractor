@@ -96,7 +96,11 @@ class AuditResult:
 
 
 
-def _frontmatter(text: str) -> dict[str, str]:
+def parse_yaml_frontmatter(text: str) -> dict[str, str]:
+    """Parse YAML frontmatter between ``---`` delimiters.
+
+    Public so other diagnostics modules can reuse the same parser.
+    """
     if not text.startswith("---"):
         return {}
     end = text.find("\n---", 3)
@@ -512,7 +516,7 @@ def audit_vault(vault: Path | None) -> tuple[list[AuditMessage], dict[str, objec
     missing_tier = 0
     invalid_tier = 0
     for path in md_files:
-        fm = _frontmatter(_read_text(path))
+        fm = parse_yaml_frontmatter(_read_text(path))
         tags = fm.get("tags", "")
         if "visibility/" not in tags:
             missing_visibility += 1
