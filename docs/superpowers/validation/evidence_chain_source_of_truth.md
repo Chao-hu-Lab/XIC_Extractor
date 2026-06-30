@@ -48,10 +48,10 @@ different questions:
 | --- | --- | --- |
 | `CONTEXT.md` | Stable domain vocabulary, lane boundaries, and the shared evidence spine. | Current counts, active tier, writer scopes. |
 | `docs/architecture-contract.md` | Dependency direction and the rule that evidence providers feed the spine before any matrix/export contract. | Current validation packet status. |
-| `docs/lcms-msms-evidence-rules.md` | Domain interpretation of MS1/MS2/RT/Backfill evidence and promotion constraints. | Current product lane state. |
+| `docs/lc-msms-evidence-rules.md` | Domain interpretation of MS1/MS2/RT/Backfill evidence and promotion constraints. | Current product lane state. |
 | `docs/superpowers/plans/2026-06-15-productization-control-plane.md` | Narrative tier board, active lane, and promotion history. | Low-level evidence fields. |
 | `docs/superpowers/validation/productization_status_index_v1.tsv` | Machine-checkable current lane status and public-surface flags. | Domain meaning of each evidence field. |
-| `docs/superpowers/specs/productization_authority_manifest.v1.json` | Allowed and forbidden writer scopes. Unknown scopes fail closed. | Scientific sufficiency of evidence providers. |
+| `docs/superpowers/schemas/productization_authority_manifest.v1.json` | Allowed and forbidden writer scopes. Unknown scopes fail closed. | Scientific sufficiency of evidence providers. |
 | `docs/superpowers/validation/ARTIFACT_INVENTORY.tsv` | Retention and externalization of validation artifacts. | Evidence-chain semantics. |
 | This file | Human-maintained evidence-chain map across code, diagnostics, and promotion boundaries. | Machine enforcement, counts, tier changes, or writer authority. |
 
@@ -115,7 +115,7 @@ Owners:
 - `xic_extractor/peak_detection/evidence_facts.py`
 - `xic_extractor/peak_detection/selection_decision.py`
 - `xic_extractor/alignment/cell_quality.py`
-- `docs/lcms-msms-evidence-rules.md`
+- `docs/lc-msms-evidence-rules.md`
 
 Purpose: answer whether there is an assessable MS1 peak in the expected window,
 whether the selected apex/boundary/area is complete, and whether the local trace
@@ -172,7 +172,7 @@ Owners:
 - `xic_extractor/target_pair_rt_calibration.py`
 - `xic_extractor/peak_detection/evidence_facts.py`
 - `xic_extractor/alignment/shared_peak_identity_explanation/*`
-- `docs/lcms-msms-evidence-rules.md`
+- `docs/lc-msms-evidence-rules.md`
 
 Purpose: answer whether a hypothesis is RT-compatible with a prior, paired
 internal standard, drift model, or expected local neighborhood.
@@ -196,7 +196,7 @@ Owners:
 - `xic_extractor/output/csv_writers.py`
 - `xic_extractor/output/detection.py`
 - `xic_extractor/review_actions.py`
-- `docs/confidence-reason-precedence-contract.md`
+- `docs/product/decision-policy.md`
 - `tests/test_targeted_product_projection.py`
 - `tests/test_review_actions.py`
 
@@ -431,7 +431,7 @@ contract consumes them.
 
 The authoritative machine-readable state is
 `docs/superpowers/validation/productization_status_index_v1.tsv` plus
-`docs/superpowers/specs/productization_authority_manifest.v1.json`. This table
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`. This table
 describes stable lane roles, not current counts. Counts, hashes, pass/fail
 numbers, and active scope sizes belong in the machine-readable artifacts.
 
@@ -470,7 +470,7 @@ When adding or changing evidence:
    promotion boundary, or authority boundary.
 2. Update `CONTEXT.md` only when stable vocabulary, lane boundaries, or
    authority concepts change.
-3. Update `docs/lcms-msms-evidence-rules.md` when the scientific/domain
+3. Update `docs/lc-msms-evidence-rules.md` when the scientific/domain
    interpretation changes.
 4. Update `productization_status_index_v1.tsv`,
    `productization_authority_manifest.v1.json`, and the control plane only

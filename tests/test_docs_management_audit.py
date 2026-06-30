@@ -141,7 +141,7 @@ def test_local_machine_path_is_reported_as_warning(tmp_path: Path) -> None:
     _clean_repo(root)
     _clean_vault(vault)
     _write(
-        root / "docs/agent-parameter-settings.md",
+        root / "docs/agent/parameter-settings.md",
         "RAW root: C:\\Xcalibur\n",
     )
 
@@ -152,6 +152,77 @@ def test_local_machine_path_is_reported_as_warning(tmp_path: Path) -> None:
         msg.severity == "warning" and "local/private path exposure" in msg.message
         for msg in result.messages
     )
+
+
+def test_docs_structure_review_reports_root_scatter(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    _clean_repo(root)
+    _clean_vault(vault)
+    _write(
+        root / "docs/2026-07-01-branch-report.md",
+        "# Branch report\n\nHistorical branch note.\n",
+    )
+
+    result = _run_audit(root, vault)
+
+    review = result.summary["repo"]["docs_structure_review"]
+    assert review["root_scatter_files"] == 1
+    assert review["top_root_scatter"] == ["docs/2026-07-01-branch-report.md"]
+    assert any(
+        msg.severity == "warning" and "docs root has non-allowlisted" in msg.message
+        for msg in result.messages
+    )
+
+
+def test_docs_structure_review_reports_retired_lanes(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    _clean_repo(root)
+    _clean_vault(vault)
+    _write(
+        root / "docs/superpowers/notes/2026-07-01-observation.md",
+        "# Observation\n\nPrivate-first note.\n",
+    )
+
+    result = _run_audit(root, vault)
+
+    review = result.summary["repo"]["docs_structure_review"]
+    assert review["retired_lane_files"] == 1
+    assert review["top_retired_lanes"] == [
+        {
+            "path": "docs/superpowers/notes/2026-07-01-observation.md",
+            "retired_dir": "docs/superpowers/notes/",
+        }
+    ]
+    assert any(
+        msg.severity == "warning" and "retired docs lanes" in msg.message
+        for msg in result.messages
+    )
+
+
+def test_docs_structure_review_reports_deepresearch_as_retired_lane(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    _clean_repo(root)
+    _clean_vault(vault)
+    _write(
+        root / "docs/deepresearch/2026-07-01-literature-note.md",
+        "# Literature note\n\nPrivate research context.\n",
+    )
+
+    result = _run_audit(root, vault)
+
+    review = result.summary["repo"]["docs_structure_review"]
+    assert review["retired_lane_files"] == 1
+    assert review["top_retired_lanes"] == [
+        {
+            "path": "docs/deepresearch/2026-07-01-literature-note.md",
+            "retired_dir": "docs/deepresearch/",
+        }
+    ]
 
 
 def test_handoff_retention_blocker_is_reported_by_docs_management_audit(
@@ -740,8 +811,8 @@ def test_repo_docs_topic_review_flags_duplicate_topic_owners(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    first_path = "docs/superpowers/specs/2026-07-01-backfill-owner-a.md"
-    second_path = "docs/superpowers/specs/2026-07-02-backfill-owner-b.md"
+    first_path = "docs/superpowers/validation/backfill-owner-a.md"
+    second_path = "docs/superpowers/validation/backfill-owner-b.md"
     formal_owner_body = "\n".join(
         [
             "# Backfill owner",
@@ -784,15 +855,45 @@ def test_repo_docs_topic_review_distinguishes_distinct_subcontracts(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    first_path = "docs/superpowers/specs/2026-07-01-method-manifest.md"
-    second_path = "docs/superpowers/specs/2026-07-02-artifact-replay-policy.md"
+    first_path = "docs/superpowers/validation/method-manifest-contract.md"
+    second_path = "docs/superpowers/validation/artifact-replay-policy.md"
     _write(
         root / first_path,
-        "# Method manifest\n\nManifest replay contract.\n",
+        "\n".join(
+            [
+                "# Method manifest",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/run-provenance.md",
+                (
+                    "Doc exit rule: retire after docs/product/run-provenance.md "
+                    "absorbs it."
+                ),
+                "",
+                "Manifest replay contract.",
+            ]
+        ),
     )
     _write(
         root / second_path,
-        "# Artifact replay policy\n\nReplay artifact manifest contract.\n",
+        "\n".join(
+            [
+                "# Artifact replay policy",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/run-provenance.md",
+                (
+                    "Doc exit rule: retire after docs/product/run-provenance.md "
+                    "absorbs it."
+                ),
+                "",
+                "Replay artifact manifest contract.",
+            ]
+        ),
     )
 
     result = _run_audit(root, vault)
@@ -806,8 +907,8 @@ def test_repo_docs_topic_review_distinguishes_distinct_subcontracts(
     assert cluster["topic_cluster_status"] == "subcontracts_with_owner"
     assert cluster["topic_owner_count"] == 0
     assert cluster["subcontract_count"] == 2
-    assert first_path in cluster["subcontract_claims"]
-    assert second_path in cluster["subcontract_claims"]
+    assert first_path in cluster["subcontract_paths"]
+    assert second_path in cluster["subcontract_paths"]
     assert not [
         msg
         for msg in result.messages
@@ -823,11 +924,26 @@ def test_sample_metadata_contract_gets_own_topic_before_run_provenance(
     _clean_repo(root)
     _clean_vault(vault)
     sample_metadata_path = (
-        "docs/superpowers/specs/2026-07-02-sample-metadata-contract.md"
+        "docs/superpowers/validation/sample-metadata-contract.md"
     )
     _write(
         root / sample_metadata_path,
-        "# Sample metadata contract\n\nsample_metadata_v1 injection_order source.\n",
+        "\n".join(
+            [
+                "# Sample metadata contract",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/sample-metadata-qc.md",
+                (
+                    "Doc exit rule: retire after docs/product/sample-metadata-qc.md "
+                    "absorbs it."
+                ),
+                "",
+                "sample_metadata_v1 injection_order source.",
+            ]
+        ),
     )
 
     result = _run_audit(root, vault)
@@ -1309,8 +1425,8 @@ def test_write_topic_clusters_tsv_writes_folder_consolidation_map(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    first_path = "docs/superpowers/specs/2026-07-01-backfill-owner-a.md"
-    second_path = "docs/superpowers/specs/2026-07-02-backfill-owner-b.md"
+    first_path = "docs/superpowers/validation/backfill-owner-a.md"
+    second_path = "docs/superpowers/validation/backfill-owner-b.md"
     body = "\n".join(
         [
             "# Backfill owner",
@@ -1357,7 +1473,7 @@ def test_write_topic_index_readmes_creates_navigation_only_indexes(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    owner_path = "docs/superpowers/specs/2026-07-01-backfill-owner.md"
+    owner_path = "docs/superpowers/validation/backfill-owner.md"
     _write(
         root / owner_path,
         "\n".join(
@@ -1421,7 +1537,7 @@ def test_topic_review_separates_bound_and_compressible_support_surfaces(
         ),
     )
     _write(
-        root / "docs/superpowers/specs/productization_authority_manifest.v1.json",
+        root / "docs/superpowers/schemas/productization_authority_manifest.v1.json",
         json.dumps({"decision_packet": authority_bound_path}),
     )
     for index in range(6):
@@ -1605,7 +1721,7 @@ def test_repo_subcontract_doc_is_not_counted_as_topic_owner(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    subcontract_path = "docs/superpowers/specs/backfill-subcontract.md"
+    subcontract_path = "docs/superpowers/validation/backfill-subcontract.md"
     _write(
         root / subcontract_path,
         "\n".join(
@@ -1641,7 +1757,7 @@ def test_repo_subcontract_doc_is_not_counted_as_topic_owner(
     assert cluster["subcontract_claims"] == "docs/product/backfill.md"
 
 
-def test_unmarked_superpowers_spec_defaults_to_subcontract_not_topic_owner(
+def test_unmarked_superpowers_specs_path_is_transient_specs_lane(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "repo"
@@ -1663,16 +1779,35 @@ def test_unmarked_superpowers_spec_defaults_to_subcontract_not_topic_owner(
     result = _run_audit(root, vault)
 
     review = result.summary["repo"]["docs_routing_review"]
-    cluster = next(
+    structure = result.summary["repo"]["docs_structure_review"]
+    assert structure["retired_lane_files"] == 0
+    assert structure["invalid_spec_payload_files"] == 0
+    assert any(
         item
-        for item in review["top_topic_clusters"]
-        if spec_path in item["subcontract_paths"]
+        for item in review["top_candidates"]
+        if item["path"] == spec_path
     )
-    assert cluster["topic_key"] == "backfill and quant matrix"
-    assert cluster["topic_cluster_status"] == "subcontracts_with_owner"
-    assert cluster["topic_owner_count"] == 0
-    assert cluster["subcontract_count"] == 1
-    assert spec_path not in cluster["owner_paths"]
+
+
+def test_docs_structure_review_reports_non_markdown_specs_payload(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    vault = tmp_path / "vault"
+    _clean_repo(root)
+    _clean_vault(vault)
+    payload_path = "docs/superpowers/specs/example-schema.json"
+    _write(root / payload_path, "{}\n")
+
+    result = _run_audit(root, vault)
+
+    structure = result.summary["repo"]["docs_structure_review"]
+    assert structure["invalid_spec_payload_files"] == 1
+    assert structure["invalid_spec_payloads"] == [payload_path]
+    assert any(
+        msg.severity == "blocker" and "non-Markdown payloads" in msg.message
+        for msg in result.messages
+    )
 
 
 def test_repo_owner_marker_controls_topic_before_body_keywords(
@@ -1682,7 +1817,7 @@ def test_repo_owner_marker_controls_topic_before_body_keywords(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    subcontract_path = "docs/superpowers/specs/review-roundtrip-subcontract.md"
+    subcontract_path = "docs/superpowers/validation/review-roundtrip-subcontract.md"
     _write(
         root / subcontract_path,
         "\n".join(
@@ -1729,7 +1864,7 @@ def test_architecture_contract_owner_routes_cleanup_specs_out_of_backfill(
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    spec_path = "docs/superpowers/specs/peak-pipeline-cleanup.md"
+    spec_path = "docs/superpowers/validation/peak-pipeline-cleanup.md"
     _write(
         root / spec_path,
         "\n".join(

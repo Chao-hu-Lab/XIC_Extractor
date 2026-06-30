@@ -49,6 +49,15 @@ Next action:
 - One topic should have one canonical repo owner. Other same-topic files are
   support artifacts, manifests, validation packets, closeouts, active stubs, or
   private history pointers.
+- Automatic retirement is the normal exit for completed transient docs after
+  product absorption is verified and the original is source-copied to Obsidian.
+  A same-path stub is an exception for active execution context or unresolved
+  exact referrers, not the default final state.
+- Before closing a newly written spec, plan, note, or handoff, run a small-model
+  absorption review: check whether durable conclusions are present and correct
+  in the long-term owner (`docs/product/`, agent contract, schema/status owner,
+  or validation README). Use `pass_can_retire`, `missing_absorption`,
+  `incorrect_absorption`, or `still_active` as the review result.
 - Active execution plans cannot be Obsidian-only. Repo needs a self-sufficient
   short stub with objective, scope, constraints, next 1-3 actions,
   verification, and stop rule.
@@ -94,12 +103,17 @@ For each candidate path or family, classify it as one of:
 3. Distill the durable payload: current decision, still-valid reason, active
    gate/checker, public contract affected or explicitly unaffected, and
    supersession/tombstone note if needed. Complete this step when every
-   non-empty payload has a repo owner, compact stub, or explicit rejection.
-4. Choose the smallest safe action: update owner, create or refresh index,
-   demote support, tombstone, source-copy/stub, retarget referrers, keep machine
-   anchor, or ask for destructive approval. Complete this step when no path is
-   moved or deleted without a referrer plan and explicit destructive gate.
-5. Verify with docs-management or targeted referrer audit as relevant, staged
+   non-empty payload has a repo owner or explicit rejection.
+4. Run product-absorption review for completed transient docs. Complete this
+   step when each candidate is `pass_can_retire`, `missing_absorption`,
+   `incorrect_absorption`, or `still_active`.
+5. Choose the smallest safe action: update owner, create or refresh index,
+   demote support, tombstone, source-copy to Obsidian, auto-retire, keep a rare
+   active/referrer-bound stub, retarget referrers, keep machine anchor, or ask
+   for a decision on unclear/high-risk cases. Complete this step when no path is
+   moved, stubbed, or deleted without vault/source-copy handling and a referrer
+   plan.
+6. Verify with docs-management or targeted referrer audit as relevant, staged
    placement guard, hook/script smoke checks for `.codex` changes, `git diff
    --check`, and a changed-file secret/local-path scan.
 
@@ -109,14 +123,17 @@ Produce a compact inventory table with:
 
 `path_or_family`, `doc_kind`, `lifecycle`, `route`, `classification`,
 `durable_payload`, `duplicate_or_stale_parts`, `surviving_repo_owner`,
-`support_or_stub_role`, `obsidian_action`, `referrer_action`, `destructive_gate`,
-`risk`, `next_step`.
+`support_or_stub_role`, `absorption_review`, `obsidian_action`,
+`referrer_action`, `retirement_action`, `risk`, `next_step`.
 
 End with a verdict:
 
 - `compress_first`: owner/index/tombstone needed before moving files.
-- `safe_to_stub_batch`: stable claims are already owned and source-copy is the
-  only remaining step.
+- `safe_to_retire_batch`: stable claims are already owned, originals are ready
+  for Obsidian/source-copy handling, and exact referrers are absent or already
+  retargeted.
+- `stub_only_if_bound`: stable claims are owned, but exact referrers or active
+  execution context temporarily require a short repo stub.
 - `keep_machine_anchor`: file is still a live checker/status/schema artifact.
 - `needs_human_decision`: information value or public contract risk is unclear.
 

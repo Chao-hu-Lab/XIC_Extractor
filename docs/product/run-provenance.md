@@ -53,8 +53,8 @@ diaries.
 
 ## See Also
 
-- [Agent parameter settings](../agent-parameter-settings.md)
+- [Agent parameter settings](../agent/parameter-settings.md)
 - [Sample metadata and QC](sample-metadata-qc.md)
 - [Review roundtrip](review-roundtrip.md)
 - [Productization](productization.md)
-- [Method manifest v1 spec](../superpowers/specs/2026-06-15-method-manifest-v1-spec.md)
+- [Validation harness](../validation/harness.md)

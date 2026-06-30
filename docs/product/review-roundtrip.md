@@ -65,8 +65,6 @@ approved product changes.
 
 ## See Also
 
-- [Review roundtrip v1 spec](../superpowers/specs/2026-06-15-review-roundtrip-v1-spec.md)
-- [Peak-choice truth protocol](../superpowers/specs/peak_choice_truth_protocol.v1.md)
 - [Validation retention](../superpowers/validation/RETENTION.md)
 - [Backfill](backfill.md)
 - [Quant matrix](quant-matrix.md)

@@ -31,6 +31,8 @@ from tools.diagnostics import docs_scan as _docs_scan  # noqa: E402
 from tools.diagnostics.docs_policy import (  # noqa: E402
     DOC_CANONICAL_OWNER_FILES,
     classify_doc,
+    classify_doc_path,
+    is_invalid_superpowers_spec_payload_path,
     is_markdown_path,
 )
 from tools.diagnostics.docs_routing_review import (  # noqa: E402
@@ -237,6 +239,7 @@ def audit_repo(
         )
 
     routing_review = docs_routing_review(root, scan_paths)
+    structure_review = docs_structure_review_for_repo(scan_paths)
     canonical_metadata_review = canonical_metadata_review_for_repo(root)
     routing_candidates = int(routing_review["candidate_files"])
     metadata_review_files = int(routing_review["metadata_review_files"])
@@ -297,6 +300,49 @@ def audit_repo(
             )
         )
 
+    root_scatter_count = int(structure_review["root_scatter_files"])
+    if root_scatter_count:
+        messages.append(
+            AuditMessage(
+                "warning",
+                "docs",
+                (
+                    "docs root has non-allowlisted Markdown files; inspect "
+                    "summary.repo.docs_structure_review.root_scatter "
+                    f"({root_scatter_count} file(s))"
+                ),
+            )
+        )
+
+    retired_lane_count = int(structure_review["retired_lane_files"])
+    if retired_lane_count:
+        messages.append(
+            AuditMessage(
+                "warning",
+                "docs",
+                (
+                    "retired docs lanes contain repo-visible files; inspect "
+                    "summary.repo.docs_structure_review.retired_lanes "
+                    f"({retired_lane_count} file(s))"
+                ),
+            )
+        )
+
+    invalid_spec_payload_count = int(structure_review["invalid_spec_payload_files"])
+    if invalid_spec_payload_count:
+        messages.append(
+            AuditMessage(
+                "blocker",
+                "docs",
+                (
+                    "docs/superpowers/specs contains non-Markdown payloads; "
+                    "inspect "
+                    "summary.repo.docs_structure_review.invalid_spec_payloads "
+                    f"({invalid_spec_payload_count} file(s))"
+                ),
+            )
+        )
+
     duplicate_topic_owner_groups = int(
         routing_review["topic_cluster_group_counts"].get(
             "potential_duplicate_owner", 0
@@ -336,10 +382,43 @@ def audit_repo(
         "local_path_hits": sum(local_path_counts.values()),
         "top_local_path_files": top_local_path_files,
         "docs_routing_review": routing_review,
+        "docs_structure_review": structure_review,
         "canonical_metadata_review": canonical_metadata_review,
         "handoff_retention": handoff_result.summary,
     }
     return messages, summary
+
+
+def docs_structure_review_for_repo(scan_paths: Sequence[str]) -> dict[str, object]:
+    root_scatter: list[str] = []
+    retired_lanes: list[dict[str, str]] = []
+    invalid_spec_payloads: list[str] = []
+    for rel_path in sorted(scan_paths):
+        if is_invalid_superpowers_spec_payload_path(rel_path):
+            invalid_spec_payloads.append(rel_path)
+        classification = classify_doc_path(rel_path)
+        if not classification.is_repo_doc:
+            continue
+        if classification.is_docs_root_scatter:
+            root_scatter.append(rel_path)
+        if classification.is_retired_tracked_dir:
+            retired_lanes.append(
+                {
+                    "path": rel_path,
+                    "retired_dir": classification.retired_tracked_dir,
+                }
+            )
+    return {
+        "root_scatter_files": len(root_scatter),
+        "root_scatter": root_scatter,
+        "top_root_scatter": root_scatter[:25],
+        "retired_lane_files": len(retired_lanes),
+        "retired_lanes": retired_lanes,
+        "top_retired_lanes": retired_lanes[:25],
+        "invalid_spec_payload_files": len(invalid_spec_payloads),
+        "invalid_spec_payloads": invalid_spec_payloads,
+        "top_invalid_spec_payloads": invalid_spec_payloads[:25],
+    }
 
 
 def canonical_metadata_review_for_repo(root: Path) -> dict[str, object]:

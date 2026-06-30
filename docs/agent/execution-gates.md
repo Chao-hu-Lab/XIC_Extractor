@@ -8,7 +8,7 @@ root `AGENTS.md` keeps only the highest-frequency subset.
 - Before non-trivial edits, confirm intended worktree, branch, and dirty diff
   scope. Do not stage, rewrite, or revert unrelated user changes.
 - Before Python, RAW, DLL, or validation commands, read
-  `docs/agent-parameter-settings.md` and use documented runners and paths.
+  `docs/agent/parameter-settings.md` and use documented runners and paths.
 - When sandbox, PowerShell syntax, output path, network approval, or RAW runner
   choice is uncertain, preflight with:
 
@@ -55,10 +55,10 @@ prerequisite. Do not assume a later cleanup PR will make an earlier PR pass.
 
 - Do not launch 85RAW or likely long RAW runs through background
   `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
-  command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
+  command shapes in `docs/agent/parameter-settings.md`, or get explicit approval
   for an external terminal or automation.
 - Known approval-first commands are documented in
-  `docs/agent-parameter-settings.md`: dependency sync/lock, Playwright browser
+  `docs/agent/parameter-settings.md`: dependency sync/lock, Playwright browser
   install, RAW/DLL loading, GUI/external-terminal launch, and global Codex
   config changes should not be re-tried once in sandbox just to fail. If the
   task needs them, request the documented narrow approval up front; otherwise

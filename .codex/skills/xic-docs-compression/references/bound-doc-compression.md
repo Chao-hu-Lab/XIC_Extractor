@@ -9,8 +9,8 @@ Every durable document needs both a current role and an exit rule.
 
 | Stage | Repo responsibility | Exit question |
 | --- | --- | --- |
-| Draft/active plan, spec, goal, or note | Keep enough public context to execute safely. | What owner, closeout, stub, or Obsidian original replaces it? |
-| Implemented or superseded plan/spec | Preserve only stable claims, decisions, gates, and lessons. | Has the stable claim been absorbed into a canonical owner? |
+| Draft/active plan, spec, goal, or note | Keep enough public context to execute safely. | What owner or active stub keeps the next action recoverable? |
+| Implemented or superseded plan/spec | Preserve only stable claims, decisions, gates, and lessons. | Has the stable claim been absorbed into a canonical owner so the original can retire? |
 | Validation result/report | Keep checker-readable evidence or compact verdict only if still current. | Is this live evidence, a stale snapshot, or private interpretation? |
 | Closeout/handoff | Keep PR body or short stub when it is the durable public surface. | Can future work resume without reading private history? |
 | Private history | Keep in Obsidian or ignored artifacts, not as repo authority. | Is there any public claim still missing from repo owners? |
@@ -39,7 +39,8 @@ These are separate:
 - a `repo_product_doc` may still duplicate another owner;
 - a route-retained support file may still need owner absorption;
 - an active plan may need to stay in repo now but exit to Obsidian later;
-- a same-path stub may be necessary for referrers without carrying authority;
+- a same-path stub may be necessary for active context or unresolved referrers
+  without carrying authority;
 - a generated manifest may be useful as a queue while not being product truth.
 
 ## What Bound Means
@@ -67,6 +68,26 @@ Extract only information that helps current or future work:
 - tombstone saying which old claim is superseded and where the current owner is.
 
 Everything else is usually private history.
+
+## Product Absorption Gate
+
+Before closing a newly written `spec`, `plan`, `note`, or `handoff`, run a
+small-model review whose only job is to compare the transient document against
+the long-term owner. The review is not a general docs audit.
+
+Use these outcomes:
+
+- `pass_can_retire`: durable conclusions are present and correct in the owner;
+  source-copy the original to Obsidian, then delete the repo original if exact
+  referrers are absent.
+- `missing_absorption`: a durable conclusion exists only in the transient doc;
+  update the owner first.
+- `incorrect_absorption`: the owner contains the claim but has drifted,
+  weakened, or changed meaning; fix the owner first.
+- `still_active`: keep a short active repo stub until execution finishes.
+
+Do not preserve a same-path stub merely because the original existed. Stub only
+when active continuation or exact path compatibility needs it.
 
 ## Waste Signals
 
@@ -114,8 +135,10 @@ For each family:
 3. Put repeated historical detail in Obsidian or drop it after explicit
    approval.
 4. Retarget referrers to the compact owner, not to every historical artifact.
-5. Leave a same-path stub only when exact paths remain externally or
-   repo-internally useful.
+5. Auto-retire the repo original after Obsidian/source-copy handling when exact
+   referrers are absent.
+6. Leave a same-path stub only when active continuation or exact paths remain
+   externally or repo-internally useful.
 
 ## Obsidian And Wiki Route
 
@@ -142,10 +165,10 @@ title/alias, not absolute vault paths.
 | Implemented/superseded plan/spec | Distill stable claims, then source-copy original or tombstone. |
 | Live checker/status/schema artifact | Keep as `current_contract`; do not stub. |
 | Many validation reports repeat the same decision | Create/update one family index and retarget referrers. |
-| Historical narrative with stable conclusion already in product docs | Source-copy to Obsidian, then same-path stub or delete after referrer cleanup. |
+| Historical narrative with stable conclusion already in product docs | Source-copy to Obsidian, then delete from repo when exact referrers are absent. |
 | Old result contradicted by later work | Tombstone with supersession pointer; do not keep as evidence. |
 | File only proves a past implementation step happened | Move to Obsidian history; repo keeps no authority. |
-| Exact path is still externally or internally bound | Keep same-path stub or retarget all refs before removal. |
+| Exact path is still externally or internally bound | Prefer retargeting refs to the owner; keep a same-path stub only as temporary compatibility. |
 | Unclear current value | Stop with `needs_human_decision`; do not migrate mechanically. |
 
 ## Backfill/Quant Heuristic

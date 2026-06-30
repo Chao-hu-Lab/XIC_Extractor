@@ -16,17 +16,18 @@ PRODUCTIZATION_STATUS_HANDOFF_PATH = PRODUCTIZATION_STATUS_ANCHOR_PATH
 CLOSEOUT_DIR = "docs/superpowers/closeouts/"
 
 PRODUCTIZATION_SCHEMA_REL = (
-    "docs/superpowers/specs/productization_control_plane_schema.v1.json"
+    "docs/superpowers/schemas/productization_control_plane_schema.v1.json"
 )
 PRODUCTIZATION_STATUS_INDEX_REL = (
     "docs/superpowers/validation/productization_status_index_v1.tsv"
 )
 PRODUCTIZATION_AUTHORITY_MANIFEST_REL = (
-    "docs/superpowers/specs/productization_authority_manifest.v1.json"
+    "docs/superpowers/schemas/productization_authority_manifest.v1.json"
 )
 MECHANICAL_ADJUDICATION_INDEX_REL = (
     "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
 )
+SUPERPOWERS_SPEC_DIR = "docs/superpowers/specs/"
 
 DOC_PLACEMENT_MARKER = "Doc placement:"
 DOC_REPO_OWNER_MARKER = "Repo owner:"
@@ -88,13 +89,51 @@ DOC_LIFECYCLES_REQUIRING_EXIT_RULE = {
     "rejected",
 }
 
+DOC_ROOT_ALLOWLIST_FILES = {
+    "docs/architecture-contract.md",
+    "docs/diagnostic-ledger.md",
+    "docs/lc-msms-evidence-rules.md",
+    "docs/project-layout.md",
+}
+DOC_RETIRED_TRACKED_DIRS = {
+    "docs/deepresearch/": (
+        "deepresearch is private-history context now; absorb durable takeaways "
+        "into docs/product/ or another canonical owner"
+    ),
+    "docs/superpowers/deepresearch/": (
+        "deepresearch is private-history context now; absorb durable takeaways "
+        "into docs/product/ or another canonical owner"
+    ),
+    "docs/superpowers/goals/": (
+        "goals are productization plans or control-plane entries now; use "
+        "docs/superpowers/plans/ or a product doc owner"
+    ),
+    "docs/superpowers/notes/": (
+        "generic notes are private-first now; use ignored handoff, output/, "
+        "Obsidian, a formal owner, or a narrowly named public artifact lane"
+    ),
+    "docs/superpowers/pulse-reports/": (
+        "pulse reports are generated read-side snapshots; write to output/ "
+        "unless promoted to productization/evidence/"
+    ),
+    "docs/superpowers/reports/": (
+        "reports is too broad; route public HTML, fixtures, probes, and "
+        "validation evidence to their explicit owner lanes"
+    ),
+    "docs/superpowers/topics/": (
+        "topics duplicated docs/product; generate temporary indexes under "
+        "ignored output/docs-topic-indexes/"
+    ),
+}
+DOC_RETIRED_TRACKED_DIR_PREFIXES = tuple(DOC_RETIRED_TRACKED_DIRS)
+
 DOC_CANONICAL_OWNER_DIRS = [
     "docs/product/",
     "docs/user/",
     "docs/agent/",
     "docs/engineering-skills/",
     "docs/solutions/",
-    "docs/superpowers/specs/",
+    "docs/superpowers/schemas/",
     "docs/superpowers/validation/",
     "docs/superpowers/fixtures/",
     "docs/superpowers/productization/",
@@ -108,15 +147,11 @@ DOC_CANONICAL_OWNER_FILES = {
     "CONTEXT.md",
     "README.md",
     "docs/architecture-contract.md",
-    "docs/confidence-reason-precedence-contract.md",
-    "docs/deepresearch/README.md",
     "docs/diagnostic-ledger.md",
-    "docs/lcms-msms-evidence-rules.md",
+    "docs/lc-msms-evidence-rules.md",
     "docs/project-layout.md",
-    "docs/research-line-triage.md",
     "docs/superpowers/README.md",
     PRODUCTIZATION_STATUS_HANDOFF_PATH,
-    "docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md",
     "docs/superpowers/plans/2026-06-15-productization-control-plane.md",
     "docs/superpowers/plans/README.md",
 }
@@ -128,6 +163,7 @@ HIGH_RISK_DOC_DIRS = [
     "docs/superpowers/notes/",
     "docs/superpowers/plans/",
     "docs/superpowers/reports/",
+    SUPERPOWERS_SPEC_DIR,
 ]
 DOC_LIFECYCLE_MANAGED_DIRS = [
     "docs/deepresearch/",
@@ -137,7 +173,7 @@ DOC_LIFECYCLE_MANAGED_DIRS = [
     "docs/superpowers/plans/",
     "docs/superpowers/pulse-reports/",
     "docs/superpowers/reports/",
-    "docs/superpowers/specs/",
+    SUPERPOWERS_SPEC_DIR,
 ]
 MISPLACED_HANDOFF_PUBLIC_RECORD_PATTERNS = [
     re.compile(r"(?:^|[_-])branch-closeout-summary(?:\.|$)", re.IGNORECASE),
@@ -164,7 +200,6 @@ DOC_ROUTING_LEGACY_HISTORY_PREFIXES = (
     "docs/superpowers/deepresearch/",
     "docs/superpowers/goals/",
     "docs/superpowers/notes/",
-    "docs/superpowers/plans/",
     "docs/superpowers/pulse-reports/",
     "docs/superpowers/reports/",
 )
@@ -180,12 +215,13 @@ DOC_ROUTING_MECHANICAL_REFERRER_PREFIXES = (
 # accidentally become candidate referrers or topic owners.
 DOC_ROUTING_TOPIC_PREFIX = "docs/superpowers/topics/"
 DOC_ROUTING_SPECS_INDEX_PATH = "docs/superpowers/specs/readme.md"
+DOC_ROUTING_SCHEMAS_INDEX_PATH = "docs/superpowers/schemas/readme.md"
 DOC_ROUTING_AUTHORITY_REFERRER_PATHS = frozenset(
     {
         "docs/superpowers/validation/ARTIFACT_INVENTORY.tsv",
         "docs/superpowers/validation/lockbox_review_packets_v1/packet_index.tsv",
         "docs/superpowers/validation/productization_status_index_v1.tsv",
-        "docs/superpowers/specs/productization_authority_manifest.v1.json",
+        "docs/superpowers/schemas/productization_authority_manifest.v1.json",
     }
 )
 PRIVATE_HISTORY_SIGNALS = [
@@ -218,6 +254,11 @@ class DocPathClassification:
     is_topic_index: bool
     is_specs_index: bool
     is_superpowers_spec: bool
+    is_docs_root_file: bool
+    is_allowed_docs_root_file: bool
+    is_docs_root_scatter: bool
+    is_retired_tracked_dir: bool
+    retired_tracked_dir: str
     inferred_kind: str
 
 
@@ -253,6 +294,11 @@ class DocClassification:
     is_topic_index: bool
     is_specs_index: bool
     is_superpowers_spec: bool
+    is_docs_root_file: bool
+    is_allowed_docs_root_file: bool
+    is_docs_root_scatter: bool
+    is_retired_tracked_dir: bool
+    retired_tracked_dir: str
 
 
 def normalize_path_text(text: str) -> str:
@@ -367,6 +413,8 @@ def is_canonical_doc_owner_path(path: str) -> bool:
     normalized = normalize_path_text(path).lstrip("./")
     if normalized in DOC_CANONICAL_OWNER_FILES:
         return True
+    if normalized in DOC_ROOT_ALLOWLIST_FILES:
+        return True
     if is_public_handoff_archive_evidence_path(normalized):
         return True
     return any(path_is_under(normalized, root) for root in DOC_CANONICAL_OWNER_DIRS)
@@ -389,6 +437,35 @@ def is_lifecycle_managed_doc_path(path: str) -> bool:
     )
 
 
+def is_docs_root_file_path(path: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./")
+    return (
+        is_markdown_path(normalized)
+        and normalized.startswith("docs/")
+        and normalized.count("/") == 1
+    )
+
+
+def is_superpowers_spec_lane_path(path: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./")
+    return path_is_under(normalized, SUPERPOWERS_SPEC_DIR)
+
+
+def is_invalid_superpowers_spec_payload_path(path: str) -> bool:
+    normalized = normalize_path_text(path).lstrip("./")
+    return is_superpowers_spec_lane_path(normalized) and not is_markdown_path(
+        normalized
+    )
+
+
+def retired_tracked_dir_for_path(path: str) -> str:
+    normalized = normalize_path_text(path).lstrip("./")
+    for root in DOC_RETIRED_TRACKED_DIR_PREFIXES:
+        if path_is_under(normalized, root):
+            return root
+    return ""
+
+
 def is_docs_routing_scan_target(path: str) -> bool:
     normalized = normalize_path_text(path).lstrip("./")
     return is_repo_doc_path(normalized) and path_startswith_any(
@@ -402,6 +479,8 @@ def infer_doc_kind_from_path(path: str) -> str:
         return "plan"
     if "/specs/" in normalized:
         return "spec"
+    if "/schemas/" in normalized:
+        return "manifest"
     if "/goals/" in normalized:
         return "goal"
     if "/reports/" in normalized or "/pulse-reports/" in normalized:
@@ -423,11 +502,17 @@ def classify_doc_path(path: str) -> DocPathClassification:
     normalized = normalize_path_text(path).lstrip("./")
     normalized_lower = normalized.lower()
     is_topic_index = normalized_lower.startswith(DOC_ROUTING_TOPIC_PREFIX)
-    is_specs_index = normalized_lower == DOC_ROUTING_SPECS_INDEX_PATH
+    is_specs_index = normalized_lower in {
+        DOC_ROUTING_SPECS_INDEX_PATH,
+        DOC_ROUTING_SCHEMAS_INDEX_PATH,
+    }
     is_superpowers_spec = (
-        normalized_lower.startswith("docs/superpowers/specs/")
+        normalized_lower.startswith(SUPERPOWERS_SPEC_DIR)
         and not is_specs_index
     )
+    is_docs_root_file = is_docs_root_file_path(normalized)
+    is_allowed_docs_root_file = normalized in DOC_ROOT_ALLOWLIST_FILES
+    retired_tracked_dir = retired_tracked_dir_for_path(normalized)
     return DocPathClassification(
         path=normalized,
         is_markdown=is_markdown_path(normalized),
@@ -453,6 +538,11 @@ def classify_doc_path(path: str) -> DocPathClassification:
         is_topic_index=is_topic_index,
         is_specs_index=is_specs_index,
         is_superpowers_spec=is_superpowers_spec,
+        is_docs_root_file=is_docs_root_file,
+        is_allowed_docs_root_file=is_allowed_docs_root_file,
+        is_docs_root_scatter=is_docs_root_file and not is_allowed_docs_root_file,
+        is_retired_tracked_dir=bool(retired_tracked_dir),
+        retired_tracked_dir=retired_tracked_dir,
         inferred_kind=infer_doc_kind_from_path(normalized),
     )
 
@@ -551,4 +641,9 @@ def classify_doc(path: str, text: str) -> DocClassification:
         is_topic_index=path_classification.is_topic_index,
         is_specs_index=path_classification.is_specs_index,
         is_superpowers_spec=path_classification.is_superpowers_spec,
+        is_docs_root_file=path_classification.is_docs_root_file,
+        is_allowed_docs_root_file=path_classification.is_allowed_docs_root_file,
+        is_docs_root_scatter=path_classification.is_docs_root_scatter,
+        is_retired_tracked_dir=path_classification.is_retired_tracked_dir,
+        retired_tracked_dir=path_classification.retired_tracked_dir,
     )

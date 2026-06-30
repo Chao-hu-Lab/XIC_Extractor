@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.diagnostics.auto_accept_policy import (
-    AutoAcceptDecision,
     decide_auto_accept,
     extract_page_metadata,
     parse_auto_accept_config,

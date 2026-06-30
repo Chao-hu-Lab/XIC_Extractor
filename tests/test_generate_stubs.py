@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from tools.diagnostics.generate_stubs import parse_blocker_tsv, BlockerRow
+from tools.diagnostics.generate_stubs import (
+    extract_doc_kind,
+    generate_stub_content,
+    generate_stubs,
+    infer_repo_owner,
+    parse_blocker_tsv,
+)
 
 
 def test_parse_blocker_tsv_extracts_fields(tmp_path: object) -> None:
@@ -20,9 +26,6 @@ def test_parse_blocker_tsv_extracts_fields(tmp_path: object) -> None:
     assert rows[0].target_note == "Example Note.md"
     assert rows[0].target_doc_class == "development-history"
     assert rows[0].suggested_resolution == "keep_target_or_leave_stub_first"
-
-
-from tools.diagnostics.generate_stubs import generate_stub_content
 
 
 def test_generate_stub_content_produces_valid_stub() -> None:
@@ -48,9 +51,6 @@ def test_generate_stub_content_produces_valid_stub() -> None:
     assert len(non_marker_lines) <= 5
 
 
-from tools.diagnostics.generate_stubs import extract_doc_kind
-
-
 def test_extract_doc_kind_from_existing_content() -> None:
     text = "# Plan\n\nDoc kind: plan\nDoc lifecycle: active\n"
     assert extract_doc_kind(text) == "plan"
@@ -60,9 +60,6 @@ def test_extract_doc_kind_defaults_to_note() -> None:
     assert extract_doc_kind("# No metadata here\n") == "note"
 
 
-from tools.diagnostics.generate_stubs import infer_repo_owner
-
-
 def test_infer_repo_owner_from_existing_content() -> None:
     text = "Repo owner: docs/product/discovery.md\n"
     assert infer_repo_owner(text, "docs/notes/x.md") == "docs/product/discovery.md"
@@ -70,9 +67,6 @@ def test_infer_repo_owner_from_existing_content() -> None:
 
 def test_infer_repo_owner_falls_back_to_self() -> None:
     assert infer_repo_owner("# No owner\n", "docs/notes/x.md") == "docs/notes/x.md"
-
-
-from tools.diagnostics.generate_stubs import generate_stubs
 
 
 def test_generate_stubs_dry_run_does_not_write(tmp_path: object) -> None:

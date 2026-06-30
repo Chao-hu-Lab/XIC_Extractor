@@ -20,6 +20,7 @@ from tools.diagnostics.docs_policy import (  # noqa: E402
     DOC_PLACEMENT_MARKER,
     DOC_PLACEMENT_VALUES,
     DOC_REPO_OWNER_MARKER,
+    DOC_RETIRED_TRACKED_DIRS,
     classify_doc,
     classify_doc_path,
     doc_exit_rule_value,
@@ -29,7 +30,9 @@ from tools.diagnostics.docs_policy import (  # noqa: E402
     doc_placement_is_non_repo,
     doc_placement_requires_repo_owner,
     has_private_history_signal,
+    is_invalid_superpowers_spec_payload_path,
     is_markdown_path,
+    is_superpowers_spec_lane_path,
 )
 
 ACTIVE_STUB_FIELDS = {
@@ -84,7 +87,7 @@ def parse_name_status(output: str) -> tuple[list[StagedMarkdown], int]:
         if len(parts) < 2:
             continue
         path = parts[-1]
-        if is_markdown_path(path):
+        if is_markdown_path(path) or is_superpowers_spec_lane_path(path):
             entries.append(StagedMarkdown(status=status, path=path))
     return entries, ignored_deletions
 
@@ -218,6 +221,20 @@ def lifecycle_metadata_problems(path: str, text: str) -> list[PlacementProblem]:
 def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
     path = entry.path.replace("\\", "/")
     status = normalize_status(entry.status)
+    if status != "D" and is_invalid_superpowers_spec_payload_path(path):
+        return [
+            PlacementProblem(
+                path=path,
+                reason=(
+                    "docs/superpowers/specs is Markdown-only; move JSON "
+                    "contracts to docs/superpowers/schemas and non-doc "
+                    "artifacts to validation, ignored output, or Obsidian"
+                ),
+                required_marker=(
+                    "Use docs/superpowers/specs/*.md for transient specs only."
+                ),
+            )
+        ]
     path_classification = classify_doc_path(path)
     if status == "D" or not path_classification.is_repo_doc:
         return []
@@ -248,6 +265,39 @@ def check_entry(root: Path, entry: StagedMarkdown) -> list[PlacementProblem]:
     lifecycle_problems: list[PlacementProblem] = []
     if status in NEWLY_STAGED_STATUSES and classification.is_lifecycle_managed:
         lifecycle_problems = lifecycle_metadata_problems(path, text)
+
+    if classification.is_docs_root_scatter:
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=(
+                    "docs root only allows cross-cutting authority docs; "
+                    "move this file under docs/agent, docs/product, "
+                    "docs/architecture, docs/validation, docs/user, "
+                    "docs/solutions, or docs/superpowers"
+                ),
+                required_marker=(
+                    "Use docs/project-layout.md root allowlist; do not add "
+                    "new non-allowlisted Markdown directly under docs/."
+                ),
+            )
+        )
+
+    if classification.is_retired_tracked_dir and status in NEWLY_STAGED_STATUSES:
+        reason = DOC_RETIRED_TRACKED_DIRS.get(
+            classification.retired_tracked_dir,
+            "retired docs lane is not a tracked destination",
+        )
+        problems.append(
+            PlacementProblem(
+                path=path,
+                reason=f"retired docs lane: {reason}",
+                required_marker=(
+                    "Route to the canonical owner, a named public artifact "
+                    "lane, ignored output/, ignored handoff, or Obsidian."
+                ),
+            )
+        )
 
     if placement and placement not in DOC_PLACEMENT_VALUES:
         problems.append(
@@ -433,7 +483,10 @@ def check_doc_placement(
         if status == "D":
             skipped_deletions += 1
             continue
-        if not is_markdown_path(entry.path):
+        if not (
+            is_markdown_path(entry.path)
+            or is_superpowers_spec_lane_path(entry.path)
+        ):
             continue
         checked_count += 1
         problems.extend(check_entry(root, entry))

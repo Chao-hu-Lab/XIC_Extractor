@@ -106,7 +106,7 @@ DOC_ROUTING_TOPIC_RULES = (
     (
         "evidence semantics",
         ("evidence", "score", "hypothesis", "identity", "trace"),
-        "docs/product/evidence-spine.md; docs/lcms-msms-evidence-rules.md",
+        "docs/product/evidence-spine.md; docs/lc-msms-evidence-rules.md",
     ),
     (
         "productization",
@@ -240,17 +240,17 @@ DOC_ROUTING_OWNER_TOPIC_RULES = (
     (
         "docs/product/evidence-spine.md",
         "evidence semantics",
-        "docs/product/evidence-spine.md; docs/lcms-msms-evidence-rules.md",
+        "docs/product/evidence-spine.md; docs/lc-msms-evidence-rules.md",
     ),
     (
         "docs/product/family-hypothesis-boundary.md",
         "evidence semantics",
-        "docs/product/evidence-spine.md; docs/lcms-msms-evidence-rules.md",
+        "docs/product/evidence-spine.md; docs/lc-msms-evidence-rules.md",
     ),
     (
-        "docs/lcms-msms-evidence-rules.md",
+        "docs/lc-msms-evidence-rules.md",
         "evidence semantics",
-        "docs/product/evidence-spine.md; docs/lcms-msms-evidence-rules.md",
+        "docs/product/evidence-spine.md; docs/lc-msms-evidence-rules.md",
     ),
     (
         "docs/product/productization.md",

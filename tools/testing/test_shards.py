@@ -27,6 +27,7 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
             "tests/test_productization_*.py",
             "tests/test_pyinstaller_spec.py",
             "tests/test_presets_*.py",
+            "tests/test_retire_docs.py",
             "tests/test_score_retirement_legacy_authority.py",
             "tests/test_test_shards.py",
             "tests/test_validation_artifact_*.py",

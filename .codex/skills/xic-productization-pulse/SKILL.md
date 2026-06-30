@@ -34,8 +34,12 @@ TSV files only when a count or schema claim depends on them.
 Save to:
 
 ```text
-docs/superpowers/pulse-reports/YYYY-MM-DD-HHMM-productization-pulse.md
+output/productization-pulse/YYYY-MM-DD-HHMM-productization-pulse.md
 ```
+
+Pulse reports are generated read-side snapshots and are ignored by default.
+Promote only durable public evidence summaries to
+`docs/superpowers/productization/evidence/`.
 
 Use these sections, capped to one readable page:
 

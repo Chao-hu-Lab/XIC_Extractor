@@ -71,6 +71,35 @@ Every value-changing decision should be explainable in this order:
 If a decision cannot name these fields, it is not ready to become product
 behavior. It can remain diagnostic, shadow, or review-only.
 
+## Targeted Confidence / Reason / Counted Detection Precedence
+
+Targeted workbook rows display `Confidence` and `Reason`, but those cells are
+not the authority for counted detections or matrix presence. The authority is
+the targeted product projection, with these layers feeding it:
+
+| Layer | Produces | Resolution point |
+| --- | --- | --- |
+| Candidate scoring | `peak_result.confidence` / `peak_result.reason` | `peak_detection/candidate_scoring.py` through `peak_detection/facade.py:find_peak_and_area` |
+| Hypothesis selection | `selection_decision.projected_confidence` / `projected_reason` | `extraction/result_assembly.py:_result_confidence` and `_result_reason`, when a selection decision exists |
+| Stored result | resolved `result.confidence` / `result.reason` | `extraction/result_assembly.py:build_extraction_result` |
+| Targeted product projection | `product_state`, `counted_detection`, `projection_reason` | `extraction/result_assembly.py:_targeted_product_projection` |
+| Display resolution | workbook / CSV `Confidence` and `Reason` cells | `output/csv_writers.py:_display_confidence` and `_display_reason` |
+
+Invariants:
+
+- Counted detection, summary counts, and matrix presence read
+  `projection.counted_detection` and `product_state`, not `Confidence`, neutral
+  loss flags, scores, or caps.
+- `_display_confidence` may demote projected rows to `VERY_LOW`; it must not
+  promote rows. If a row should read higher, fix the projection decision.
+- `_display_reason` prefers `projection.projection_reason` when present,
+  otherwise it falls back to stored `result.reason`.
+- New evidence sources must enter as typed evidence or selection context and be
+  reconciled by workflow projection; they must not create another direct display
+  or count authority.
+- `reproject_extraction_result` must preserve the same candidate scoring,
+  selection, projection, and display precedence as `build_extraction_result`.
+
 ## Targeted Policy
 
 Targeted selection is hypothesis-driven. The workflow already knows target
@@ -254,5 +283,5 @@ contract.
 - [Alignment](alignment.md)
 - [Peak model selection](peak-model-selection.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Architecture contract](../architecture-contract.md)

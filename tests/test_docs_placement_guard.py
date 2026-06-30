@@ -71,7 +71,7 @@ def test_repo_active_stub_with_required_fields_passes(tmp_path: Path) -> None:
 def test_new_lifecycle_managed_doc_requires_kind_lifecycle_and_exit_rule(
     tmp_path: Path,
 ) -> None:
-    path = "docs/superpowers/specs/2026-07-01-example-contract.md"
+    path = "docs/superpowers/plans/2026-07-01-example-contract.md"
     _write(
         tmp_path,
         path,
@@ -84,8 +84,8 @@ def test_new_lifecycle_managed_doc_requires_kind_lifecycle_and_exit_rule(
     assert any("missing Doc lifecycle" in problem for problem in problems)
 
 
-def test_new_lifecycle_managed_spec_with_metadata_passes(tmp_path: Path) -> None:
-    path = "docs/superpowers/specs/2026-07-01-example-contract.md"
+def test_new_lifecycle_managed_plan_with_metadata_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/plans/2026-07-01-example-contract.md"
     _write(
         tmp_path,
         path,
@@ -93,8 +93,10 @@ def test_new_lifecycle_managed_spec_with_metadata_passes(tmp_path: Path) -> None
             [
                 "# Example Contract",
                 "",
-                "Doc kind: spec",
+                "Doc placement: formal_repo_doc",
+                "Doc kind: plan",
                 "Doc lifecycle: active",
+                "Repo owner: docs/product/example.md",
                 "Doc exit rule: promote accepted behavior to docs/product/example.md.",
                 "",
                 "Public behavior contract draft.",
@@ -190,7 +192,9 @@ def test_canonical_doc_can_document_marker_schema_without_false_positive(
     assert result.problems == ()
 
 
-def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
+def test_transient_superpowers_specs_markdown_with_metadata_passes(
+    tmp_path: Path,
+) -> None:
     path = "docs/superpowers/specs/2026-07-01-example-contract.md"
     _write(
         tmp_path,
@@ -215,8 +219,31 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
     assert result.problems == ()
 
 
+def test_superpowers_specs_non_markdown_payload_fails(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/specs/example-schema.json"
+    _write(tmp_path, path, "{}\n")
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("Markdown-only" in problem for problem in problems)
+
+
+def test_parse_name_status_keeps_specs_non_markdown_payloads() -> None:
+    entries, ignored_deletions = parse_name_status(
+        "A\tdocs/superpowers/specs/example-schema.json\n"
+        "A\toutput/private.json\n"
+    )
+
+    assert ignored_deletions == 0
+    assert [entry.path for entry in entries] == [
+        "docs/superpowers/specs/example-schema.json"
+    ]
+
+
 def test_repo_support_doc_requires_owner_and_passes(tmp_path: Path) -> None:
-    path = "docs/superpowers/notes/example-support-note.md"
+    path = "docs/superpowers/file-management/docs-cleanup/example-support-note.md"
     _write(
         tmp_path,
         path,
@@ -240,7 +267,7 @@ def test_repo_support_doc_requires_owner_and_passes(tmp_path: Path) -> None:
 
 
 def test_repo_support_doc_without_owner_fails(tmp_path: Path) -> None:
-    path = "docs/superpowers/notes/example-support-note.md"
+    path = "docs/superpowers/file-management/docs-cleanup/example-support-note.md"
     _write(
         tmp_path,
         path,
@@ -263,7 +290,7 @@ def test_repo_support_doc_without_owner_fails(tmp_path: Path) -> None:
 
 
 def test_repo_subcontract_doc_requires_owner_and_passes(tmp_path: Path) -> None:
-    path = "docs/superpowers/specs/example-subcontract.md"
+    path = "docs/validation/example-subcontract.md"
     _write(
         tmp_path,
         path,
@@ -288,7 +315,7 @@ def test_repo_subcontract_doc_requires_owner_and_passes(tmp_path: Path) -> None:
 
 
 def test_repo_subcontract_doc_without_owner_fails(tmp_path: Path) -> None:
-    path = "docs/superpowers/specs/example-subcontract.md"
+    path = "docs/validation/example-subcontract.md"
     _write(
         tmp_path,
         path,
@@ -479,8 +506,58 @@ def test_private_obsidian_note_staged_under_repo_docs_fails(tmp_path: Path) -> N
     assert any("not a repo-trackable placement" in problem for problem in problems)
 
 
-def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
+def test_new_tracked_note_lane_fails_even_with_repo_stub_metadata(
+    tmp_path: Path,
+) -> None:
     path = "docs/superpowers/notes/2026-07-01-private-review-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Private review note",
+                "",
+                "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/review-roundtrip.md",
+                "",
+                "This file is a sanitized public stub.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("retired docs lane" in problem for problem in problems)
+
+
+def test_new_tracked_deepresearch_lane_fails(tmp_path: Path) -> None:
+    path = "docs/deepresearch/2026-07-01-literature-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Literature note",
+                "",
+                "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/untargeted-method.md",
+                "",
+                "Stable claims should be absorbed into the product owner.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("retired docs lane" in problem for problem in problems)
+
+
+def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/plans/2026-07-01-private-review-note.md"
     _write(
         tmp_path,
         path,
@@ -501,6 +578,29 @@ def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
     result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
 
     assert result.problems == ()
+
+
+def test_non_allowlisted_docs_root_markdown_fails(tmp_path: Path) -> None:
+    path = "docs/2026-07-01-branch-report.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Branch report",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: report",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/productization.md",
+                "Doc exit rule: retire after summary is absorbed.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("docs root only allows" in problem for problem in problems)
 
 
 def test_deletions_are_ignored_by_placement_guard() -> None:

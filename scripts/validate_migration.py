@@ -316,7 +316,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("docs/superpowers/specs/2026-04-13-migration-validation.xlsx"),
+        default=Path(
+            "docs/superpowers/validation/"
+            "migration_validation_v1/2026-04-13-migration-validation.xlsx"
+        ),
     )
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--allow-overrides", action="store_true")

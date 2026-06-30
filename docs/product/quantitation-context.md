@@ -44,6 +44,6 @@ Quantitation context is the RT and trace context used to integrate the selected 
 
 ## See Also
 
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Targeted selection](targeted-selection.md) | [Evidence spine](evidence-spine.md) | [Quant matrix](quant-matrix.md)
-- [Selected full-envelope quantitation boundary spec](../superpowers/specs/2026-06-03-selected-full-envelope-quantitation-boundary-spec.md)
+- [Peak model selection](peak-model-selection.md)

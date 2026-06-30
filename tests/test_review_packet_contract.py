@@ -8,7 +8,7 @@ from typing import Any
 from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "docs/superpowers/specs/review_packet_schema.v1.json"
+SCHEMA_PATH = ROOT / "docs/superpowers/schemas/review_packet_schema.v1.json"
 QUEUE_PATH = ROOT / "docs/superpowers/validation/review_queue_v1.tsv"
 DECISION_LOG_PATH = ROOT / "docs/superpowers/validation/review_decision_log_v1.tsv"
 ADJUDICATION_INDEX_PATH = (

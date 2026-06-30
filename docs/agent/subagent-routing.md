@@ -3,7 +3,7 @@
 This document defines when to use repo-local Codex subagents, active goals, and
 runtime guardrails for XIC Extractor. It is an operating guide, not a second
 source of truth for project parameters. Stable runners, RAW paths, validation
-tiers, and command shapes still live in `docs/agent-parameter-settings.md`.
+tiers, and command shapes still live in `docs/agent/parameter-settings.md`.
 
 The role set was informed by public Codex subagent catalogs, including
 `https://github.com/VoltAgent/awesome-codex-subagents`, but collapsed for this
@@ -69,7 +69,7 @@ improve the existing owner instead of adding a parallel entry.
 This repo owns only XIC-specific overlays and routing docs. Global skills are
 environment-level workflow dependencies outside this repo diff. If a named
 global skill is unavailable, report `global skill unavailable`, use `AGENTS.md`,
-this routing doc, and `docs/agent-parameter-settings.md` as the minimal fallback
+this routing doc, and `docs/agent/parameter-settings.md` as the minimal fallback
 checklist, and do not recreate or copy the global workflow into the repo.
 
 GStack skills are still available and not retired. For this repo, treat them as
@@ -185,7 +185,7 @@ Execution roles:
   workflow, such as `$gh-fix-ci`, when available. Use `ops-triager` only when
   check metadata, branch protection, Windows runner behavior, or local
   reproduction remains unclear after the skill path.
-- Any `.codex/agents/*.toml`, `docs/agent-subagent-routing.md`, or AGENTS
+- Any `.codex/agents/*.toml`, `docs/agent/subagent-routing.md`, or AGENTS
   workflow-rule change gets `docs-handoff-reviewer` to check role overlap,
   trigger drift, and output-contract regression.
 - Any phase plan that could preserve a bad legacy path, overclaim evidence, or
@@ -313,7 +313,7 @@ constraints.
 
 Do not maintain a second goal template in this routing doc. The global skill is
 the canonical reusable contract shape. XIC goals should normally reference
-`AGENTS.md`, `docs/agent-parameter-settings.md`, this routing doc, the active
+`AGENTS.md`, `docs/agent/parameter-settings.md`, this routing doc, the active
 spec/plan, and existing diagnostics or validation artifacts. Avoid broad goals
 such as "improve the pipeline" unless the goal first asks for a bounded plan.
 

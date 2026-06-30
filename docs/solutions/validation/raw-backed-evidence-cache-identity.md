@@ -7,7 +7,7 @@ status: "current"
 tags: ["raw-validation", "evidence-cache", "standard-peak", "fail-closed"]
 source_refs:
   - "tools/diagnostics/INDEX.md"
-  - "docs/agent-parameter-settings.md"
+  - "docs/agent/parameter-settings.md"
   - "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
   - "output/performance/family_abstraction_final_8raw_validation_20260629/timing.json"
 ---

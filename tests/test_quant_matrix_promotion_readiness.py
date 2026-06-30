@@ -22,7 +22,7 @@ from xic_extractor.tabular_io import file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMOTION_SCHEMA = (
-    ROOT / "docs/superpowers/specs/quant_matrix_promotion_readiness_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/quant_matrix_promotion_readiness_schema.v1.json"
 )
 
 

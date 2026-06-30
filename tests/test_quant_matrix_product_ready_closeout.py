@@ -20,7 +20,7 @@ from tests.test_quant_matrix_default_activation_dry_run import (
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = (
     ROOT
-    / "docs/superpowers/specs/"
+    / "docs/superpowers/schemas/"
     / "quant_matrix_product_ready_closeout_schema.v1.json"
 )
 

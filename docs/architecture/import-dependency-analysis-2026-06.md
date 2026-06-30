@@ -1,7 +1,7 @@
 # Import Dependency Graph Analysis
 
 Doc placement: repo_stub_plus_obsidian
-Repo owner: docs/architecture-review-2026-06.md
+Repo owner: docs/architecture/review-2026-06.md
 
 **Repository:** XIC_Extractor (untargeted-gui-refresh-clean)
 **Analysis Date:** 2026-06-28

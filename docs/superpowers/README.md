@@ -19,7 +19,8 @@ storage after their stable public claims are represented in formal repo docs.
 | Directory | Purpose | Do not put here |
 | --- | --- | --- |
 | `plans/` | active control planes, named roadmaps, and intentionally retained public plans | private implementation diary or branch scratch |
-| `specs/` | public specs, schema contracts, design contracts, and retained formal behavior docs | command transcripts or local validation chronology |
+| `specs/` | short-lived Markdown development specs with explicit owner and exit rule | JSON schemas, HTML stories, workbooks, validation packets, or permanent product authority |
+| `schemas/` | checker-readable JSON Schema contracts and authority manifests | design narratives, command transcripts, validation chronology, or review-story galleries |
 | `validation/` | checker-readable validation packets, inventories, summaries, lockbox artifacts, and compact evidence | unbounded generated dumps or private reviewer rationale |
 | `fixtures/` | small test/checker fixtures and expected-output oracles | full validation bundles |
 | `productization/status/` | machine-readable or checker-facing productization status anchors | branch handoff state |
@@ -27,7 +28,17 @@ storage after their stable public claims are represented in formal repo docs.
 | `file-management/` | approved cleanup manifests, referrer audits, migration queues, and placement evidence | product behavior specs or handoff logs |
 | `closeouts/` | intentionally public branch closeout summaries and PR-body seeds | active handoff next actions |
 | `handoffs/` | ignored local active handoff workspace plus rare tracked compatibility stubs | productization anchors, file-management manifests, or closeout summaries |
-| `notes/`, `goals/`, `reports/`, `pulse-reports/` | retained legacy or public-readable remnants pending further normalization | new private history by default |
+
+Retired tracked lanes:
+
+| Retired lane | Replacement |
+| --- | --- |
+| `../deepresearch/`, `deepresearch/` | `docs/product/` authority pages, Obsidian research notes, or ignored local output |
+| `notes/` | ignored handoff, ignored `output/`, Obsidian, or a formal owner/support artifact |
+| `topics/` | `docs/product/` plus generated ignored `output/docs-topic-indexes/` |
+| `goals/` | `plans/` for executable public plans, or productization control-plane/product docs |
+| `pulse-reports/` | ignored `output/productization-pulse/`; promote durable summaries to `productization/evidence/` |
+| `reports/` | product/user doc, validation/fixture lane, ignored `output/`, or Obsidian depending on role |
 
 ## Public Repo Boundary
 
@@ -45,6 +56,10 @@ The public repo should keep:
 The public repo should not keep hundreds of same-path private-history stubs as
 the final state. Those stubs are temporary compatibility surfaces while repo
 referrers, tests, and diagnostic provenance are audited.
+For completed transient specs, plans, notes, and handoffs, the normal exit is
+product-owner absorption, Obsidian source-copy, and repo removal. Keep a stub
+only when the work is still active or an exact path referrer cannot yet move to
+the owner.
 
 Branch-story or worktree-report HTML belongs to the same cleanup decision as
 handoff history; it should not block private-history stub removal unless the
@@ -56,6 +71,13 @@ The current docs-cleanup control surface lives under
 `docs/superpowers/file-management/docs-cleanup/`. Tracked topic indexes were
 retired because `docs/product/` is the durable topic layer. If a cleanup pass
 needs browsable topic pages, generate them to ignored `output/docs-topic-indexes/`.
+
+Generic tracked deepresearch, notes, goals, pulse reports, and reports are also
+retired as new destinations. Existing historical references may still mention
+those paths, but new public repo files must route to a named owner lane instead
+of recreating the broad bucket. `specs/` is intentionally not retired, but it is
+Markdown-only and transient: durable decisions move to product owners, and
+long-form originals move to Obsidian after implementation.
 
 Retained cleanup evidence:
 

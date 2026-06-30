@@ -135,6 +135,6 @@ handoff 不是產品權威。若文件衝突:
 
 1. `git status` / `git diff` 決定目前工作樹實況。
 2. productization control plane 決定 maturity tier、active lane、WIP owner、promotion gate。
-3. named specs/plans 決定 schema、CLI/config/output 行為契約。
+3. product docs、named plans、schemas 決定 schema、CLI/config/output 行為契約。
 4. validation notes 決定 RAW/benchmark evidence。
 5. handoff 只做白話摘要、接手順序、下一步建議。

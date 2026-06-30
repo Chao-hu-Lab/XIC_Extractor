@@ -55,7 +55,6 @@ future activation gates.
 
 ## See Also
 
-- [Sample metadata contract v1 spec](../superpowers/specs/2026-06-15-sample-metadata-contract-v1-spec.md)
 - [Run provenance](run-provenance.md)
 - [Productization](productization.md)
 - [Product validation contract](../agent/product-validation-contract.md)

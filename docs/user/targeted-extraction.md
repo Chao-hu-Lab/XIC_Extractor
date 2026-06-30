@@ -111,7 +111,7 @@ After a run, review the `Overview` sheet for detection rates and the
 look abnormal, check the `Diagnostics` sheet before re-running.
 
 For developer-level validation harness details, see
-[docs/agent-parameter-settings.md](../agent-parameter-settings.md).
+[docs/agent/parameter-settings.md](../agent/parameter-settings.md).
 
 ## Troubleshooting
 

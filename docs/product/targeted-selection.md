@@ -63,9 +63,7 @@ Targeted selection is the product-facing decision path for known targets. It tur
 
 ## See Also
 
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md) | [Evidence spine](evidence-spine.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md) | [Evidence spine](evidence-spine.md)
 - [Quantitation context](quantitation-context.md) | [Review roundtrip](review-roundtrip.md)
-- [Product priority reset spec](../superpowers/specs/2026-05-28-product-priority-reset-decision-spec.md)
-- [Selected-hypothesis behavior addendum](../superpowers/specs/2026-06-02-selected-hypothesis-evidence-decision-public-behavior-addendum.md)
-- [Region-boundary behavior addendum](../superpowers/specs/2026-06-02-region-boundary-public-behavior-addendum.md)
-- [Target-pair RT auto-reselection spec](../superpowers/specs/2026-06-03-target-pair-rt-auto-reselection-spec.md)
+- [Peak model selection](peak-model-selection.md)
+- [Decision policy](decision-policy.md)

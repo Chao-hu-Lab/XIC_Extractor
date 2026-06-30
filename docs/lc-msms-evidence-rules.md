@@ -3,7 +3,7 @@
 Doc placement: formal_repo_doc
 Doc kind: product_doc
 Doc lifecycle: active
-Repo owner: docs/lcms-msms-evidence-rules.md
+Repo owner: docs/lc-msms-evidence-rules.md
 Doc exit rule: Keep active as the durable LC-MS/MS evidence semantics owner; retire only after a replacement product evidence contract absorbs these rules.
 
 This document owns XIC Extractor's durable interpretation rules for LC-MS/MS
@@ -38,7 +38,7 @@ packet outside that activation chain is not matrix authority by itself.
 This document owns durable evidence semantics, not live maturity tier, active
 lane, or current writer counts. Read those from the productization control
 plane, `docs/superpowers/validation/productization_status_index_v1.tsv`, and
-`docs/superpowers/specs/productization_authority_manifest.v1.json`.
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`.
 
 ## MS1 Morphology And Area Owner
 

@@ -26,7 +26,7 @@ from tools.diagnostics.docs_policy import (
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / PRODUCTIZATION_AUTHORITY_MANIFEST_REL
 DEFAULT_SCHEMA = (
-    ROOT / "docs/superpowers/specs/mechanical_adjudication_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/mechanical_adjudication_schema.v1.json"
 )
 DEFAULT_INDEX = ROOT / MECHANICAL_ADJUDICATION_INDEX_REL
 

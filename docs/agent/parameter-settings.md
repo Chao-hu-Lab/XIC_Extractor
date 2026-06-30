@@ -178,7 +178,7 @@ python -m scripts.agent_sandbox_doctor --command "<command-to-check>"
 4. 它是否有 smoke check，且不會把使用者真正該審的決策藏起來？
 
 目前不建議新增 repo-local `.codex/config.toml` 或 active hooks。先把重複失敗
-收斂到本檔、`docs/agent-subagent-routing.md`、或 CLI preflight；等 passive hook
+收斂到本檔、`docs/agent/subagent-routing.md`、或 CLI preflight；等 passive hook
 能證明它真的擋住反覆失敗，再考慮 blocking hook。
 
 ## Validation Tiers
@@ -457,7 +457,7 @@ Python process exits cleanly. For a likely timeout, rely on
 `--timing-live-output` first.
 
 Targeted extraction / workbook harness details live in
-[`docs/validation-harness.md`](validation-harness.md). That harness is not the
+[`docs/validation/harness.md`](../validation/harness.md). That harness is not the
 canonical 85RAW alignment acceptance runner unless it is explicitly updated to
 emit the same minimal machine contract and heartbeat shape documented here.
 

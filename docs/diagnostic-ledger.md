@@ -24,7 +24,7 @@ authority scopes are owned by
 productization status index
 `docs/superpowers/validation/productization_status_index_v1.tsv`, and the
 authority manifest
-`docs/superpowers/specs/productization_authority_manifest.v1.json`. When this
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`. When this
 ledger cites a historical validation note, treat it as diagnostic/rerun memory
 unless the current control plane or a current authority artifact still promotes
 the same claim.
@@ -60,6 +60,22 @@ the same claim.
 | RAW-capable Python | `"${env:XIC_REPO_ROOT}\.venv\Scripts\python.exe"` |
 
 ## Known Diagnostic Conclusions
+
+### Retired AsLS / Linear-Edge Decision Gates
+
+Verdict: old P2/P2b/P2c AsLS-versus-linear-edge diagnostics are closed history,
+not active decision surfaces. Current area authority is owned by the LC-MS/MS
+evidence rules, morphology-aware area policy, and product projection contracts.
+Historical notes may mention linear-edge comparison, but active code and future
+diagnostics must not provide a linear-edge fallback, comparator, or truth gate
+unless a new product contract explicitly reopens that decision.
+
+Use current owners instead:
+
+- `docs/product/quant-matrix.md` for matrix authority and historical AsLS policy
+  supersession.
+- `docs/product/peak-model-selection.md` for baseline-aware local S/N evidence.
+- `docs/lc-msms-evidence-rules.md` for evidence semantics and area policy.
 
 ### 2026-06-16/17 5-hmdC Own-Max Support Limited Rescue Smoke
 

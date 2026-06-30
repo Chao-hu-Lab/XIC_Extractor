@@ -24,7 +24,7 @@ from tools.diagnostics.docs_policy import PRODUCTIZATION_STATUS_INDEX_REL
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = (
-    ROOT / "docs/superpowers/specs/bounded_non_broad_product_lanes.v1.json"
+    ROOT / "docs/superpowers/schemas/bounded_non_broad_product_lanes.v1.json"
 )
 DEFAULT_ACCEPTANCE = (
     ROOT / "docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv"

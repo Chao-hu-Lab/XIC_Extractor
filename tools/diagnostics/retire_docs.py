@@ -1,12 +1,15 @@
-"""Retire dated documents from repo to vault.
+"""Retire completed transient documents from repo to vault.
 
-Checks whether each file already exists in the vault. If yes, deletes from repo.
-If not, copies to vault first, then deletes from repo.
+This tool is intentionally mechanical. Product-absorption review happens before
+calling it; this script only checks lifecycle metadata, vault backup, and exact
+repo referrers. Completed transient docs with no exact referrers leave the repo.
+Referrer-bound docs can be converted to short same-path stubs with
+``--stub-bound``; otherwise they are kept for a referrer rewrite pass.
 
-Usage:
-    uv run python tools/diagnostics/retire_docs.py --sweep              # dry-run: show what would retire
-    uv run python tools/diagnostics/retire_docs.py --sweep --execute    # actually retire
-    uv run python tools/diagnostics/retire_docs.py FILE [FILE ...]      # retire specific files
+Usage examples:
+    uv run python tools/diagnostics/retire_docs.py --sweep
+    uv run python tools/diagnostics/retire_docs.py --sweep --execute
+    uv run python tools/diagnostics/retire_docs.py FILE [FILE ...]
 """
 from __future__ import annotations
 
@@ -16,13 +19,31 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VAULT_ARCHIVE_DIR = "XIC/20 Archived Plans And Specs/Repo Retired"
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.diagnostics import docs_scan as _docs_scan  # noqa: E402
+from tools.diagnostics.docs_policy import (  # noqa: E402
+    classify_doc,
+    normalize_path_text,
+)
+
+VAULT_ARCHIVE_DIR = "XIC/Archives/Repo Retired"
 
 RETIRE_CANDIDATES = (
     "docs/superpowers/notes",
     "docs/superpowers/plans",
     "docs/superpowers/specs",
 )
+AUTO_RETIRE_LIFECYCLES = {
+    "implemented",
+    "superseded",
+    "rejected",
+    "archived",
+    "retired",
+}
+KEEP_LIFECYCLES = {"active", "draft"}
 
 KEEP_PATTERNS = {
     "README.md",
@@ -64,6 +85,9 @@ def _should_keep(rel_path: str) -> bool:
 class RetireResult:
     already_in_vault: list[tuple[str, Path]] = field(default_factory=list)
     copied_to_vault: list[tuple[str, Path]] = field(default_factory=list)
+    retired: list[str] = field(default_factory=list)
+    stubbed: list[tuple[str, str]] = field(default_factory=list)
+    referrer_bound: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     kept: list[tuple[str, str]] = field(default_factory=list)
     errors: list[tuple[str, str]] = field(default_factory=list)
 
@@ -81,12 +105,107 @@ def find_retire_candidates(repo_root: Path) -> list[Path]:
     return candidates
 
 
+def _scan_paths(repo_root: Path) -> tuple[str, ...]:
+    return (
+        _docs_scan.git_visible_paths(repo_root)
+        or _docs_scan.fallback_local_path_scan_paths(repo_root)
+    )
+
+
+def _exact_referrers(repo_root: Path, rel_path: str) -> tuple[str, ...]:
+    normalized = normalize_path_text(rel_path).lstrip("./")
+    referrers: list[str] = []
+    for scan_rel in _scan_paths(repo_root):
+        scan_rel = normalize_path_text(scan_rel).lstrip("./")
+        if scan_rel == normalized:
+            continue
+        scan_path = repo_root / scan_rel
+        if not _docs_scan.is_local_path_scan_target(scan_path, scan_rel):
+            continue
+        if normalized in _docs_scan.read_text(scan_path):
+            referrers.append(scan_rel)
+    return tuple(sorted(referrers))
+
+
+def _vault_destination(fpath: Path, vault_archive: Path) -> Path:
+    return vault_archive / fpath.name
+
+
+def _ensure_vault_copy(
+    fpath: Path,
+    rel_path: str,
+    vault_path: Path,
+    vault_archive: Path,
+    result: RetireResult,
+    *,
+    execute: bool,
+) -> Path:
+    vault_match = _find_in_vault(fpath.name, vault_path)
+    if vault_match:
+        result.already_in_vault.append((rel_path, vault_match))
+        return vault_match
+
+    dest = _vault_destination(fpath, vault_archive)
+    result.copied_to_vault.append((rel_path, dest))
+    if execute:
+        vault_archive.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(fpath, dest)
+    return dest
+
+
+def _stub_text(rel_path: str, text: str) -> str:
+    classification = classify_doc(rel_path, text)
+    owner = classification.repo_owner or classification.path
+    kind = classification.doc_kind if classification.doc_kind != "unknown" else "note"
+    return "\n".join(
+        [
+            "# Retired Document Stub",
+            "",
+            "Doc placement: repo_stub_plus_obsidian",
+            f"Doc kind: {kind}",
+            "Doc lifecycle: archived",
+            f"Repo owner: {owner}",
+            (
+                "Doc exit rule: delete this stub after exact repo referrers move "
+                f"to {owner}."
+            ),
+            "",
+            "Status: retired_original_in_obsidian",
+            "",
+            f"Original repo path: `{rel_path}`",
+            f"Current repo authority: `{owner}`",
+            f"Obsidian source hint: `source_repo_path:{rel_path}`",
+            "",
+            "The long-form original is private history. This stub only preserves",
+            "compatibility for remaining exact path references.",
+            "",
+        ]
+    )
+
+
+def _retirement_blocker(rel_path: str, text: str) -> str:
+    classification = classify_doc(rel_path, text)
+    if classification.placement == "repo_active_stub":
+        return "active repo stub"
+    if classification.doc_lifecycle in KEEP_LIFECYCLES:
+        return f"{classification.doc_lifecycle} lifecycle"
+    if classification.lifecycle_status != "declared":
+        return (
+            "missing or invalid lifecycle metadata; run product-absorption review "
+            "before retirement"
+        )
+    if classification.doc_lifecycle not in AUTO_RETIRE_LIFECYCLES:
+        return f"{classification.doc_lifecycle} lifecycle is not auto-retirable"
+    return ""
+
+
 def retire_files(
     files: list[Path],
     repo_root: Path,
     vault_path: Path,
     *,
     execute: bool = False,
+    stub_bound: bool = False,
 ) -> RetireResult:
     result = RetireResult()
     vault_archive = vault_path / VAULT_ARCHIVE_DIR
@@ -102,19 +221,46 @@ def retire_files(
             result.errors.append((rel, "file does not exist"))
             continue
 
-        vault_match = _find_in_vault(fpath.name, vault_path)
+        text = fpath.read_text(encoding="utf-8", errors="ignore")
+        blocker = _retirement_blocker(rel, text)
+        if blocker:
+            result.kept.append((rel, blocker))
+            continue
 
-        if vault_match:
-            result.already_in_vault.append((rel, vault_match))
+        referrers = _exact_referrers(repo_root, rel)
+        if referrers and not stub_bound:
+            result.referrer_bound.append((rel, referrers))
+            result.kept.append(
+                (
+                    rel,
+                    "exact repo referrers; rerun with --stub-bound or retarget refs",
+                )
+            )
+            continue
+
+        _ensure_vault_copy(
+            fpath,
+            rel,
+            vault_path,
+            vault_archive,
+            result,
+            execute=execute,
+        )
+
+        if referrers and stub_bound:
+            owner = classify_doc(rel, text).repo_owner
+            if not owner:
+                result.kept.append(
+                    (rel, "exact repo referrers but no Repo owner for stub target")
+                )
+                continue
             if execute:
-                fpath.unlink()
+                fpath.write_text(_stub_text(rel, text), encoding="utf-8")
+            result.stubbed.append((rel, owner))
         else:
-            dest = vault_archive / fpath.name
-            result.copied_to_vault.append((rel, dest))
             if execute:
-                vault_archive.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(fpath, dest)
                 fpath.unlink()
+            result.retired.append(rel)
 
     return result
 
@@ -136,15 +282,37 @@ def _resolve_vault_path() -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="*", type=Path, help="specific files to retire")
-    parser.add_argument("--sweep", action="store_true", help="find all retire candidates")
-    parser.add_argument("--execute", action="store_true", help="actually retire (default: dry-run)")
+    parser.add_argument(
+        "--sweep",
+        action="store_true",
+        help="find all retire candidates",
+    )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="actually retire (default: dry-run)",
+    )
+    parser.add_argument(
+        "--stub-bound",
+        action="store_true",
+        help=(
+            "Replace completed docs that still have exact repo referrers with "
+            "same-path compatibility stubs instead of keeping them."
+        ),
+    )
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--vault-path", type=Path, default=None)
     args = parser.parse_args(argv)
 
     vault_path = args.vault_path or _resolve_vault_path()
     if not vault_path:
-        print("ERROR: Cannot find vault path. Set OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config", file=sys.stderr)
+        print(
+            (
+                "ERROR: Cannot find vault path. Set OBSIDIAN_VAULT_PATH in "
+                "~/.obsidian-wiki/config"
+            ),
+            file=sys.stderr,
+        )
         return 1
 
     repo_root = args.repo_root.resolve()
@@ -152,7 +320,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.sweep:
         files = find_retire_candidates(repo_root)
     elif args.files:
-        files = [f.resolve() for f in args.files]
+        files = [
+            f.resolve() if f.is_absolute() else (repo_root / f).resolve()
+            for f in args.files
+        ]
     else:
         parser.error("provide file paths or use --sweep")
         return 1
@@ -160,18 +331,45 @@ def main(argv: list[str] | None = None) -> int:
     mode = "EXECUTE" if args.execute else "DRY-RUN"
     print(f"Mode: {mode}\n")
 
-    result = retire_files(files, repo_root, vault_path, execute=args.execute)
+    result = retire_files(
+        files,
+        repo_root,
+        vault_path,
+        execute=args.execute,
+        stub_bound=args.stub_bound,
+    )
 
     if result.already_in_vault:
-        print(f"Already in vault — {'deleted from repo' if args.execute else 'would delete'} ({len(result.already_in_vault)}):")
+        print(f"Already in vault ({len(result.already_in_vault)}):")
         for rel, vault_match in result.already_in_vault:
             print(f"  {rel}")
             print(f"    vault: {vault_match}")
 
     if result.copied_to_vault:
-        print(f"\nNot in vault — {'copied + deleted' if args.execute else 'would copy + delete'} ({len(result.copied_to_vault)}):")
+        copy_label = "copied" if args.execute else "would copy"
+        print(f"\nNot in vault - {copy_label} ({len(result.copied_to_vault)}):")
         for rel, dest in result.copied_to_vault:
-            print(f"  {rel} → {dest}")
+            print(f"  {rel} -> {dest}")
+
+    if result.retired:
+        retire_label = "Retired" if args.execute else "Would retire"
+        print(f"\n{retire_label} ({len(result.retired)}):")
+        for rel in result.retired:
+            print(f"  {rel}")
+
+    if result.stubbed:
+        print(
+            f"\n{'Stubbed' if args.execute else 'Would stub'} "
+            f"({len(result.stubbed)}):"
+        )
+        for rel, owner in result.stubbed:
+            print(f"  {rel} -> {owner}")
+
+    if result.referrer_bound:
+        print(f"\nReferrer-bound kept ({len(result.referrer_bound)}):")
+        for rel, referrers in result.referrer_bound:
+            print(f"  {rel}")
+            print(f"    referrers: {'; '.join(referrers)}")
 
     if result.kept:
         print(f"\nKept ({len(result.kept)}):")
@@ -183,8 +381,12 @@ def main(argv: list[str] | None = None) -> int:
         for rel, reason in result.errors:
             print(f"  {rel} ({reason})")
 
-    total = len(result.already_in_vault) + len(result.copied_to_vault)
-    print(f"\nSummary: {total} {'retired' if args.execute else 'retirable'}, {len(result.kept)} kept, {len(result.errors)} errors")
+    total = len(result.retired) + len(result.stubbed)
+    summary_label = "repo action(s)" if args.execute else "repo action(s) available"
+    print(
+        f"\nSummary: {total} {summary_label}, "
+        f"{len(result.kept)} kept, {len(result.errors)} errors"
+    )
     return 0
 
 

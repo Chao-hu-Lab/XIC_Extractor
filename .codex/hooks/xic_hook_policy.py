@@ -98,7 +98,7 @@ PRODUCT_SURFACE_PATHS = [
     "docs/user/",
     "docs/agent/product-validation-contract.md",
     "docs/agent/architecture-public-contracts.md",
-    "docs/superpowers/specs/",
+    "docs/superpowers/schemas/",
     "docs/superpowers/plans/",
     "xic_extractor/extractor.py",
     "xic_extractor/signal_processing.py",

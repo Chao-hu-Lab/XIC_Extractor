@@ -7,7 +7,8 @@ This document covers `scripts\validation_harness.py`, which is a targeted
 extraction / workbook comparison harness. It is not the canonical runner for
 large untargeted alignment acceptance. For stable local Python runners, RAW/DLL
 paths, 85RAW command shape, `validation-minimal`, heartbeat sidecars, and known
-launch anti-patterns, read [`agent-parameter-settings.md`](agent-parameter-settings.md)
+launch anti-patterns, read
+[`docs/agent/parameter-settings.md`](../agent/parameter-settings.md)
 before starting any RAW run.
 
 ## Harness Scope
@@ -30,7 +31,7 @@ placeholders are for command inspection, not real data discovery.
 Use this harness when the decision depends on targeted extraction workbook
 behavior. Do not use it for alignment/downstream matrix acceptance. Alignment
 validation uses `scripts.run_alignment` and the machine TSV contract described in
-`docs/agent-parameter-settings.md`.
+`docs/agent/parameter-settings.md`.
 
 ## Daily Workbook / Method Validation
 
@@ -88,7 +89,7 @@ Dry-run prints exact commands without touching RAW files:
 
 Use dry-run before any full targeted extraction workbook gate. If the printed
 runner, RAW/DLL path, foreground-run, or heartbeat expectation conflicts with
-`docs/agent-parameter-settings.md`, stop and update the docs or runner before
+`docs/agent/parameter-settings.md`, stop and update the docs or runner before
 launching a long RAW run. The alignment artifact/profile contract in that file
 does not apply to targeted workbook harness suites.
 
@@ -128,7 +129,7 @@ alignment matrix contract.
 ## Alignment Validation
 
 For untargeted alignment validation, downstream handoff, or 85RAW acceptance,
-start from `docs/agent-parameter-settings.md` instead of this harness. The
+start from `docs/agent/parameter-settings.md` instead of this harness. The
 current large-run contract is:
 
 ```text
@@ -183,7 +184,7 @@ extraction workbook release checks:
 
 Do not use this suite for routine PR checks, and do not use it as the alignment
 handoff gate. For alignment, use the canonical foreground command shape in
-`docs/agent-parameter-settings.md`.
+`docs/agent/parameter-settings.md`.
 
 ## Stop Conditions
 

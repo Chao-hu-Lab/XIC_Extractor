@@ -109,8 +109,8 @@ Before changing Backfill product behavior, require the relevant subset of:
 
 - [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md)
 - [Status index](../superpowers/validation/productization_status_index_v1.tsv)
-- [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
-- [Adjudication schema](../superpowers/specs/mechanical_adjudication_schema.v1.json)
+- [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
+- [Adjudication schema](../superpowers/schemas/mechanical_adjudication_schema.v1.json)
 - [Adjudication index](../superpowers/validation/mechanical_adjudication_index_v1.tsv)
-- [Evidence rules](../lcms-msms-evidence-rules.md)
+- [Evidence rules](../lc-msms-evidence-rules.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)

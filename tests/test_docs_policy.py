@@ -16,7 +16,7 @@ def test_docs_policy_marks_validation_as_route_retained_contract_surface() -> No
     assert classification.doc_kind_source == "declared"
 
 
-def test_docs_policy_marks_legacy_plan_as_high_risk_lifecycle_doc() -> None:
+def test_docs_policy_marks_plan_as_high_risk_lifecycle_doc_not_history() -> None:
     classification = classify_doc_path(
         "docs/superpowers/plans/2026-07-01-example-plan.md"
     )
@@ -24,7 +24,7 @@ def test_docs_policy_marks_legacy_plan_as_high_risk_lifecycle_doc() -> None:
     assert classification.is_repo_doc
     assert classification.is_high_risk_repo_doc
     assert classification.is_lifecycle_managed
-    assert classification.is_legacy_history
+    assert not classification.is_legacy_history
     assert classification.inferred_kind == "plan"
 
 
@@ -109,6 +109,45 @@ def test_docs_policy_keeps_root_authority_docs_canonical_not_high_risk() -> None
     assert classification.doc_kind == "report"
     assert classification.doc_kind_source == "declared"
     assert classification.repo_owner == "docs/diagnostic-ledger.md"
+    assert classification.is_allowed_docs_root_file
+    assert not classification.is_docs_root_scatter
+
+
+def test_docs_policy_marks_non_allowlisted_docs_root_file_as_scatter() -> None:
+    classification = classify_doc_path("docs/2026-07-01-branch-report.md")
+
+    assert classification.is_docs_root_file
+    assert classification.is_docs_root_scatter
+    assert not classification.is_allowed_docs_root_file
+
+
+def test_docs_policy_marks_retired_superpowers_lanes() -> None:
+    classification = classify_doc_path(
+        "docs/superpowers/notes/2026-07-01-observation.md"
+    )
+
+    assert classification.is_retired_tracked_dir
+    assert classification.retired_tracked_dir == "docs/superpowers/notes/"
+
+
+def test_docs_policy_marks_deepresearch_as_retired_lane() -> None:
+    classification = classify_doc_path(
+        "docs/deepresearch/Untargeted LC-MS Feature Discovery Background.md"
+    )
+
+    assert classification.is_retired_tracked_dir
+    assert classification.retired_tracked_dir == "docs/deepresearch/"
+
+
+def test_docs_policy_marks_specs_as_transient_markdown_lane() -> None:
+    classification = classify_doc_path(
+        "docs/superpowers/specs/2026-07-01-example-contract.md"
+    )
+
+    assert not classification.is_retired_tracked_dir
+    assert classification.is_high_risk_repo_doc
+    assert classification.is_lifecycle_managed
+    assert classification.inferred_kind == "spec"
 
 
 def test_formal_repo_doc_placement_upgrades_canonical_owner() -> None:

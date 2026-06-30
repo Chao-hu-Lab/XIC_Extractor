@@ -104,10 +104,10 @@ Before changing preset behavior, require the relevant subset of:
 
 ## See Also
 
-- [Parameter settings](../agent-parameter-settings.md)
+- [Parameter settings](../agent/parameter-settings.md)
 - [Preset code](../../xic_extractor/presets/)
 - [Preset TOML data](../../xic_extractor/presets/data/)
 - [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md)
 - [Status index](../superpowers/validation/productization_status_index_v1.tsv)
-- [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
+- [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
 - [Diagnostic ledger](../diagnostic-ledger.md)

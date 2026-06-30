@@ -19,7 +19,7 @@ local handoff only when multiple local branches need simultaneous state.
 
 Durable tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
-`docs/superpowers/specs/productization_authority_manifest.v1.json`, and
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`, and
 `docs/superpowers/validation/productization_status_index_v1.tsv`.
 
 ## Product State

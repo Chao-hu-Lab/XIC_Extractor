@@ -27,7 +27,7 @@ from scripts.lockbox_reviewer_identity import (
 from xic_extractor.tabular_io import file_sha256, read_tsv_with_header
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "docs/superpowers/specs/lockbox_label_schema_v1.json"
+SCHEMA_PATH = ROOT / "docs/superpowers/schemas/lockbox_label_schema_v1.json"
 LOCKBOX_MANIFEST = (
     ROOT / "docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv"
 )

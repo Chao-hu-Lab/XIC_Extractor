@@ -1,7 +1,7 @@
 # XIC Extractor Productization Roadmap Review
 
 Doc placement: repo_support_doc
-Doc kind: goal
+Doc kind: plan
 Doc lifecycle: active
 Repo owner: docs/product/backfill.md; docs/product/quant-matrix.md; docs/superpowers/plans/2026-06-15-productization-control-plane.md
 Doc exit rule: Retire or move to Obsidian after the Backfill/quant-matrix product docs and productization control plane fully absorb this roadmap direction.
@@ -36,7 +36,7 @@ Use this roadmap with:
 - [Quant matrix product doc](../../product/quant-matrix.md)
 - [productization control plane](../plans/2026-06-15-productization-control-plane.md)
 - [productization status anchor](../productization/status/cc-framework-improvements-productization.md)
-- [deepresearch index](../../deepresearch/README.md)
+- [Untargeted Method](../../product/untargeted-method.md)
 
 The control plane remains the authority for current tier, active lane, and
 current writer surface. This roadmap records direction and phase order.

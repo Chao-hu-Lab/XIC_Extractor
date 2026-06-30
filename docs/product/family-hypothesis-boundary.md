@@ -104,5 +104,5 @@ PeakHypothesis behavior, require the relevant subset of:
 - [Alignment](alignment.md)
 - [Backfill](backfill.md)
 - [Peak model selection](peak-model-selection.md)
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Architecture contract](../architecture-contract.md)

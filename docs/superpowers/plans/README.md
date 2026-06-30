@@ -20,11 +20,13 @@ plan is not active by default.
    continuation state. Use
    `../productization/status/cc-framework-improvements-productization.md` only when
    working on that productization status-anchor branch.
-3. `docs/product/backfill.md`, `docs/product/quant-matrix.md`, and the current
+3. `2026-06-19-backfill-quant-matrix-productization-roadmap.md` for the current
+   Backfill / quant-matrix roadmap direction when that lane is active.
+4. `docs/product/backfill.md`, `docs/product/quant-matrix.md`, and the current
    branch handoff for Backfill / quant-matrix phase execution. The old Backfill
    quant-matrix blueprint has been retired to Obsidian and must not be treated
    as an active repo plan.
-4. Older dated plans only when the active goal names them as provenance.
+5. Older dated plans only when the active plan names them as provenance.
 
 ## Current Backfill Direction
 
@@ -38,4 +40,5 @@ promotion, or productization gates are historical unless explicitly reactivated.
 ## Rule
 
 Do not treat old implementation checklists as open work. First check the control
-plane and current handoff; then create a fresh goal for any reactivation.
+plane and current handoff; then create a fresh plan or goal-shaped runtime
+contract for any reactivation.

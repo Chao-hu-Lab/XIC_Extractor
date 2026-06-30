@@ -65,6 +65,8 @@ themselves.
 - Treating review-only labels or diagnostic sidecars as writer authority.
 - Adding diagnostic evidence columns to the primary matrix.
 - Treating historical AsLS-vs-raw policy as current area authority.
+- Reopening retired AsLS/linear-edge comparison gates instead of using current
+  morphology-aware area and evidence rules.
 - Claiming `production_ready` from contract fixtures or 8RAW smoke alone.
 - Updating topic prose while leaving status index or authority manifest stale.
 
@@ -72,6 +74,6 @@ themselves.
 
 - [Backfill](backfill.md) | [Alignment](alignment.md) | [Productization](productization.md)
 - [Productization control plane plan](../superpowers/plans/2026-06-15-productization-control-plane.md)
-- [Status index](../superpowers/validation/productization_status_index_v1.tsv) | [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
-- [Sidecar-to-product activation contract](../superpowers/specs/2026-05-30-sidecar-to-product-label-activation-contract.md)
-- [Full untargeted peak-hypothesis matrix contract](../superpowers/specs/2026-06-03-full-untarget-peak-hypothesis-final-matrix-contract.md)
+- [Status index](../superpowers/validation/productization_status_index_v1.tsv) | [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
+- [Peak model selection](peak-model-selection.md)
+- [Run provenance](run-provenance.md)

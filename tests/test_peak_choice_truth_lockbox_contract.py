@@ -17,7 +17,7 @@ from scripts.build_peak_choice_truth_lockbox import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "docs/superpowers/specs/truth_label_schema.v1.json"
+SCHEMA_PATH = ROOT / "docs/superpowers/schemas/truth_label_schema.v1.json"
 MANIFEST_PATH = ROOT / "docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv"
 LABEL_LOG_PATH = ROOT / "docs/superpowers/validation/reviewer_label_log_v1.tsv"
 SUMMARY_PATH = (
