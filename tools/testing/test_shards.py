@@ -16,11 +16,13 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
     {
         "docs-config": (
             "tests/test_agent_sandbox_doctor.py",
+            "tests/test_auto_accept_policy.py",
             "tests/test_bounded_product_lanes_contract.py",
             "tests/test_check_productization_authority.py",
             "tests/test_ci_workflow.py",
             "tests/test_config*.py",
             "tests/test_docs_*.py",
+            "tests/test_generate_stubs.py",
             "tests/test_handoff_*.py",
             "tests/test_multiprocessing_entrypoints.py",
             "tests/test_peak_model_selection.py",
@@ -29,6 +31,7 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
             "tests/test_presets_*.py",
             "tests/test_score_retirement_legacy_authority.py",
             "tests/test_test_shards.py",
+            "tests/test_validate_vault_page.py",
             "tests/test_validation_artifact_*.py",
         ),
         "gui": (
@@ -140,12 +143,14 @@ SHARD_PATTERNS: ShardPatterns = OrderedDict(
             "tests/test_targeted_*.py",
         ),
         "diagnostics-tools": (
+            "tests/test_auto_accept_policy.py",
             "tests/test_benchmark_parallel.py",
             "tests/test_build_targeted_ms1_shape_identity_supports.py",
             "tests/test_changed_row_mode_overlay_review.py",
             "tests/test_compare_alignment_workbooks.py",
             "tests/test_cross_report_evidence_consistency.py",
             "tests/test_diagnostic_*.py",
+            "tests/test_generate_stubs.py",
             "tests/test_instrument_qc_*.py",
             "tests/test_low_ms1_assessable_coverage_audit.py",
             "tests/test_multi_tag_adduct_audit.py",
