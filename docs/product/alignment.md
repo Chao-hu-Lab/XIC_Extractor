@@ -18,6 +18,11 @@ contracts for review and downstream product decisions.
   and compatibility traceability. `group_hypothesis_id` carries successor
   cross-sample identity when available; product projection decides whether that
   identity may write or count.
+- Current public matrix, production-decision, and matrix-identity TSV paths may
+  still key records by the stable row/display label for compatibility. Treat
+  that as an adapter state, not canonical identity proof; promoting
+  `group_hypothesis_id` to the public projection key requires an explicit
+  expected-diff contract and schema tests.
 - Successor/group identity, gap-fill semantics, and workbook metadata
   versioning are public behavior when they affect alignment outputs and must
   stay repo-readable.

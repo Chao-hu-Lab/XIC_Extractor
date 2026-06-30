@@ -221,7 +221,10 @@ ranks, and projection writes. Reserve `Trace` for LC-MS chromatogram signals;
 do not use it as shorthand for decision records.
 `DecisionRecord.gate` and `DecisionRecord.tie_break` are audit-visible policy
 terms, not a generic selection key. Only workflow-owned selection modules may
-convert those terms into ordering keys.
+convert those terms into ordering keys. Audit-visible means a promoted workflow
+must preserve the terms in its owning record, sidecar, or public output when
+they explain product behavior; it does not mean every current review TSV emits a
+complete `DecisionRecord`.
 `DecisionRecord.projection_authority` names the workflow owner allowed to
 project or count the result. It is not an evidence token, score field, shadow
 artifact label, or display writer name. New product authority labels need the

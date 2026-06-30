@@ -17,6 +17,13 @@ path.
   candidates sharing the same discovered MS1 peak. It must not be treated as
   cross-sample identity, selected-peak truth, or Backfill promotion authority by
   itself.
+- The peak-anchor schema migration intentionally removed legacy
+  `family_context`, `feature_superfamily_id`, `feature_superfamily_size`,
+  `feature_superfamily_role`, `feature_superfamily_confidence`, and
+  `feature_superfamily_evidence` columns from `discovery_candidates.csv` and
+  `discovery_review.csv`. There is no compatibility adapter for those columns;
+  downstream consumers must read the current column constants or tolerate the
+  missing legacy fields.
 - Batch discovery handoff uses explicit index files. Do not depend on old
   worktree-local output directories as durable inputs.
 - Minimal output modes are for fast inspection; standard outputs are the public
@@ -59,6 +66,8 @@ Before changing discovery behavior, require the relevant subset of:
 - Performance/output-level review if a minimal or standard mode changes.
 - Evidence-rule review if a new evidence provider changes candidate meaning.
 - Downstream alignment handoff check when filenames or columns change.
+  `tests/test_discovery_csv.py` and `tests/test_discovery_review_csv.py` own the
+  current peak-anchor output schema.
 
 ## Pitfalls
 

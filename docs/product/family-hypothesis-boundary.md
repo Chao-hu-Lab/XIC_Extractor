@@ -43,8 +43,10 @@ display labels. Treat this as an adapter state:
 1. Preserve legacy IDs when they are public output contracts.
 2. Add successor IDs alongside legacy IDs when identity semantics become
    product-relevant.
-3. Use `group_hypothesis_id` for alignment identity decisions when a
-   `CrossSamplePeakGroupHypothesis` exists.
+3. Use `group_hypothesis_id` for successor alignment identity decisions when a
+   workflow has promoted it as the decision key. Until then, public
+   matrix/projection maps may still key by legacy row labels and must describe
+   that compatibility state.
 4. Do not collapse multiple source peak anchors or cross-sample groups into one
    product row unless an explicit split/consolidation contract and tests approve
    it.

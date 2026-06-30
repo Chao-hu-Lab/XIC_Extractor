@@ -39,12 +39,13 @@ the answer is not to read every RAW byte before every cache hit.
 Bind each reusable trace row to the current per-sample RAW identity and fail
 closed when identity is missing or mismatched.
 
-For the current implementation, cache schema v4 records `path_stat_v1` identity:
-the requested path, resolved path, file size, mtime, device, and inode. Cache
-hits validate the cached trace payload, stable provenance, and current RAW
-identity before reuse. Manifest fallback and cache seeding use the same rule.
-When validation fails, the runner falls back to normal RAW extraction instead of
-reusing stale evidence.
+For the current implementation, cache schema v5 records the cached trace-summary
+and trace-data artifact size plus SHA256, and records `path_stat_v1` RAW
+identity: the requested path, resolved path, file size, mtime, device, and inode.
+Cache hits validate cached artifact fingerprints, trace payload, stable
+provenance, and current RAW identity before reuse. Manifest fallback and cache
+seeding use the same rule. When validation fails, the runner falls back to normal
+RAW extraction instead of reusing stale evidence.
 
 Keep this separate from resume semantics. `--reuse-existing` can still rebuild
 from completed local artifacts under its existing contract; the evidence cache
@@ -61,18 +62,25 @@ across runs.
   - `output/performance/family_abstraction_final_8raw_validation_20260629/product_ready_preset_publication_check/product_ready_preset_publication_summary.json`
   - `output/performance/family_abstraction_final_8raw_validation_20260629/standard_peak_backfill_preset/standard_peak_backfill_preset_summary.json`
 - Tests / reviewers:
+  - `test_batch_evidence_cache_rejects_same_size_trace_payload_mismatch`
+  - `test_batch_evidence_cache_rejects_same_size_summary_payload_mismatch`
   - `test_batch_evidence_cache_rejects_replaced_raw_file_identity`
   - `test_batch_evidence_cache_manifest_fallback_rejects_replaced_raw_file_identity`
   - PR review comment on `--standard-peak-evidence-cache-dir`
+- Cache-specific claims above are supported by focused tests. The fresh 8RAW
+  validation run listed here was executed with `evidence_cache_enabled=false`;
+  it supports non-cache validation-minimal parity, not cache-hit acceptance or
+  cache performance.
 
 ## Limits
 
-This proves the cache fails closed for same-path RAW replacement and that the
-fresh 8RAW validation-minimal run completes with public TSV parity against the
-previous branch baseline. It is not a cryptographic RAW-content guarantee and it
-does not make the evidence cache a default one-shot production optimization.
-Use 85RAW only when a later change needs stress-scale timing or production
-readiness evidence.
+This proves the cache fails closed for same-size cached artifact corruption and
+same-path RAW replacement. It also records that the fresh 8RAW validation-minimal
+run completed with public TSV parity against the previous branch baseline, but
+that run did not exercise cache hits. This is not a cryptographic RAW-content
+guarantee and it does not make the evidence cache a default one-shot production
+optimization. Use 85RAW only when a later change needs stress-scale timing or
+production readiness evidence.
 
 ## Next Time
 

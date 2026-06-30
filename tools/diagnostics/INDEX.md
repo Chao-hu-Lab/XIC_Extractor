@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
-**Last refreshed:** 2026-06-29
+**Last refreshed:** 2026-06-30
 **Total entry-points:** 104
-**Total files (incl. helpers):** 186 Python files under `tools/diagnostics/`
+**Total files (incl. helpers):** 187 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/architecture-contract.md`; the retired dated
 diagnostic lifecycle spec remains only as a same-path public stub.
 **Provenance note:** `Originating spec/plan`, `Recent doc`, and similar fields

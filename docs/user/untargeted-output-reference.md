@@ -27,6 +27,10 @@ One row per candidate feature per sample. Full provenance for audit.
 | feature_family_id | string | Per-sample peak anchor label for candidates sharing the same discovered MS1 peak |
 | feature_family_size | int | Number of members in the family |
 
+Legacy `family_context` and `feature_superfamily_*` columns are not part of the
+current Discovery output schema. Consumers should use the listed columns rather
+than requiring those removed fields.
+
 #### Measurement Columns
 
 | Column | Type | Description |
