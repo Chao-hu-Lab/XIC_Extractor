@@ -53,14 +53,15 @@ repo deliberately keeps it as a public artifact.
 ## Current Cleanup Evidence
 
 The current docs-cleanup control surface lives under
-`docs/superpowers/file-management/docs-cleanup/` and
-`docs/superpowers/topics/`.
+`docs/superpowers/file-management/docs-cleanup/`. Tracked topic indexes were
+retired because `docs/product/` is the durable topic layer. If a cleanup pass
+needs browsable topic pages, generate them to ignored `output/docs-topic-indexes/`.
 
-Current routing queue:
+Retained cleanup evidence:
 
 - `docs/superpowers/file-management/docs-cleanup/2026-06-29_docs-superpowers-routing-manifest.md`
 - `docs/superpowers/file-management/docs-cleanup/2026-06-29_docs-superpowers-topic-clusters.tsv`
-- `docs/superpowers/topics/docs-workflow/README.md`
+- optional ignored topic indexes under `output/docs-topic-indexes/`
 
 Completed or archived support:
 

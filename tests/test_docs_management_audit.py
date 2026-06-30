@@ -1338,7 +1338,7 @@ def test_write_topic_clusters_tsv_writes_folder_consolidation_map(
     )
     assert row["topic_key"] == "backfill and quant matrix"
     assert row["suggested_repo_topic_folder"] == (
-        "docs/superpowers/topics/backfill-and-quant-matrix/"
+        "output/docs-topic-indexes/backfill-and-quant-matrix/"
     )
     assert row["suggested_obsidian_topic_folder"].endswith(
         "/Backfill And Quant Matrix/"
@@ -1379,8 +1379,8 @@ def test_write_topic_index_readmes_creates_navigation_only_indexes(
     readme = (
         index_dir / "backfill-and-quant-matrix" / "README.md"
     ).read_text(encoding="utf-8")
-    assert "Doc placement: formal_repo_doc" in readme
-    assert "Doc kind: product_doc" in readme
+    assert "Doc placement: ignored_artifact" in readme
+    assert "Doc kind: manifest" in readme
     assert "navigation and cleanup index" in readme
     assert "does not define product behavior" in readme
     assert "Digestion review files:" in readme
@@ -1388,6 +1388,7 @@ def test_write_topic_index_readmes_creates_navigation_only_indexes(
     assert "Support retention counts:" in readme
     assert "## Support Retention" in readme
     assert "Canonical owner hint: `docs/product/backfill.md" in readme
+    assert "Generated index folder: `output/docs-topic-indexes/" in readme
     assert f"- `{owner_path}`" in readme
 
 

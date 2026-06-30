@@ -19,8 +19,10 @@ is not active just because it is in this directory.
    only when working on the productization status-anchor workflow; otherwise
    use the branch-scoped current handoff named by the active goal or PR workflow.
 3. `docs/superpowers/goals/XIC_Extractor_Productization_Roadmap_Review.md`
-4. `docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md`
-   for Backfill/quant-matrix work.
+4. `docs/product/backfill.md`, `docs/product/quant-matrix.md`, and the current
+   branch handoff for Backfill/quant-matrix work. The old Backfill
+   quant-matrix blueprint has been retired to Obsidian and is no longer a repo
+   execution surface.
 5. The spec explicitly named by the current goal.
 
 ## Active Goal Surface

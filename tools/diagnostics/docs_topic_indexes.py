@@ -1,4 +1,4 @@
-"""Render generated docs/superpowers topic index README files."""
+"""Render generated docs topic index README files for ignored review output."""
 
 from __future__ import annotations
 
@@ -48,14 +48,13 @@ def _topic_index_markdown(cluster: dict[str, object]) -> str:
     lines = [
         f"# {title} Topic Index",
         "",
-        "Doc placement: formal_repo_doc",
-        "Doc kind: product_doc",
+        "Doc placement: ignored_artifact",
+        "Doc kind: manifest",
         "Doc lifecycle: active",
-        f"Repo owner: {repo_topic_folder}README.md; authority: {repo_owner_hint}",
+        f"Repo owner: {repo_owner_hint}",
         (
-            "Doc exit rule: Regenerate from docs_management_audit when topic "
-            "clusters change; retire after exact referrers and Obsidian "
-            "originals are resolved."
+            "Doc exit rule: Regenerate on demand from docs_management_audit; "
+            "do not track as durable repo documentation."
         ),
         "",
         "This file is a navigation and cleanup index. It does not define product "
@@ -64,7 +63,7 @@ def _topic_index_markdown(cluster: dict[str, object]) -> str:
         "## Authority",
         "",
         f"- Canonical owner hint: `{repo_owner_hint}`",
-        f"- Repo topic index folder: `{repo_topic_folder}`",
+        f"- Generated index folder: `{repo_topic_folder}`",
         f"- Obsidian archive lane: `{obsidian_topic_folder}`",
         "",
         "## Cluster State",

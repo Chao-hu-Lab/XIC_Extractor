@@ -3,8 +3,8 @@
 Doc placement: repo_support_doc
 Doc kind: goal
 Doc lifecycle: active
-Repo owner: docs/superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md
-Doc exit rule: Retire or move to Obsidian after the Backfill quant-matrix blueprint and productization control plane fully absorb this roadmap direction.
+Repo owner: docs/product/backfill.md; docs/product/quant-matrix.md; docs/superpowers/plans/2026-06-15-productization-control-plane.md
+Doc exit rule: Retire or move to Obsidian after the Backfill/quant-matrix product docs and productization control plane fully absorb this roadmap direction.
 
 Updated: 2026-06-19
 Status: direction-reset roadmap
@@ -23,16 +23,17 @@ default quant matrix = detected + accepted Backfill
 write authority = ProductionAcceptanceManifest only
 ```
 
-Use the
-[Backfill Quant Matrix Product Blueprint](../plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
-as the authoritative roadmap. The 2026-06-18 evidence-lifecycle blueprint is
-superseded and retained only as an adapt source.
+Use the Backfill/quant-matrix product docs plus the productization control plane
+as the authoritative roadmap. The retired Backfill quant-matrix blueprint and
+the 2026-06-18 evidence-lifecycle blueprint are superseded and retained only as
+Obsidian/source-history inputs.
 
 ## Read First
 
 Use this roadmap with:
 
-- [Backfill Quant Matrix Product Blueprint](../plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
+- [Backfill product doc](../../product/backfill.md)
+- [Quant matrix product doc](../../product/quant-matrix.md)
 - [productization control plane](../plans/2026-06-15-productization-control-plane.md)
 - [productization status anchor](../productization/status/cc-framework-improvements-productization.md)
 - [deepresearch index](../../deepresearch/README.md)

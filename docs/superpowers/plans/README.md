@@ -20,8 +20,10 @@ plan is not active by default.
    continuation state. Use
    `../productization/status/cc-framework-improvements-productization.md` only when
    working on that productization status-anchor branch.
-3. `2026-06-19-backfill-quant-matrix-product-blueprint.md` for Backfill /
-   quant-matrix phase execution.
+3. `docs/product/backfill.md`, `docs/product/quant-matrix.md`, and the current
+   branch handoff for Backfill / quant-matrix phase execution. The old Backfill
+   quant-matrix blueprint has been retired to Obsidian and must not be treated
+   as an active repo plan.
 4. Older dated plans only when the active goal names them as provenance.
 
 ## Current Backfill Direction

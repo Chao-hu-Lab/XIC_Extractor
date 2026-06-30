@@ -702,7 +702,10 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--topic-index-dir",
         type=Path,
-        help="Write index-only topic README files under this directory.",
+        help=(
+            "Write temporary index-only topic README files under this "
+            "directory, normally ignored output/docs-topic-indexes."
+        ),
     )
     return parser.parse_args(argv)
 

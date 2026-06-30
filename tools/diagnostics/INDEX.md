@@ -1,8 +1,8 @@
 # tools/diagnostics/ — Diagnostic Tool Index
 
 **Last refreshed:** 2026-06-30
-**Total entry-points:** 104
-**Total files (incl. helpers):** 187 Python files under `tools/diagnostics/`
+**Total entry-points:** 107
+**Total files (incl. helpers):** 191 Python files under `tools/diagnostics/`
 **Governing spec:** `docs/architecture-contract.md`; the retired dated
 diagnostic lifecycle spec remains only as a same-path public stub.
 **Provenance note:** `Originating spec/plan`, `Recent doc`, and similar fields
@@ -42,7 +42,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 8. [Peak-Group / Overlay Visualization](#peak-group--overlay-visualization) — 7 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
-11. [Agent / Docs Workflow Guards](#agent--docs-workflow-guards) — 3 tools
+11. [Agent / Docs Workflow Guards](#agent--docs-workflow-guards) — 6 tools
 
 ---
 
@@ -1675,9 +1675,9 @@ retention drift, and local/private path exposure that needs focused
 retention/privacy review.
 
 Use `--routing-manifest-tsv` for file-level cleanup rows and
-`--topic-clusters-tsv` for big-direction folder/index consolidation. Use
-`--topic-index-dir docs/superpowers/topics` to regenerate index-only topic
-README files from the current cluster summary.
+`--topic-clusters-tsv` for big-direction consolidation. Use
+`--topic-index-dir output/docs-topic-indexes` to generate temporary,
+ignored index-only topic README files from the current cluster summary.
 **Topic group**: `docs_management_audit.py` + `docs_placement_guard.py` +
 `handoff_retention_audit.py`
 **Governing doc**: `docs/agent/obsidian-handoff-contract.md`
@@ -1709,6 +1709,43 @@ changes, or authorizes tracked deletion.
 
 ---
 
+### `generate_stubs.py`
+
+**Purpose**: Generate compact repo stub files from a Link Stub Blockers TSV so
+historical links can point to Obsidian originals without keeping long private
+history bodies in repo.
+**Topic group**: `docs_management_audit.py` + `generate_stubs.py`
+**Governing doc**: `docs/agent/obsidian-handoff-contract.md`
+**Status note**: Dry-run by default; `--execute` writes stub files but does not
+move vault pages, update manifests, stage changes, or authorize deletion.
+
+---
+
+### `retire_docs.py`
+
+**Purpose**: Retire dated docs/superpowers plans, specs, and notes after vault
+presence is confirmed, copying missing originals to the vault before removal
+when run with `--execute`.
+**Topic group**: `docs_management_audit.py` + `retire_docs.py`
+**Governing doc**: `docs/project-layout.md`;
+`docs/agent/obsidian-handoff-contract.md`
+**Status note**: Dry-run unless `--execute` is supplied. It skips README,
+schema, JSON, TSV, and control-plane anchors; it does not decide product
+authority or validation readiness.
+
+---
+
+### `validate_vault_page.py`
+
+**Purpose**: Validate required Obsidian vault page metadata before promotion:
+frontmatter, summary, lifecycle, tier, and visibility tag.
+**Topic group**: `docs_management_audit.py` + `validate_vault_page.py`
+**Governing doc**: `docs/agent/obsidian-handoff-contract.md`
+**Status note**: Read-only single-page metadata check. It does not edit vault
+pages, promote staged notes, update manifests, or change repo files.
+
+---
+
 ## Shared Infrastructure
 
 Not entry-points, but referenced by multiple topic groups:
@@ -1717,7 +1754,7 @@ Not entry-points, but referenced by multiple topic groups:
 - `xic_extractor/diagnostics/backfill_overlay.py` — package-owned shared selector for seed-specific backfill overlay rows. It keeps retained backfill gates, shadow policy, and shadow projection on one fail-closed selection rule: exact seed rows beat legacy family rows when allowed, and conflict/review verdicts outrank support verdicts when duplicate rows exist for the same seed. Use it before adding local `_selected_overlay_row` or `_overlay_sort_key` copies.
 - `tools/diagnostics/docs_scan.py` — shared text-file discovery/read helpers for docs diagnostics. Reuse it before adding another `git ls-files` fallback, repo-relative path helper, or text-file scan predicate.
 - `tools/diagnostics/docs_routing_review.py` — docs/superpowers routing domain logic: route classification, lifecycle metadata, topic hints, topic-owner clustering, exact-referrer status, and TSV field contracts. Keep docs-route/product-authority rules here instead of rebuilding them inside CLI wrappers.
-- `tools/diagnostics/docs_topic_indexes.py` — generated topic-index README renderer. It writes navigation-only `docs/superpowers/topics/<topic>/README.md` files from the topic-cluster summary and must not define product behavior, validation policy, matrix authority, or selected values.
+- `tools/diagnostics/docs_topic_indexes.py` — generated topic-index README renderer. It writes navigation-only topic README files to a caller-provided ignored output directory, normally `output/docs-topic-indexes/<topic>/README.md`, from the topic-cluster summary and must not define product behavior, validation policy, matrix authority, or selected values.
 
 Large diagnostics refactor reviews should use
 `.codex/skills/xic-large-pr-review/SKILL.md`. Start from high blast-radius

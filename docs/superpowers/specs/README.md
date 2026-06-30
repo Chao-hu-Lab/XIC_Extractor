@@ -4,7 +4,7 @@ Doc placement: repo_support_doc
 Doc kind: manifest
 Doc lifecycle: active
 Repo owner: docs/project-layout.md
-Doc exit rule: Retire or rewrite this index after specs are absorbed into topic indexes, canonical product docs, or Obsidian-backed stubs.
+Doc exit rule: Retire or rewrite this index after specs are absorbed into canonical product docs, checker-readable schema registries, or Obsidian-backed stubs.
 
 Status: routing index
 

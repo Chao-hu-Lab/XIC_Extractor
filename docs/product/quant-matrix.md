@@ -72,7 +72,6 @@ themselves.
 
 - [Backfill](backfill.md) | [Alignment](alignment.md) | [Productization](productization.md)
 - [Productization control plane plan](../superpowers/plans/2026-06-15-productization-control-plane.md)
-- [Backfill quant-matrix blueprint](../superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
 - [Status index](../superpowers/validation/productization_status_index_v1.tsv) | [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
 - [Sidecar-to-product activation contract](../superpowers/specs/2026-05-30-sidecar-to-product-label-activation-contract.md)
 - [Full untargeted peak-hypothesis matrix contract](../superpowers/specs/2026-06-03-full-untarget-peak-hypothesis-final-matrix-contract.md)

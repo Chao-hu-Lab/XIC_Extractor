@@ -37,6 +37,7 @@ DOC_ROUTING_REFERRER_EXCLUDE_PATTERNS = (
         r"docs/superpowers/file-management/docs-cleanup/.*source-copy-stub-batch\.md$"
     ),
     re.compile(r"docs/superpowers/file-management/docs-cleanup/.*topic-clusters\.tsv$"),
+    re.compile(r"output/docs-topic-indexes/[^/]+/README\.md$"),
     re.compile(r"docs/superpowers/topics/[^/]+/README\.md$"),
 )
 DOC_ROUTE_OBSIDIAN_ORIGINAL = "obsidian_original"
@@ -443,7 +444,7 @@ def _topic_title(topic_key: str) -> str:
 
 
 def _suggested_repo_topic_folder(topic_key: str) -> str:
-    return f"docs/superpowers/topics/{_topic_slug(topic_key)}/"
+    return f"output/docs-topic-indexes/{_topic_slug(topic_key)}/"
 
 
 def _suggested_obsidian_topic_folder(topic_key: str) -> str:
@@ -455,13 +456,13 @@ def _topic_next_action(status: str) -> str:
     if status == "potential_duplicate_owner":
         return (
             "resolve files claiming the same repo owner; keep one owner, demote "
-            "siblings to support/archive/stub, and keep the topic folder as an "
-            "index only"
+            "siblings to support/archive/stub, and regenerate an ignored topic "
+            "index only if browsing support surfaces is still useful"
         )
     if status == "multiple_subtopic_owners":
         return (
             "confirm each owner-like file is a distinct sub-contract; point all "
-            "of them back to the big-direction owner and topic index"
+            "of them back to the big-direction owner"
         )
     if status == "owner_plus_cleanup_candidates":
         return (

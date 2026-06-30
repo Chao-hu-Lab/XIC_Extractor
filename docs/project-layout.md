@@ -90,12 +90,13 @@ reports `route_retained_files` and `digestion_status` separately so public docs,
 checker-readable artifacts, stubs, or referrer-blocked files can still be
 reviewed for owner absorption, support-surface demotion, lifecycle closeout, or
 Obsidian original routing.
-For browsing, a future `docs/superpowers/topics/<topic>/` folder may act as a
-topic index and migration queue, but it must not become a second product owner.
-The index points readers to the canonical owner, support artifacts, and
-Obsidian original lookup keys; it does not redefine the topic. Refresh topic
-indexes through `tools/diagnostics/docs_management_audit.py --topic-index-dir`
-instead of hand-maintaining separate source-of-truth pages.
+Do not maintain a tracked `docs/superpowers/topics/` tree. `docs/product/` is
+the repo topic layer; a separate tracked topic-index folder duplicates that
+meaning and drifts quickly after retirement sweeps. When browsing support
+surfaces still helps a cleanup pass, generate temporary topic indexes through
+`tools/diagnostics/docs_management_audit.py --topic-index-dir
+output/docs-topic-indexes`; `output/` is ignored and the generated pages must
+not become source-of-truth docs.
 When a route needs private-vault work, use the wiki skill chain rather than ad
 hoc file edits: `wiki-status`/`wiki-query` for read-side lookup,
 `wiki-ingest`/`wiki-update` for original or project knowledge writes,

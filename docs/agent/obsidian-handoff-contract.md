@@ -81,12 +81,14 @@ closeout, or Obsidian original handling. Use `digestion_status` and
 `digestion_next_action` from the docs-management audit before treating
 `repo_product_doc` or `kept_files` counts as cleaned-up knowledge.
 
-When same-topic files become hard to browse, prefer an index folder such as
-`docs/superpowers/topics/<topic>/` over another owner document. The folder is a
-navigation and migration queue: it links to the canonical owner, support
-artifacts, lifecycle state, Obsidian originals, and referrer cleanup work. It
-must not carry independent product authority. Generate or refresh these indexes
-from `tools/diagnostics/docs_management_audit.py --topic-index-dir`; do not
+When same-topic files become hard to browse, prefer the topic-cluster manifest
+or a temporary generated index under ignored `output/docs-topic-indexes/` over
+another owner document. The generated index is only a navigation and migration
+queue: it links to the canonical owner, support artifacts, lifecycle state,
+Obsidian originals, and referrer cleanup work. It must not carry independent
+product authority, and the repo no longer tracks `docs/superpowers/topics/` as
+a durable docs tree. Generate or refresh temporary indexes from
+`tools/diagnostics/docs_management_audit.py --topic-index-dir`; do not
 hand-maintain them as separate source-of-truth pages.
 
 The stable lookup key from repo to vault is `source_repo_path:<repo path>`.
@@ -731,7 +733,7 @@ direction instead of by file path. Required columns:
 | `topic_index_count` | Generated index-only topic README files. |
 | `delegated_handoff_count` | Handoff files delegated to handoff retention audit. |
 | `repo_owner_hint` | Intended canonical owner path or topic. |
-| `suggested_repo_topic_folder` | Index-only repo folder for browsing and migration coordination. |
+| `suggested_repo_topic_folder` | Suggested ignored `output/docs-topic-indexes/<topic>/` folder for temporary browsing and migration coordination. |
 | `suggested_obsidian_topic_folder` | Private-vault topic archive lane. |
 | `topic_next_action` | Smallest consolidation action for the topic. |
 | `owner_paths` | Sample owner-like files to review first. |
