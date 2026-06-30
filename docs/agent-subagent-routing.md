@@ -415,13 +415,8 @@ the strongest evidence actually checked: CI, focused tests, 8RAW parity, 85RAW
 parity, targeted benchmark, manual EIC/MS2 review, or `diagnostic_only`.
 
 Before opening, updating, or marking a PR ready, the main agent must run the
-repo CI-equivalent lint, typecheck, and test gates in the active worktree:
-
-```powershell
-$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
-$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
-$env:UV_CACHE_DIR='.uv-cache'; uv run pytest -v --tb=short -x
-```
+PR Verification Gate in `docs/agent/execution-gates.md` from the active
+worktree. Do not replace the shard gate with a monolithic full-suite pytest run.
 
 Any real lint, typecheck, or test failure is a blocker and must be fixed before
 PR. If the sandbox blocks dependency resolution, executable spawn, or DLL

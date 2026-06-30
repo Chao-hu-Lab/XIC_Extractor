@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: ["master", "main", "feature/*", "fix/*"]
+    branches: ["master", "main"]
   pull_request:
     branches: ["master", "main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -12,6 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -27,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -34,12 +48,11 @@ jobs:
       - run: uv run mypy xic_extractor
 
   test:
-    name: test / ${{ matrix.shard }} (Python ${{ matrix.python-version }})
+    name: test / ${{ matrix.shard }} (Python 3.12)
     runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
         shard:
           - docs-config
           - gui
@@ -51,19 +64,80 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          path: repo-${{ matrix.python-version }}-${{ matrix.shard }}
+          path: repo-3.12-${{ matrix.shard }}
           submodules: false
       - uses: astral-sh/setup-uv@v8.2.0
         with:
-          python-version: ${{ matrix.python-version }}
-          working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
+          python-version: "3.12"
+          working-directory: repo-3.12-${{ matrix.shard }}
       - name: Install
         shell: pwsh
-        working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
+        working-directory: repo-3.12-${{ matrix.shard }}
         run: |
-          uv venv --python ${{ matrix.python-version }} --clear
+          $started = Get-Date
+          uv venv --python 3.12 --clear
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv pip install -e .[dev]
+          $exitCode = $LASTEXITCODE
+          $elapsed = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "### ${{ matrix.shard }} Python 3.12 timing" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- install_seconds=$elapsed" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          exit $exitCode
       - name: Test
         shell: pwsh
-        working-directory: repo-${{ matrix.python-version }}-${{ matrix.shard }}
-        run: uv run python -m tools.testing.test_shards ${{ matrix.shard }} -- -v --tb=short -x
+        working-directory: repo-3.12-${{ matrix.shard }}
+        run: |
+          $started = Get-Date
+          uv run python -m tools.testing.test_shards ${{ matrix.shard }} -- -v --tb=short -x
+          $exitCode = $LASTEXITCODE
+          $elapsed = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "- test_seconds=$elapsed" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          exit $exitCode
+
+  compatibility:
+    name: compatibility / ${{ matrix.shard }} (Python 3.11)
+    if: github.event_name == 'push'
+    runs-on: self-hosted
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - docs-config
+          - gui
+          - targeted-core
+          - alignment-core
+          - product-gates-activation
+          - product-gates-evidence
+          - diagnostics-tools
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: repo-3.11-${{ matrix.shard }}
+          submodules: false
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          python-version: "3.11"
+          working-directory: repo-3.11-${{ matrix.shard }}
+      - name: Install
+        shell: pwsh
+        working-directory: repo-3.11-${{ matrix.shard }}
+        run: |
+          $started = Get-Date
+          uv venv --python 3.11 --clear
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv pip install -e .[dev]
+          $exitCode = $LASTEXITCODE
+          $elapsed = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "### ${{ matrix.shard }} Python 3.11 timing" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- install_seconds=$elapsed" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          exit $exitCode
+      - name: Test
+        shell: pwsh
+        working-directory: repo-3.11-${{ matrix.shard }}
+        run: |
+          $started = Get-Date
+          uv run python -m tools.testing.test_shards ${{ matrix.shard }} -- -v --tb=short -x
+          $exitCode = $LASTEXITCODE
+          $elapsed = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+          "- test_seconds=$elapsed" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          exit $exitCode

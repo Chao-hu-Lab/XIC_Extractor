@@ -99,6 +99,14 @@ execpolicy, and subagent TOML as execution-affecting config. Changes need:
 Before opening, updating, or marking a PR ready, run the CI-equivalent commands
 from `.github/workflows/ci.yml` in the current worktree:
 
+CI is layered: pull requests run the required Python 3.12 shard matrix, while
+pushes to `main` or `master` also run the Python 3.11 compatibility matrix. The
+local PR closeout gate below mirrors the command surface; it is not a request to
+rerun every GitHub matrix job locally.
+Hosted lint/typecheck jobs use the GitHub uv cache keyed by `pyproject.toml` and
+`uv.lock`; self-hosted shard jobs record install/test seconds in the job summary
+so future CI tuning is based on observed queue, install, and shard timing.
+
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
 $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
