@@ -1,5 +1,11 @@
 # XIC Extractor Context
 
+Doc placement: formal_repo_doc
+Doc kind: product_doc
+Doc lifecycle: active
+Repo owner: docs/product/domain-glossary.md
+Doc exit rule: Update when stable vocabulary, lane boundaries, or authority concepts change.
+
 This file is the stable domain glossary for XIC Extractor. Keep volatile
 productization status, counts, tiers, and current blockers in the active
 handoff and control plane docs, not here.

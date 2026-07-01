@@ -144,11 +144,11 @@ DOC_CANONICAL_OWNER_DIRS = [
 ]
 DOC_CANONICAL_OWNER_FILES = {
     "AGENTS.md",
-    "CONTEXT.md",
     "README.md",
     "docs/architecture-contract.md",
     "docs/diagnostic-ledger.md",
     "docs/lc-msms-evidence-rules.md",
+    "docs/product/domain-glossary.md",
     "docs/project-layout.md",
     "docs/superpowers/README.md",
     PRODUCTIZATION_STATUS_HANDOFF_PATH,

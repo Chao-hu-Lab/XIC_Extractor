@@ -29,13 +29,11 @@
 | `pyproject.toml` | 專案 metadata、依賴、CLI entry points、setuptools.packages.find、pytest 設定 | 追蹤 |
 | `uv.lock` | uv 套件鎖定檔 | 追蹤 |
 | `xic_extractor.spec` | PyInstaller 打包設定 | 追蹤 |
+| `.gitattributes` | repo-wide text / line-ending / diff contract | 追蹤 |
 | `.gitignore` | git 忽略規則 | 追蹤 |
-| `.python-version` | Python 版本 (3.13) | 追蹤 |
-| `mypy.ini` | mypy 設定 | 追蹤 |
 | `README.md` | 使用者文件 | 追蹤 |
 | `AGENTS.md` | 開發契約與程式設計規則 | 追蹤 |
-| `test.md` | 測試架構指南 | 追蹤 |
-| `launch_gui.bat` | Windows GUI 啟動批次檔 | 追蹤 |
+| `launch_gui.bat` | Windows 本機開發快速啟動 GUI；release 打包後由 `.exe` 接手，不是 PyInstaller 必需輸入 | 追蹤 |
 
 ### 第一層子目錄（追蹤）
 
@@ -48,7 +46,7 @@
 | `tests/` | pytest 測試（扁平結構 + `fixtures/`） | 否，exclude |
 | `docs/` | 使用者文件（`docs/user/`）、產品主題文件（`docs/product/`）、agent contracts（`docs/agent/`）、architecture support（`docs/architecture/`）、JSON schema contract（`docs/superpowers/schemas/`）、短期 Markdown 規格（`docs/superpowers/specs/`）、計畫（`docs/superpowers/plans/`）、reusable solution notes（`docs/solutions/`） | 否 |
 | `assets/` | `app_icon.png`、`screenshots/` | 經由 `datas` |
-| `config/` | runtime 設定；**只 `*.example.csv` 與固定列表（如 `RNA.csv`）被追蹤** | 範本 CSV |
+| `config/` | runtime 設定；**只 `env.example`、`*.example.csv` 與固定 public CSV（如 `MixSTDs.csv`）被追蹤** | 範本 CSV |
 | `.github/` | GitHub Actions workflows + dependabot | 否 |
 | `.codex/` | Repo-local Codex skills, hooks, rules, and subagent profiles | 否 |
 
@@ -333,6 +331,8 @@ else:
 ```
 
 意思是：打包後 `config/`、`output/` 在執行檔旁（用戶可改），但 `assets/`、`scripts/` 在 bundle 內（唯讀）。動這些目錄時要兩種模式都驗證。
+Root `launch_gui.bat` 只服務本機開發雙擊啟動；release artifact 以
+`XIC_Extractor.exe` 為入口，不依賴這個批次檔。
 
 ## § 4 新檔案該放哪？
 
@@ -356,7 +356,10 @@ else:
 │       （扁平結構，不鏡像 xic_extractor/ 子目錄）
 │       共用 fixture → tests/conftest.py 或 tests/fixtures/
 │
-├── schema / 計畫文件
+├── schema / 規格 / 計畫文件
+│   ├── stable domain glossary → docs/product/domain-glossary.md
+│   ├── 測試架構指南 → docs/agent/testing.md
+│   ├── milestone changelog → docs/history/CHANGELOG.md
 │   ├── JSON schema contract → docs/superpowers/schemas/<contract>.v1.json
 │   ├── 過渡性 Markdown 規格 → docs/superpowers/specs/<dated-topic>.md；完成後 product owner 吸收，原文轉 Obsidian
 │   ├── 全局控制面 / 命名 owner → docs/superpowers/plans/<explicit-owner>.md
@@ -377,7 +380,8 @@ else:
 │   └→ tmp_runtime/
 │
 ├── 設定範本（只 example 才被追蹤）
-│   └→ config/<name>.example.csv
+│   ├── local env template → config/env.example
+│   └── runtime CSV template → config/<name>.example.csv
 │
 └── 資源檔（icon、screenshot）
     └→ assets/

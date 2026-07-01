@@ -65,9 +65,9 @@ New-Item -ItemType Junction -Path .venv -Target "${env:XIC_REPO_ROOT}\.venv"
 ## Stable Local Paths
 
 Exact machine-specific values must live in ignored local env files such as
-`.env.xic-local`; the public template is `.env.example`. Repo docs use env
-names so the repository can stay public-safe without losing the local execution
-contract.
+`.env.xic-local`; the public template is `config/env.example`. Repo docs use
+env names so the repository can stay public-safe without losing the local
+execution contract.
 
 Load the local env before RAW-backed runs when the shell does not already have
 these values:

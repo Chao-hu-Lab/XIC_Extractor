@@ -12,7 +12,7 @@ they produce work.
 
 This repo uses a single-context domain layout:
 
-- `CONTEXT.md` at the repo root, if present
+- `docs/product/domain-glossary.md`, if present
 - `docs/adr/` for architecture decision records, if present
 - repo-local domain contracts referenced from `AGENTS.md`
 
@@ -29,14 +29,15 @@ contracts. The current targeted/untargeted split does not meet that bar.
 Before substantial work, read the nearest applicable sources:
 
 - `AGENTS.md`
-- `CONTEXT.md`, if present
+- `docs/product/domain-glossary.md`, if present
 - `docs/adr/`, if present
 - the relevant docs referenced by `AGENTS.md`
 - current handoff/control-plane docs when the task touches productization state
 
-If `CONTEXT.md` or `docs/adr/` do not exist yet, proceed silently. Their absence
-is not itself a blocker. Use existing productization specs, handoffs, and
-architecture docs as the working source of truth until a context doc exists.
+If `docs/product/domain-glossary.md` or `docs/adr/` do not exist yet, proceed
+silently. Their absence is not itself a blocker. Use existing productization
+specs, handoffs, and architecture docs as the working source of truth until a
+context doc exists.
 
 ## Required Domain Split
 

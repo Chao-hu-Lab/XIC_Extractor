@@ -2137,13 +2137,13 @@ def test_env_example_local_machine_path_is_reported(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _clean_repo(root)
     _clean_vault(vault)
-    _write(root / ".env.example", "XIC_RAW_ROOT=C:\\Xcalibur\\data\n")
+    _write(root / "config" / "env.example", "XIC_RAW_ROOT=C:\\Xcalibur\\data\n")
 
     result = _run_audit(root, vault)
 
     assert result.blockers == ()
     top_hits = result.summary["repo"]["top_local_path_files"]
-    assert any(item["path"] == ".env.example" for item in top_hits)
+    assert any(item["path"] == "config/env.example" for item in top_hits)
 
 
 def test_xic_local_env_configures_vault_when_env_var_is_unset(

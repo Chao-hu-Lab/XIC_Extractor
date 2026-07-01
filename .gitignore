@@ -18,7 +18,6 @@ tmp_runtime/
 # Local secrets / machine-specific overrides
 .env
 .env.*
-!.env.example
 
 # Output (generated files)
 output/
@@ -29,6 +28,7 @@ local_validation_raw/
 local_validation_artifacts/
 
 # Superpowers / Claude dev artefacts
+.agents/
 .superpowers/
 .remember/
 .codegraph/
@@ -50,6 +50,7 @@ docs/superpowers/handoffs/archive/*
 
 # Private user config/profiles (only examples are versioned)
 config/*
+!config/env.example
 !config/settings.example.csv
 !config/targets.example.csv
 !config/MixSTDs.csv
