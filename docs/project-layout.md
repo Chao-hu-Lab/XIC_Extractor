@@ -186,7 +186,7 @@ archive 大桶：
 | intentionally public PR/branch closeout summary | `docs/superpowers/closeouts/` |
 | ignored local active handoff or rare tracked compatibility stub | `docs/superpowers/handoffs/` |
 | checker-readable validation packet、inventory、status index、lockbox public artifact | `docs/superpowers/validation/` until a focused checker-aware migration moves it |
-| generated read-side pulse | ignored `output/productization-pulse/`; promote only compact public evidence to `docs/superpowers/productization/evidence/` |
+| generated read-side status report | ignored `output/` or Obsidian; promote only compact public evidence to `docs/superpowers/productization/evidence/` |
 | public HTML/story/report | formal `docs/product/` or `docs/user/` page when durable; otherwise ignored `output/` or Obsidian |
 | fixture/probe/transition list | `docs/superpowers/fixtures/`, `docs/superpowers/validation/`, or ignored `output/` depending on checker use |
 
@@ -368,7 +368,7 @@ else:
 │
 ├── 可重用解法 / 工作流知識
 │   └→ docs/solutions/<category>/<slug>.md
-│       （完成非直覺修正、產品化決策、validation lesson 後用 xic-compound 產生）
+│       （完成非直覺修正、產品化決策、validation lesson 後手動用 $xic-compound 產生）
 │
 ├── 執行產物（自動忽略）
 │   └→ output/

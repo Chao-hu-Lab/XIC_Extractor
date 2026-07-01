@@ -1,6 +1,6 @@
 ---
 name: xic-docs-compression
-description: Use for XIC Extractor documentation digestion when docs/superpowers cleanup, Obsidian source-copy/stub work, route-retained files, historical validation results, plans/specs/notes/closeouts, topic-owner consolidation, or referrer-bound docs need retention decisions. Requires classifying lifecycle, route, information value, duplication, owner, Obsidian role, and destructive gate before moving, stubbing, deleting, or retargeting docs.
+description: Docs compression for XIC docs/superpowers cleanup, Obsidian copy/retirement, product-owner absorption, stubs, route decisions, or referrer-bound docs; classify lifecycle, durable payload, owner, absorption, and retirement gate before moving or deleting docs.
 ---
 
 # XIC Docs Compression

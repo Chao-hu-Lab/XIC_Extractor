@@ -1,6 +1,6 @@
 ---
 name: xic-performance-diagnosis
-description: Use for XIC Extractor performance diagnosis, preset runtime optimization, 8RAW/85RAW timing analysis, RAW locality investigation, worker-budget decisions, exact-safe optimization planning, missing-baseline triage, or fast-mode candidate review. Requires artifact-driven bottleneck ranking and correctness gates before implementation. Do not use for pure unit-test speedups or generic performance advice unrelated to XIC runs, timing artifacts, or validation outputs.
+description: Performance diagnosis before XIC preset/runtime optimization, timing analysis, RAW locality, worker budget, exact-safe planning, baseline triage, or fast-mode review; requires timing artifacts, bottleneck rank, correctness oracle, and validation gate before edits.
 ---
 
 # XIC Performance Diagnosis
@@ -16,8 +16,9 @@ Routing order:
    `diagnostic_only`.
 2. Use `xic-architecture-preflight` before code edits.
 3. Use `xic-raw-validation` before launching or accepting RAW-backed validation.
-4. Use `xic-product-gate-advancement` only when evidence could change maturity
-   tier, active lane, ProductWriter authority, or product gate state.
+4. Read or update the productization control plane only when evidence could
+   change maturity tier, active lane, ProductWriter authority, or product gate
+   state.
 
 ## First Response Protocol
 

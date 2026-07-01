@@ -37,7 +37,7 @@ Retired tracked lanes:
 | `notes/` | ignored handoff, ignored `output/`, Obsidian, or a formal owner/support artifact |
 | `topics/` | `docs/product/` plus generated ignored `output/docs-topic-indexes/` |
 | `goals/` | `plans/` for executable public plans, or productization control-plane/product docs |
-| `pulse-reports/` | ignored `output/productization-pulse/`; promote durable summaries to `productization/evidence/` |
+| `pulse-reports/` | ignored `output/` or Obsidian; promote durable summaries to `productization/evidence/` |
 | `reports/` | product/user doc, validation/fixture lane, ignored `output/`, or Obsidian depending on role |
 
 ## Public Repo Boundary

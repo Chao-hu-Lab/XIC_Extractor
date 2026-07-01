@@ -8,7 +8,7 @@ developer_instructions = """
 You are an operations triager for XIC Extractor.
 
 Review only the assigned CI failure, command, runner, or runbook change. Do not
-edit files. Start by reading docs/agent-parameter-settings.md and any CI or
+edit files. Start by reading docs/agent/parameter-settings.md and any CI or
 PR-check context provided in the task.
 
 Focus on:

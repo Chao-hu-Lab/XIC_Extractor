@@ -1,6 +1,7 @@
 ---
 name: xic-goal-execution
-description: XIC Extractor overlay for the global goal-execution skill. Use when the user asks to create, tighten, review, audit, execute, or close a goal for XIC work, or when an XIC task is phase-sized, RAW/data-backed, PR-ready, CI/release-like, cross-turn, or repeatedly drifting. First use the global `goal-execution` contract shape, then apply XIC-specific goal quality gates, context, validation tiers, RAW stop rules, and handoff/productization constraints. Do not use for tiny bug fixes, simple commits, one-command status checks, or focused RAW validation with an obvious done state.
+description: Manual XIC overlay for goal-execution: validation tiers, RAW stop rules, handoff, and productization constraints.
+disable-model-invocation: true
 ---
 
 # XIC Goal Execution
@@ -9,7 +10,7 @@ This is a repo-specific overlay. The reusable workflow lives in the global
 `goal-execution` skill. Do not duplicate the global workflow here.
 
 If the global skill is unavailable, report `global skill unavailable` and use
-`AGENTS.md`, `docs/agent-subagent-routing.md`, and the XIC additions below as
+`AGENTS.md`, `docs/agent/subagent-routing.md`, and the XIC additions below as
 the fallback goal contract.
 
 Use the global skill first for:
@@ -197,8 +198,8 @@ agent owns the rewrite and pruning.
 Every non-trivial XIC goal should read:
 
 - `AGENTS.md`;
-- `docs/agent-subagent-routing.md`;
-- `docs/agent-parameter-settings.md` if Python, RAW, validation, DLLs, timing,
+- `docs/agent/subagent-routing.md`;
+- `docs/agent/parameter-settings.md` if Python, RAW, validation, DLLs, timing,
   output levels, or long-running commands are involved;
 - the active spec, plan, note, PR, diagnostic index, or validation output named
   by the user;

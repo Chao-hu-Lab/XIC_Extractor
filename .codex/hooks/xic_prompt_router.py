@@ -107,7 +107,7 @@ def main() -> int:
 
     if any(re.search(pattern, prompt, re.IGNORECASE) for pattern in GOAL_PATTERNS):
         contexts.append(
-            "XIC goal context detected: use xic-goal-execution for phase-sized or drifting work. "
+            "XIC goal context detected: use the global goal-execution contract for phase-sized or drifting work. "
             "Keep one objective and name context, constraints, verification, done condition, stop rules, and handoff."
         )
 

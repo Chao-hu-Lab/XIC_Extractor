@@ -1,6 +1,6 @@
 ---
 name: xic-pr-stack-repair
-description: Use before repairing, splitting, retargeting, rebuilding, or merging stacked XIC PRs, especially when CI failures involve stale PR bases, repeated global ledger edits, externalized output/local_validation_artifacts, clean-checkout artifact gaps, or superseded branches. This is a stack-boundary and artifact-ownership workflow, not a normal PR description, read-only review, or one-PR CI bugfix.
+description: Stack repair before splitting, retargeting, rebuilding, or merging stacked/superseded XIC PRs when stale bases, repeated ledgers, externalized artifacts, clean-checkout gaps, or missing GitHub checks are plausible.
 ---
 
 # XIC PR Stack Repair
@@ -44,8 +44,9 @@ Read `references/repair-checklist.md`, then produce a stack map covering:
 For artifact-boundary or productization-adjacent stack repairs, run the focused
 checks in `references/repair-checklist.md` before the full PR gate.
 
-Then use `xic-pr-closeout` for PR description, readiness labels, CI-equivalent
-gate, residual risk, and merge narrative.
+Then use global `pr-closeout` for PR description and manually apply
+`$xic-pr-closeout` only when XIC readiness labels, validation tier, RAW
+artifacts, or merge/history expectations need extra structure.
 
 Trigger coverage lives in `evals/trigger-cases.json` with
 `evals/semantic_config.json`. Update those cases before broadening the trigger

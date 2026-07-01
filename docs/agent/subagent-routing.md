@@ -29,11 +29,15 @@ or runtime permission.
 Reusable workflow skills should live in the global skill roots and may be
 mirrored to the Claude Code compatibility root when that runtime needs them.
 Repo-local skills under `.codex/skills` should exist only when XIC needs an
-execution checklist that cannot live cleanly in this routing doc. Use skills
-when their trigger threshold applies before recreating process instructions:
+execution checklist that cannot live cleanly in this routing doc. Keep
+model-invoked repo skills for high-risk gates the agent must remember on its
+own; make low-frequency overlays user-invoked with `$<skill>` so they do not
+add always-on context load. Use skills when their trigger threshold applies
+before recreating process instructions:
 
 - global `goal-execution` for goal contract creation, review, tightening, and
-  execution; `xic-goal-execution` only adds XIC constraints and validation tiers.
+  execution; `$xic-goal-execution` is a manual overlay for XIC validation tiers,
+  RAW stop rules, handoff, and productization constraints.
 - global `critical-artifact-review` for multi-angle review of durable specs,
   plans, goal prompts, workflow rules, handoff docs, and public contracts. It
   must read this routing doc when running in XIC; do not maintain a duplicate
@@ -49,8 +53,8 @@ when their trigger threshold applies before recreating process instructions:
   CID-NL expansion, or other evidence-provider additions. It forces reuse,
   ownership, call-cost, public-contract, and validation-gate decisions before
   coding.
-- global `pr-closeout` for durable PR/branch closeout; `xic-pr-closeout` only
-  adds XIC readiness labels and artifact rules.
+- global `pr-closeout` for durable PR/branch closeout; `$xic-pr-closeout` is a
+  manual overlay for XIC readiness labels and artifact rules.
 - `xic-pr-stack-repair` before repairing, retargeting, rebuilding, or merging a
   stacked/superseded PR series when stale bases, repeated ledger edits,
   externalized artifacts, or clean-checkout CI dependencies are plausible.
@@ -65,6 +69,9 @@ answer a concrete question faster or with stronger evidence than local manual
 work. If a new route does not offer a clearer decision, lower repeat-failure
 risk, better recovery, or repo-specific capability that an existing owner lacks,
 improve the existing owner instead of adding a parallel entry.
+Retire a repo-local skill when it only summarizes an existing owner, emits an
+ignored report without a gate, or duplicates a global skill without a distinct
+XIC stop rule.
 
 This repo owns only XIC-specific overlays and routing docs. Global skills are
 environment-level workflow dependencies outside this repo diff. If a named
@@ -307,9 +314,9 @@ review.
 ## Goal Contracts
 
 Use the global `goal-execution` skill for goal creation, tightening, review, and
-runtime execution. Apply `.codex/skills/xic-goal-execution/SKILL.md` only for
-XIC-specific context, validation tiers, RAW stop rules, and handoff/productization
-constraints.
+runtime execution. Apply `$xic-goal-execution` manually only when the XIC-specific
+validation tiers, RAW stop rules, or handoff/productization constraints are the
+actual source of risk.
 
 Do not maintain a second goal template in this routing doc. The global skill is
 the canonical reusable contract shape. XIC goals should normally reference
@@ -404,9 +411,9 @@ future agent execution before the agent can reason about the repo.
 
 Use the global `pr-closeout` workflow when preparing, opening, updating, or
 closing out a PR or development branch whose description will become future
-project memory. Apply `.codex/skills/xic-pr-closeout/SKILL.md` for XIC-specific
-readiness labels, validation tiers, downstream handoff, RAW artifacts, and
-merge/history expectations.
+project memory. Apply `$xic-pr-closeout` manually when XIC readiness labels,
+validation tiers, downstream handoff, RAW artifacts, or merge/history
+expectations need extra closeout structure.
 
 Use `.codex/skills/xic-large-pr-review/SKILL.md` when reviewing a large or
 diagnostics-heavy PR. The review should build a blast-radius map first, inspect

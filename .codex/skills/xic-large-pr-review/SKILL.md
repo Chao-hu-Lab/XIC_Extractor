@@ -1,6 +1,6 @@
 ---
 name: xic-large-pr-review
-description: XIC Extractor large-PR review overlay. Use this whenever the user asks to review an XIC PR, especially large diagnostics, architecture, clean-code, preset-performance, parity-gate, 8RAW/85RAW, matrix-only/deep-audit, activation, value-delta, matrix identity, or RAW-access locality PRs. This skill focuses review effort on high blast-radius contracts and residual risk; it is not a PR closeout or merge workflow.
+description: Large XIC PR review for diagnostics, architecture, preset performance, parity, 8RAW/85RAW, activation/value-delta, matrix identity, or RAW-locality diffs; review blast radius, public contracts, evidence, and residual risk.
 ---
 
 # XIC Large PR Review
@@ -123,5 +123,5 @@ Stop and report the limitation when:
 - a suspected issue cannot be grounded in a changed file, public contract, or
   focused test gap.
 
-For subagent review, use repo routing in `docs/agent-subagent-routing.md` only
+For subagent review, use repo routing in `docs/agent/subagent-routing.md` only
 when the user explicitly asks for subagents or when runtime policy permits it.
