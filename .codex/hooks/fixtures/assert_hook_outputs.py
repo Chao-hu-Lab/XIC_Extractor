@@ -172,7 +172,7 @@ def main() -> int:
             "command": "rg -n \"index.lock|cannot lock ref\" docs .codex",
         },
         "tool_response": {
-            "stdout": "docs/agent-parameter-settings.md:149:.git\\index.lock\n"
+            "stdout": "docs/agent/parameter-settings.md:149:.git\\index.lock\n"
             ".codex/hooks/xic_post_tool_guard.py:181:cannot lock ref",
             "stderr": "",
         },

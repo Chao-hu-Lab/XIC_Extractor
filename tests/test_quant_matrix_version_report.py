@@ -26,7 +26,7 @@ from xic_extractor.alignment.quant_matrix_version import (
 
 ROOT = Path(__file__).resolve().parents[1]
 QUANT_MATRIX_REPORT_SCHEMA = (
-    ROOT / "docs/superpowers/specs/quant_matrix_review_report_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/quant_matrix_review_report_schema.v1.json"
 )
 
 

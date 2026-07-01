@@ -1,5 +1,11 @@
 # XIC productization status anchor
 
+Doc placement: repo_support_doc
+Doc kind: product_doc
+Doc lifecycle: active
+Repo owner: docs/product/productization.md
+Doc exit rule: Update when productization status-anchor phrases or checker expectations change; retire only after checkers and docs stop depending on this path.
+
 Updated: 2026-06-25
 Kind: `productization_status_anchor`
 Branch: `n/a`
@@ -13,7 +19,7 @@ local handoff only when multiple local branches need simultaneous state.
 
 Durable tier authority lives in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
-`docs/superpowers/specs/productization_authority_manifest.v1.json`, and
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`, and
 `docs/superpowers/validation/productization_status_index_v1.tsv`.
 
 ## Product State

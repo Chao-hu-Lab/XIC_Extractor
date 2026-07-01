@@ -1,6 +1,7 @@
 ---
 name: xic-compound
-description: Use when finishing XIC work that produced a reusable lesson, repeated failure, productization decision, validation pattern, or workflow correction that future agents should find before repeating the same investigation.
+description: Manual XIC solution-note workflow for reusable lessons from non-obvious fixes, validation patterns, productization decisions, or repeated agent failures.
+disable-model-invocation: true
 ---
 
 # XIC Compound

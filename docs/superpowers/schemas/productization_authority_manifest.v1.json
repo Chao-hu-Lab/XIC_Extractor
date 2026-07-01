@@ -1,0 +1,116 @@
+{
+  "schema_version": "productization_authority_manifest_v1",
+  "status": "active",
+  "updated": "2026-06-21",
+  "authority_policy": {
+    "unregistered_scope_policy": "fail_closed",
+    "product_writer_allowed_scopes": [
+      "backfill_policy_write_ready_rows",
+      "cid_nl_adopt_ready_feature_inclusion_95_cells",
+      "backfill_expansion_clean_target_selective_activation_84_cells"
+    ],
+    "matrix_write_requires": [
+      "registered_product_authority_scope",
+      "expected_diff_acceptance",
+      "focused_output_contract_tests"
+    ],
+    "forbidden_authority_sources": [
+      "quality_explanations",
+      "quality_blockers",
+      "round_trip_oracle_as_peak_choice_truth",
+      "istd_anchor_as_analyte_area_truth",
+      "broad_backfill_candidate_universe"
+    ]
+  },
+  "current_authority": {
+    "backfill": {
+      "candidate_audit_universe_rows": 4613,
+      "current_product_authority_rows": 511,
+      "detected_flagged_rows": 0,
+      "blocked_rows": 4102,
+      "authority_scope": "backfill_policy_write_ready_rows",
+      "authority_source": "generated_policy_write_ready_rows",
+      "artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy.tsv",
+      "artifact_sha256": "1585F9EBF6C216677406A03C57868EEA38A25B663F00566A9C84C37898D11659",
+      "acceptance_artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json",
+      "acceptance_artifact_sha256": "093E4F4894D0D7FB05A54FDFDA8454618FEBA0A4AC93EFEC7B77CA64AE97458D"
+    },
+    "cid_nl_default_activation": {
+      "current_product_authority_rows": 95,
+      "candidate_transition_rows": 20,
+      "existing_successor_context_rows": 337,
+      "omitted_no_target_rows": 27,
+      "authority_scope": "cid_nl_adopt_ready_feature_inclusion_95_cells",
+      "authority_source": "cid_nl_activation_adopt_gate_expected_diff",
+      "artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_summary.json",
+      "artifact_sha256": "36555FC6E2E82703B7D876117F9008DC5F52892DBDACBE6224D3D25199B605B7",
+      "acceptance_artifact": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_checks.tsv",
+      "acceptance_artifact_sha256": "A948873B0FC35CF1A74487D935CB3EA6D3ABDB582A505F6E26774ABD7F147DED",
+      "compact_manifest": "docs/superpowers/validation/cid_nl_default_product_activation_v1/cid_nl_default_product_activation_manifest.tsv",
+      "compact_manifest_sha256": "AFEEE1B12DE2B16BAC4D0288CBBD5971BD21177B01B04EA4400C192692DFCB5C"
+    },
+    "backfill_expansion_clean_target_selective_activation": {
+      "current_product_authority_rows": 84,
+      "candidate_peak_rows": 7,
+      "projected_held_cell_rows": 28,
+      "boundary_review_excluded_cell_rows": 37,
+      "off_target_hold_or_remap_excluded_cell_rows": 29,
+      "authority_scope": "backfill_expansion_clean_target_selective_activation_84_cells",
+      "authority_source": "backfill_expansion_clean_target_selective_product_activation_v1",
+      "artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_summary.json",
+      "artifact_sha256": "54E5BBB3C44038CF8710CCB1D2B358073C81D20ED2B69FC70F15FA0D0DCA2629",
+      "acceptance_artifact": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_checks.tsv",
+      "acceptance_artifact_sha256": "F7F83B1352B6FBFA98C93B3E952A2E05096A1FD6D62B0D541AEBB5A90C30D0A5",
+      "compact_manifest": "docs/superpowers/validation/backfill_expansion_clean_target_selective_product_activation_v1/backfill_expansion_clean_target_selective_product_activation_manifest.tsv",
+      "compact_manifest_sha256": "8787C8CB46310C8F7470A168245A8039CC8DD3F276B80FB033C4715D40657A00"
+    }
+  },
+  "parked_lanes": {
+    "broad_backfill": {
+      "status": "parked",
+      "decision_packet": "vault:Backfill Broad Autowrite Feasibility Gate V1.md",
+      "reason": "Existing artifacts do not prove broad analyte peak-choice truth, analyte area truth, or homogeneous separability for the unresolved 3015 trace-matched rows; 1087 rows still lack trace/overlay evidence.",
+      "may_grant_write_authority": false
+    }
+  },
+  "explanation_only_sources": [
+    {
+      "source_id": "backfill_policy_quality_explanations",
+      "artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy_quality_explanations.tsv",
+      "artifact_sha256": "023AD7794D7C79258BC06CE3A33E8ECA26B5D6866B7D4F0421B2ACECC6C8E4D4",
+      "may_grant_write_authority": false
+    }
+  ],
+  "blocked_or_negative_evidence_scopes": [
+    {
+      "scope_id": "all_stability",
+      "status": "blocked",
+      "reason": "Family oracle was 19/20 and exceeded the accepted 10% area ceiling."
+    },
+    {
+      "scope_id": "apex_delta_clean",
+      "status": "blocked",
+      "reason": "Heldout oracle was 17/20 with boundary error above tolerance."
+    },
+    {
+      "scope_id": "width_only_clean",
+      "status": "blocked",
+      "reason": "Heldout oracle was 1/3 with boundary and area errors above tolerance."
+    },
+    {
+      "scope_id": "shape_margin_clean",
+      "status": "blocked",
+      "reason": "Heldout oracle was 6/8 with area error above tolerance."
+    },
+    {
+      "scope_id": "shape_clean_reintegration_stable_writer_probe",
+      "status": "negative_evidence",
+      "reason": "Writer probe produced 0 new writes and 104 unchanged pre-existing values."
+    },
+    {
+      "scope_id": "backfill_expansion_raw_trace_expected_diff_666_cells",
+      "status": "held_candidate",
+      "reason": "The 666-cell Backfill expansion packet has sample-local alignment, RAW trace identity, expected-diff, and provenance replay, but shift-aware standard-peak support and MS1 own-max evidence are not wired by stable row/cell keys; it may not grant ProductWriter authority."
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # Diagnostic Ledger And Rerun Policy
 
+Doc placement: formal_repo_doc
+Doc kind: report
+Doc lifecycle: active
+Repo owner: docs/diagnostic-ledger.md
+Doc exit rule: Keep active while expensive RAW rerun memory is needed; retire only after durable diagnostic memory moves to a replacement canonical owner.
+
 **Status:** maintained repo-local diagnostic memory
 **Last updated:** 2026-06-25
 
@@ -18,7 +24,7 @@ authority scopes are owned by
 productization status index
 `docs/superpowers/validation/productization_status_index_v1.tsv`, and the
 authority manifest
-`docs/superpowers/specs/productization_authority_manifest.v1.json`. When this
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`. When this
 ledger cites a historical validation note, treat it as diagnostic/rerun memory
 unless the current control plane or a current authority artifact still promotes
 the same claim.
@@ -54,6 +60,22 @@ the same claim.
 | RAW-capable Python | `"${env:XIC_REPO_ROOT}\.venv\Scripts\python.exe"` |
 
 ## Known Diagnostic Conclusions
+
+### Retired AsLS / Linear-Edge Decision Gates
+
+Verdict: old P2/P2b/P2c AsLS-versus-linear-edge diagnostics are closed history,
+not active decision surfaces. Current area authority is owned by the LC-MS/MS
+evidence rules, morphology-aware area policy, and product projection contracts.
+Historical notes may mention linear-edge comparison, but active code and future
+diagnostics must not provide a linear-edge fallback, comparator, or truth gate
+unless a new product contract explicitly reopens that decision.
+
+Use current owners instead:
+
+- `docs/product/quant-matrix.md` for matrix authority and historical AsLS policy
+  supersession.
+- `docs/product/peak-model-selection.md` for baseline-aware local S/N evidence.
+- `docs/lc-msms-evidence-rules.md` for evidence semantics and area policy.
 
 ### 2026-06-16/17 5-hmdC Own-Max Support Limited Rescue Smoke
 
@@ -440,8 +462,8 @@ Evidence notes and retained artifacts for this diagnostic conclusion:
 | Post-fix 85RAW weak-seed watch rows | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/85raw_weak_seed_tolerated_watch_rows.tsv`, SHA256 `E003FDEAC97E1DAE6E0D6AF929CDD7EA3A004BC9873A0340EF8A7B2E099683E4` |
 | Post-review hardened single-dR gate summary | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/post_review_hardened_single_dr_gate_summary.tsv`, SHA256 `43FE4E4BCFF9DD20CA6B16F183F7A414EE89DCF1657A7E2E3B20559E32DE48E3` |
 | Current 8RAW diagnostic tool usage snapshot | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/diagnostic_tool_usage_current_8raw.tsv` |
-| Current 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_current_8raw_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_current_8raw_failure_mode_report.md`, SHA256 `425B5ABD766A86BAF7970ADC6FC2C06F405454CAB3AAAFB066BE52FAA8679C88` |
-| Post-fix 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; report `targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_failure_mode_report.md`, SHA256 `FFB5EA89BD1DAECA685BBBA2F9BA96D069C934996DD7C5B3A332992B15D76D98` |
+| Current 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_current_8raw_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; historical narrative report retired after source-copy handling; durable summary lives in `docs/product/alignment.md` and the retirement record is `docs/superpowers/file-management/docs-cleanup/2026-06-30_source-copy-stub-removal-approval-packet.md` |
+| Post-fix 8RAW targeted GT default checkpoint | `docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_audit_default_5medc_primary_delivery_fix_comparison.csv`, SHA256 `DB05B546B99CB9567D7873216906181FB20F57BA021BEFC3A503CC3128BE77D8`; historical narrative report retired after source-copy handling; durable summary lives in `docs/product/alignment.md` and the retirement record is `docs/superpowers/file-management/docs-cleanup/2026-06-30_source-copy-stub-removal-approval-packet.md` |
 
 Source worktree output for the snapshots above was
 `output/product_priority_reset_phase1/`. The committed fixture copies are the

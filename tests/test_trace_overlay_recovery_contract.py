@@ -15,7 +15,7 @@ from scripts.build_trace_overlay_recovery_report import (
 from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "docs/superpowers/specs/trace_overlay_recovery_contract.v1.json"
+SCHEMA_PATH = ROOT / "docs/superpowers/schemas/trace_overlay_recovery_contract.v1.json"
 REPORT_PATH = ROOT / "docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv"
 SUMMARY_PATH = (
     ROOT / "docs/superpowers/validation/missing_overlay_resolution_summary_v1.json"

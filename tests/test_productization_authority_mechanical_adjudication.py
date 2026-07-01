@@ -10,10 +10,10 @@ from scripts.check_productization_state import artifact_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = (
-    ROOT / "docs/superpowers/specs/productization_authority_manifest.v1.json"
+    ROOT / "docs/superpowers/schemas/productization_authority_manifest.v1.json"
 )
 SCHEMA_PATH = (
-    ROOT / "docs/superpowers/specs/mechanical_adjudication_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/mechanical_adjudication_schema.v1.json"
 )
 INDEX_PATH = (
     ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"

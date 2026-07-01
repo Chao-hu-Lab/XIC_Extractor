@@ -134,7 +134,7 @@ work, but it must be stored separately from `reviewer_slot=2` unless a future
 goal explicitly approves a downgraded single-owner + AI-challenge evidence
 contract. The completed-label checker and truth-summary import gate now accept
 human truth labels only from the explicit reviewer registry in
-`docs/superpowers/specs/lockbox_label_schema_v1.json`; agent/subagent-looking or
+`docs/superpowers/schemas/lockbox_label_schema_v1.json`; agent/subagent-looking or
 unregistered reviewer IDs are rejected. Either way, labels still cannot become
 ProductWriter authority without a later authority manifest update and
 expected-diff product goal.

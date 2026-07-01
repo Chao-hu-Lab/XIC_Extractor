@@ -47,6 +47,10 @@ from scripts.check_productization_state import check_productization_state  # noq
 from scripts.check_validation_artifact_retention import (  # noqa: E402
     check_validation_artifact_retention,
 )
+from tools.diagnostics.docs_policy import (  # noqa: E402
+    CONTROL_PLANE_PATH,
+    PRODUCTIZATION_STATUS_ANCHOR_PATH,
+)
 from xic_extractor.tabular_io import read_tsv_required, text_value  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,17 +59,9 @@ CHECKS_TSV = DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_checks.tsv"
 COMPACT_MANIFEST_TSV = (
     DEFAULT_DOCS_DIR / "cid_nl_default_product_activation_manifest.tsv"
 )
-ROADMAP = ROOT / "docs/superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md"
-# This checker reads the shared productization status anchor. It is not a
-# default branch handoff target for unrelated work.
-HANDOFF = (
-    ROOT
-    / "docs/superpowers/productization/status"
-    / "cc-framework-improvements-productization.md"
-)
-CONTROL_PLANE = (
-    ROOT / "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
-)
+ROADMAP = ROOT / "docs/product/discovery.md"
+HANDOFF = ROOT / PRODUCTIZATION_STATUS_ANCHOR_PATH
+CONTROL_PLANE = ROOT / CONTROL_PLANE_PATH
 
 
 def check_cid_nl_discovery_release_slice(
@@ -260,11 +256,8 @@ def _check_docs(
 ) -> None:
     required = {
         roadmap: [
-            "CID-NL Discovery Product Roadmap",
-            "Do not reopen broad Backfill",
-            "accepted_discovery_cell_count",
-            "cid_nl_discovery_full_scope_classification_v1",
-            "cid_nl_85raw_universe_closure_v1",
+            "CID-NL Discovery is a bounded accepted slice",
+            "reopen broad Backfill",
         ],
         handoff: [
             "CID-NL default product activation v1",

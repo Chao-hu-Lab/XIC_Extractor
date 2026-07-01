@@ -21,24 +21,23 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SCHEMA = (
-    ROOT / "docs/superpowers/specs/productization_control_plane_schema.v1.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.diagnostics.docs_policy import (  # noqa: E402
+    CONTROL_PLANE_PATH,
+    PRODUCTIZATION_AUTHORITY_MANIFEST_REL,
+    PRODUCTIZATION_SCHEMA_REL,
+    PRODUCTIZATION_STATUS_ANCHOR_PATH,
+    PRODUCTIZATION_STATUS_INDEX_REL,
 )
-DEFAULT_STATUS_INDEX = (
-    ROOT / "docs/superpowers/validation/productization_status_index_v1.tsv"
-)
-DEFAULT_AUTHORITY_MANIFEST = (
-    ROOT / "docs/superpowers/specs/productization_authority_manifest.v1.json"
-)
-DEFAULT_PRODUCTIZATION_STATUS_ANCHOR = (
-    ROOT
-    / "docs/superpowers/productization/status"
-    / "cc-framework-improvements-productization.md"
-)
+
+DEFAULT_SCHEMA = ROOT / PRODUCTIZATION_SCHEMA_REL
+DEFAULT_STATUS_INDEX = ROOT / PRODUCTIZATION_STATUS_INDEX_REL
+DEFAULT_AUTHORITY_MANIFEST = ROOT / PRODUCTIZATION_AUTHORITY_MANIFEST_REL
+DEFAULT_PRODUCTIZATION_STATUS_ANCHOR = ROOT / PRODUCTIZATION_STATUS_ANCHOR_PATH
 DEFAULT_HANDOFF = DEFAULT_PRODUCTIZATION_STATUS_ANCHOR
-DEFAULT_CONTROL_PLANE = (
-    ROOT / "docs/superpowers/plans/2026-06-15-productization-control-plane.md"
-)
+DEFAULT_CONTROL_PLANE = ROOT / CONTROL_PLANE_PATH
 
 WRITER_LANE_AUTHORITY = {
     "backfill_current_write_ready_scope": {
@@ -254,7 +253,7 @@ def _check_artifacts(
     for index, row in enumerate(rows, start=2):
         artifact = row.get("current_artifact", "")
         expected_hash = row.get("artifact_sha256", "")
-        if not artifact:
+        if not artifact or artifact.startswith("vault:"):
             continue
         path = repo_root / artifact
         if not path.exists():

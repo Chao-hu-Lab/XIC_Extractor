@@ -14,6 +14,7 @@ For definitions of domain-specific terms used in these pages, see the
 | Topic | Start here | Scope |
 | --- | --- | --- |
 | Discovery | [`discovery.md`](discovery.md) | Untargeted feature discovery, candidate/review outputs, seed evidence handoff |
+| Untargeted Method | [`untargeted-method.md`](untargeted-method.md) | Durable method boundary for untargeted LC-MS recovery, hygiene, and historical report absorption |
 | Alignment | [`alignment.md`](alignment.md) | Cross-sample alignment, owner construction, backfill sidecars, matrix handoff |
 | Targeted Selection | [`targeted-selection.md`](targeted-selection.md) | Targeted behavior, selected hypotheses, region/boundary gates, reasons |
 | Decision Policy | [`decision-policy.md`](decision-policy.md) | Typed evidence, workflow gates, score boundaries, and projection authority |
@@ -45,17 +46,18 @@ For definitions of domain-specific terms used in these pages, see the
 | Presets | [`presets.md`](presets.md) | Resolver and alignment preset behavior, reproducibility rules |
 | Productization | [`productization.md`](productization.md) | Capability map, promotion boundaries, authority routing |
 | Untargeted GUI | [`untargeted-gui.md`](untargeted-gui.md) | Discovery workspace, run modes, local config, bundle resources |
+| RAW-To-Final Matrix Story | [`raw-to-final-matrix-product-story.html`](raw-to-final-matrix-product-story.html) | Human-readable product explainer for RAW/discovery/alignment/matrix handoff |
 
 ## Authority Boundary
 
 Topic pages summarize durable rules but do not replace their upstream owners.
 If a topic file conflicts with an owner listed below, the owner wins.
 
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Architecture contract](../architecture-contract.md)
 - [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md)
   and its [status index](../superpowers/validation/productization_status_index_v1.tsv)
-  / [authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
+  / [authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
 
 ## Contributor Rules
 
@@ -68,6 +70,9 @@ If a topic file conflicts with an owner listed below, the owner wins.
   command transcripts into this directory.
 - Topic pages do not change maturity tier, active lane, writer authority,
   matrix behavior, schema, or validation verdicts.
+- Product-story HTML can stay here only as an explainer. If it conflicts with
+  topic pages, the control plane, status index, or authority manifest, those
+  owners win.
 
 ### Shared Conventions
 

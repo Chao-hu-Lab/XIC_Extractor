@@ -22,8 +22,8 @@ request.
 - "Review a matrix activation plan that has no runtime or call-cost question."
 - "Launch 85RAW now." Use `xic-raw-validation` for launch/acceptance preflight;
   this skill can only define the performance decision the run should close.
-- "Can this diagnostic evidence advance product tier?" Use
-  `xic-product-gate-advancement` after performance evidence exists.
+- "Can this diagnostic evidence advance product tier?" Read or update the
+  productization control plane after performance evidence exists.
 
 ## Borderline
 

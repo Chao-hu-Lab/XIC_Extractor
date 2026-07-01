@@ -1,12 +1,19 @@
 # XIC Extractor productization control plane
 
+Doc placement: formal_repo_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/superpowers/plans/2026-06-15-productization-control-plane.md
+Doc exit rule: Keep current; update directly when productization tier, active lane, authority, or promotion gates change.
+
 日期: 2026-06-15
 狀態: living plan / maintenance checklist
 目前 readiness: `diagnostic_only` for this control document
 主要依據: [productization topic map](../../product/productization.md)
 歷史盤點: summarized in this control plane; original branch inventory is retired private-history context
 產品化狀態 anchor: [cc-framework-improvements productization status](../productization/status/cc-framework-improvements-productization.md)
-可重用背景研究: [deepresearch notes](../../deepresearch/README.md)
+可重用背景研究: stable takeaways absorbed into
+[Untargeted Method](../../product/untargeted-method.md) and product topic pages
 
 ## Authority
 
@@ -16,7 +23,7 @@ packet 的權威。白話 handoff 只負責讓下一個 agent/session 快速接�
 
 1. `git status` / `git diff` 決定目前工作樹實況。
 2. 本文件決定 maturity tier、active lane、WIP owner、promotion gate。
-3. named specs/plans 決定 schema、CLI/config/output 行為契約。
+3. product docs、named plans、schemas 決定 schema、CLI/config/output 行為契約。
 4. validation notes 決定 RAW/benchmark evidence。
 5. handoff 只做白話摘要、接手順序、下一步建議。
 
@@ -224,7 +231,7 @@ The retired private Backfill production-gate research input reviewed on
 2026-06-17 reinforces that `height >= 2e6` is only a high-signal demonstrator /
 rollout guardrail, not a product hard gate. Low-height `19/20 pass + 1 boundary
 fail` should be treated as boundary/reintegration risk evidence. Public
-takeaways live in `docs/product/backfill.md` and `docs/deepresearch/README.md`;
+takeaways live in `docs/product/backfill.md` and product method/topic pages;
 the private research input is not a source-of-truth repo path.
 The 2026-06-18 Backfill strategy reset notes, summarized here and in
 `docs/product/backfill.md`,
@@ -791,7 +798,7 @@ not product writer authority.
 - [ ] Pick exactly one lane to push to next tier.
 - [ ] Pick exactly one lane to kill/archive/externalize.
 - [ ] Review all `diagnostic_only` artifacts older than 30 days.
-- [ ] Review all specs/plans with no owner.
+- [ ] Review all product docs/plans/schemas with no owner.
 - [ ] Update this board with actual tier, not aspirational tier.
 - [ ] Write one closeout note summarizing what changed in product surface.
 
@@ -882,7 +889,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `missing`
 - New tier: `production_ready` for targeted CLI replay parity; not full exact artifact replay
-- Evidence: `docs/superpowers/specs/2026-06-15-method-manifest-v1-spec.md`; retired replay-validation private note summarized here; `xic_extractor.output.method_manifest`; `xic-extractor-cli --replay-manifest`; focused manifest/output metadata/CLI replay tests; targeted 8RAW and 85RAW CSV/workbook replay parity; post-review test that replay rejects settings/targets artifact paths that do not bind to `invocation.config_dir`
+- Evidence: current owner `docs/product/run-provenance.md`; retired method-manifest spec provenance; retired replay-validation private note summarized here; `xic_extractor.output.method_manifest`; `xic-extractor-cli --replay-manifest`; focused manifest/output metadata/CLI replay tests; targeted 8RAW and 85RAW CSV/workbook replay parity; post-review test that replay rejects settings/targets artifact paths that do not bind to `invocation.config_dir`
 - Product surface changed: additive `output/method_manifest.json`; additive workbook `Run Metadata` rows `method_manifest_schema`, `method_manifest_path`, `method_manifest_sha256`; additive `--replay-manifest` CLI mode
 - Validation: synthetic/focused unit, output contract, CLI replay tests, targeted 8RAW CSV-only replay byte parity, targeted 8RAW Excel-mode workbook compare, and one targeted 85RAW initial+replay sequence with CSV byte parity plus workbook compare
 - Remaining blocker: no timestamped workbook hash capture for full exact artifact replay; GUI parity intentionally skipped because GUI replay is not yet wired to mainline
@@ -900,7 +907,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `missing`
 - New tier: `production_candidate` for ReviewAction import validation, dry-run application plan, expected-diff approval template/loader, apply-readiness planning, and changeset planning only
-- Evidence: `docs/superpowers/specs/2026-06-15-review-roundtrip-v1-spec.md`; `xic_extractor.review_actions`; `scripts/validate_review_actions.py`; `scripts/plan_review_action_applications.py`; `scripts/validate_review_action_expected_diffs.py`; `scripts/plan_review_action_apply_readiness.py`; `scripts/plan_review_action_apply_changesets.py`; post-review stale-approval guard that blocks expected-diff approvals when the current targeted row no longer matches the approved baseline state
+- Evidence: current owner `docs/product/review-roundtrip.md`; retired review-roundtrip spec provenance; `xic_extractor.review_actions`; `scripts/validate_review_actions.py`; `scripts/plan_review_action_applications.py`; `scripts/validate_review_action_expected_diffs.py`; `scripts/plan_review_action_apply_readiness.py`; `scripts/plan_review_action_apply_changesets.py`; post-review stale-approval guard that blocks expected-diff approvals when the current targeted row no longer matches the approved baseline state
 - Product surface changed: additive `review_action_v1` TSV/CSV schema, validator CLI, additive `review_action_application_plan_v1` dry-run TSV, optional `review_action_expected_diff_v1` template TSV with baseline target-state columns, expected-diff approval loader, approval validator CLI, additive `review_action_apply_readiness_v1` TSV planner, and additive `review_action_apply_changeset_v1` TSV planner; no extraction output mutation
 - Validation: `python -m pytest tests\test_review_actions.py -q`; `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py scripts\validate_review_action_expected_diffs.py scripts\plan_review_action_apply_readiness.py scripts\plan_review_action_apply_changesets.py tests\test_review_actions.py`; `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\review_actions.py scripts\validate_review_actions.py scripts\plan_review_action_applications.py scripts\validate_review_action_expected_diffs.py scripts\plan_review_action_apply_readiness.py scripts\plan_review_action_apply_changesets.py`
 - Remaining blocker: no product-writing action application/reintegration loop, no manual boundary recompute, no selected candidate switch writer, no audited output writer that consumes changeset rows
@@ -909,7 +916,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `partial_internal`
 - New tier: `production_candidate` for shared schema/validator only
-- Evidence: `docs/superpowers/specs/2026-06-15-sample-metadata-contract-v1-spec.md`; `xic_extractor.sample_metadata`; `scripts/validate_sample_metadata.py`; post-review alias-collision tests for shared `sample_name`/`raw_stem` injection-order namespace
+- Evidence: current owner `docs/product/sample-metadata-qc.md`; retired sample-metadata spec provenance; `xic_extractor.sample_metadata`; `scripts/validate_sample_metadata.py`; post-review alias-collision tests for shared `sample_name`/`raw_stem` injection-order namespace
 - Product surface changed: additive `sample_metadata_v1` TSV/CSV schema and validator CLI; no extraction/QC/alignment runtime change
 - Validation: `python -m pytest tests\test_sample_metadata.py -q`; `$env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py tests\test_sample_metadata.py`; `$env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor\sample_metadata.py scripts\validate_sample_metadata.py`
 - Remaining blocker: extraction still reads legacy `injection_order_source`; instrument-QC sequence manifest is not yet projected into `sample_metadata_v1`; alignment and normalization do not consume this resolver; sample roles cannot alter matrix values without expected-diff gates
@@ -938,7 +945,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `production_candidate` for deferred changeset rows; selected-candidate switch and manual-boundary area recompute deferred
 - New tier: `parked`; audited apply copy remains `production_surface`, deferred changesets remain `production_candidate`
-- Evidence: `docs/superpowers/specs/2026-06-15-review-roundtrip-v1-spec.md`; current `xic_extractor.review_actions` apply path records `select_candidate` and `set_manual_boundary` as deferred operations only
+- Evidence: current owner `docs/product/review-roundtrip.md`; retired review-roundtrip spec provenance; current `xic_extractor.review_actions` apply path records `select_candidate` and `set_manual_boundary` as deferred operations only
 - Product surface changed: none this round
 - Validation: no code path changed in this lane this round
 - Remaining blocker: human product decision and expected-diff acceptance are required before any writer may change selected peak, selected area, workbook, primary matrix, or counted detection for these actions
@@ -1078,7 +1085,7 @@ at that older checkpoint, not the latest release claim.
   At this checkpoint no reviewed observed rows had been generated yet; later
   `standard_peak_heldout_trace_reintegration_oracle_v1` supplies a high-signal
   clean independent reintegration slice.
-- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tools/diagnostics/standard_peak_heldout_oracle_results.py`; `tests/test_standard_peak_shadow_activation_inputs.py`; `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tools/diagnostics/standard_peak_heldout_oracle_results.py`; `tests/test_standard_peak_shadow_activation_inputs.py`; current owners `docs/product/backfill.md` and `docs/product/quant-matrix.md`; retired backfill integration policy spec provenance
 - Product surface changed: `heldout_observed_results.tsv` now requires observed provenance columns: `observed_result_source`, `observed_boundary_source`, `observed_area_source`, and `observed_independence_basis`. Allowed independence bases are `product_writer_observed_result`, `masked_rerun_observed_result`, and `independent_boundary_reintegration_result`; oracle/manual/review-queue source copies fail closed after source-label canonicalization. `heldout_oracle_results.tsv` now carries those provenance columns forward for auditability, and `result_source_artifact_path` must exist so the output SHA cannot be blank. No RAW, matrix writer, workbook schema, default extraction, or non-standard peak policy changed.
 - Validation: red/green focused tests proved missing provenance, oracle/manual/review-queue source-copy variants, and missing result-source artifact rows failed after implementation; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q` (`20 passed` at that checkpoint; later `25 passed` after original-cell-status and source-cross-check guards); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`37 passed` at that checkpoint; later `42 passed` after the same guards); latest full local gate after the source-cross-check guard also passed: ruff, mypy, `pytest -v --tb=short -x` (`3698 passed, 1 skipped`), diagnostics index, and `git diff --check` with LF/CRLF warnings only. Subagent reviewer `Gibbs` found the source-label and missing-artifact gaps; both were fixed.
 - Remaining blocker: production-ready still needs observed start/end/area rows for reviewed heldout cases from an allowed independent source, plus bounded 85RAW expected-diff approval.
@@ -1087,7 +1094,7 @@ at that older checkpoint, not the latest release claim.
 
 - Previous tier: `production_candidate` for standard-path seed guard with observed-result provenance contract
 - New tier: still `production_candidate`; invalid reviewed/rescued rows are now blocked from serving as heldout oracle product-readiness evidence
-- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tests/test_standard_peak_shadow_activation_inputs.py`; `docs/superpowers/specs/2026-06-13-backfill-integration-policy-spec.md`; exploratory read of existing trace artifacts for `FAM002634 / Breast_Cancer_Tissue_pooled_QC3` and `FAM017068 / Breast_Cancer_Tissue_pooled_QC5`
+- Evidence: `xic_extractor.diagnostics.standard_peak_shadow_activation_inputs`; `tests/test_standard_peak_shadow_activation_inputs.py`; current owners `docs/product/backfill.md` and `docs/product/quant-matrix.md`; retired backfill integration policy spec provenance; exploratory read of existing trace artifacts for `FAM002634 / Breast_Cancer_Tissue_pooled_QC3` and `FAM017068 / Breast_Cancer_Tissue_pooled_QC5`
 - Product surface changed: `heldout_oracle_manifest.tsv` now requires `heldout_original_cell_status`. Accepted values are `detected`, `detected_seed`, `quantifiable_detected`, and `accepted_detected`; `rescued` and unknown statuses fail before result evaluation. No RAW, matrix writer, workbook schema, default extraction, or non-standard peak policy changed.
 - Validation: red/green focused test `test_standard_peak_heldout_oracle_results_requires_original_detected_cell_status`; `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py -k heldout_oracle -q` (`21 passed` at that checkpoint; later `25 passed` after the observed-source cross-check guard); `$env:UV_CACHE_DIR='.uv-cache'; uv run pytest tests\test_standard_peak_shadow_activation_inputs.py tests\test_standard_peak_backfill_productization.py -q` (`38 passed` at that checkpoint; later `42 passed` after the observed-source cross-check guard)
 - Remaining blocker at this checkpoint: production-ready needed true originally
@@ -2330,7 +2337,7 @@ at that older checkpoint, not the latest release claim.
   to the machine status index.
 - New tier: `production_candidate` bounded-lane guard. This does not change
   product behavior or writer authority.
-- Evidence: `docs/superpowers/specs/bounded_non_broad_product_lanes.v1.json`
+- Evidence: `docs/superpowers/schemas/bounded_non_broad_product_lanes.v1.json`
   defines the acceptance schema.
   `docs/superpowers/validation/bounded_non_broad_lane_acceptance_v1.tsv`
   records seven non-broad lane outcomes and binds to
@@ -2382,7 +2389,7 @@ at that older checkpoint, not the latest release claim.
 - New tier: unchanged for product authority. The label-collection pack is a
   `production_candidate` truth/approval substrate: it can collect independent
   labels later, but it does not grant ProductWriter authority.
-- Evidence: `docs/superpowers/specs/lockbox_label_schema_v1.json` defines
+- Evidence: `docs/superpowers/schemas/lockbox_label_schema_v1.json` defines
   legal labels for peak choice, area, boundary, reviewer confidence, reason
   code, notes, source hashes, and no-authority flags.
   `scripts/build_lockbox_label_collection_pack.py` generates 72 Markdown
@@ -2948,7 +2955,7 @@ at that older checkpoint, not the latest release claim.
   and row count remain unchanged: `backfill_policy_write_ready_rows`, 511
   accepted Backfill cells, broad 4613-row Backfill still parked.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_default_product_activation_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_default_product_activation_schema.v1.json`,
   `scripts/build_quant_matrix_default_product_activation.py`,
   `tests/test_quant_matrix_default_product_activation.py`, and
   `docs/superpowers/validation/quant_matrix_default_product_activation_v1/`.
@@ -3087,7 +3094,7 @@ at that older checkpoint, not the latest release claim.
   ProductWriter activation commit. It is not itself ProductWriter activation,
   default matrix output writing, or expanded matrix authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_product_ready_closeout_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_product_ready_closeout_schema.v1.json`,
   `scripts/build_quant_matrix_product_ready_closeout.py`,
   `tests/test_quant_matrix_product_ready_closeout.py`, and
   `docs/superpowers/validation/quant_matrix_product_ready_closeout_v1/`.
@@ -3132,7 +3139,7 @@ at that older checkpoint, not the latest release claim.
   output, selected peak/area/counting behavior, workbook/GUI behavior,
   review/replay behavior, broad Backfill unpark, or new matrix write changed.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_default_activation_dry_run_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_default_activation_dry_run_schema.v1.json`,
   `scripts/build_quant_matrix_default_activation_dry_run.py`,
   `tests/test_quant_matrix_default_activation_dry_run.py`, and
   `docs/superpowers/validation/quant_matrix_default_activation_dry_run_v1/`.
@@ -3175,7 +3182,7 @@ at that older checkpoint, not the latest release claim.
   selected peak/area/counting behavior, workbook/GUI behavior, review/replay
   behavior change, broad Backfill unpark, or a new matrix write.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_promotion_packet_v2_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_promotion_packet_v2_schema.v1.json`,
   `scripts/build_quant_matrix_promotion_packet_v2.py`,
   `tests/test_quant_matrix_promotion_packet_v2.py`, and
   `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v2/`.
@@ -3219,7 +3226,7 @@ at that older checkpoint, not the latest release claim.
   review/replay behavior change, broad Backfill unpark, or new matrix
   authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_real_bundle_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_real_bundle_schema.v1.json`,
   `scripts/build_quant_matrix_real_bundle.py`,
   `tests/test_quant_matrix_real_bundle.py`, and
   `docs/superpowers/validation/quant_matrix_real_bundle_v1/`.
@@ -3264,7 +3271,7 @@ at that older checkpoint, not the latest release claim.
   default extraction, selected peak/area/counting change, workbook/GUI change,
   or new matrix authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_downstream_impact_smoke_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_downstream_impact_smoke_schema.v1.json`,
   `scripts/build_quant_matrix_downstream_impact_smoke.py`, and
   `xic_extractor/alignment/quant_matrix_downstream_impact.py`.
 - Product surface changed: additive downstream-impact smoke outputs only:
@@ -3302,7 +3309,7 @@ at that older checkpoint, not the latest release claim.
   and checker/builder surface, not a maturity-tier promotion, ProductWriter
   default extraction, or new matrix authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_validation_evidence_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_validation_evidence_schema.v1.json`,
   `scripts/build_quant_matrix_promotion_validation_packet.py`,
   `xic_extractor/alignment/quant_matrix_validation_packet.py`, and
   `docs/superpowers/validation/quant_matrix_promotion_validation_packet_v1/`.
@@ -3342,7 +3349,7 @@ at that older checkpoint, not the latest release claim.
   schema, not a maturity-tier promotion, ProductWriter default extraction, or
   new matrix authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_promotion_readiness_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_promotion_readiness_schema.v1.json`,
   `scripts/check_quant_matrix_promotion_readiness.py`, and
   `xic_extractor/alignment/quant_matrix_promotion.py`.
 - Product surface changed: additive readiness sidecars only:
@@ -3415,7 +3422,7 @@ at that older checkpoint, not the latest release claim.
   schema, not a maturity-tier promotion, ProductWriter default extraction, or
   new matrix authority.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_review_report_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_review_report_schema.v1.json`,
   `scripts/build_quant_matrix_version_report.py`, and
   `xic_extractor/alignment/quant_matrix_report.py`.
 - Product surface changed: additive review outputs only:
@@ -3443,7 +3450,7 @@ at that older checkpoint, not the latest release claim.
   schema for manifest-authorized Backfill values, not a maturity-tier
   promotion and not ProductWriter default extraction.
 - Current artifacts:
-  `docs/superpowers/specs/quant_matrix_version_schema.v1.json`,
+  `docs/superpowers/schemas/quant_matrix_version_schema.v1.json`,
   `scripts/build_quant_matrix_version.py`, and
   `xic_extractor/alignment/quant_matrix_version.py`.
 - Product surface changed: additive explicit outputs only:
@@ -3473,7 +3480,7 @@ at that older checkpoint, not the latest release claim.
   precursor to Phase 3 activation, not ProductWriter authority and not a
   maturity-tier promotion.
 - Current artifact:
-  `docs/superpowers/specs/production_acceptance_manifest_schema.v1.json`.
+  `docs/superpowers/schemas/production_acceptance_manifest_schema.v1.json`.
   It defines `ProductionAcceptanceManifest v1`, where the authority key is
   `peak_hypothesis_id + sample_stem`; `feature_family_id is context/provenance only`.
 - Evidence: `scripts/check_production_acceptance_manifest.py` validates the
@@ -3556,7 +3563,7 @@ at that older checkpoint, not the latest release claim.
   authority drift.
 - New tier: `production_candidate` control-plane guard. This does not change
   product behavior or writer authority.
-- Evidence: `docs/superpowers/specs/productization_control_plane_schema.v1.json`
+- Evidence: `docs/superpowers/schemas/productization_control_plane_schema.v1.json`
   defines the status-index schema and allowed readiness states.
   `docs/superpowers/validation/productization_status_index_v1.tsv` records each
   current lane exactly once, including parked broad Backfill, the 511-cell
@@ -3635,8 +3642,8 @@ at that older checkpoint, not the latest release claim.
   truth-label protocol or family-split lockbox.
 - New tier: `production_candidate` for a non-mutating truth acquisition
   contract. This does not change writer authority.
-- Evidence: `docs/superpowers/specs/peak_choice_truth_protocol.v1.md` defines
-  the truth-lockbox protocol. `docs/superpowers/specs/truth_label_schema.v1.json`
+- Evidence: current lockbox schema
+  `docs/superpowers/schemas/truth_label_schema.v1.json`
   defines the sampling manifest and label-log schema. The generated
   `docs/superpowers/validation/lockbox_sampling_manifest_v1.tsv` contains 72
   deterministic cases: 18 approved write-ready controls, 24 unresolved
@@ -3677,7 +3684,7 @@ at that older checkpoint, not the latest release claim.
   human approval packet.
 - New tier: `production_candidate` for Review Packet / Approval Workflow v1 as
   a non-mutating review contract. This does not change writer authority.
-- Evidence: `docs/superpowers/specs/review_packet_schema.v1.json` defines
+- Evidence: `docs/superpowers/schemas/review_packet_schema.v1.json` defines
   packet/log schemas and forbids free-form value entry, matrix touch, and
   product authority from review approval.
   `docs/superpowers/validation/review_queue_v1.tsv` contains 3015
@@ -3739,10 +3746,10 @@ at that older checkpoint, not the latest release claim.
   asset is `production_candidate`: it classifies the current 4613-row
   candidate/audit universe without adding ProductWriter authority.
 - Evidence:
-  `docs/superpowers/specs/productization_authority_manifest.v1.json` freezes
+  `docs/superpowers/schemas/productization_authority_manifest.v1.json` freezes
   current product authority at `backfill_policy_write_ready_rows` / 511 cells
   and marks broad Backfill, quality explanations, quality blockers, and known
-  negative-evidence scopes as non-authority. `docs/superpowers/specs/mechanical_adjudication_schema.v1.json`
+  negative-evidence scopes as non-authority. `docs/superpowers/schemas/mechanical_adjudication_schema.v1.json`
   defines fail-closed row decisions. `docs/superpowers/validation/mechanical_adjudication_index_v1.tsv`
   classifies all 4613 rows as 511 `write_ready`, 3015 requiring independent
   peak-choice/area truth, and 1087 requiring trace/overlay or reintegration
@@ -3775,11 +3782,13 @@ at that older checkpoint, not the latest release claim.
   feasibility gate; current writer authority remained 511 `write_ready` cells.
 - New tier: `parked` for broad Backfill auto-write. Current 511-cell
   `production_ready` writer authority is unchanged.
-- Evidence:
-  `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
-  revalidated artifact hashes and counts, assessed ISTD reference semantics,
-  compared the 3015 unresolved trace-matched rows against the 511 approved rows,
-  and output exactly `park_broad_backfill`.
+- Evidence: this control-plane entry and `docs/product/backfill.md` retain the
+  durable `park_broad_backfill` decision after the historical note was retired.
+  The retired note revalidated artifact hashes and counts, assessed ISTD
+  reference semantics, compared the 3015 unresolved trace-matched rows against
+  the 511 approved rows, and output exactly `park_broad_backfill`; its retirement
+  record is
+  `docs/superpowers/file-management/docs-cleanup/2026-06-30_source-copy-stub-removal-approval-packet.md`.
 - Product surface changed: docs/control-plane only. No ProductWriter, matrix,
   workbook, selected area, counted detection, workbook schema, CLI/config, or
   TSV schema behavior changed.
@@ -4550,9 +4559,8 @@ the later low-height writer entry above as the current tier source.
   successor is an MS1-backed untargeted feature candidate, then separately
   support replacement, merge, dedupe, migration, or co-existing-feature review.
   A source peak does not invalidate successor feature inclusion.
-- Evidence: background research note
-  `docs/deepresearch/Untargeted LC-MS Feature Discovery Background.md` records
-  the external-method basis for feature-first untargeted LC-MS analysis.
+- Evidence: stable external-method takeaways are represented in
+  `docs/product/untargeted-method.md`.
   Focused tests cover the updated Gallery wording, differential TSV gates,
   diagnostic-only payload flags, and visual relationship classification.
 - Remaining blocker: feature inclusion is still not ProductWriter authority.

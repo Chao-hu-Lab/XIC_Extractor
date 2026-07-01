@@ -12,7 +12,7 @@ from scripts.build_quant_matrix_real_bundle import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = (
-    ROOT / "docs/superpowers/specs/quant_matrix_real_bundle_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/quant_matrix_real_bundle_schema.v1.json"
 )
 
 

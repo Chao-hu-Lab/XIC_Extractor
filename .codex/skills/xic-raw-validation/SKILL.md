@@ -1,6 +1,6 @@
 ---
 name: xic-raw-validation
-description: Use this before launching or accepting XIC Extractor RAW-backed validation when the task involves 8RAW/85RAW, alignment validation, production-equivalent gates, benchmark acceptance, timing heartbeat, or expensive RAW I/O. Do not use it for pure unit tests, synthetic no-RAW checks, or reading existing artifacts unless the result is being used as gate evidence.
+description: RAW validation preflight before launching or accepting 8RAW/85RAW, alignment, benchmark, production-equivalent, timing-heartbeat, or other expensive RAW-backed gate evidence; excludes pure unit/synthetic checks.
 ---
 
 # XIC RAW Validation
@@ -33,8 +33,8 @@ Do not use this skill for:
 Read first:
 
 - `AGENTS.md`
-- `docs/agent-parameter-settings.md`
-- `docs/agent-subagent-routing.md`
+- `docs/agent/parameter-settings.md`
+- `docs/agent/subagent-routing.md`
 - active validation spec, plan, output index, or note
 
 Search existing artifacts before rerunning:

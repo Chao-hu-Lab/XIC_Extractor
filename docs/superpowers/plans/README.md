@@ -1,5 +1,11 @@
 # Productization Plans
 
+Doc placement: repo_support_doc
+Doc kind: plan
+Doc lifecycle: active
+Repo owner: docs/superpowers/plans/2026-06-15-productization-control-plane.md
+Doc exit rule: Update when productization plan routing or active reading order changes.
+
 Status: routing index
 
 This directory contains a mix of active control-plane documents, current
@@ -14,9 +20,13 @@ plan is not active by default.
    continuation state. Use
    `../productization/status/cc-framework-improvements-productization.md` only when
    working on that productization status-anchor branch.
-3. `2026-06-19-backfill-quant-matrix-product-blueprint.md` for Backfill /
-   quant-matrix phase execution.
-4. Older dated plans only when the active goal names them as provenance.
+3. `2026-06-19-backfill-quant-matrix-productization-roadmap.md` for the current
+   Backfill / quant-matrix roadmap direction when that lane is active.
+4. `docs/product/backfill.md`, `docs/product/quant-matrix.md`, and the current
+   branch handoff for Backfill / quant-matrix phase execution. The old Backfill
+   quant-matrix blueprint has been retired to Obsidian and must not be treated
+   as an active repo plan.
+5. Older dated plans only when the active plan names them as provenance.
 
 ## Current Backfill Direction
 
@@ -30,4 +40,24 @@ promotion, or productization gates are historical unless explicitly reactivated.
 ## Rule
 
 Do not treat old implementation checklists as open work. First check the control
-plane and current handoff; then create a fresh goal for any reactivation.
+plane and current handoff; then create a fresh plan or goal-shaped runtime
+contract for any reactivation.
+
+## Lifecycle Closeout
+
+Active execution plans are tracked repo documents because another agent must be
+able to resume work without private Obsidian access. They must declare
+`Doc placement`, `Doc kind`, `Doc lifecycle`, `Repo owner`, and `Doc exit rule`.
+
+When a dated plan is complete, do not leave the original as permanent residue
+and do not delete it by hand. Close it out by:
+
+1. moving durable decisions into the declared repo owner;
+2. running product-absorption review and recording `pass_can_retire`;
+3. source-copying the original to Obsidian with readback verified;
+4. retiring it through `tools/diagnostics/retire_docs.py --evidence <json>`;
+5. staging the retirement evidence packet with any lifecycle-managed deletion.
+
+Same-path stubs are temporary exceptions for active continuation or exact
+referrers. Normal completed-plan exit is owner absorption plus Obsidian original,
+not another long tracked plan.

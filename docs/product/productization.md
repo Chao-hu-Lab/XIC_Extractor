@@ -12,7 +12,7 @@ treat the dated report as historical.
 | --- | --- |
 | Maturity tier, active lane, WIP owner, promotion packet gate | [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md) |
 | Machine-checkable productization state | [Status index](../superpowers/validation/productization_status_index_v1.tsv) |
-| ProductWriter scope and accepted authority records | [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json) |
+| ProductWriter scope and accepted authority records | [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json) |
 | Validation retention and externalization | [RETENTION.md](../superpowers/validation/RETENTION.md) and `ARTIFACT_INVENTORY.tsv` |
 | Product topic meaning | `docs/product/*.md` topic pages |
 | Historical reasoning/provenance | Dated reports, plans, specs, and private Obsidian notes |
@@ -44,6 +44,11 @@ write authority, and broad 4613-row Backfill auto-write remains parked.
 | Reports/diagnostics | HTML reports, TSV sidecars, diagnostic probes | Presentation and observability are not decision authority | Reports consume canonical decisions; reusable probes go in `tools/diagnostics/` |
 | Mature-tool comparisons | Skyline/MZmine/OpenMS/XCMS notes, smoke reports, expressibility runbooks | Define product floor/differentiators, not implementation authority | Repo-owned method/contract change with tests and expected diff |
 | Skyline expressibility | Transition-list probes, smoke manifests, runbooks | Evaluation evidence only, not export support | Explicit export/support contract before treating as product surface |
+
+Dated method and literature reports are historical background after their
+stable claims are absorbed here, in topic pages, and in
+[Untargeted Method](untargeted-method.md). They cannot override the control
+plane, status index, authority manifest, or the current owner docs.
 
 ## Boundaries
 
@@ -82,5 +87,6 @@ write authority, and broad 4613-row Backfill auto-write remains parked.
 
 - [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md)
 - [Status index](../superpowers/validation/productization_status_index_v1.tsv)
-- [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
+- [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
 - [Validation retention](../superpowers/validation/RETENTION.md)
+- [Untargeted Method](untargeted-method.md)

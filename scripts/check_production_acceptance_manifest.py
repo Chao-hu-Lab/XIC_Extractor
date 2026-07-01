@@ -26,7 +26,7 @@ from xic_extractor.tabular_io import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION_ACCEPTANCE_MANIFEST_SCHEMA = (
-    ROOT / "docs/superpowers/specs/production_acceptance_manifest_schema.v1.json"
+    ROOT / "docs/superpowers/schemas/production_acceptance_manifest_schema.v1.json"
 )
 
 SCHEMA_VERSION = "production_acceptance_manifest_schema_v1"

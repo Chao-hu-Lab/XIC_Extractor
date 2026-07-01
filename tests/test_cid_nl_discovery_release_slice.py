@@ -16,11 +16,8 @@ def test_release_slice_handoff_can_name_later_active_goal(tmp_path) -> None:
     roadmap.write_text(
         "\n".join(
             [
-                "CID-NL Discovery Product Roadmap",
-                "Do not reopen broad Backfill",
-                "accepted_discovery_cell_count",
-                "cid_nl_discovery_full_scope_classification_v1",
-                "cid_nl_85raw_universe_closure_v1",
+                "CID-NL Discovery is a bounded accepted slice",
+                "reopen broad Backfill",
             ]
         ),
         encoding="utf-8",

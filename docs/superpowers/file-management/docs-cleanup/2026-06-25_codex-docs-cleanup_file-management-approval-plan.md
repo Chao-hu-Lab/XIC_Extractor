@@ -1,5 +1,11 @@
 # File-Management Approval Plan
 
+Doc placement: repo_support_doc
+Doc kind: manifest
+Doc lifecycle: archived
+Repo owner: docs/agent/obsidian-handoff-contract.md
+Doc exit rule: Keep only as the explicit 2026-06-25 approval record unless current docs-management audit artifacts supersede it with the same approval scope.
+
 Status: `approved_no_referrer_batches_committed`
 
 This plan records the non-code file-management patch for private-history stubs.

@@ -2,7 +2,7 @@
 
 This file owns planning discipline, reusable workflow routing, and owner
 migration policy. Stable runners and validation command shapes remain in
-`docs/agent-parameter-settings.md`.
+`docs/agent/parameter-settings.md`.
 
 ## Planning And Review
 
@@ -21,7 +21,7 @@ migration policy. Stable runners and validation command shapes remain in
   action; use a different tool or stop with the blocker instead.
 - Use a goal-shaped contract for long-running, multi-step, cross-turn, or
   repeatedly drifting work. Goal contracts must point to canonical local
-  surfaces, active specs/plans, and existing diagnostics or validation outputs.
+  surfaces, active product docs/plans/schemas, and existing diagnostics or validation outputs.
 - Non-trivial specs, plans, docs, workflow rules, and implementations need a
   critical-thinking review angle: strongest assumption, stale-artifact risk,
   cheaper existing oracle, or condition that would invalidate the path.
@@ -102,7 +102,7 @@ a new source of evidence instead of another blind retry.
 ## Skills And Subagents
 
 - When the user asks for subagent review, follow
-  `docs/agent-subagent-routing.md`. Do not replace a requested multi-angle
+  `docs/agent/subagent-routing.md`. Do not replace a requested multi-angle
   review with one generic reviewer unless a runtime limit blocks it and the
   bypass is reported.
 - Repo-local execution subagents are opt-in. The main agent owns synthesis,

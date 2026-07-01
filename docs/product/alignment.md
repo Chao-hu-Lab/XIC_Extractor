@@ -18,6 +18,11 @@ contracts for review and downstream product decisions.
   and compatibility traceability. `group_hypothesis_id` carries successor
   cross-sample identity when available; product projection decides whether that
   identity may write or count.
+- Current public matrix, production-decision, and matrix-identity TSV paths may
+  still key records by the stable row/display label for compatibility. Treat
+  that as an adapter state, not canonical identity proof; promoting
+  `group_hypothesis_id` to the public projection key requires an explicit
+  expected-diff contract and schema tests.
 - Successor/group identity, gap-fill semantics, and workbook metadata
   versioning are public behavior when they affect alignment outputs and must
   stay repo-readable.
@@ -32,6 +37,19 @@ contracts for review and downstream product decisions.
 - Runner scripts orchestrate inputs, profiles, and output locations. Reusable
   grouping, ownership, identity, writer, and sidecar behavior belongs in
   package modules or explicit specs.
+
+## Retained Validation Anchors
+
+- The 2026-05-28 targeted GT alignment audit fixtures for `5-medC` are
+  diagnostic anchors for the 8RAW validation-minimal and primary-delivery-fix
+  alignment slices. Both recorded `PASS 8/8`, zero `SPLIT`, zero `DRIFT`, zero
+  `DUPLICATE`, and zero `MISS` against the targeted GT RT rows.
+- Those fixture reports prove the audited alignment slice did not lose the
+  `5-medC` targeted rows, but they do not grant ProductWriter authority,
+  broaden matrix publication, or replace stronger 85RAW/product gates.
+- Historical `FAM*` labels in those reports are compatibility traceability for
+  the audited run. They are not canonical cross-sample identity proof when a
+  successor group or PeakHypothesis surface exists.
 
 ## Surfaces
 
@@ -81,10 +99,10 @@ Before changing alignment behavior, require the relevant subset of:
 ## See Also
 
 - [Architecture contract](../architecture-contract.md)
-- [Parameter settings](../agent-parameter-settings.md)
+- [Parameter settings](../agent/parameter-settings.md)
 - [Product validation contract](../agent/product-validation-contract.md)
 - [Diagnostic ledger](../diagnostic-ledger.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)
-- [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
-- [Cross-sample peak group addendum](../superpowers/specs/2026-06-02-cross-sample-peak-group-public-behavior-addendum.md)
-- [Alignment stage semantics](../superpowers/specs/2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)
+- [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
+- [Discovery](discovery.md)
+- [Evidence spine](evidence-spine.md)

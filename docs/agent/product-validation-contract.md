@@ -1,7 +1,7 @@
 # Product Validation Contract
 
 This file owns product-readiness language and LC-MS/MS evidence guardrails. The
-full domain evidence contract remains in `docs/lcms-msms-evidence-rules.md`.
+full domain evidence contract remains in `docs/lc-msms-evidence-rules.md`.
 
 ## Source-Of-Truth Boundaries
 
@@ -11,7 +11,7 @@ language and product-surface discipline; it does not own active maturity tier,
 active lane, current writer counts, or promotion-packet status. Those live in
 `docs/superpowers/plans/2026-06-15-productization-control-plane.md`,
 `docs/superpowers/validation/productization_status_index_v1.tsv`, and
-`docs/superpowers/specs/productization_authority_manifest.v1.json`.
+`docs/superpowers/schemas/productization_authority_manifest.v1.json`.
 
 When converting a historical note into official documentation:
 

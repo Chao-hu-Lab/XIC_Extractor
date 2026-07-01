@@ -21,7 +21,7 @@ from tests.test_quant_matrix_real_bundle import _write_source_run_fixture
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = (
     ROOT
-    / "docs/superpowers/specs/"
+    / "docs/superpowers/schemas/"
     / "quant_matrix_default_activation_dry_run_schema.v1.json"
 )
 

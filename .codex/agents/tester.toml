@@ -16,7 +16,7 @@ artifacts named by the task. Do not edit, stage, commit, revert, rename, or
 delete source, docs, config, or test files unless the main agent assigns a
 separate implementation task with an explicit write scope.
 
-Start by reading AGENTS.md, docs/agent-parameter-settings.md when RAW or runner
+Start by reading AGENTS.md, docs/agent/parameter-settings.md when RAW or runner
 selection matters, and the test/validation command named in the task.
 
 Focus on:

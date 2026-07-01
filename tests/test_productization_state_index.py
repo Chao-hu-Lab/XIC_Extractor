@@ -412,8 +412,8 @@ def test_control_plane_current_summary_routes_to_promotion_packet_v2() -> None:
     assert "Next checkpoint is Phase 5" not in summary
 
 
-def test_specs_readme_lists_quant_matrix_version_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_version_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -423,8 +423,8 @@ def test_specs_readme_lists_quant_matrix_version_schema() -> None:
     assert "expected-diff" in text
 
 
-def test_specs_readme_lists_quant_matrix_review_report_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_review_report_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -435,8 +435,8 @@ def test_specs_readme_lists_quant_matrix_review_report_schema() -> None:
     assert "does not grant ProductWriter or matrix authority" in text
 
 
-def test_specs_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -448,8 +448,8 @@ def test_specs_readme_lists_quant_matrix_promotion_readiness_schema() -> None:
     assert "artifact-bound large-cohort" in text
 
 
-def test_specs_readme_lists_quant_matrix_validation_evidence_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_validation_evidence_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -459,8 +459,8 @@ def test_specs_readme_lists_quant_matrix_validation_evidence_schema() -> None:
     assert "`write_authority=false`" in text
 
 
-def test_specs_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -472,8 +472,8 @@ def test_specs_readme_lists_quant_matrix_promotion_packet_v2_schema() -> None:
     assert "default matrix authority unchanged" in text
 
 
-def test_specs_readme_lists_quant_matrix_default_activation_dry_run_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_default_activation_dry_run_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -484,8 +484,8 @@ def test_specs_readme_lists_quant_matrix_default_activation_dry_run_schema() -> 
     assert "ProductWriter defaults and default matrix outputs remain unchanged" in text
 
 
-def test_specs_readme_lists_quant_matrix_product_ready_closeout_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_product_ready_closeout_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -495,8 +495,8 @@ def test_specs_readme_lists_quant_matrix_product_ready_closeout_schema() -> None
     assert "default outputs or matrix authority" in text
 
 
-def test_specs_readme_lists_quant_matrix_default_product_activation_schema() -> None:
-    text = (Path(__file__).parents[1] / "docs/superpowers/specs/README.md").read_text(
+def test_schemas_readme_lists_quant_matrix_default_product_activation_schema() -> None:
+    text = (Path(__file__).parents[1] / "docs/superpowers/schemas/README.md").read_text(
         encoding="utf-8",
     )
 
@@ -619,7 +619,7 @@ def test_productization_doc_hash_canonicalizes_checkout_line_endings(
     tmp_path: Path,
 ) -> None:
     for relative in (
-        "docs/superpowers/specs/artifact.json",
+        "docs/superpowers/schemas/artifact.json",
         "docs/superpowers/notes/artifact.md",
     ):
         artifact = tmp_path / relative

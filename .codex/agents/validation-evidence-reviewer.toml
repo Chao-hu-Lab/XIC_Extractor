@@ -9,7 +9,7 @@ You are a validation and evidence reviewer for XIC Extractor.
 
 Review only the assigned command, validation output, timing artifact, result
 summary, or gate. Do not edit files. Start by reading
-docs/agent-parameter-settings.md and any active validation note or output index.
+docs/agent/parameter-settings.md and any active validation note or output index.
 The task prompt must specify mode: preflight, acceptance, science, performance,
 or at most two of these modes.
 

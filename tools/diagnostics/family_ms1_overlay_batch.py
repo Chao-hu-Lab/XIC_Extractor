@@ -41,7 +41,7 @@ TOP30_EXPANSION_ELIGIBLE = "eligible"
 TOP30_EXPANSION_BLOCKED = "blocked"
 OVERLAY_BATCH_SOURCE = "family_ms1_overlay_batch_v1"
 OVERLAY_SUPERWINDOW_SPAN_FACTOR = 2
-OVERLAY_EVIDENCE_CACHE_SCHEMA = "family_ms1_overlay_evidence_cache_v4"
+OVERLAY_EVIDENCE_CACHE_SCHEMA = "family_ms1_overlay_evidence_cache_v5"
 RAW_IDENTITY_METHOD = "path_stat_v1"
 OverlayTraceItem = tuple[int, overlay_plot.FamilyCell, str, Any]
 WindowedOverlayTraceItem = tuple[int, OverlayTraceItem, tuple[int, int]]
@@ -640,6 +640,8 @@ def _store_success_row_in_cache(
         "trace_data_json": str(paths["trace_data_json"]),
         "trace_summary_size_bytes": paths["trace_summary_tsv"].stat().st_size,
         "trace_data_size_bytes": paths["trace_data_json"].stat().st_size,
+        "trace_summary_sha256": _sha256_file(paths["trace_summary_tsv"]),
+        "trace_data_sha256": _sha256_file(paths["trace_data_json"]),
         "evidence_summary": dict(evidence_summary),
     }
     paths["manifest_json"].write_text(
@@ -719,6 +721,8 @@ def _cache_index_entry(manifest: Mapping[str, Any]) -> dict[str, Any]:
         "trace_data_json": str(manifest.get("trace_data_json", "")),
         "trace_summary_size_bytes": manifest.get("trace_summary_size_bytes"),
         "trace_data_size_bytes": manifest.get("trace_data_size_bytes"),
+        "trace_summary_sha256": manifest.get("trace_summary_sha256"),
+        "trace_data_sha256": manifest.get("trace_data_sha256"),
         "evidence_summary": dict(manifest.get("evidence_summary") or {}),
     }
 
@@ -735,18 +739,20 @@ def _cache_index_entry_matches(
         return False
     if entry.get("key_payload") != dict(key_payload):
         return False
-    path_fields = (
-        ("trace_summary_tsv", "trace_summary_size_bytes"),
-        ("trace_data_json", "trace_data_size_bytes"),
+    artifact_fields = (
+        ("trace_summary_tsv", "trace_summary_size_bytes", "trace_summary_sha256"),
+        ("trace_data_json", "trace_data_size_bytes", "trace_data_sha256"),
     )
-    for path_key, size_key in path_fields:
+    for path_key, size_key, hash_key in artifact_fields:
         path_text = str(entry.get(path_key, "")).strip()
         if not path_text:
             return False
-        path = Path(path_text)
-        if not path.is_file():
-            return False
-        if not _size_matches(entry.get(size_key), path):
+        if not _artifact_fingerprint_matches(
+            entry,
+            path=Path(path_text),
+            size_key=size_key,
+            hash_key=hash_key,
+        ):
             return False
     return True
 
@@ -799,25 +805,35 @@ def _cache_manifest_matches(
         return False
     if manifest.get("key_payload") != dict(key_payload):
         return False
-    for label, path_key in (
-        ("trace_summary_size_bytes", "trace_summary_tsv"),
-        ("trace_data_size_bytes", "trace_data_json"),
+    for path_key, size_key, hash_key in (
+        ("trace_summary_tsv", "trace_summary_size_bytes", "trace_summary_sha256"),
+        ("trace_data_json", "trace_data_size_bytes", "trace_data_sha256"),
     ):
-        path = paths[path_key]
-        if not path.is_file():
-            return False
-        expected_size = manifest.get(label)
-        if expected_size is None:
-            legacy_hash_key = label.replace("_size_bytes", "_sha256")
-            legacy_hash = manifest.get(legacy_hash_key)
-            if legacy_hash is None:
-                return False
-            if str(legacy_hash).upper() != _sha256_file(path):
-                return False
-            continue
-        if not _size_matches(expected_size, path):
+        if not _artifact_fingerprint_matches(
+            manifest,
+            path=paths[path_key],
+            size_key=size_key,
+            hash_key=hash_key,
+        ):
             return False
     return True
+
+
+def _artifact_fingerprint_matches(
+    record: Mapping[str, Any],
+    *,
+    path: Path,
+    size_key: str,
+    hash_key: str,
+) -> bool:
+    if not path.is_file():
+        return False
+    if not _size_matches(record.get(size_key), path):
+        return False
+    expected_hash = str(record.get(hash_key, "")).strip().upper()
+    if not expected_hash:
+        return False
+    return expected_hash == _sha256_file(path)
 
 
 def _size_matches(expected_size: object, path: Path) -> bool:

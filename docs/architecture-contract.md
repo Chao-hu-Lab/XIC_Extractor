@@ -171,7 +171,7 @@ the untargeted alignment path (`common_evidence_from_aligned_cell`), so a change
 there has cross-path blast radius.
 
 The end-to-end `Confidence` / `Reason` / counted-detection resolution order is
-documented in `docs/confidence-reason-precedence-contract.md`; the authority
+documented in `docs/product/decision-policy.md`; the authority
 migration now lives in `docs/product/alignment.md` and
 `docs/product/evidence-spine.md` after the dated evidence-chain spec was reduced
 to a migration/history stub.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,37 @@ def _write(root: Path, path: str, text: str) -> None:
     target = root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
+
+
+def _source_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _retirement_evidence(
+    path: str,
+    text: str,
+    *,
+    exact_referrers: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "version": 1,
+        "entries": [
+            {
+                "source_path": path,
+                "review_result": "pass_can_retire",
+                "owner_paths": ["docs/product/backfill.md"],
+                "owner_anchors": ["docs/product/backfill.md#current-direction"],
+                "absorbed_claims": ["claim is present in owner"],
+                "absorbed_negative_claims": ["negative_payload=none"],
+                "source_copy_readback_verified": True,
+                "source_hash": _source_hash(text),
+                "exact_referrers": exact_referrers or [],
+                "active_followups": [],
+            }
+        ],
+    }
 
 
 def _problems(root: Path, status: str, path: str) -> list[str]:
@@ -47,7 +79,10 @@ def test_repo_active_stub_with_required_fields_passes(tmp_path: Path) -> None:
                 "# Active work stub",
                 "",
                 "Doc placement: repo_active_stub",
+                "Doc kind: plan",
+                "Doc lifecycle: active",
                 "Repo owner: docs/superpowers/handoffs/current/example.md",
+                "Doc exit rule: replace with branch closeout after implementation.",
                 "",
                 "Objective: keep the next action recoverable.",
                 "Scope: docs workflow only.",
@@ -56,6 +91,47 @@ def test_repo_active_stub_with_required_fields_passes(tmp_path: Path) -> None:
                 "1. Run the checker.",
                 "Verification: focused pytest.",
                 "Stop rule: stop if the repo stub is not self-sufficient.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_new_lifecycle_managed_doc_requires_kind_lifecycle_and_exit_rule(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/plans/2026-07-01-example-contract.md"
+    _write(
+        tmp_path,
+        path,
+        "# Example Contract\n\nPublic behavior contract draft.\n",
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("missing Doc kind" in problem for problem in problems)
+    assert any("missing Doc lifecycle" in problem for problem in problems)
+
+
+def test_new_lifecycle_managed_plan_with_metadata_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/plans/2026-07-01-example-contract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example Contract",
+                "",
+                "Doc placement: formal_repo_doc",
+                "Doc kind: plan",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/example.md",
+                "Doc exit rule: promote accepted behavior to docs/product/example.md.",
+                "",
+                "Public behavior contract draft.",
             ]
         ),
     )
@@ -101,6 +177,7 @@ def test_user_guide_with_non_user_placement_fails(tmp_path: Path) -> None:
         "repo_active_stub",
         "branch_closeout_summary",
         "repo_stub_plus_obsidian",
+        "repo_stub_plus_formal_doc",
         "ignored_artifact",
     ):
         path = f"docs/user/{placement}.md"
@@ -147,7 +224,9 @@ def test_canonical_doc_can_document_marker_schema_without_false_positive(
     assert result.problems == ()
 
 
-def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
+def test_transient_superpowers_specs_markdown_with_metadata_passes(
+    tmp_path: Path,
+) -> None:
     path = "docs/superpowers/specs/2026-07-01-example-contract.md"
     _write(
         tmp_path,
@@ -157,7 +236,10 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
                 "# Example contract",
                 "",
                 "Doc placement: formal_repo_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
                 "Repo owner: docs/product/example.md",
+                "Doc exit rule: promote accepted behavior to docs/product/example.md.",
                 "",
                 "This is a public contract.",
             ]
@@ -167,6 +249,139 @@ def test_superpowers_spec_with_formal_marker_passes(tmp_path: Path) -> None:
     result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
 
     assert result.problems == ()
+
+
+def test_superpowers_specs_non_markdown_payload_fails(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/specs/example-schema.json"
+    _write(tmp_path, path, "{}\n")
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("Markdown-only" in problem for problem in problems)
+
+
+def test_parse_name_status_keeps_specs_non_markdown_payloads() -> None:
+    entries, ignored_deletions = parse_name_status(
+        "A\tdocs/superpowers/specs/example-schema.json\n"
+        "A\toutput/private.json\n"
+    )
+
+    assert ignored_deletions == 0
+    assert [entry.path for entry in entries] == [
+        "docs/superpowers/specs/example-schema.json"
+    ]
+
+
+def test_parse_name_status_treats_rename_source_as_deletion() -> None:
+    entries, ignored_deletions = parse_name_status(
+        "R100\t"
+        "docs/superpowers/plans/2026-04-07-old-plan.md\t"
+        "docs/product/old-plan.md\n"
+    )
+
+    assert ignored_deletions == 0
+    assert [(entry.status, entry.path) for entry in entries] == [
+        ("D", "docs/superpowers/plans/2026-04-07-old-plan.md"),
+        ("R", "docs/product/old-plan.md"),
+    ]
+
+
+def test_repo_support_doc_requires_owner_and_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/file-management/docs-cleanup/example-support-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example support note",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: validation_artifact",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/backfill.md",
+                "",
+                "Compact validation note supporting the Backfill owner.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_repo_support_doc_without_owner_fails(tmp_path: Path) -> None:
+    path = "docs/superpowers/file-management/docs-cleanup/example-support-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example support note",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: validation_artifact",
+                "Doc lifecycle: archived",
+                "",
+                "Compact validation note supporting the Backfill owner.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("requires a repo owner" in problem for problem in problems)
+
+
+def test_repo_subcontract_doc_requires_owner_and_passes(tmp_path: Path) -> None:
+    path = "docs/validation/example-subcontract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example subcontract",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Repo owner: docs/product/backfill.md",
+                "Doc exit rule: retire after the canonical owner absorbs it.",
+                "",
+                "Bounded Backfill contract.",
+            ]
+        ),
+    )
+
+    result = check_doc_placement(tmp_path, [StagedMarkdown("A", path)])
+
+    assert result.problems == ()
+
+
+def test_repo_subcontract_doc_without_owner_fails(tmp_path: Path) -> None:
+    path = "docs/validation/example-subcontract.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Example subcontract",
+                "",
+                "Doc placement: repo_subcontract_doc",
+                "Doc kind: spec",
+                "Doc lifecycle: active",
+                "Doc exit rule: retire after the canonical owner absorbs it.",
+                "",
+                "Bounded Backfill contract.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("requires a repo owner" in problem for problem in problems)
 
 
 def test_branch_closeout_summary_with_pr_body_seed_passes(tmp_path: Path) -> None:
@@ -337,7 +552,9 @@ def test_private_obsidian_note_staged_under_repo_docs_fails(tmp_path: Path) -> N
     assert any("not a repo-trackable placement" in problem for problem in problems)
 
 
-def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
+def test_new_tracked_note_lane_fails_even_with_repo_stub_metadata(
+    tmp_path: Path,
+) -> None:
     path = "docs/superpowers/notes/2026-07-01-private-review-note.md"
     _write(
         tmp_path,
@@ -347,6 +564,56 @@ def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
                 "# Private review note",
                 "",
                 "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/review-roundtrip.md",
+                "",
+                "This file is a sanitized public stub.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("retired docs lane" in problem for problem in problems)
+
+
+def test_new_tracked_deepresearch_lane_fails(tmp_path: Path) -> None:
+    path = "docs/deepresearch/2026-07-01-literature-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Literature note",
+                "",
+                "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/untargeted-method.md",
+                "",
+                "Stable claims should be absorbed into the product owner.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("retired docs lane" in problem for problem in problems)
+
+
+def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
+    path = "docs/superpowers/plans/2026-07-01-private-review-note.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Private review note",
+                "",
+                "Doc placement: repo_stub_plus_obsidian",
+                "Doc kind: note",
+                "Doc lifecycle: archived",
                 "Repo owner: docs/product/review-roundtrip.md",
                 "",
                 "This file is a sanitized public stub.",
@@ -359,9 +626,32 @@ def test_sanitized_stub_plus_obsidian_passes(tmp_path: Path) -> None:
     assert result.problems == ()
 
 
-def test_deletions_are_ignored_by_placement_guard() -> None:
+def test_non_allowlisted_docs_root_markdown_fails(tmp_path: Path) -> None:
+    path = "docs/2026-07-01-branch-report.md"
+    _write(
+        tmp_path,
+        path,
+        "\n".join(
+            [
+                "# Branch report",
+                "",
+                "Doc placement: repo_support_doc",
+                "Doc kind: report",
+                "Doc lifecycle: archived",
+                "Repo owner: docs/product/productization.md",
+                "Doc exit rule: retire after summary is absorbed.",
+            ]
+        ),
+    )
+
+    problems = _problems(tmp_path, "A", path)
+
+    assert any("docs root only allows" in problem for problem in problems)
+
+
+def test_non_lifecycle_deletions_are_ignored_by_placement_guard() -> None:
     entries, ignored_deletions = parse_name_status(
-        "D\tdocs/superpowers/plans/2026-04-07-old-plan.md\n"
+        "D\tdocs/product/backfill.md\n"
     )
 
     result = check_doc_placement(
@@ -373,6 +663,109 @@ def test_deletions_are_ignored_by_placement_guard() -> None:
     assert result.checked_count == 0
     assert result.ignored_deletions == 1
     assert result.problems == ()
+
+
+def test_lifecycle_managed_deletion_requires_retirement_evidence() -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    entries, ignored_deletions = parse_name_status(f"D\t{path}\n")
+
+    result = check_doc_placement(
+        Path("."),
+        entries,
+        ignored_deletions=ignored_deletions,
+    )
+
+    assert result.checked_count == 1
+    assert result.ignored_deletions == 0
+    assert any(
+        problem.path == path
+        and "deletion requires staged retirement evidence" in problem.reason
+        for problem in result.problems
+    )
+
+
+def test_lifecycle_managed_rename_source_requires_retirement_evidence() -> None:
+    source = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    destination = "docs/product/old-plan.md"
+    entries, ignored_deletions = parse_name_status(f"R100\t{source}\t{destination}\n")
+
+    result = check_doc_placement(
+        Path("."),
+        entries,
+        ignored_deletions=ignored_deletions,
+    )
+
+    assert any(
+        problem.path == source
+        and "deletion requires staged retirement evidence" in problem.reason
+        for problem in result.problems
+    )
+
+
+def test_lifecycle_managed_deletion_with_retirement_evidence_passes(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, old_text)
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+        StagedMarkdown("A", "docs/product/backfill.md", "# Backfill\n"),
+    ]
+
+    result = check_doc_placement(tmp_path, entries)
+
+    assert result.checked_count == 2
+    assert result.ignored_deletions == 0
+    assert result.problems == ()
+
+
+def test_lifecycle_managed_deletion_rejects_hash_mismatch() -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, "different text")
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+    ]
+
+    result = check_doc_placement(Path("."), entries)
+
+    assert any("source_hash mismatch" in problem.reason for problem in result.problems)
+
+
+def test_lifecycle_managed_deletion_rejects_remaining_referrers(
+    tmp_path: Path,
+) -> None:
+    path = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    old_text = "# Old plan\n\nRetired source text.\n"
+    referrer = "docs/product/backfill.md"
+    _write(tmp_path, referrer, f"# Backfill\n\nHistorical source: `{path}`.\n")
+    evidence_path = (
+        "docs/superpowers/file-management/docs-cleanup/"
+        "2026-07-01-retirement-evidence.json"
+    )
+    evidence = _retirement_evidence(path, old_text)
+    entries = [
+        StagedMarkdown("D", path, old_text),
+        StagedMarkdown("A", evidence_path, json.dumps(evidence)),
+    ]
+
+    result = check_doc_placement(tmp_path, entries)
+
+    assert any(
+        "exact repo referrers require retargeting" in problem.reason
+        for problem in result.problems
+    )
 
 
 def test_cli_reads_staged_blob_not_worktree_after_divergence(tmp_path: Path) -> None:
@@ -392,7 +785,10 @@ def test_cli_reads_staged_blob_not_worktree_after_divergence(tmp_path: Path) -> 
                 "# Active work stub",
                 "",
                 "Doc placement: repo_active_stub",
+                "Doc kind: plan",
+                "Doc lifecycle: active",
                 "Repo owner: docs/superpowers/handoffs/current/example.md",
+                "Doc exit rule: replace with branch closeout after implementation.",
                 "",
                 "Objective: keep the next action recoverable.",
                 "Scope: docs workflow only.",

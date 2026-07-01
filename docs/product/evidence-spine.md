@@ -50,7 +50,7 @@ The evidence spine is the shared layer that converts chromatographic observation
 
 ## See Also
 
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Architecture contract](../architecture-contract.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)
 - [Backfill](backfill.md) | [Discovery](discovery.md) | [Alignment](alignment.md)

@@ -35,6 +35,9 @@ from scripts.validation_artifact_contracts import (  # noqa: E402
     artifact_hash_matches,
     check_summary_artifact_hashes,
 )
+from tools.diagnostics.docs_policy import (  # noqa: E402
+    MECHANICAL_ADJUDICATION_INDEX_REL,
+)
 from xic_extractor.tabular_io import (  # noqa: E402
     file_sha256,
     read_tsv_required,
@@ -62,9 +65,7 @@ DEFAULT_CENSUS_ROW_MANIFEST_TSV = (
 DEFAULT_CENSUS_OPPORTUNITY_CELLS_TSV = (
     DEFAULT_CENSUS_OUTPUT_DIR / "backfill_expansion_opportunity_cells.tsv"
 )
-DEFAULT_MECHANICAL_ADJUDICATION_INDEX_TSV = (
-    ROOT / "docs/superpowers/validation/mechanical_adjudication_index_v1.tsv"
-)
+DEFAULT_MECHANICAL_ADJUDICATION_INDEX_TSV = ROOT / MECHANICAL_ADJUDICATION_INDEX_REL
 DEFAULT_TRACE_RECOVERY_REPORT_TSV = (
     ROOT / "docs/superpowers/validation/trace_overlay_recovery_report_v1.tsv"
 )

@@ -17,6 +17,13 @@ path.
   candidates sharing the same discovered MS1 peak. It must not be treated as
   cross-sample identity, selected-peak truth, or Backfill promotion authority by
   itself.
+- The peak-anchor schema migration intentionally removed legacy
+  `family_context`, `feature_superfamily_id`, `feature_superfamily_size`,
+  `feature_superfamily_role`, `feature_superfamily_confidence`, and
+  `feature_superfamily_evidence` columns from `discovery_candidates.csv` and
+  `discovery_review.csv`. There is no compatibility adapter for those columns;
+  downstream consumers must read the current column constants or tolerate the
+  missing legacy fields.
 - Batch discovery handoff uses explicit index files. Do not depend on old
   worktree-local output directories as durable inputs.
 - Minimal output modes are for fast inspection; standard outputs are the public
@@ -28,6 +35,18 @@ path.
   value-delta framing, expected matrix effect, and explicit expected-diff review.
 - Do not introduce vendor RAW-to-mzML conversion as an implicit product
   dependency without a separate public contract.
+- The untargeted lane is an alignment, recovery, and primary-matrix hygiene
+  layer. It addresses false missingness, RT-driven splitting, owner-centered
+  recovery, duplicate-claim control, and Review/Audit separation. It is not a
+  full LC-MS QA/QC normalization, artifact deconvolution, blank/background
+  contaminant, isotope/adduct annotation, or post-acquisition normalization
+  system; see [Untargeted Method](untargeted-method.md) for the absorbed
+  method/literature boundary.
+- Current untargeted product direction preserves a clean primary `Matrix` while
+  keeping rescue-only, ambiguous, and diagnostic candidates in Review/Audit
+  surfaces. Do not judge the lane by exact equality to old upstream feature
+  tables when the accepted contract is matrix hygiene plus targeted benchmark
+  recovery.
 
 ## Surfaces
 
@@ -45,7 +64,7 @@ path.
   handoff, batch index for downstream alignment.
 - **Does not own**: ProductWriter authority or Backfill promotion (see
   [backfill.md](backfill.md)), final evidence truth for a candidate feature
-  (see [evidence rules](../lcms-msms-evidence-rules.md)), or release-slice
+  (see [evidence rules](../lc-msms-evidence-rules.md)), or release-slice
   readiness (see [productization.md](productization.md)).
 - A Discovery slice must use Discovery vocabulary and authority; it must not
   reopen broad Backfill or expand the Backfill authority manifest by accident.
@@ -59,6 +78,8 @@ Before changing discovery behavior, require the relevant subset of:
 - Performance/output-level review if a minimal or standard mode changes.
 - Evidence-rule review if a new evidence provider changes candidate meaning.
 - Downstream alignment handoff check when filenames or columns change.
+  `tests/test_discovery_csv.py` and `tests/test_discovery_review_csv.py` own the
+  current peak-anchor output schema.
 
 ## Pitfalls
 
@@ -80,6 +101,6 @@ Before changing discovery behavior, require the relevant subset of:
 - [Alignment](alignment.md) -- cross-sample handoff boundary
 - [Peak anchor and group boundary](family-hypothesis-boundary.md) -- Discovery
   peak anchors, cross-sample groups, and PeakHypothesis authority
-- [Evidence rules](../lcms-msms-evidence-rules.md) -- evidence semantics
-- [CID-NL Discovery roadmap](../superpowers/plans/2026-06-21-cid-nl-discovery-product-roadmap.md) -- product lane boundary
-- [Untargeted performance spec](../superpowers/specs/2026-05-12-untargeted-performance-architecture-spec.md) -- RAW-locality and request-batching direction
+- [Untargeted Method](untargeted-method.md) -- durable method boundary
+- [Evidence rules](../lc-msms-evidence-rules.md) -- evidence semantics
+- [Productization](productization.md) -- product lane boundary and CID-NL scope

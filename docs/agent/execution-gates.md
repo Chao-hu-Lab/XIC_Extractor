@@ -8,7 +8,7 @@ root `AGENTS.md` keeps only the highest-frequency subset.
 - Before non-trivial edits, confirm intended worktree, branch, and dirty diff
   scope. Do not stage, rewrite, or revert unrelated user changes.
 - Before Python, RAW, DLL, or validation commands, read
-  `docs/agent-parameter-settings.md` and use documented runners and paths.
+  `docs/agent/parameter-settings.md` and use documented runners and paths.
 - When sandbox, PowerShell syntax, output path, network approval, or RAW runner
   choice is uncertain, preflight with:
 
@@ -55,10 +55,10 @@ prerequisite. Do not assume a later cleanup PR will make an earlier PR pass.
 
 - Do not launch 85RAW or likely long RAW runs through background
   `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
-  command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
+  command shapes in `docs/agent/parameter-settings.md`, or get explicit approval
   for an external terminal or automation.
 - Known approval-first commands are documented in
-  `docs/agent-parameter-settings.md`: dependency sync/lock, Playwright browser
+  `docs/agent/parameter-settings.md`: dependency sync/lock, Playwright browser
   install, RAW/DLL loading, GUI/external-terminal launch, and global Codex
   config changes should not be re-tried once in sandbox just to fail. If the
   task needs them, request the documented narrow approval up front; otherwise
@@ -99,9 +99,18 @@ execpolicy, and subagent TOML as execution-affecting config. Changes need:
 Before opening, updating, or marking a PR ready, run the CI-equivalent commands
 from `.github/workflows/ci.yml` in the current worktree:
 
+CI is layered: pull requests run the required Python 3.12 shard matrix, while
+pushes to `main` or `master` also run the Python 3.11 compatibility matrix. The
+local PR closeout gate below mirrors the command surface; it is not a request to
+rerun every GitHub matrix job locally.
+Hosted lint/typecheck jobs use the GitHub uv cache keyed by `pyproject.toml` and
+`uv.lock`; self-hosted shard jobs record install/test seconds in the job summary
+so future CI tuning is based on observed queue, install, and shard timing.
+
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
 $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python tools/diagnostics/docs_management_audit.py --repo-only --fail-on-completed-transient --json
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
 $env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards --check
 $env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards docs-config -- -v --tb=short -x

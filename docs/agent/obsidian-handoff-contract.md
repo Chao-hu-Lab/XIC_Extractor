@@ -29,13 +29,93 @@ As of 2026-06-25, this is the standing documentation policy, not an experiment:
    material that would be inappropriate or noisy in a public repo.
 3. Obsidian may deepen context, but it must never be the only source for repo
    behavior, product authority, validation policy, or the next safe action.
-4. Historical tracked notes move by a stub-first workflow: extract the stable
-   public claim into a canonical repo owner, keep or create a same-path
-   sanitized stub while exact referrers exist, then move the long original
-   context to Obsidian.
-5. Destructive cleanup is a separate final step. `git rm`, archive moves, and
-   tracked-file deletion require explicit user approval after the concrete
-   paths, replacements, and referrer scan are known.
+4. Historical tracked notes move by an absorption-first workflow: extract the
+   stable public claim into a canonical repo owner, source-copy the long original
+   context to Obsidian, then retire the repo original. Same-path sanitized stubs
+   are temporary compatibility surfaces only while active execution context or
+   exact referrers require them.
+5. Policy-approved automatic retirement is allowed for completed transient docs
+   after owner absorption, Obsidian/source-copy handling, and a clean referrer
+   scan. That path now requires a retirement evidence packet with
+   `review_result: pass_can_retire`; staged lifecycle-managed deletions without
+   matching evidence are blocked. Explicit user approval is reserved for unclear
+   routes, high-risk public contracts, archive moves, and tracked-file deletion
+   outside that safe-retire path.
+
+## Three-route document model
+
+Every durable repo/vault documentation decision must resolve to one of these
+routes:
+
+| Route | Repo body | Obsidian body | Required pointer |
+| --- | --- | --- | --- |
+| `obsidian_original` | No long-form body stays in repo. A compact same-path stub or manifest row may remain only while needed for referrers or provenance. | Original full text. | `source_repo_path:<repo path>` plus note title/alias after write/readback. |
+| `repo_distilled_plus_obsidian_original` | Distilled product, validation, or agent-operating claim in a canonical repo owner or self-sufficient stub. | Original full text and private reasoning. | `source_repo_path:<repo path>` plus note title/alias after write/readback. |
+| `repo_product_doc` | The file itself is the compact product, validation, governance, or operating document and stays in repo. | Optional private background only. | None required. |
+
+`needs_route_decision` is allowed only in audit manifests as a temporary
+workflow state. It is not a final route.
+
+Route is not lifecycle. A file can be a complete active plan today and still
+have a final route of `repo_distilled_plus_obsidian_original` after execution.
+Use lifecycle metadata to say where the document is in its life:
+
+| Field | Meaning |
+| --- | --- |
+| `Doc kind` | `plan`, `spec`, `note`, `goal`, `report`, `manifest`, `handoff`, `closeout`, `validation_artifact`, or `product_doc`. |
+| `Doc lifecycle` | `draft`, `active`, `implemented`, `superseded`, `rejected`, `archived`, or `retired`. |
+| `Doc exit rule` | The closeout, promotion, retirement, replacement, or Obsidian migration condition. Required for new draft/active/implemented/superseded/rejected lifecycle-managed docs. |
+
+Repo docs should contain compressed, public, self-sufficient information:
+rules, product contracts, validation policy, checker-readable summaries, compact
+decision records, and current handoff stubs. Raw original text, command diaries,
+review rationale, abandoned sequencing, and private local context should not
+remain in repo as a final state.
+
+Route is also not topic uniqueness. `repo_product_doc` means the file may stay
+inside the repo, not that it is the only source of truth for its subject. A
+durable topic should have one canonical repo owner. Other repo documents on the
+same topic must be supporting artifacts, manifests, validation packets,
+closeouts, or active stubs that point back to the owner instead of silently
+redefining the same concept.
+
+Route retention is not digestion. A file can be route-retained because it is a
+public contract, checker-readable artifact, active stub, or referrer-blocked
+surface, while still needing owner absorption, support-surface review, lifecycle
+closeout, or Obsidian original handling. Use `digestion_status` and
+`digestion_next_action` from the docs-management audit before treating
+`repo_product_doc` or `kept_files` counts as cleaned-up knowledge.
+
+When same-topic files become hard to browse, prefer the topic-cluster manifest
+or a temporary generated index under ignored `output/docs-topic-indexes/` over
+another owner document. The generated index is only a navigation and migration
+queue: it links to the canonical owner, support artifacts, lifecycle state,
+Obsidian originals, and referrer cleanup work. It must not carry independent
+product authority, and the repo no longer tracks `docs/superpowers/topics/` as
+a durable docs tree. Generate or refresh temporary indexes from
+`tools/diagnostics/docs_management_audit.py --topic-index-dir`; do not
+hand-maintain them as separate source-of-truth pages.
+
+The stable lookup key from repo to vault is `source_repo_path:<repo path>`.
+Agents should search Obsidian frontmatter or text for that key before reading
+full private notes. Do not store absolute vault paths in repo docs. The Obsidian
+pointer is provenance and deep context, not product authority.
+
+Use Obsidian/wiki skills as the private-vault side of the workflow:
+
+| Step | Skill route | Responsibility |
+| --- | --- | --- |
+| Before deciding route | `wiki-status` then `wiki-query` | Check staged writes, existing ingests, and whether `source_repo_path:<repo path>` already has an original or distilled page. |
+| Copy/distill an original | `wiki-ingest` or `wiki-update` | Ingest the long original or sync durable project knowledge after repo claims are represented in owners. |
+| Handwritten/stub notes | `obsidian-markdown` | Keep frontmatter, wikilinks, callouts, embeds, and note syntax valid. |
+| After wiki writes | `wiki-lint` | Check links, lifecycle/frontmatter, summaries, visibility, and provenance health. |
+| Staged write promotion | `wiki-stage-commit` | Promote or reject `_staging/` pages when `WIKI_STAGED_WRITES=true`. |
+
+The cleanup TSV exposes `wiki_skill_route` and `wiki_next_action` so future
+agents can route work without rereading the entire policy.
+It also exposes `digestion_status` and `digestion_next_action` so route-retained
+files can still be actively collapsed into owners, support surfaces, stubs, or
+Obsidian originals instead of being mistaken for finished documentation.
 
 ## Obsidian-wiki adoption
 
@@ -141,6 +221,45 @@ First promote the stable public claim:
 5. Verify that a future agent can continue from repo files alone before any
    removal is proposed.
 
+## Retirement evidence gate
+
+Completed transient docs under `docs/superpowers/plans/`,
+`docs/superpowers/specs/`, and the legacy `docs/superpowers/notes/` lane do not
+leave the repo merely because their lifecycle says `implemented`, `superseded`,
+`rejected`, `archived`, or `retired`. They may retire only after a small
+product-absorption review says `pass_can_retire` and a machine-readable
+retirement evidence packet names the source path.
+
+The evidence packet must include, per source path:
+
+- `review_result: pass_can_retire`;
+- `owner_paths` and `owner_anchors` showing where the durable claims live;
+- `absorbed_claims` and `absorbed_negative_claims`;
+- `source_copy_readback_verified: true`;
+- `source_hash` for the original repo text;
+- empty `active_followups`;
+- exact repo referrers, when a same-path stub is temporarily required.
+
+`tools/diagnostics/retire_docs.py --evidence <json>` is the destructive local
+gate. It verifies the evidence, source hash, Obsidian/source-copy readback flag,
+and referrer state before deleting or stubbing. Retirement evidence packets
+under `docs/superpowers/file-management/docs-cleanup/` are gate artifacts, so
+their `source_path` field is not counted as a live exact referrer. The repo-only
+CI gate is
+`tools/diagnostics/docs_management_audit.py --repo-only
+--fail-on-completed-transient`; it does not read a private vault, but it fails
+when completed transient originals remain outside allowed stub states. The
+staged placement guard blocks lifecycle-managed Markdown deletions unless the
+same staged diff includes
+`docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json` with
+a usable `pass_can_retire` entry for the deleted `source_path`, matching
+`source_hash`, existing owner paths, and no remaining exact repo referrers.
+
+Same-path stubs remain exceptions. Use `repo_active_stub` for active execution
+context and `repo_stub_plus_obsidian` or `repo_stub_plus_formal_doc` only while
+exact-path compatibility or referrers still need that path. After referrers move
+to the owner, the stub goes through the same retirement evidence path.
+
 ## Public/private publication boundary
 
 Treat the public repo like the publication surface: it may disclose the
@@ -178,7 +297,7 @@ repo owner first.
 
 | Layer | Owner | Purpose | Must not contain |
 | --- | --- | --- | --- |
-| Formal repo docs | `docs/user/`, `docs/product/`, `docs/agent/`, `docs/superpowers/specs/`, named plans, ledgers | Public user guides, product contracts, product state, validation policy, source-of-truth claims | private diary, raw transcripts, obsolete branch sequencing |
+| Formal repo docs | `docs/user/`, `docs/product/`, `docs/agent/`, `docs/architecture/`, `docs/validation/`, `docs/superpowers/schemas/`, transient Markdown specs, named plans, ledgers | Public user guides, product contracts, product state, validation policy, source-of-truth claims, active development specs with exit rules | private diary, raw transcripts, obsolete branch sequencing, JSON schemas inside `specs/` |
 | Branch handoff stub | `docs/superpowers/handoffs/current/ACTIVE.local.md` or branch-named ignored local handoff | Current objective, decisions, validation, blocker, next actions, optional Obsidian pointer | long logs, full chat history, private sample investigation |
 | Branch closeout summary | PR body by default; `docs/superpowers/closeouts/` only when intentionally public | Branch-level narrative and PR-body seed: problem, solution, verification, residual risk, evidence links | raw transcript, private diary, Obsidian-only context, unchecked product claims |
 | Productization status anchor | `docs/superpowers/productization/status/cc-framework-improvements-productization.md` | Productization checker anchor phrases and shared status reminders | branch-specific current objectives |
@@ -195,9 +314,12 @@ for repo documents.
 | Placement | Meaning | Default destination |
 | --- | --- | --- |
 | `formal_repo_doc` | Public contract, source-of-truth, source index, validation policy, or checker-readable summary | repo canonical owner |
+| `repo_subcontract_doc` | Public bounded contract under a canonical owner; formal enough to stay in repo, but not the top-level topic owner | repo sub-contract linked to owner |
+| `repo_support_doc` | Public support surface, validation note, routing index, or compact evidence pointer that must remain in repo but must not claim topic-owner authority | repo support artifact linked to owner |
 | `repo_active_stub` | Short active execution stub that lets the next agent continue without private vault access | ignored local handoff by default; repo only when intentionally force-added |
 | `branch_closeout_summary` | Branch narrative and PR body seed after non-trivial branch work | PR body by default; repo archive only when intentionally public |
 | `repo_stub_plus_obsidian` | Same-path public-safe stub; long original content lives in Obsidian | repo stub plus private staged draft |
+| `repo_stub_plus_formal_doc` | Same-path public-safe stub; stable claims live in the declared formal repo owner | repo stub plus formal owner pointer |
 | `private_obsidian_note` | Implementation diary, command log, review rationale, branch sequencing, or private/local context | Obsidian staged draft |
 | `ignored_artifact` | Bulky generated artifact or local-only evidence packet | ignored storage plus repo summary/hash/regeneration metadata |
 | `throwaway_scratch` | Ephemeral scratch with no long-term repo or vault value | ignored local scratch |
@@ -205,8 +327,11 @@ for repo documents.
 Machine-readable repo markers:
 
 ```markdown
-Doc placement: <formal_repo_doc | repo_active_stub | branch_closeout_summary | repo_stub_plus_obsidian | private_obsidian_note | ignored_artifact | throwaway_scratch>
+Doc placement: <formal_repo_doc | repo_subcontract_doc | repo_support_doc | repo_active_stub | branch_closeout_summary | repo_stub_plus_obsidian | repo_stub_plus_formal_doc | private_obsidian_note | ignored_artifact | throwaway_scratch>
+Doc kind: <plan | spec | note | goal | report | manifest | handoff | closeout | validation_artifact | product_doc>
+Doc lifecycle: <draft | active | implemented | superseded | rejected | archived | retired>
 Repo owner: <path-or-topic>
+Doc exit rule: <closeout, promotion, retirement, replacement, or Obsidian migration condition>
 ```
 
 Rules:
@@ -214,28 +339,45 @@ Rules:
 1. Repo docs outside an explicit canonical owner path must carry
    `Doc placement: <value>` before commit.
    Canonical owner paths include `docs/user/`, `docs/product/`, `docs/agent/`,
-   `docs/superpowers/specs/`, validation and checker fixture paths,
-   `docs/superpowers/productization/`, `docs/superpowers/file-management/`, and
-   `docs/superpowers/closeouts/`. The handoff current and archive directories
-   are ignored local workspace by default; private branch diary or review
-   rationale files there should move to Obsidian rather than becoming repo docs.
+   `docs/architecture/`, `docs/validation/`, `docs/superpowers/schemas/`,
+   transient Markdown `docs/superpowers/specs/`, validation and checker fixture
+   paths, `docs/superpowers/productization/`,
+   `docs/superpowers/file-management/`, and `docs/superpowers/closeouts/`.
+   The handoff current and archive directories are ignored local workspace by
+   default; private branch diary or review rationale files there should move to
+   Obsidian rather than becoming repo docs.
 2. Repo-tracked placements that depend on repo authority must also carry
-   `Repo owner: <path-or-topic>`: `formal_repo_doc`, `repo_active_stub`,
-   `branch_closeout_summary`, `repo_stub_plus_obsidian`, and
-   `ignored_artifact`.
-3. `private_obsidian_note` and `throwaway_scratch` are not valid tracked repo
+   `Repo owner: <path-or-topic>`: `formal_repo_doc`,
+   `repo_subcontract_doc`, `repo_support_doc`, `repo_active_stub`,
+   `branch_closeout_summary`, `repo_stub_plus_obsidian`,
+   `repo_stub_plus_formal_doc`, and `ignored_artifact`.
+3. New lifecycle-managed public plans and specs must carry `Doc kind`,
+    `Doc lifecycle`, and an exit rule when the lifecycle is draft, active,
+    implemented, superseded, or rejected. This is the cradle gate; cleanup audits
+   handle older files that predate the metadata. `docs/superpowers/specs/` is
+   Markdown-only and exits by updating the product owner plus moving the original
+   long-form spec to Obsidian or another approved private-history route. Do not
+   create new tracked
+   generic `deepresearch/`, `notes/`, `goals/`, `reports/`,
+   `pulse-reports/`, or `topics/` lanes; route those to a formal owner, a
+   named public artifact lane, ignored output, ignored handoff, or Obsidian.
+4. `private_obsidian_note` and `throwaway_scratch` are not valid tracked repo
    document placements. If either appears under `docs/`, move the note to the
    vault staged-draft lane or replace it with a sanitized
-   `repo_stub_plus_obsidian`.
-4. `repo_active_stub` must be self-sufficient and include objective, scope,
+   `repo_stub_plus_obsidian` or `repo_stub_plus_formal_doc`.
+5. `repo_active_stub` must be self-sufficient and include objective, scope,
    constraints, next 1-3 actions, verification, stop rule, and an optional
    Obsidian pointer. The optional pointer cannot be required to understand the
    next safe action.
-5. `branch_closeout_summary` must include a short PR Body Seed. Do not paste a
+6. `branch_closeout_summary` must include a short PR Body Seed. Do not paste a
    full handoff, raw transcript, or private Obsidian context into a PR body.
-6. Staged tracked deletions are not adjudicated by placement markers. They still
-   require exact manifest, final referrer audit, and explicit user approval.
-7. Commit through explicit staging. `git commit -a`, `git commit --all`,
+7. Staged lifecycle-managed Markdown deletions are guarded. Completed
+   transient docs require a staged
+   `docs/superpowers/file-management/docs-cleanup/*retirement-evidence*.json`
+   packet with a usable `pass_can_retire` entry, matching `source_hash`, and no
+   remaining exact repo referrers for the deleted `source_path`; otherwise use
+   `retire_docs.py --evidence <json>` first or keep an allowed stub state.
+8. Commit through explicit staging. `git commit -a`, `git commit --all`,
    `git commit -am ...`, and `git commit <pathspec>` are blocked because they can
    bypass the staged Markdown placement check.
 
@@ -376,8 +518,9 @@ describe the intended durable location and authority of a repo or vault note.
 | `keep_repo` | Durable source-of-truth or public contract stays in repo | owner file is clear and current |
 | `formalize_repo` | Content should stay, but must be rewritten into formal docs first | stable claims moved to a canonical owner |
 | `repo_stub_plus_obsidian` | Short sanitized repo stub remains; long details may move to Obsidian | stub is self-sufficient and points to optional note |
-| `move_to_obsidian_after_stub` | Repo original can leave version control only after a stub/formal owner exists | explicit user approval before `git rm` |
-| `archive_or_delete_later` | Historical artifact is likely removable after evidence is preserved elsewhere | explicit user approval and final referrer scan |
+| `repo_stub_plus_formal_doc` | Short sanitized repo stub remains; stable claims already live in a formal repo owner | stub is self-sufficient and points to the owner |
+| `move_to_obsidian_after_stub` | Repo original can leave version control after a formal owner exists; a stub is needed only for active context or unresolved exact referrers | product absorption review plus final referrer scan |
+| `archive_or_delete_later` | Historical artifact is likely removable after evidence is preserved elsewhere | safe-retire policy or explicit user approval plus final referrer scan |
 | `local_only_no_repo` | Private/local material should never enter version control | keep ignored; no repo referrer may depend on it |
 
 ## Validation and review artifact boundary
@@ -591,10 +734,29 @@ path. Required columns:
 | --- | --- |
 | `source_path` | Current repo path or ignored artifact path. |
 | `classification` | `repo_relocate`, `repo_keep_current`, `formalize_then_obsidian`, `repo_stub_plus_obsidian`, `ignored_externalize`, `delete_generated_later`, or `needs_human_review`. |
+| `doc_kind` | Declared or inferred kind: plan, spec, note, goal, report, manifest, handoff, closeout, validation artifact, or product doc. |
+| `doc_kind_source` | `declared` when the file says `Doc kind`, otherwise `inferred`. |
+| `doc_lifecycle` | Declared lifecycle or `unknown` for legacy files. |
+| `doc_exit_rule` | Declared exit rule or `missing`. |
+| `lifecycle_status` | `declared`, `missing_lifecycle`, `invalid_lifecycle`, or `missing_exit_rule`. |
+| `wiki_skill_route` | Wiki/Obsidian skills to use for the next vault-side action. |
+| `wiki_next_action` | Short operational instruction for query, ingest/update, lint, or staged promotion. |
+| `doc_route` | `obsidian_original`, `repo_distilled_plus_obsidian_original`, `repo_product_doc`, or temporary `needs_route_decision`. |
+| `repo_body_role` | `original_not_repo`, `distilled_repo_claim`, `repo_source_of_truth`, or `route_pending`. |
+| `digestion_status` | Whether the row is a generated index/delegated handoff/canonical owner or still needs route decision, owner absorption, sub-contract review, support-surface review, or Obsidian handling. |
+| `digestion_next_action` | The next content-governance action before treating the row as digested knowledge. |
+| `topic_key` | Human topic bucket used to check whether multiple repo files are carrying the same meaning. |
+| `topic_role` | `repo_topic_owner`, `repo_topic_index`, `repo_supporting_artifact`, `needs_distillation_or_route`, or `delegated_handoff`. |
+| `topic_owner_claim` | Exact owner claim used to distinguish true duplicate owner claims from distinct sub-contracts under one big direction. |
+| `topic_cluster_size` | Number of scanned repo docs in the same topic/owner-hint cluster. |
+| `topic_cluster_status` | `potential_duplicate_owner`, `multiple_subtopic_owners`, `owner_plus_cleanup_candidates`, `owner_missing_for_candidates`, `multiple_support_surfaces`, or `single_surface`. |
+| `topic_cluster_sample` | Sample files from the same topic cluster. |
 | `repo_owner` | Formal repo owner that preserves the stable public claim. |
 | `repo_target_path` | Destination if retained or relocated in repo. Blank if not applicable. |
+| `obsidian_original_hint` | Stable lookup key, normally `source_repo_path:<repo path>`, until a note title/alias is verified. |
 | `obsidian_target_folder` | Destination folder from the taxonomy above. Blank unless copied to Obsidian. |
 | `obsidian_note_title` | Title or alias of the private note. Blank unless copied to Obsidian. |
+| `repo_pointer_required` | `yes`, `no`, or `decision_pending`. |
 | `ignored_artifact_target` | Destination under ignored artifact storage when externalized. |
 | `retention_decision` | Retention decision from `ARTIFACT_INVENTORY.tsv`, when applicable. |
 | `privacy_risk` | `low`, `medium`, or `high`. |
@@ -611,13 +773,46 @@ table or explicitly review and accept the privacy exposure. Repo docs should kee
 the durable policy and batch summaries; exact path manifests may remain
 branch-local or private until cleanup is complete.
 
+Companion topic-cluster manifests should summarize the same surface by big
+direction instead of by file path. Required columns:
+
+| Column | Meaning |
+| --- | --- |
+| `topic_key` | Big-direction topic bucket. |
+| `topic_cluster_status` | Consolidation state for the topic. |
+| `file_count` | Number of scanned repo docs in the topic cluster. |
+| `topic_owner_count` | Files currently acting like repo topic owners. |
+| `topic_owner_claim_count` | Distinct owner claims among owner-like files. |
+| `supporting_count` | Support artifacts, validation packets, manifests, or closeouts. |
+| `candidate_count` | Files needing distillation or route decision. |
+| `topic_index_count` | Generated index-only topic README files. |
+| `delegated_handoff_count` | Handoff files delegated to handoff retention audit. |
+| `repo_owner_hint` | Intended canonical owner path or topic. |
+| `suggested_repo_topic_folder` | Suggested ignored `output/docs-topic-indexes/<topic>/` folder for temporary browsing and migration coordination. |
+| `suggested_obsidian_topic_folder` | Private-vault topic archive lane. |
+| `topic_next_action` | Smallest consolidation action for the topic. |
+| `owner_paths` | Sample owner-like files to review first. |
+| `owner_claims` | Sample distinct owner claims. |
+| `supporting_sample_paths` | Sample support files. |
+| `candidate_paths` | Candidate files needing route/lifecycle work. |
+| `digestion_review_count` | Files in the topic that still need owner absorption, route decision, support review, or Obsidian-original handling. |
+| `digestion_status_counts` | Compact status histogram for the topic; use it to avoid reading `route-retained` as fully digested. |
+| `support_retention_counts` | Compact histogram explaining why support surfaces remain: authority/status anchor, exact-referrer bound, active, archived/compressible, or ordinary support. |
+| `bound_support_sample_paths` | Support samples that should not be shortened, moved, or deleted until exact refs, status rows, authority manifests, or active exit rules are resolved. |
+| `compressible_support_sample_paths` | Support samples that are first candidates for owner absorption, Obsidian source-copy handling, compact stubs, or later removal review. |
+
 Classification inventory rows should include:
 
 - path;
 - disposition;
+- doc kind;
+- doc lifecycle;
+- exit rule status;
+- doc route;
 - current repo owner or replacement owner;
 - privacy risk;
 - whether future agents need it for handoff;
+- stable `source_repo_path` lookup key when an Obsidian original is expected;
 - Obsidian target note title if known;
 - required pre-move action;
 - whether destructive action is allowed now.
@@ -634,10 +829,10 @@ Use privacy risk to decide where the long text belongs:
   repo text.
 
 If a tracked file is still referenced by exact path from another repo file,
-`move_to_obsidian_after_stub` is not enough. Before removal, either keep a
-sanitized stub at the same path or update every repo referrer to a formal owner
-that preserves the same decision. This referrer scan is mandatory even when the
-long original content has been copied to Obsidian.
+`move_to_obsidian_after_stub` is not enough. Before removal, either update every
+repo referrer to a formal owner that preserves the same decision or keep a short
+same-path compatibility stub. This referrer scan is mandatory even when the long
+original content has been copied to Obsidian.
 
 Same-path stubs are temporary unless the exact path is deliberately bound by a
 hash, checker, fixture, artifact contract, or compatibility reference. Each
@@ -648,25 +843,35 @@ record why exact-path retention remains required.
 
 When future work creates new documentation:
 
-1. Decide placement before writing: `formal_repo_doc`, `repo_active_stub`,
-   `branch_closeout_summary`, `repo_stub_plus_obsidian`,
+1. Decide placement before writing: `formal_repo_doc`, `repo_subcontract_doc`,
+   `repo_support_doc`, `repo_active_stub`, `branch_closeout_summary`,
+   `repo_stub_plus_obsidian`, `repo_stub_plus_formal_doc`,
    `private_obsidian_note`, `ignored_artifact`, or `throwaway_scratch`.
-2. If it changes public behavior, schema, product state, validation policy,
+2. Decide kind, lifecycle, and exit rule before writing new lifecycle-managed
+   public plans or specs. A `writing-plans` implementation plan can live in repo
+   while active, but its exit rule must say how it closes: promote stable claims
+   to owners, replace itself with closeout/stub, or move the original to
+   Obsidian. Generic deepresearch, notes, goals, pulse reports, and reports are
+   private-first or generated-output surfaces unless deliberately promoted to a
+   named public owner lane.
+3. If it changes public behavior, schema, product state, validation policy,
    source-of-truth claims, or agent workflow rules, write the stable claim to the
    canonical repo owner.
-3. If it is active execution context, keep a short `repo_active_stub` in repo.
+4. If it is active execution context, keep a short `repo_active_stub` in repo.
    A long Obsidian note may deepen context, but it must not be the only plan.
-4. If it is long exploration, scratch reasoning, private diary, review
+5. If it is long exploration, scratch reasoning, private diary, review
    rationale, branch sequencing, or command transcript, write it to Obsidian
    staged draft or ignored artifact storage instead of committing it first and
    cleaning it up later.
-5. If a private note contains a durable public decision, distill that decision
+6. If a private note contains a durable public decision, distill that decision
    into the repo owner before relying on the note.
-6. Never make a repo document depend on a private Obsidian note for its core
+7. Never make a repo document depend on a private Obsidian note for its core
    meaning. Repo references to Obsidian must be optional pointers.
-7. Before moving or deleting any tracked doc, scan referrers and ensure each
-   remaining repo link lands on a formal owner or sanitized stub.
-8. Do not rely on a broad wiki source scan to decide placement. A new formal
+8. Before moving or deleting any tracked doc, scan referrers and ensure each
+   remaining repo link lands on a formal owner or sanitized stub. For completed
+   transient docs, use the retirement evidence gate above instead of manual
+   `git rm`.
+9. Do not rely on a broad wiki source scan to decide placement. A new formal
    repo doc stays in repo by default; a private note is intentionally added to
    the vault raw inbox, staged draft lane, or an approved migration manifest.
 
@@ -681,15 +886,18 @@ A documentation cleanup patch should proceed in this order:
 
 1. Classify each source path in the inventory.
 2. Extract stable public claims into formal repo owners.
-3. Create same-path sanitized stubs for tracked files that still have exact repo
-   referrers.
+3. Run product-absorption review for completed transient docs; use a small
+   reviewer to catch missing or incorrect owner updates.
 4. Copy long private history to Obsidian only after a pilot write/readback is
    verified for the target vault.
 5. Re-run exact referrer scans against the candidate paths and note titles.
-6. Run docs/hook smoke checks plus secret, private local path, and absolute
+6. Delete safe-retire candidates with no exact referrers; create same-path
+   sanitized stubs only for active or referrer-bound exceptions.
+7. Run docs/hook smoke checks plus secret, private local path, and absolute
    vault path scans.
-7. Ask for explicit destructive approval before any `git rm`, archive move, or
-   tracked-file deletion.
+8. Ask for explicit approval only for archive moves, unclear routes, high-risk
+   public-contract changes, or tracked-file deletion outside the safe-retire
+   path.
 
 ## Obsidian CLI/MCP pilot gate
 

@@ -26,6 +26,29 @@ or candidate tables into the matrix.
   same-peak, group-hypothesis, or PeakHypothesis-level authority record before
   it can promote a rescued cell.
 
+## Current Evidence Compression
+
+The broad Backfill auto-write decision is parked, not unresolved. The retained
+decision packet is still an authority/status anchor, so it must not be shortened
+or moved until the status index and authority manifest point at a replacement
+compact artifact with updated hashes.
+
+Stable claims already absorbed here:
+
+- The 4613-row candidate/audit universe is not a writer pool.
+- Current Backfill product authority is the scoped 511 `write_ready` cells.
+- The remaining 4102 rows are outside writer authority; this includes 3015
+  trace-matched rows with no approved evidence class or passing oracle, and
+  1087 rows missing trace/overlay evidence.
+- Profile-only separation, quality blockers, round-trip reintegration, and
+  ISTD behavior cannot become broad ProductWriter predicates.
+- Broad Backfill can reopen only through a new independent truth source for
+  peak choice, family identity, or area truth, plus an expected-diff contract.
+
+The seed-aware review packet remains a shadow-gate support surface. Its current
+signal is useful for review triage, but it does not change matrix authority or
+write scope.
+
 ## Surfaces
 
 | Surface | Role |
@@ -86,11 +109,8 @@ Before changing Backfill product behavior, require the relevant subset of:
 
 - [Productization control plane](../superpowers/plans/2026-06-15-productization-control-plane.md)
 - [Status index](../superpowers/validation/productization_status_index_v1.tsv)
-- [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
-- [Adjudication schema](../superpowers/specs/mechanical_adjudication_schema.v1.json)
+- [Authority manifest](../superpowers/schemas/productization_authority_manifest.v1.json)
+- [Adjudication schema](../superpowers/schemas/mechanical_adjudication_schema.v1.json)
 - [Adjudication index](../superpowers/validation/mechanical_adjudication_index_v1.tsv)
-- [Broad auto-write feasibility gate](../superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md)
-- [Evidence rules](../lcms-msms-evidence-rules.md)
+- [Evidence rules](../lc-msms-evidence-rules.md)
 - [Peak anchor and group boundary](family-hypothesis-boundary.md)
-- [Backfill quant matrix blueprint](../superpowers/plans/2026-06-19-backfill-quant-matrix-product-blueprint.md)
-- [Seed-aware review index](../superpowers/notes/2026-05-19-seed-aware-backfill-review-index.md)

@@ -9,7 +9,7 @@ source_refs:
   - ".codex/hooks/xic_post_tool_guard.py"
   - ".codex/hooks/fixtures/assert_hook_outputs.py"
   - "docs/agent/execution-gates.md"
-  - "docs/agent-parameter-settings.md"
+  - "docs/agent/parameter-settings.md"
 ---
 
 # Codex Environment Noise Triage

@@ -58,7 +58,7 @@ contract promotes a correction or gate.
 ## See Also
 
 - [Sample metadata and QC](sample-metadata-qc.md)
-- [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
+- [LC-MS/MS evidence rules](../lc-msms-evidence-rules.md)
 - [Evidence spine](evidence-spine.md)
 - [Review roundtrip](review-roundtrip.md)
 - [Productization](productization.md)

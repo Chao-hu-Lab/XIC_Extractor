@@ -1,5 +1,11 @@
 # Public Surface Stub Audit
 
+Doc placement: repo_support_doc
+Doc kind: report
+Doc lifecycle: archived
+Repo owner: docs/agent/obsidian-handoff-contract.md
+Doc exit rule: Keep as historical public-surface evidence unless a later closeout index preserves the same audit counts, approval boundary, and no-git-rm warning.
+
 Status: `audit_only`
 
 This report checks whether the repo has become a public-facing collection of

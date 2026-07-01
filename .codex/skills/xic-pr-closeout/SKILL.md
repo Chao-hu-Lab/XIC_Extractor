@@ -1,6 +1,7 @@
 ---
 name: xic-pr-closeout
-description: XIC Extractor overlay for the global pr-closeout skill. Use when preparing, opening, updating, or closing out an XIC PR or branch where phase/spec work, validation artifacts, RAW-backed evidence, workflow rules, public contracts, multiple commits, or downstream handoff need durable review context. First use global `pr-closeout`; then apply XIC readiness labels, artifact rules, and merge/history expectations. Do not use for simple status checks, tiny commits with no PR, or pure GitHub mechanics already covered by create-pr/commit.
+description: Manual XIC overlay for pr-closeout: readiness labels, validation tier, RAW artifacts, downstream handoff, and merge/history expectations.
+disable-model-invocation: true
 ---
 
 # XIC PR Closeout
@@ -9,7 +10,7 @@ This is a repo-specific overlay. The reusable workflow lives in the global
 `pr-closeout` skill. Do not duplicate the global workflow here.
 
 If the global skill is unavailable, report `global skill unavailable` and use
-`AGENTS.md`, `docs/agent-subagent-routing.md`, and the XIC additions below as
+`AGENTS.md`, `docs/agent/subagent-routing.md`, and the XIC additions below as
 the fallback closeout contract.
 
 Use the global skill first for PR/branch narrative, verification, residual risk,

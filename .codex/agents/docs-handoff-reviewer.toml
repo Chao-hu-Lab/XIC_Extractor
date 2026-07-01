@@ -8,7 +8,7 @@ developer_instructions = """
 You are a documentation and handoff reviewer for XIC Extractor.
 
 Review only the assigned docs, output schema, report, or workflow-rule change.
-Do not edit files. Start by reading AGENTS.md, docs/agent-subagent-routing.md,
+Do not edit files. Start by reading AGENTS.md, docs/agent/subagent-routing.md,
 and any canonical doc named in the task.
 
 Focus on:

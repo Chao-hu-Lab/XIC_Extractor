@@ -1,6 +1,6 @@
 ---
 name: xic-architecture-preflight
-description: XIC Extractor implementation preflight for architecture, reuse, and call-cost discipline. Use before implementing or planning non-trivial diagnostics, RAW-backed evidence, preset-performance changes, matrix/activation/value-delta paths, model-selection work, HCD-PI, Delta Mass, CID-NL, or other evidence-provider additions. This skill prevents new architecture debt by requiring existing-owner reuse and cost modeling before coding.
+description: Architecture preflight before non-trivial XIC implementation touching diagnostics, RAW-backed evidence, preset performance, matrix/activation/value-delta, model selection, or evidence providers; requires owner reuse, call-cost, public-contract risk, validation gate, and stop rule.
 ---
 
 # XIC Architecture Preflight

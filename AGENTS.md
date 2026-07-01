@@ -13,7 +13,7 @@ a required preflight.
 - Directory layout and scratch hygiene: [`docs/project-layout.md`](docs/project-layout.md)
 - Stable domain glossary and product lane vocabulary: [`CONTEXT.md`](CONTEXT.md)
 - Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
-  [`docs/agent-parameter-settings.md`](docs/agent-parameter-settings.md)
+  [`docs/agent/parameter-settings.md`](docs/agent/parameter-settings.md)
 - Known diagnostic conclusions: [`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md)
 - Agent operating model, rules, hooks, skills, and automations:
   [`docs/agent/codex-operating-system.md`](docs/agent/codex-operating-system.md)
@@ -37,7 +37,7 @@ a required preflight.
 - Architecture boundaries, CodeGraph usage, and public contracts:
   [`docs/agent/architecture-public-contracts.md`](docs/agent/architecture-public-contracts.md)
 - Full LC-MS/MS domain evidence contract:
-  [`docs/lcms-msms-evidence-rules.md`](docs/lcms-msms-evidence-rules.md)
+  [`docs/lc-msms-evidence-rules.md`](docs/lc-msms-evidence-rules.md)
 - Full architecture and decomposition contract:
   [`docs/architecture-contract.md`](docs/architecture-contract.md)
 - Repo-local XIC overlay skills: [`.codex/skills`](.codex/skills), only when
@@ -67,7 +67,7 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
 - Before non-trivial edits, confirm intended worktree, branch, and dirty diff
   scope. Do not stage, rewrite, or revert unrelated user changes.
 - Before Python, RAW, DLL, or validation commands, read
-  `docs/agent-parameter-settings.md` and use documented runners and paths.
+  `docs/agent/parameter-settings.md` and use documented runners and paths.
 - Keep outputs under task-specific `output/` or `docs/superpowers/` paths. New
   diagnostic output groups need a summary or index.
 - Keep active handoffs as short current-state snapshots, not logs. Use the
@@ -102,7 +102,7 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
   8RAW, 85RAW, targeted benchmark, or manual EIC/MS2 review.
 - Do not launch 85RAW or likely long RAW runs through background
   `Start-Process` from the Codex shell. Use the foreground heartbeat/timing
-  command shapes in `docs/agent-parameter-settings.md`, or get explicit approval
+  command shapes in `docs/agent/parameter-settings.md`, or get explicit approval
   for an external terminal or automation.
 - Search `tools/diagnostics/INDEX.md`, relevant notes, and existing validation
   outputs before inventing a new diagnostic workflow. Search
@@ -137,9 +137,18 @@ and untargeted product lanes. See `docs/engineering-skills/domain.md`.
 Before opening, updating, or marking a PR ready, run the CI-equivalent commands
 from `.github/workflows/ci.yml` in the current worktree:
 
+CI is layered: pull requests run the required Python 3.12 shard matrix, while
+pushes to `main` or `master` also run the Python 3.11 compatibility matrix. The
+local PR closeout gate below mirrors the command surface; it is not a request to
+rerun every GitHub matrix job locally.
+Hosted lint/typecheck jobs use the GitHub uv cache keyed by `pyproject.toml` and
+`uv.lock`; self-hosted shard jobs record install/test seconds in the job summary
+so future CI tuning is based on observed queue, install, and shard timing.
+
 ```powershell
 $env:UV_CACHE_DIR='.uv-cache'; uv run ruff check xic_extractor tests
 $env:UV_CACHE_DIR='.uv-cache'; uv run python scripts/check_diagnostics_index.py
+$env:UV_CACHE_DIR='.uv-cache'; uv run python tools/diagnostics/docs_management_audit.py --repo-only --fail-on-completed-transient --json
 $env:UV_CACHE_DIR='.uv-cache'; uv run mypy xic_extractor
 $env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards --check
 $env:UV_CACHE_DIR='.uv-cache'; uv run python -m tools.testing.test_shards docs-config -- -v --tb=short -x
@@ -217,7 +226,7 @@ debugging the shard runner itself.
   product-vs-diagnostic claims, then parity evidence.
 - Repo-local execution subagents are opt-in. The main agent owns synthesis,
   edits, final judgment, and verification. Use
-  `docs/agent-subagent-routing.md` when subagents are requested.
+  `docs/agent/subagent-routing.md` when subagents are requested.
 
 ## Public Contracts
 

@@ -566,6 +566,64 @@ def test_batch_evidence_cache_rejects_same_size_trace_payload_mismatch(
     assert render_count == 2
 
 
+def test_batch_evidence_cache_rejects_same_size_summary_payload_mismatch(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    queue_tsv = tmp_path / "queue.tsv"
+    alignment_cells = tmp_path / "alignment_cells.tsv"
+    raw_dir = tmp_path / "raw"
+    dll_dir = tmp_path / "dll"
+    first_output = tmp_path / "out_first"
+    second_output = tmp_path / "out_second"
+    cache_dir = tmp_path / "overlay_cache"
+    alignment_cells.write_text("feature_family_id\nFAM001\n", encoding="utf-8")
+    _write_queue(queue_tsv, [_queue_row("FAM001")])
+    _write_raw_identity_file(raw_dir, "S1", "raw-v1")
+
+    render_count = _install_fake_cache_renderer(monkeypatch)
+
+    batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=first_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+    )
+    assert render_count() == 1
+
+    cache_summary = next(cache_dir.glob("*/*_trace_summary.tsv"))
+    original_size = cache_summary.stat().st_size
+    cache_summary.write_text(
+        "sample_stem\tstatus\nS1\tblocked\n",
+        encoding="utf-8",
+    )
+    assert cache_summary.stat().st_size == original_size
+
+    metrics: dict[str, object] = {}
+    rows = batch.run_overlay_batch(
+        review_queue_tsv=queue_tsv,
+        alignment_cells=alignment_cells,
+        raw_dir=raw_dir,
+        dll_dir=dll_dir,
+        output_dir=second_output,
+        limit=1,
+        evidence_only=True,
+        evidence_cache_dir=cache_dir,
+        metrics=metrics,
+    )
+
+    assert rows[0]["status"] == "success"
+    assert metrics["evidence_cache_hit_count"] == 0
+    assert metrics["evidence_cache_miss_count"] == 1
+    assert render_count() == 2
+    summary_path = Path(str(rows[0]["trace_summary_tsv"]))
+    assert second_output in summary_path.parents
+
+
 def test_batch_evidence_cache_reuses_same_request_across_copied_inputs(
     tmp_path: Path,
     monkeypatch,

@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STATIC_BUNDLE_INDEX = (
     ROOT / "docs/superpowers/validation/lockbox_static_review_v1/bundle_index.tsv"
 )
-LABEL_SCHEMA = ROOT / "docs/superpowers/specs/lockbox_label_schema_v1.json"
+LABEL_SCHEMA = ROOT / "docs/superpowers/schemas/lockbox_label_schema_v1.json"
 LABEL_LOG = ROOT / "docs/superpowers/validation/lockbox_reviewer_label_log_v1.tsv"
 SUMMARY_JSON = ROOT / "docs/superpowers/validation/lockbox_truth_summary_v1.json"
 CONFUSION_TABLE = (
