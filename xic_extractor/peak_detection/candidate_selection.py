@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import math
 
+from xic_extractor.decision_policy import (
+    DecisionRecord,
+    DecisionTerm,
+    decision_blockers,
+    decision_gate_terms,
+)
 from xic_extractor.peak_detection.evidence_facts import (
     CandidateEvidenceFacts,
     decision_semantics_from_candidate_facts,
@@ -32,13 +38,6 @@ _MS2_TRACE_SELECTION_POINTS = {
     "ms2_trace_strong": 10.0,
     "ms2_trace_moderate": 5.0,
     "ms2_trace_weak": -8.0,
-}
-_DECISION_CLASS_RANK = {
-    "accepted": 0,
-    "review": 1,
-    "not_counted": 2,
-    "ambiguous": 3,
-    "excluded": 4,
 }
 _TRACE_STRENGTH_RANK = {"strong": 0, "moderate": 1, "weak": 2, "none": 3, "": 3}
 
@@ -225,6 +224,26 @@ def _typed_selection_key(
     selection_rt: float | None,
     strict_selection_rt: bool,
 ) -> tuple[float, ...]:
+    record = candidate_selection_decision_record(
+        item,
+        scored,
+        selection_rt=selection_rt,
+        strict_selection_rt=strict_selection_rt,
+    )
+    return _candidate_selection_ordering_key(record)
+
+
+def _candidate_selection_ordering_key(record: DecisionRecord) -> tuple[float, ...]:
+    return tuple(value for _name, value in (*record.gate, *record.tie_break))
+
+
+def candidate_selection_decision_record(
+    item: ScoredCandidate,
+    scored: list[ScoredCandidate],
+    *,
+    selection_rt: float | None = None,
+    strict_selection_rt: bool = False,
+) -> DecisionRecord:
     facts = _facts(item)
     semantics = decision_semantics_from_candidate_facts(
         facts,
@@ -236,46 +255,76 @@ def _typed_selection_key(
         if reference is not None
         else float("inf")
     )
-    blocking_count = (
-        len(semantics.conflict_reasons)
-        + len(semantics.review_reasons)
-        + len(semantics.not_counted_reasons)
-        + len(semantics.exclusion_reasons)
-        + len(semantics.ambiguity_reasons)
-    )
     quality_penalty = (
         facts.selection_quality_penalty
         if facts.selection_quality_penalty is not None
         else float(facts.quality_penalty)
     )
+    gate_terms = decision_gate_terms(semantics)
+    gate: tuple[DecisionTerm, ...]
+    tie_break: tuple[DecisionTerm, ...]
     if strict_selection_rt and selection_rt is not None:
-        return (
-            float(_typed_anchor_rank(facts, selection_rt=selection_rt)),
-            float(_DECISION_CLASS_RANK[semantics.decision_class]),
-            float(blocking_count),
-            float(
-                _typed_strict_anchor_area_demotion_rank(
-                    item,
-                    scored,
-                    selection_rt=selection_rt,
-                )
+        gate = (
+            (
+                "anchor_selection_completeness_rank",
+                float(_typed_anchor_rank(facts, selection_rt=selection_rt)),
             ),
-            quality_penalty,
-            float(_chemical_rank(facts)),
-            float(_trace_strength_rank(facts)),
-            distance,
-            -facts.abundance,
+            *gate_terms,
         )
-    return (
-        float(_DECISION_CLASS_RANK[semantics.decision_class]),
-        float(blocking_count),
-        float(_typed_abundance_demotion_rank(item, scored, selection_rt=selection_rt)),
-        float(_chemical_rank(facts)),
-        float(_trace_strength_rank(facts)),
-        quality_penalty,
-        distance,
-        _rt_prior_distance(facts),
-        -facts.abundance,
+        tie_break = (
+            (
+                "strict_anchor_area_demotion_rank",
+                float(
+                    _typed_strict_anchor_area_demotion_rank(
+                        item,
+                        scored,
+                        selection_rt=selection_rt,
+                    )
+                ),
+            ),
+            ("selection_quality_penalty", quality_penalty),
+            ("chemical_evidence_rank", float(_chemical_rank(facts))),
+            ("trace_strength_rank", float(_trace_strength_rank(facts))),
+            ("selection_rt_distance", distance),
+            ("negative_abundance", -facts.abundance),
+        )
+    else:
+        gate = gate_terms
+        tie_break = (
+            (
+                "abundance_demotion_rank",
+                float(
+                    _typed_abundance_demotion_rank(
+                        item,
+                        scored,
+                        selection_rt=selection_rt,
+                    )
+                ),
+            ),
+            ("chemical_evidence_rank", float(_chemical_rank(facts))),
+            ("trace_strength_rank", float(_trace_strength_rank(facts))),
+            ("selection_quality_penalty", quality_penalty),
+            ("selection_rt_distance", distance),
+            ("rt_prior_distance", _rt_prior_distance(facts)),
+            ("negative_abundance", -facts.abundance),
+        )
+    return DecisionRecord(
+        workflow="targeted_candidate_selection",
+        unit_id=facts.candidate_id,
+        required_evidence=(
+            "typed_candidate_evidence_facts",
+            "selected_apex_rt",
+            "trace_evidence",
+            "chemical_evidence",
+            "rt_evidence",
+            "boundary_evidence",
+        ),
+        decision_class=semantics.decision_class,
+        blockers=decision_blockers(semantics),
+        support=semantics.support_reasons,
+        gate=gate,
+        tie_break=tie_break,
+        projection_authority="select_candidate_by_evidence",
     )
 
 

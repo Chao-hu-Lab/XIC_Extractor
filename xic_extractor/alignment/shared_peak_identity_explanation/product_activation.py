@@ -1208,7 +1208,7 @@ def _peak_hypothesis_matrix_rows(
     legacy_rt_row_oracle: Sequence[LegacyRtRowReference],
     legacy_rt_row_oracle_mz_ppm: float,
     legacy_rt_row_oracle_rt_tolerance_min: float,
-    include_family_projections: bool = True,
+    include_family_projections: bool = False,
     rt_mode_evidence_rows: Sequence[Mapping[str, str]] = (),
 ) -> tuple[list[dict[str, str]], FormalMatrixStats]:
     rows_by_hypothesis: dict[str, dict[str, str]] = {}

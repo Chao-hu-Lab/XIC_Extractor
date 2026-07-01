@@ -52,8 +52,7 @@ def build_discovery_review_note(candidate: DiscoveryCandidate) -> str:
     return (
         f"{candidate.ms2_support} MS2; "
         f"{candidate.ms1_support} MS1; "
-        f"{candidate.rt_alignment} RT; "
-        f"{candidate.family_context}"
+        f"{candidate.rt_alignment} RT"
     )
 
 
@@ -63,9 +62,6 @@ def _candidate_sort_key(candidate: DiscoveryCandidate) -> tuple[Any, ...]:
     return (
         _PRIORITY_RANK.get(candidate.review_priority, len(_PRIORITY_RANK)),
         -candidate.evidence_score,
-        -candidate.feature_superfamily_size,
-        candidate.feature_superfamily_id,
-        0 if candidate.feature_superfamily_role == "representative" else 1,
         -candidate.feature_family_size,
         candidate.feature_family_id,
         -candidate.seed_event_count,

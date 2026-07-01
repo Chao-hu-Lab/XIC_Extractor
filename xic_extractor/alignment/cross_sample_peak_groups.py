@@ -1,3 +1,15 @@
+"""Cross-sample peak group construction.
+
+This module groups SampleLocalMS1Owner instances into cross-sample chemical-
+entity groups using m/z, RT, product m/z, observed neutral loss, and edge
+evidence.  The output ``CrossSamplePeakGroupHypothesis`` is the primary
+cross-sample identity unit.
+
+``public_family_id`` is a *display label* preserved for output compatibility.
+It is NOT an identity anchor; use ``group_hypothesis_id`` for identity
+decisions within the pipeline.
+"""
+
 from __future__ import annotations
 
 import math
@@ -105,6 +117,15 @@ class CrossSamplePeakGroupHardGateChallengeFact:
 
 @dataclass(frozen=True)
 class CrossSamplePeakGroupHypothesis:
+    """Cross-sample chemical-entity group hypothesis.
+
+    Identity semantics:
+    - ``group_hypothesis_id``: primary identity key for pipeline decisions.
+    - ``public_family_id``: display label for output compatibility.
+      Identical to ``group_hypothesis_id`` in current implementation.
+    - ``feature_family_id`` property: legacy output alias for ``public_family_id``.
+    """
+
     group_hypothesis_id: str
     public_family_id: str
     owner_ids: tuple[str, ...]

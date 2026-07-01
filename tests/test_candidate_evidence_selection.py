@@ -1,9 +1,11 @@
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from xic_extractor.peak_detection.candidate_scoring import score_candidate
 from xic_extractor.peak_detection.candidate_selection import (
+    candidate_selection_decision_record,
     select_candidate_by_evidence,
 )
 from xic_extractor.peak_detection.evidence_facts import (
@@ -234,6 +236,163 @@ def test_strict_selector_demotes_late_small_peak_when_anchor_aligned_area_exists
     )
 
     assert selected.candidate is anchor_aligned_area
+
+
+def test_typed_selection_decision_record_exposes_gate_support_and_projection() -> None:
+    candidate = _candidate(
+        10.0,
+        area=1200.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.0,
+            abundance=1200.0,
+            ms2_trace_strength="strong",
+            shape_quality="clean",
+        ),
+    )
+
+    record = candidate_selection_decision_record(
+        [scored][0],
+        [scored],
+        selection_rt=10.0,
+    )
+
+    assert record.workflow == "targeted_candidate_selection"
+    assert record.unit_id == "candidate@10.0"
+    assert record.required_evidence == (
+        "typed_candidate_evidence_facts",
+        "selected_apex_rt",
+        "trace_evidence",
+        "chemical_evidence",
+        "rt_evidence",
+        "boundary_evidence",
+    )
+    assert record.decision_class == "accepted"
+    assert record.blockers == ()
+    assert "candidate_aligned_ms2_nl" in record.support
+    assert record.projection_authority == "select_candidate_by_evidence"
+    assert [name for name, _value in record.gate] == [
+        "decision_class_rank",
+        "blocker_count",
+    ]
+    assert [name for name, _value in record.tie_break] == [
+        "abundance_demotion_rank",
+        "chemical_evidence_rank",
+        "trace_strength_rank",
+        "selection_quality_penalty",
+        "selection_rt_distance",
+        "rt_prior_distance",
+        "negative_abundance",
+    ]
+    assert not hasattr(record, "key")
+    assert record.gate == (
+        ("decision_class_rank", 0.0),
+        ("blocker_count", 0.0),
+    )
+    assert record.tie_break == (
+        ("abundance_demotion_rank", 0.0),
+        ("chemical_evidence_rank", 0.0),
+        ("trace_strength_rank", 0.0),
+        ("selection_quality_penalty", 0.0),
+        ("selection_rt_distance", 0.0),
+        ("rt_prior_distance", 0.0),
+        ("negative_abundance", -1200.0),
+    )
+
+
+def test_typed_selection_record_ordering_ignores_legacy_score_payload() -> None:
+    candidate = _candidate(
+        10.0,
+        area=1200.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    base_scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.0,
+            abundance=1200.0,
+            ms2_trace_strength="strong",
+            shape_quality="clean",
+        ),
+    )
+    adversarial_scored = replace(
+        base_scored,
+        evidence_score=_legacy_score(
+            raw_score=999,
+            support_labels=("fake_score_support", "strict_nl_ok"),
+            concern_labels=("fake_score_concern",),
+        ),
+    )
+
+    base_record = candidate_selection_decision_record(
+        base_scored,
+        [base_scored],
+        selection_rt=10.0,
+    )
+    adversarial_record = candidate_selection_decision_record(
+        adversarial_scored,
+        [adversarial_scored],
+        selection_rt=10.0,
+    )
+
+    assert adversarial_record.gate == base_record.gate
+    assert adversarial_record.tie_break == base_record.tie_break
+    assert adversarial_record.support == base_record.support
+    assert adversarial_record.blockers == base_record.blockers
+
+
+def test_strict_decision_record_places_anchor_gate_before_tie_breaks() -> None:
+    candidate = _candidate(
+        10.02,
+        area=900.0,
+        proposal_sources=("chrom_peak_segment",),
+    )
+    scored = _scored_with_facts(
+        candidate,
+        _facts(
+            candidate,
+            rt=10.02,
+            abundance=900.0,
+            ms2_trace_strength="none",
+            shape_quality="clean",
+            nl_match=False,
+            paired_istd_delta_min=0.02,
+            paired_istd_status="close",
+        ),
+    )
+
+    record = candidate_selection_decision_record(
+        scored,
+        [scored],
+        selection_rt=10.0,
+        strict_selection_rt=True,
+    )
+
+    assert [name for name, _value in record.gate] == [
+        "anchor_selection_completeness_rank",
+        "decision_class_rank",
+        "blocker_count",
+    ]
+    assert record.tie_break[0][0] == "strict_anchor_area_demotion_rank"
+    assert record.gate == (
+        ("anchor_selection_completeness_rank", 0.0),
+        ("decision_class_rank", 1.0),
+        ("blocker_count", 1.0),
+    )
+    assert record.tie_break[:4] == (
+        ("strict_anchor_area_demotion_rank", 0.0),
+        ("selection_quality_penalty", 0.0),
+        ("chemical_evidence_rank", 3.0),
+        ("trace_strength_rank", 3.0),
+    )
+    assert record.tie_break[4][0] == "selection_rt_distance"
+    assert record.tie_break[4][1] == pytest.approx(0.02)
+    assert record.tie_break[5] == ("negative_abundance", -900.0)
 
 
 def _scored_with_facts(

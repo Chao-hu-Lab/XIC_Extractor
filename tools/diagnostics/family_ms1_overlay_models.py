@@ -1,4 +1,4 @@
-"""Shared models and thresholds for family MS1 overlay diagnostics."""
+"""Shared models and thresholds for legacy family-id peak-group MS1 overlays."""
 
 from __future__ import annotations
 

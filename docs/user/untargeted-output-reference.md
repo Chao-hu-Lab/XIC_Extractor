@@ -18,20 +18,14 @@ One row per candidate feature per sample. Full provenance for audit.
 | ms2_support | string | MS2 evidence level |
 | ms1_support | string | MS1 feature finding status |
 | rt_alignment | string | RT alignment quality |
-| family_context | string | `singleton` or `family member` |
 
 #### Identity Columns
 
 | Column | Type | Description |
 | --- | --- | --- |
 | candidate_id | string | Unique candidate identifier |
-| feature_family_id | string | Feature family identifier |
+| feature_family_id | string | Per-sample peak anchor label for candidates sharing the same discovered MS1 peak |
 | feature_family_size | int | Number of members in the family |
-| feature_superfamily_id | string | Superfamily identifier |
-| feature_superfamily_size | int | Superfamily member count |
-| feature_superfamily_role | string | `representative` or `member` |
-| feature_superfamily_confidence | string | Superfamily assignment confidence |
-| feature_superfamily_evidence | string | Evidence type for superfamily |
 
 #### Measurement Columns
 
@@ -108,7 +102,6 @@ Compact triage index — one row per candidate, subset of columns from
 | ms2_support | string | MS2 evidence |
 | ms1_support | string | MS1 finding status |
 | rt_alignment | string | RT alignment quality |
-| family_context | string | Family membership |
 | candidate_id | string | Unique ID |
 | precursor_mz | float | Precursor m/z |
 | best_seed_rt | float | Best seed RT (min) |
@@ -159,13 +152,16 @@ injection order when an injection-order source is provided).
 
 ### `alignment_review.tsv`
 
-One row per feature family. Alignment quality and identity decisions.
+One row per cross-sample group. Alignment quality and identity decisions.
+`feature_family_id` is the stable public row/display label retained for output
+compatibility; pipeline identity decisions should use `group_hypothesis_id`
+where that internal or sidecar identity is available.
 
 #### Core Identity
 
 | Column | Type | Description |
 | --- | --- | --- |
-| feature_family_id | string | Unique family ID |
+| feature_family_id | string | Stable public row/display label for the cross-sample group |
 | neutral_loss_tag | string | NL identifier |
 | family_center_mz | float | Center m/z |
 | family_center_rt | float | Center RT (min) |

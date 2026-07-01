@@ -14,7 +14,6 @@ class DiscoveryEvidence:
     ms2_support: str
     ms1_support: str
     rt_alignment: str
-    family_context: str
 
 
 def score_discovery_evidence(
@@ -33,7 +32,6 @@ def score_discovery_evidence(
     ms2_support = classify_ms2_support(candidate, thresholds=thresholds)
     ms1_support = classify_ms1_support(candidate, thresholds=thresholds)
     rt_alignment = classify_rt_alignment(candidate, thresholds=thresholds)
-    family_context = classify_family_context(candidate)
 
     score = 0
     if candidate.ms1_peak_found:
@@ -81,12 +79,6 @@ def score_discovery_evidence(
         elif candidate.ms1_trace_quality.upper() in {"POOR", "MISSING"}:
             score += weights.legacy_trace_quality_low
 
-    if candidate.feature_superfamily_size > 1:
-        if candidate.feature_superfamily_role == "representative":
-            score += weights.superfamily_representative
-        else:
-            score += weights.superfamily_member
-
     score = min(100, max(0, score))
     return DiscoveryEvidence(
         score=score,
@@ -94,7 +86,6 @@ def score_discovery_evidence(
         ms2_support=ms2_support,
         ms1_support=ms1_support,
         rt_alignment=rt_alignment,
-        family_context=family_context,
     )
 
 
@@ -164,14 +155,6 @@ def classify_rt_alignment(
     if delta <= thresholds.rt_near_max_min:
         return "near"
     return "shifted"
-
-
-def classify_family_context(candidate: DiscoveryCandidate) -> str:
-    if candidate.feature_superfamily_size <= 1:
-        return "singleton"
-    if candidate.feature_superfamily_role == "representative":
-        return "representative"
-    return "member"
 
 
 def evidence_tier_from_score(score: int) -> str:

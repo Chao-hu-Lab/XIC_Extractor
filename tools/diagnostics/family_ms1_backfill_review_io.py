@@ -1,4 +1,4 @@
-"""Input loading helpers for family MS1 backfill review reports."""
+"""Input loaders for legacy family-id peak-group MS1 backfill review reports."""
 
 from __future__ import annotations
 

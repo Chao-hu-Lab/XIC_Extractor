@@ -1,4 +1,4 @@
-"""Seed a family MS1 overlay evidence cache from existing overlay artifacts."""
+"""Seed a peak-group MS1 evidence cache from legacy family overlay artifacts."""
 
 from __future__ import annotations
 

@@ -5299,3 +5299,19 @@ the later low-height writer entry above as the current tier source.
   active branch handoffs. Moving them to semantic owner directories prevents
   future handoff archives from becoming a second file-management or
   productization system.
+
+### 2026-06-29 - Standard-Peak Evidence Cache RAW-Identity Fail-Closed Fix
+
+- Lane: standard-peak repeated method-development replay cache / review-replay
+  safety.
+- Product/public surface changed: opt-in replay/cache behavior only. Warm cache
+  hits now require per-sample RAW identity (`path_stat_v1`: resolved path, size,
+  mtime, device, inode) to match cached trace provenance; missing or mismatched
+  identity fails closed to normal RAW extraction.
+- Control-plane decision: no maturity tier, active lane, ProductWriter
+  authority, matrix/workbook schema, selected peak/area, counted detection,
+  default preset, or matrix authority change. This only tightens reusable
+  evidence-cache safety for repeated standard-peak method-development runs.
+- Evidence: focused cache regression tests cover direct index hits and manifest
+  fallback after RAW replacement; related standard-peak/cache tests and docs
+  gates should pass before PR update.

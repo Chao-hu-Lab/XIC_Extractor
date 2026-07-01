@@ -95,7 +95,6 @@ def test_read_discovery_candidates_csv_parses_full_candidate_row(
     assert candidate.evidence_score == 82
     assert candidate.candidate_id == "Sample_1#6095@mz500.123456_p384.076056"
     assert candidate.feature_family_id == "Sample_1@F0001"
-    assert candidate.feature_superfamily_id == "Sample_1@SF0001"
     assert candidate.precursor_mz == pytest.approx(500.123456)
     assert candidate.product_mz == pytest.approx(384.076056)
     assert candidate.observed_neutral_loss_da == pytest.approx(116.0474)
@@ -323,7 +322,6 @@ def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
         sample_stem="'=Sample",
         raw_file="'-raw.raw",
         feature_family_id="'@family",
-        feature_superfamily_id="'plain_superfamily",
         ms1_feature_row_id="'=Sample|DNA_dR|500.123456|8.48",
     )
     csv_path = tmp_path / "discovery_candidates.csv"
@@ -335,7 +333,6 @@ def test_read_discovery_candidates_csv_unescapes_known_formula_fields(
     assert candidate.sample_stem == "=Sample"
     assert candidate.raw_file == Path("-raw.raw")
     assert candidate.feature_family_id == "@family"
-    assert candidate.feature_superfamily_id == "'plain_superfamily"
 
 
 def test_readers_reject_missing_required_columns(tmp_path: Path) -> None:
@@ -658,17 +655,11 @@ def _candidate_row(**overrides: str) -> dict[str, str]:
         "ms2_support": "strong",
         "ms1_support": "clean",
         "rt_alignment": "aligned",
-        "family_context": "family",
         "candidate_id": "Sample_1#6095@mz500.123456_p384.076056",
         "discovery_candidate_state": "ms1_feature_nl_supported",
         "ms1_feature_row_id": "Sample_1|DNA_dR|500.123456|8.48",
         "feature_family_id": "Sample_1@F0001",
         "feature_family_size": "2",
-        "feature_superfamily_id": "Sample_1@SF0001",
-        "feature_superfamily_size": "3",
-        "feature_superfamily_role": "representative",
-        "feature_superfamily_confidence": "MEDIUM",
-        "feature_superfamily_evidence": "peak_boundary_overlap",
         "precursor_mz": "500.123456",
         "product_mz": "384.076056",
         "observed_neutral_loss_da": "116.0474",

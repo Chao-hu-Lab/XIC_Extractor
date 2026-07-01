@@ -1,18 +1,18 @@
-# Family And Hypothesis Boundary
+# Peak Anchor, Cross-Sample Group, and Hypothesis Boundary
 
-This page defines the durable boundary between legacy family identifiers,
+This page defines the durable boundary between per-sample peak anchors,
 cross-sample group hypotheses, peak hypotheses, and product projections. Use it
-when a change touches discovery grouping, alignment owner construction,
-Backfill activation, or any matrix identity sidecar.
+when a change touches discovery peak-anchor grouping, alignment owner
+construction, Backfill activation, or any matrix identity sidecar.
 
 ## Contract
 
-- `family` and `feature_family_id` are compatibility and review containers.
-  They help group related evidence, route review, and preserve public row
-  traceability. They are not promotion units by themselves.
-- `CrossSamplePeakGroupHypothesis` owns cross-sample group identity: membership,
-  owner edge evidence, hard split gates, review-only records, and group delivery
-  metadata.
+- `peak_anchor_id` (discovery `feature_family_id`) groups candidates that share
+  the same MS1 chromatographic peak within a single sample. It is a per-sample
+  trace-identity label, not a chemical identity claim.
+- `CrossSamplePeakGroupHypothesis` owns cross-sample group identity:
+  membership, owner edge evidence, hard split gates, review-only records, and
+  group delivery metadata. Use `group_hypothesis_id` for identity.
 - `PeakHypothesis` owns candidate chromatographic identity: the physical peak
   candidate, selected integration, typed evidence, and selected-hypothesis
   decision semantics.
@@ -27,48 +27,58 @@ Backfill activation, or any matrix identity sidecar.
 
 | Concept | Owns | Must not own |
 | --- | --- | --- |
-| Discovery `feature_family_id` / `feature_superfamily_id` | Per-sample candidate grouping and review context | Cross-sample matrix identity, Backfill promotion, selected-peak truth |
-| Alignment `public_family_id` / legacy `feature_family_id` | Stable public row label and compatibility traceability | Canonical identity proof when a group hypothesis exists |
-| `CrossSamplePeakGroupHypothesis` | Cross-sample owner/group identity and successor group metadata | Per-peak integration truth or ProductWriter authority |
+| Discovery `peak_anchor_id` / output `feature_family_id` | Per-sample MS1 peak identity and review grouping | Cross-sample identity, Backfill promotion, selected-peak truth |
+| Alignment `public_family_id` (display label) | Stable public row label for output compatibility | Canonical identity proof - use `group_hypothesis_id` instead |
+| `CrossSamplePeakGroupHypothesis` | Cross-sample owner/group identity via `group_hypothesis_id` | Per-peak integration truth or ProductWriter authority |
 | `PeakHypothesis` | Candidate peak identity, evidence context, selected hypothesis semantics | Cross-sample grouping policy or final matrix writing |
 | Product projection / ProductWriter | Counted detection, product state, matrix value authority | Low-level evidence extraction or review-only grouping |
 
 ## Migration Rule
 
-The codebase is in a compatibility transition. Some legacy surfaces still expose
-`feature_family_id` while newer sidecars also expose `group_hypothesis_id` or
-`peak_hypothesis_id`. Treat this as an adapter state:
+The codebase is in a compatibility transition. Discovery outputs still expose
+`feature_family_id` for per-sample peak anchors, and alignment outputs still
+expose `public_family_id` or legacy `feature_family_id` as cross-sample group
+display labels. Treat this as an adapter state:
 
 1. Preserve legacy IDs when they are public output contracts.
 2. Add successor IDs alongside legacy IDs when identity semantics become
    product-relevant.
-3. Do not collapse multiple source families into one product row unless an
-   explicit split/consolidation contract and tests approve it.
-4. Keep review-only family context out of ProductWriter authority unless it is
+3. Use `group_hypothesis_id` for alignment identity decisions when a
+   `CrossSamplePeakGroupHypothesis` exists.
+4. Do not collapse multiple source peak anchors or cross-sample groups into one
+   product row unless an explicit split/consolidation contract and tests approve
+   it.
+5. Keep review-only group context out of ProductWriter authority unless it is
    converted into typed same-peak or group-hypothesis evidence.
 
 ## Design Red Lines
 
 - Do not say "the score decides whether the peak is trustworthy." Say which
   evidence facts, selected hypothesis, and workflow projection own the decision.
-- Do not use family membership as same-peak proof. Same-peak support needs a
-  typed anchor, selected mode, or PeakHypothesis-level reason.
+- Do not use discovery peak-anchor membership as cross-sample identity proof.
+  Cross-sample identity belongs to `CrossSamplePeakGroupHypothesis` and
+  `group_hypothesis_id`.
+- Do not use cross-sample group membership as same-peak proof. Same-peak support
+  needs a typed anchor, selected mode, or PeakHypothesis-level reason.
 - Do not let `alignment_review.tsv` display tokens promote rows. Positive
   product support needs provenance-valid sidecars or explicit authority records.
 - Do not treat `family_projection` rows as canonical identity proof. They are
   unresolved projection rows until replaced by explicit PeakHypothesis
   assignments or an approved product contract says they are out of scope.
+- Helpers that can emit or include `family_projection` rows must default to
+  excluding them. Any inclusion path needs an explicit diagnostic or compatibility
+  opt-in and must keep canonical identity readiness fail-closed.
 
 ## Codebase Smells To Audit
 
 These patterns are not automatically bugs, but they require close review before
 refactor or promotion:
 
-- A family assignment function writes `evidence_score`, `evidence_tier`,
+- A peak-anchor assignment function writes `evidence_score`, `evidence_tier`,
   confidence, or product-like status.
 - A cross-sample alignment path keys product behavior only by
-  `feature_family_id` when `group_hypothesis_id` or `peak_hypothesis_id` is
-  available.
+  `feature_family_id` or `public_family_id` when `group_hypothesis_id` or
+  `peak_hypothesis_id` is available.
 - A diagnostic sidecar exposes supportive labels without product-authority
   provenance.
 - A new helper extracts shared code by moving discovery/alignment policy into
@@ -76,8 +86,8 @@ refactor or promotion:
 
 ## Verification
 
-Before changing family, owner, group-hypothesis, or PeakHypothesis behavior,
-require the relevant subset of:
+Before changing peak-anchor, owner, cross-sample group, group-hypothesis, or
+PeakHypothesis behavior, require the relevant subset of:
 
 - focused tests for row identity, sidecar columns, and deterministic duplicate
   policy;

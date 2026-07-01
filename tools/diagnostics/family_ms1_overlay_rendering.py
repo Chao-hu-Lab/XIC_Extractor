@@ -1,4 +1,4 @@
-"""Matplotlib rendering helpers for family MS1 overlay diagnostics."""
+"""Matplotlib rendering helpers for legacy family-id peak-group MS1 overlays."""
 
 from __future__ import annotations
 
@@ -56,9 +56,9 @@ def render_family_ms1_overlay(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    # Accepted for CLI/backcompat while the family-context overlay intentionally
+    # Accepted for CLI/backcompat while the peak-group context overlay intentionally
     # stays two-panel. Drift/iRT belongs to the typed hypothesis/mode evidence
-    # slice, not this family-level context image.
+    # slice, not this peak-group context image.
     _ = drift_lookup
     rescued = [row for row in rows if row.status == "rescued"]
     focus_rows = _selected_peak_focus_rows(rows)
@@ -98,7 +98,7 @@ def render_family_ms1_overlay(
 
     fig.suptitle(
         (
-            f"{family_id} family MS1 pattern context: "
+            f"{family_id} peak-group MS1 pattern context: "
             f"m/z {_format_mz(mz)} +/-{ppm:g} ppm\n"
             f"selected RT segment {_selected_peak_segment_label(focus_rows)}; "
             f"{len(rows)} traces; "

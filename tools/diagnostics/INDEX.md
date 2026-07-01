@@ -39,7 +39,7 @@ top-level `tools/diagnostics/*.py` files for total files.
 5. [Peak / Candidate Audits](#peak--candidate-audits) — 7 tools
 6. [Targeted Benchmarks & Reviews](#targeted-benchmarks--reviews) — 11 tools
 7. [Instrument QC](#instrument-qc) — 6 tools
-8. [Family / Overlay Visualization](#family--overlay-visualization) — 7 tools
+8. [Peak-Group / Overlay Visualization](#peak-group--overlay-visualization) — 7 tools
 9. [Area / Region Audits](#area--region-audits) — 4 tools
 10. [One-off Fixtures](#one-off-fixtures) — 1 tool
 11. [Agent / Docs Workflow Guards](#agent--docs-workflow-guards) — 3 tools
@@ -1462,34 +1462,38 @@ are not daily).
 
 ---
 
-## Family / Overlay Visualization
+## Peak-Group / Overlay Visualization
 
 Matplotlib-rendered MS1 overlay visuals for human review of backfill candidates.
-Family-level overlays are context; mode-aware outputs should use
+Legacy `family_ms1_*` filenames and `feature_family_id` fields mean public
+row-label compatibility, not product identity authority. Peak-group overlays are
+context; mode-aware outputs should use
 `peak_hypothesis_id` / selected-apex mode evidence when a row may contain
 multiple MS1 peak modes.
 
 ### `family_ms1_overlay_plot.py`
 
-**Purpose**: Render MS1 overlay evidence for one alignment feature family.
+**Purpose**: Render MS1 overlay evidence for one legacy family-id peak group.
 **Topic group**: `family_ms1_overlay_plot.py` + `_evidence`, `_models`, `_rendering`, `_rendering_styles`, `_trace`, `_writers` (7 files)
 **Originating spec**: (none found; landed alongside backfill review work)
-**Status note**: Family overlay PNG/PDF is family-context only and intentionally keeps two panels: absolute RT own-max pattern and raw-intensity signal height. The writer also emits sibling `_hypothesis.png` / `_hypothesis.pdf` files that keep apex-aligned MS1 shape on the hypothesis-evidence surface, using detected NL seed traces as the anchor reference instead of letting rescued traces define the reference shape. Detected/rescued selected-peak traces are drawn even when selected/cell local-window peak dominance is below `0.5`; low dominance is an annotation/warning for review, not a visibility gate. The shaded band marks the selected/cell peak segment used for the visual comparison. `--targeted-workbook` / `--sample-info` remain accepted for CLI compatibility, but the current two-panel family-context overlay does not render a drift-corrected iRT panel. Area, apex-delta, shape-similarity scatter, and iRT/mode evidence remain hypothesis/mode questions and should not be put back into the family-context overlay. This renderer remains diagnostic-only and does not change backfill decisions or matrix areas.
+**Status note**: Peak-group overlay PNG/PDF is context-only and intentionally keeps two panels: absolute RT own-max pattern and raw-intensity signal height. The writer also emits sibling `_hypothesis.png` / `_hypothesis.pdf` files that keep apex-aligned MS1 shape on the hypothesis-evidence surface, using detected NL seed traces as the anchor reference instead of letting rescued traces define the reference shape. Detected/rescued selected-peak traces are drawn even when selected/cell local-window peak dominance is below `0.5`; low dominance is an annotation/warning for review, not a visibility gate. The shaded band marks the selected/cell peak segment used for the visual comparison. `--targeted-workbook` / `--sample-info` remain accepted for CLI compatibility, but the current two-panel peak-group context overlay does not render a drift-corrected iRT panel. Area, apex-delta, shape-similarity scatter, and iRT/mode evidence remain hypothesis/mode questions and should not be put back into the peak-group context overlay. This renderer remains diagnostic-only and does not change backfill decisions or matrix areas.
 
 ---
 
 ### `family_ms1_overlay_batch.py`
 
-**Purpose**: Render queued family MS1 overlays from a backfill review report.
+**Purpose**: Render queued peak-group MS1 overlays from a backfill review report.
 **Topic group**: shares helpers with `family_ms1_overlay_plot`
 **Pairs with**: `family_ms1_backfill_review_report.py` (produces the queue, this consumes it)
 **Status note**: Preserves optional queue `seed_group_id` in `family_ms1_overlay_batch_summary.tsv` so downstream retained-backfill evidence gates can join overlay evidence at seed-group precision. Summary rows carry separate apex-aligned shape metrics and own-max absolute-RT shape / absolute apex cluster metrics; these are evidence notes, not a composite `backfill_score`. Queues without `seed_group_id` remain supported for legacy family context, but seed-specific retained-backfill gates treat them as insufficient and request an exact `seed_group_id` overlay before using visual support/blockers. The CLI writes summary/Markdown incrementally after each row and supports `--reuse-existing`, which rebuilds summary rows from completed trace artifacts and, in rendered mode, completed PNG/PDF bundles without re-reading RAW; this makes large 85RAW queues resumable after timeout. In-process preset callers use the same renderer without incremental summary rewrites, then write final batch outputs once. RAW trace extraction is sample-batched and uses bounded scan-window super-window grouping before cropping traces back to their original request windows; `family_ms1_overlay_batch_summary.json` records selected rows, RAW opens, XIC requests, exact scan windows, super-window groups, chromatogram calls, and trace point counts. `--evidence-only` keeps the same trace TSV/JSON and summary schema while leaving `png_path` / `pdf_path` blank for image-free publication runs.
 `--evidence-cache-dir` is an opt-in evidence-only accelerator for repeated
 modeling validation. Cache keys bind the alignment-cell hash, RAW/DLL paths,
-overlay source, rank/output prefix, family/sample/seed request, mz/ppm/RT
-window, and family center RT. Warm hits reuse cached trace TSV/JSON evidence
-without opening RAW files only after the cached trace payload and stable
-provenance still match the current request; misses fall back to normal RAW
+overlay source, rank/output prefix, legacy family/sample/seed request, mz/ppm/RT
+window, and peak-group center RT. Cache v4 also records per-sample RAW identity
+with `path_stat_v1` (`resolved_path`, size, mtime, device, inode). Warm hits
+reuse cached trace TSV/JSON evidence without opening RAW files only after the
+cached trace payload, stable provenance, and current RAW identities still match
+the request; missing or mismatched RAW identity fails closed to normal RAW
 extraction and can store exact evidence for future runs. Rendered PNG/PDF runs
 ignore the evidence cache. Cache rows remain evidence-provider inputs only and
 must still flow through the retained gate, shift-aware gate, consolidation, and
@@ -1505,15 +1509,17 @@ already-reviewed overlay summary and its trace TSV/JSON artifacts.
 **Status note**: This is a no-RAW cache warm-up helper for repeated
 8RAW/85RAW validation loops. It verifies the same request/key inputs as the
 overlay batch cache, copies trace summaries, writes normalized trace JSON
-provenance into the cache, and writes the shared cache index. It does not render
-overlays, re-extract RAW, modify source summaries, or prove product readiness.
+provenance with the same per-sample RAW identity binding into the cache, and
+writes the shared cache index. If RAW identity cannot be verified, the row is
+not seeded as a reusable cache hit. It does not render overlays, re-extract RAW,
+modify source summaries, or prove product readiness.
 
 ---
 
 ### `family_ms1_alignment_experiment.py`
 
-**Purpose**: Render honest RT-interpretation comparison panels for MS1 overlay traces for one alignment feature family.
-**Topic group**: underlying single-family experiment for `family_ms1_alignment_experiment_batch.py`; reuses `family_ms1_overlay_*` helpers.
+**Purpose**: Render honest RT-interpretation comparison panels for one legacy family-id peak group.
+**Topic group**: underlying single-peak-group experiment for `family_ms1_alignment_experiment_batch.py`; reuses `family_ms1_overlay_*` helpers.
 **Status note**: Diagnostic-only RT-interpretation comparison; does not change backfill decisions or matrix areas. The batch wrapper reads existing overlay trace JSONs and runs this per successful overlay row.
 
 ---
@@ -1522,16 +1528,16 @@ overlays, re-extract RAW, modify source summaries, or prove product readiness.
 
 **Purpose**: Convert `family_ms1_overlay_batch_summary.tsv` trace JSON outputs into shift-aware source-family alignment experiment outputs in batch.
 **Topic group**: `family_ms1_alignment_experiment.py`
-**Status note**: This no-RAW batch wrapper reads existing overlay trace JSONs, runs the single-family shift-aware alignment experiment for successful overlay rows, and writes `family_ms1_alignment_experiment_batch_summary.tsv/json`. It preloads source-family provenance for selected families once per batch and the underlying best-shift search reuses normalized trace curves across candidate shifts, so matrix-only summary generation does not rescan the full cell-evidence TSV or resmooth traces per shift. It uses deterministic `<rank>_<family>_shift_aware` output prefixes so downstream `shift_aware_backfill_calibration_pack.py --shift-aware-summary-dir` can collect `*_source_family_best_shift_summary.tsv` files without hand-built command lists. `--no-images` keeps the summary TSV outputs, including `*_source_family_best_shift_summary.tsv`, while leaving `source_best_shift_png` blank and skipping PNG review rendering; this is the matrix-only publication path. `--start-rank`, `--limit`, and `--reuse-existing` make full 85RAW review queues resumable after overlay rendering; in no-images mode, reuse requires completed summary TSVs rather than completed PNGs. Failed or missing overlay rows are reported as skipped/failed and do not imply standard-peak support.
+**Status note**: This no-RAW batch wrapper reads existing overlay trace JSONs, runs the single-peak-group shift-aware alignment experiment for successful overlay rows, and writes `family_ms1_alignment_experiment_batch_summary.tsv/json`. It preloads source-family provenance for selected peak groups once per batch and the underlying best-shift search reuses normalized trace curves across candidate shifts, so matrix-only summary generation does not rescan the full cell-evidence TSV or resmooth traces per shift. It uses deterministic `<rank>_<family>_shift_aware` output prefixes so downstream `shift_aware_backfill_calibration_pack.py --shift-aware-summary-dir` can collect `*_source_family_best_shift_summary.tsv` files without hand-built command lists. `--no-images` keeps the summary TSV outputs, including `*_source_family_best_shift_summary.tsv`, while leaving `source_best_shift_png` blank and skipping PNG review rendering; this is the matrix-only publication path. `--start-rank`, `--limit`, and `--reuse-existing` make full 85RAW review queues resumable after overlay rendering; in no-images mode, reuse requires completed summary TSVs rather than completed PNGs. Failed or missing overlay rows are reported as skipped/failed and do not imply standard-peak support.
 
 ---
 
 ### `changed_row_mode_overlay_review.py`
 
-**Purpose**: Convert changed-row family MS1 overlay trace JSONs into a
+**Purpose**: Convert changed-row peak-group MS1 overlay trace JSONs into a
 mode-aware review surface: RAW selected-apex RT-mode evidence TSV,
 PeakHypothesis review projection TSV, per-sample mode review TSV,
-per-family summary TSV, review-only similarity TSV/summary, Gaussian15-smoothed
+legacy family-id summary TSV, review-only similarity TSV/summary, Gaussian15-smoothed
 mode-colored PNGs, and an HTML gallery.
 **Topic group**: consumes `family_ms1_overlay_batch.py` trace JSONs plus
 `alignment_matrix_identity.tsv`; reuses

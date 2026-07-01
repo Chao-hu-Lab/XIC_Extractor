@@ -215,6 +215,8 @@ def _is_high_backfill_dependency(
     rescued_count: int,
     review_has_warning_column: bool,
 ) -> bool:
+    if "high_backfill_dependency" in _row_flags(review_row):
+        return True
     if review_has_warning_column:
         return review_row.get("warning") == "high_backfill_dependency"
     return rescued_count > detected_count and rescued_count >= 2

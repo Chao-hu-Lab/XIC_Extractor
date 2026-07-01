@@ -13,7 +13,96 @@ from xic_extractor.alignment.tsv_writer import (
     ALIGNMENT_OWNER_BACKFILL_SEED_AUDIT_COLUMNS,
     ALIGNMENT_REVIEW_COLUMNS,
 )
-from xic_extractor.diagnostics import backfill_reconciliation_gallery as gallery
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery as gallery,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_assets as gallery_assets,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_chain_html as gallery_chain_html,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_counts as gallery_counts,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_detail_cards as gallery_detail_cards,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_detail_drawer as gallery_detail_drawer,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_evidence as gallery_evidence,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_family_pattern as gallery_family_pattern,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_filters as gallery_filters,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_html as gallery_html,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_index_builder as gallery_index_builder,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_index_fields as gallery_index_fields,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_indices as gallery_indices,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_inputs as gallery_inputs,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_models as gallery_models,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_output_rows as gallery_output_rows,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_output_writer as gallery_output_writer,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_overlay_links as gallery_overlay_links,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_page as gallery_page,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_provenance as gallery_provenance,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_ranges as gallery_ranges,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_render_context as gallery_render_context,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_review_modes as gallery_review_modes,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_search as gallery_search,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_shadow_tables as gallery_shadow_tables,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_source_context as gallery_source_context,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_state as gallery_state,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_summary as gallery_summary,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_table_rows as gallery_table_rows,
+)
+from xic_extractor.diagnostics import (
+    backfill_reconciliation_gallery_target_benchmark as gallery_target_benchmark,
+)
 from xic_extractor.diagnostics.backfill_shadow_policy import (
     BACKFILL_SHADOW_POLICY_COLUMNS,
 )
@@ -47,6 +136,485 @@ EXPECTED_GROUP_COLUMNS = (
     "source_artifacts",
     "source_warnings",
 )
+
+
+def test_gallery_static_assets_stay_out_of_reconciliation_logic() -> None:
+    assert gallery._gallery_css is gallery_assets.gallery_css
+    assert gallery._lightbox_html is gallery_assets.lightbox_html
+    assert gallery._lightbox_script is gallery_assets.lightbox_script
+
+
+def test_gallery_models_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery.ReconciliationGroup is gallery_models.ReconciliationGroup
+    assert gallery.ReconciliationIndex is gallery_models.ReconciliationIndex
+    assert gallery.RepresentativeCell is gallery_models.RepresentativeCell
+    assert gallery.ShadowPolicyCell is gallery_models.ShadowPolicyCell
+    assert gallery.ShadowProjectionCell is gallery_models.ShadowProjectionCell
+    assert gallery.TargetBenchmarkContext is gallery_models.TargetBenchmarkContext
+    assert gallery._ordered_unique([" a ", "a", "", None]) == ("a",)
+
+
+def test_gallery_html_helpers_stay_out_of_reconciliation_orchestrator(
+    tmp_path: Path,
+) -> None:
+    assert gallery._escape is gallery_html.escape_html
+    assert gallery._badge is gallery_html.badge
+    assert gallery._href_for_path("javascript:alert(1)", tmp_path / "index.html") == ""
+
+
+def test_gallery_inputs_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.load_reconciliation_input_rows
+        is gallery_inputs.load_reconciliation_input_rows
+    )
+    assert gallery._read_required_tsv is gallery_inputs._read_required_tsv
+    assert (
+        gallery._INPUT_ARTIFACT_LABEL_BY_KEY
+        is gallery_inputs._INPUT_ARTIFACT_LABEL_BY_KEY
+    )
+
+
+def test_gallery_index_builder_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.build_reconciliation_index
+        is gallery_index_builder.build_reconciliation_index
+    )
+
+
+def test_gallery_indices_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._shadow_policy_cell_from_row
+        is gallery_indices._shadow_policy_cell_from_row
+    )
+    assert (
+        gallery._shadow_projection_cells_by_group
+        is gallery_indices._shadow_projection_cells_by_group
+    )
+    row = {
+        "feature_family_id": "FAM1",
+        "seed_group_id": "seed1",
+        "sample_stem": "sample1",
+        "shadow_policy_decision": "fill_now",
+        "decision_reason": "shape supported",
+    }
+    assert (
+        gallery._shadow_policy_cell_from_row(row).shadow_policy_decision == "fill_now"
+    )
+
+
+def test_gallery_render_context_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._gallery_render_context
+        is gallery_render_context._gallery_render_context
+    )
+    assert gallery._html_scope_notice is gallery_render_context._html_scope_notice
+
+
+def test_gallery_source_context_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._cells_by_family_seed_group
+        is gallery_source_context._cells_by_family_seed_group
+    )
+    assert (
+        gallery._seed_records_by_family
+        is gallery_source_context._seed_records_by_family
+    )
+    assert (
+        gallery._source_hashes_from_input_artifacts
+        is gallery_source_context._source_hashes_from_input_artifacts
+    )
+
+
+def test_gallery_evidence_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._classify_evidence is gallery_evidence._classify_evidence
+    assert gallery._product_behavior is gallery_evidence._product_behavior
+    assert gallery._reconciliation_class is gallery_evidence._reconciliation_class
+
+
+def test_gallery_provenance_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._input_artifact_links
+        is gallery_provenance._input_artifact_links
+    )
+    assert gallery._source_artifacts_html is gallery_provenance._source_artifacts_html
+    assert (
+        gallery._write_local_overlay_interpretation_guide
+        is gallery_provenance._write_local_overlay_interpretation_guide
+    )
+
+
+def test_gallery_target_benchmark_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._target_benchmark_summary_text
+        is gallery_target_benchmark._target_benchmark_summary_text
+    )
+    assert (
+        gallery._target_benchmark_panel_html
+        is gallery_target_benchmark._target_benchmark_panel_html
+    )
+    assert (
+        gallery._target_benchmark_contexts_html
+        is gallery_target_benchmark._target_benchmark_contexts_html
+    )
+    assert (
+        gallery._family_target_summary_html
+        is gallery_target_benchmark._family_target_summary_html
+    )
+
+
+def test_gallery_overlay_links_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._missing_overlay_reason_text
+        is gallery_overlay_links._missing_overlay_reason_text
+    )
+    assert (
+        gallery._family_pattern_link_html
+        is gallery_overlay_links._family_pattern_link_html
+    )
+    assert gallery._overlay_link_html is gallery_overlay_links._overlay_link_html
+    assert (
+        gallery._hypothesis_overlay_link_html
+        is gallery_overlay_links._hypothesis_overlay_link_html
+    )
+    assert (
+        gallery._seed_overlay_cell_html
+        is gallery_overlay_links._seed_overlay_cell_html
+    )
+    assert (
+        gallery._shadow_policy_overlay_link_html
+        is gallery_overlay_links._shadow_policy_overlay_link_html
+    )
+    assert (
+        gallery._shadow_projection_overlay_link_html
+        is gallery_overlay_links._shadow_projection_overlay_link_html
+    )
+
+
+def test_gallery_review_modes_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._is_cid_nl_successor_review_group
+        is gallery_review_modes._is_cid_nl_successor_review_group
+    )
+    assert (
+        gallery._is_cid_nl_differential_review_group
+        is gallery_review_modes._is_cid_nl_differential_review_group
+    )
+    assert (
+        gallery._cid_nl_transition_label
+        is gallery_review_modes._cid_nl_transition_label
+    )
+    assert (
+        gallery._is_cid_nl_successor_review_index
+        is gallery_review_modes._is_cid_nl_successor_review_index
+    )
+
+
+def test_gallery_filters_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._filter_html is gallery_filters._filter_html
+    assert (
+        gallery._default_visible_family_count
+        is gallery_filters._default_visible_family_count
+    )
+    assert (
+        gallery._family_filter_categories
+        is gallery_filters._family_filter_categories
+    )
+    assert gallery._group_filter_categories is gallery_filters._group_filter_categories
+    assert gallery._review_category_counts is gallery_filters._review_category_counts
+
+
+def test_gallery_output_rows_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery.SCHEMA_VERSION == gallery_output_rows.SCHEMA_VERSION
+    assert gallery._group_as_row is gallery_output_rows._group_as_row
+    assert gallery._representative_as_row is gallery_output_rows._representative_as_row
+    assert gallery._summary is gallery_output_rows._summary
+    assert gallery._string_object_mapping is gallery_output_rows._string_object_mapping
+
+
+def test_gallery_output_writer_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.write_reconciliation_outputs
+        is gallery_output_writer.write_reconciliation_outputs
+    )
+
+
+def test_gallery_page_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery.write_reconciliation_gallery_html
+        is gallery_page.write_reconciliation_gallery_html
+    )
+    assert gallery._gallery_document_title is gallery_page._gallery_document_title
+    assert gallery._gallery_hero_copy is gallery_page._gallery_hero_copy
+
+
+def test_gallery_summary_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._summary_html is gallery_summary._summary_html
+    assert gallery._decision_legend_html is gallery_summary._decision_legend_html
+    assert gallery._summary_item is gallery_summary._summary_item
+    assert gallery._string_int_mapping is gallery_summary._string_int_mapping
+    assert (
+        gallery._activation_summary_text
+        is gallery_summary._activation_summary_text
+    )
+    assert (
+        gallery._current_rescue_summary_text
+        is gallery_summary._current_rescue_summary_text
+    )
+
+
+def test_gallery_chain_html_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._compact_issue_label is gallery_chain_html._compact_issue_label
+    assert gallery._compact_product_reason is gallery_chain_html._compact_product_reason
+    assert gallery._chain_item_html is gallery_chain_html._chain_item_html
+    assert gallery._component_list_html is gallery_chain_html._component_list_html
+    assert (
+        gallery._secondary_chain_details_html
+        is gallery_chain_html._secondary_chain_details_html
+    )
+    assert (
+        gallery._component_summary_text
+        is gallery_chain_html._component_summary_text
+    )
+
+
+def test_gallery_index_fields_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._representative_cells_for_group
+        is gallery_index_fields._representative_cells_for_group
+    )
+    assert gallery._product_cell_state is gallery_index_fields._product_cell_state
+    assert gallery._apex_delta_sec is gallery_index_fields._apex_delta_sec
+    assert gallery._source_row_key is gallery_index_fields._source_row_key
+    assert gallery._top_product_reason is gallery_index_fields._top_product_reason
+    assert gallery._tag_or_class is gallery_index_fields._tag_or_class
+    assert gallery._first_label is gallery_index_fields._first_label
+
+
+def test_gallery_search_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._search_blob is gallery_search._search_blob
+    assert gallery._family_search_blob is gallery_search._family_search_blob
+    assert (
+        gallery._shadow_projection_search_blob
+        is gallery_search._shadow_projection_search_blob
+    )
+
+
+def test_gallery_ranges_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._family_seed_summary is gallery_ranges._family_seed_summary
+    assert gallery._family_window_summary is gallery_ranges._family_window_summary
+    assert gallery._compact_value_range is gallery_ranges._compact_value_range
+    assert gallery._compact_text_values is gallery_ranges._compact_text_values
+    assert gallery._seed_mz_range is gallery_ranges._seed_mz_range
+    assert gallery._seed_rt_range is gallery_ranges._seed_rt_range
+    assert gallery._seed_window_range is gallery_ranges._seed_window_range
+    assert gallery._numeric_range_text is gallery_ranges._numeric_range_text
+    assert gallery._numeric_range_start is gallery_ranges._numeric_range_start
+    assert gallery._numeric_range_end is gallery_ranges._numeric_range_end
+    assert gallery._parsed_numeric_values is gallery_ranges._parsed_numeric_values
+
+
+def test_gallery_counts_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._counts_html is gallery_counts._counts_html
+    assert (
+        gallery._cid_nl_successor_counts_html
+        is gallery_counts._cid_nl_successor_counts_html
+    )
+    assert gallery._projection_counts_html is gallery_counts._projection_counts_html
+    assert (
+        gallery._projection_impact_counts_html
+        is gallery_counts._projection_impact_counts_html
+    )
+    assert gallery._impact_counts_html is gallery_counts._impact_counts_html
+    assert gallery._count_pill is gallery_counts._count_pill
+    assert (
+        gallery._consolidated_counts_html
+        is gallery_counts._consolidated_counts_html
+    )
+
+
+def test_gallery_state_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._state_html is gallery_state._state_html
+    assert gallery._state_aria_label is gallery_state._state_aria_label
+    assert gallery._state_html_for_shadow is gallery_state._state_html_for_shadow
+    assert (
+        gallery._shadow_policy_state_label
+        is gallery_state._shadow_policy_state_label
+    )
+    assert (
+        gallery._shadow_policy_chain_title
+        is gallery_state._shadow_policy_chain_title
+    )
+    assert (
+        gallery._shadow_policy_chain_subtitle
+        is gallery_state._shadow_policy_chain_subtitle
+    )
+    assert (
+        gallery._projection_matrix_state_html
+        is gallery_state._projection_matrix_state_html
+    )
+
+
+def test_gallery_family_pattern_stays_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._family_pattern_state_html
+        is gallery_family_pattern._family_pattern_state_html
+    )
+    assert (
+        gallery._family_pattern_status_html
+        is gallery_family_pattern._family_pattern_status_html
+    )
+    assert (
+        gallery._family_context_available
+        is gallery_family_pattern._family_context_available
+    )
+    assert (
+        gallery._family_anchor_summary_html
+        is gallery_family_pattern._family_anchor_summary_html
+    )
+    assert (
+        gallery._family_pattern_issue_html
+        is gallery_family_pattern._family_pattern_issue_html
+    )
+
+
+def test_gallery_shadow_tables_stay_out_of_reconciliation_orchestrator() -> None:
+    assert (
+        gallery._shadow_policy_summary_note_html
+        is gallery_shadow_tables._shadow_policy_summary_note_html
+    )
+    assert (
+        gallery._cell_impact_legend_note_html
+        is gallery_shadow_tables._cell_impact_legend_note_html
+    )
+    assert (
+        gallery._shadow_projection_summary_note_html
+        is gallery_shadow_tables._shadow_projection_summary_note_html
+    )
+    assert (
+        gallery._shadow_policy_cells_html
+        is gallery_shadow_tables._shadow_policy_cells_html
+    )
+    assert (
+        gallery._shadow_projection_cells_html
+        is gallery_shadow_tables._shadow_projection_cells_html
+    )
+    assert (
+        gallery._shadow_projection_warnings_html
+        is gallery_shadow_tables._shadow_projection_warnings_html
+    )
+    assert (
+        gallery._shadow_projection_metric_text
+        is gallery_shadow_tables._shadow_projection_metric_text
+    )
+    assert (
+        gallery._shadow_projection_evidence_html
+        is gallery_shadow_tables._shadow_projection_evidence_html
+    )
+    assert (
+        gallery._shadow_policy_gap_html
+        is gallery_shadow_tables._shadow_policy_gap_html
+    )
+    assert gallery._shadow_metric_text is gallery_shadow_tables._shadow_metric_text
+    assert (
+        gallery._shadow_policy_evidence_html
+        is gallery_shadow_tables._shadow_policy_evidence_html
+    )
+
+
+def test_gallery_detail_cards_stay_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._detail_summary_html is gallery_detail_cards._detail_summary_html
+    assert (
+        gallery._cid_nl_review_focus_card_html
+        is gallery_detail_cards._cid_nl_review_focus_card_html
+    )
+    assert (
+        gallery._cid_nl_discovery_identity_card_html
+        is gallery_detail_cards._cid_nl_discovery_identity_card_html
+    )
+    assert (
+        gallery._detail_summary_card_html
+        is gallery_detail_cards._detail_summary_card_html
+    )
+    assert gallery._review_answer_html is gallery_detail_cards._review_answer_html
+    assert (
+        gallery._review_answer_decision_text
+        is gallery_detail_cards._review_answer_decision_text
+    )
+    assert gallery._support_summary_items is gallery_detail_cards._support_summary_items
+    assert gallery._blocker_summary_items is gallery_detail_cards._blocker_summary_items
+    assert (
+        gallery._visual_summary_subtitle
+        is gallery_detail_cards._visual_summary_subtitle
+    )
+    assert (
+        gallery._detail_visual_summary_html
+        is gallery_detail_cards._detail_visual_summary_html
+    )
+    assert (
+        gallery._anchor_review_context_html
+        is gallery_detail_cards._anchor_review_context_html
+    )
+    assert (
+        gallery._cid_nl_identity_transition_list_html
+        is gallery_detail_cards._cid_nl_identity_transition_list_html
+    )
+    assert (
+        gallery._cid_nl_successor_decision_list_html
+        is gallery_detail_cards._cid_nl_successor_decision_list_html
+    )
+    assert (
+        gallery._summary_count_list_html
+        is gallery_detail_cards._summary_count_list_html
+    )
+    assert (
+        gallery._identity_transition_text
+        is gallery_detail_cards._identity_transition_text
+    )
+    assert (
+        gallery._overlay_evidence_notes_html
+        is gallery_detail_cards._overlay_evidence_notes_html
+    )
+    assert (
+        gallery._representative_cells_table_html
+        is gallery_detail_cards._representative_cells_table_html
+    )
+
+
+def test_gallery_detail_drawer_stays_out_of_reconciliation_orchestrator() -> None:
+    assert gallery._details_html is gallery_detail_drawer._details_html
+
+
+def test_gallery_table_rows_stay_out_of_reconciliation_orchestrator() -> None:
+    table_row_aliases = (
+        "_table_html",
+        "_family_groups",
+        "_family_sort_key",
+        "_family_tag_html",
+        "_family_detail_summary",
+        "_top_issue_html",
+        "_family_table_row",
+        "_consolidated_seed_alias_rows",
+        "_consolidated_seed_alias_family",
+        "_seed_alias_count_label",
+        "_representatives_for_groups",
+        "_consolidated_overlay_cell_html",
+        "_consolidated_seed_alias_details_html",
+        "_consolidated_review_answer_html",
+        "_consolidated_overlay_readout",
+        "_projection_accept_cells_html",
+        "_projection_accept_seed_hint_html",
+        "_seed_alias_table_html",
+        "_seed_decision_rows",
+        "_detail_row_id",
+        "_seed_table_row_html",
+        "_family_details_html",
+        "_seed_issue_text",
+        "_seed_detail_summary",
+        "_HIGH_SEED_ALIAS_COUNT",
+    )
+    for name in table_row_aliases:
+        assert getattr(gallery, name) is getattr(gallery_table_rows, name)
+
 
 EXPECTED_REPRESENTATIVE_CELL_COLUMNS = (
     "schema_version",

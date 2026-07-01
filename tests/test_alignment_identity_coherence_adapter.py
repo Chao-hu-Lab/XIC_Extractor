@@ -50,7 +50,6 @@ def _candidate(
         ms2_support="seed",
         ms1_support="owner",
         rt_alignment="local",
-        family_context="single",
         candidate_id=candidate_id,
         precursor_mz=precursor_mz,
         product_mz=product_mz,
@@ -624,7 +623,7 @@ def test_run_diagnostic_process_mode_matches_serial_ordering(
         )()
 
     monkeypatch.setattr(
-        "xic_extractor.alignment.identity_coherence_trace_retrieval."
+        "xic_extractor.alignment.identity_coherence.trace_retrieval."
         "run_identity_trace_process",
         fake_process,
     )
@@ -709,7 +708,7 @@ def test_run_diagnostic_process_mode_batches_all_seed_trace_requests_once(
         )()
 
     monkeypatch.setattr(
-        "xic_extractor.alignment.identity_coherence_trace_retrieval."
+        "xic_extractor.alignment.identity_coherence.trace_retrieval."
         "run_identity_trace_process",
         fake_process,
     )

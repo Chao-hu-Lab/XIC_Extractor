@@ -24,6 +24,9 @@ contracts for review and downstream product decisions.
 - `alignment_review.tsv` tokens are review context only. Positive support must
   come from provenance-valid sidecars or explicit authority records, not from
   display tokens alone.
+- Row-level diagnostic risk tokens such as `row_flags=high_backfill_dependency`
+  are guardrail pressure. Diagnostics may count them before legacy `warning`
+  compatibility fields, but they do not promote rows into production authority.
 - Output filenames, row ordering, column schema, schema-version signals, and
   identity/provenance sidecars are public contracts.
 - Runner scripts orchestrate inputs, profiles, and output locations. Reusable
@@ -81,7 +84,7 @@ Before changing alignment behavior, require the relevant subset of:
 - [Parameter settings](../agent-parameter-settings.md)
 - [Product validation contract](../agent/product-validation-contract.md)
 - [Diagnostic ledger](../diagnostic-ledger.md)
-- [Family and hypothesis boundary](family-hypothesis-boundary.md)
+- [Peak anchor and group boundary](family-hypothesis-boundary.md)
 - [Authority manifest](../superpowers/specs/productization_authority_manifest.v1.json)
 - [Cross-sample peak group addendum](../superpowers/specs/2026-06-02-cross-sample-peak-group-public-behavior-addendum.md)
 - [Alignment stage semantics](../superpowers/specs/2026-06-01-c6-alignment-stage-semantics-value-assessment-design.md)

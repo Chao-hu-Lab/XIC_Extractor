@@ -1,4 +1,4 @@
-"""Trace loading and extraction helpers for family MS1 overlay diagnostics."""
+"""Trace loading helpers for legacy family-id peak-group MS1 overlays."""
 
 from __future__ import annotations
 

@@ -260,7 +260,6 @@ def _candidate(
         ms2_support="weak",
         ms1_support="found",
         rt_alignment="aligned",
-        family_context="singleton",
         candidate_id=candidate_id,
         precursor_mz=precursor_mz,
         product_mz=product_mz,

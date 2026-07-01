@@ -16,6 +16,7 @@ For definitions of domain-specific terms used in these pages, see the
 | Discovery | [`discovery.md`](discovery.md) | Untargeted feature discovery, candidate/review outputs, seed evidence handoff |
 | Alignment | [`alignment.md`](alignment.md) | Cross-sample alignment, owner construction, backfill sidecars, matrix handoff |
 | Targeted Selection | [`targeted-selection.md`](targeted-selection.md) | Targeted behavior, selected hypotheses, region/boundary gates, reasons |
+| Decision Policy | [`decision-policy.md`](decision-policy.md) | Typed evidence, workflow gates, score boundaries, and projection authority |
 | Peak Model Selection | [`peak-model-selection.md`](peak-model-selection.md) | Model-selection invariants, parity requirements, expected-diff gates |
 | Quantitation Context | [`quantitation-context.md`](quantitation-context.md) | Bounded trace context, morphology evidence, area-impacting gates |
 
@@ -25,7 +26,7 @@ For definitions of domain-specific terms used in these pages, see the
 | --- | --- | --- |
 | Quant Matrix | [`quant-matrix.md`](quant-matrix.md) | Product-facing matrix values, Backfill activation boundaries, authority routing |
 | Evidence Spine | [`evidence-spine.md`](evidence-spine.md) | Shared evidence carriers, peak hypotheses, projection boundaries |
-| Family And Hypothesis Boundary | [`family-hypothesis-boundary.md`](family-hypothesis-boundary.md) | Legacy family IDs, group hypotheses, PeakHypothesis, and projection authority |
+| Peak Anchor And Group Boundary | [`family-hypothesis-boundary.md`](family-hypothesis-boundary.md) | Discovery peak anchors, cross-sample groups, PeakHypothesis, and projection authority |
 | Backfill | [`backfill.md`](backfill.md) | ProductWriter authority, accepted quant values, expansion gates |
 | Run Provenance | [`run-provenance.md`](run-provenance.md) | Method manifests, run metadata, replay context |
 

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -58,6 +59,38 @@ def test_safe_merge_eligibility_requires_internal_product_action() -> None:
 
     assert result.eligible is False
     assert result.reason == "product_action_not_safe_merge_eligible"
+
+
+def test_safe_merge_eligibility_rejects_score_only_authority() -> None:
+    result = eligibility_for_region_first_safe_merge(
+        replace(
+            _decision(
+                shadow_boundary_id="left;right",
+                verdict="split_supported",
+                source="",
+                product_action="safe_merge_eligible",
+            ),
+            score_delta=999,
+            selected_interval_total_score=999,
+            best_single_boundary_score=1,
+        )
+    )
+
+    assert result.eligible is False
+    assert result.reason == "shadow_verdict_not_merge_suggested"
+
+
+def test_safe_merge_eligibility_rejects_unsupported_source_marked_safe() -> None:
+    result = eligibility_for_region_first_safe_merge(
+        _decision(
+            shadow_boundary_id="left;right",
+            source="same_apex_wider_boundary_merge",
+            product_action="safe_merge_eligible",
+        )
+    )
+
+    assert result.eligible is False
+    assert result.reason == "unsupported_merge_suggestion_source"
 
 
 def test_adjacent_wis_safe_merge_updates_selected_boundary_and_area() -> None:

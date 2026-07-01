@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import io
-import pickle
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
-from dataclasses import dataclass, fields, is_dataclass
-from multiprocessing import get_context
+from dataclasses import dataclass
 from pathlib import Path
-from time import perf_counter
-from types import ModuleType, TracebackType
+from types import TracebackType
 from typing import Any
 
 from xic_extractor.alignment.backfill_scope import (
@@ -16,9 +11,40 @@ from xic_extractor.alignment.backfill_scope import (
 )
 from xic_extractor.alignment.config import AlignmentConfig
 from xic_extractor.alignment.identity_coherence.models import (
-    CandidateTrace,
     IdentityCoherenceTraceRequest,
-    IdentityCoherenceTraceResult,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceProcessOutput as IdentityTraceProcessOutput,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceSampleJob as IdentityTraceSampleJob,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceSampleResult as IdentityTraceSampleResult,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceTimingStats as IdentityTraceTimingStats,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceWorkerError as IdentityTraceWorkerError,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    IdentityTraceWorkerResult as IdentityTraceWorkerResult,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    collect_identity_trace_results as collect_identity_trace_results,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    extract_identity_trace_sample_from_raw as _extract_identity_trace_sample_from_raw,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    identity_trace_blocked_sample_result as _identity_trace_blocked_sample_result,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    run_identity_trace_jobs as _run_identity_trace_jobs,
+)
+from xic_extractor.alignment.identity_trace_process import (
+    run_identity_trace_process as _run_identity_trace_process,
 )
 from xic_extractor.alignment.matrix import AlignedCell
 from xic_extractor.alignment.ms1_index_source import (
@@ -45,10 +71,22 @@ from xic_extractor.alignment.ownership_models import (
     OwnerAssignment,
     SampleLocalMS1Owner,
 )
+from xic_extractor.alignment.process_execution import (
+    AlignmentProcessExecutionError,
+    ProcessProgressCallback,
+    process_job_payload_size_bytes,
+    validate_process_job_payload,
+)
+from xic_extractor.alignment.process_execution import (
+    TimedProcessRawSource as _TimedProcessRawSource,
+)
+from xic_extractor.alignment.process_execution import (
+    TimedProcessStats as _TimedProcessStats,
+)
+from xic_extractor.alignment.process_execution import (
+    run_process_jobs as _run_process_jobs,
+)
 from xic_extractor.config import ExtractionConfig
-from xic_extractor.xic_models import XICRequest, XICTrace
-
-ProcessProgressCallback = Callable[[Any], None]
 
 
 @dataclass(frozen=True)
@@ -167,55 +205,67 @@ class OwnerBackfillWorkerError:
     message: str
 
 
-@dataclass(frozen=True)
-class IdentityTraceSampleJob:
-    sample_index: int
-    sample_stem: str
-    raw_path: Path
-    dll_dir: Path
-    requests: tuple[tuple[int, IdentityCoherenceTraceRequest], ...]
-    raw_xic_batch_size: int = 1
-
-
-@dataclass(frozen=True)
-class IdentityTraceTimingStats:
-    sample_stem: str
-    elapsed_sec: float
-    extract_xic_count: int
-    point_count: int
-    extract_xic_batch_count: int = 0
-    raw_chromatogram_call_count: int = 0
-
-
-@dataclass(frozen=True)
-class IdentityTraceSampleResult:
-    sample_index: int
-    sample_stem: str
-    indexed_results: tuple[tuple[int, IdentityCoherenceTraceResult], ...]
-    timing_stats: tuple[IdentityTraceTimingStats, ...] = ()
-
-
-@dataclass(frozen=True)
-class IdentityTraceProcessOutput:
-    results: tuple[IdentityCoherenceTraceResult, ...]
-    timing_stats: tuple[IdentityTraceTimingStats, ...]
-
-
-@dataclass(frozen=True)
-class IdentityTraceWorkerError:
-    sample_index: int
-    sample_stem: str
-    raw_name: str
-    message: str
-
-
-class AlignmentProcessExecutionError(RuntimeError):
-    """Raised when an alignment process worker reports a failed sample job."""
-
-
 OwnerBuildWorkerResult = OwnerBuildSampleResult | OwnerBuildWorkerError
 OwnerBackfillWorkerResult = OwnerBackfillSampleResult | OwnerBackfillWorkerError
-IdentityTraceWorkerResult = IdentityTraceSampleResult | IdentityTraceWorkerError
+
+
+def run_identity_trace_process(
+    requests: Sequence[IdentityCoherenceTraceRequest],
+    *,
+    raw_paths: Mapping[str, Path],
+    dll_dir: Path,
+    max_workers: int,
+    raw_xic_batch_size: int = 1,
+    runner: Callable[..., list[IdentityTraceWorkerResult]] | None = None,
+) -> IdentityTraceProcessOutput:
+    active_runner = runner or run_identity_trace_jobs
+    return _run_identity_trace_process(
+        requests,
+        raw_paths=raw_paths,
+        dll_dir=dll_dir,
+        max_workers=max_workers,
+        raw_xic_batch_size=raw_xic_batch_size,
+        runner=active_runner,
+    )
+
+
+def run_identity_trace_jobs(
+    jobs: Iterable[IdentityTraceSampleJob],
+    *,
+    max_workers: int,
+    executor_factory: Callable[..., Any] | None = None,
+) -> list[IdentityTraceWorkerResult]:
+    return _run_identity_trace_jobs(
+        jobs,
+        worker=extract_identity_trace_sample_job,
+        max_workers=max_workers,
+        executor_factory=executor_factory,
+    )
+
+
+def extract_identity_trace_sample_job(
+    job: IdentityTraceSampleJob,
+) -> IdentityTraceWorkerResult:
+    from xic_extractor.raw_reader import open_raw
+
+    try:
+        raw_context = open_raw(job.raw_path, job.dll_dir)
+        raw = raw_context.__enter__()
+    except Exception:
+        return _identity_trace_blocked_sample_result(job)
+
+    exc_info: tuple[
+        type[BaseException] | None,
+        BaseException | None,
+        TracebackType | None,
+    ] = (None, None, None)
+    try:
+        return _extract_identity_trace_sample_from_raw(job, raw)
+    except BaseException as error:
+        exc_info = (type(error), error, error.__traceback__)
+        raise
+    finally:
+        raw_context.__exit__(*exc_info)
 
 
 def run_owner_build_process(
@@ -591,181 +641,6 @@ def run_owner_backfill_jobs(
     )
 
 
-def run_identity_trace_process(
-    requests: Sequence[IdentityCoherenceTraceRequest],
-    *,
-    raw_paths: Mapping[str, Path],
-    dll_dir: Path,
-    max_workers: int,
-    raw_xic_batch_size: int = 1,
-    runner: Callable[..., list[IdentityTraceWorkerResult]] | None = None,
-) -> IdentityTraceProcessOutput:
-    if max_workers < 1:
-        raise ValueError("max_workers must be >= 1")
-    if raw_xic_batch_size < 1:
-        raise ValueError("raw_xic_batch_size must be >= 1")
-
-    indexed_requests = tuple(enumerate(requests))
-    grouped: dict[str, list[tuple[int, IdentityCoherenceTraceRequest]]] = {}
-    for index, request in indexed_requests:
-        grouped.setdefault(request.sample_id, []).append((index, request))
-
-    jobs: list[IdentityTraceSampleJob] = []
-    parent_results: list[IdentityTraceSampleResult] = []
-    for sample_index, sample_stem in enumerate(sorted(grouped), start=1):
-        sample_requests = tuple(grouped[sample_stem])
-        raw_path = raw_paths.get(sample_stem)
-        if raw_path is None:
-            parent_results.append(
-                IdentityTraceSampleResult(
-                    sample_index=sample_index,
-                    sample_stem=sample_stem,
-                    indexed_results=tuple(
-                        (
-                            index,
-                            _identity_trace_blocked_result(
-                                request,
-                                "missing_raw_source",
-                            ),
-                        )
-                        for index, request in sample_requests
-                    ),
-                )
-            )
-            continue
-        jobs.append(
-            IdentityTraceSampleJob(
-                sample_index=sample_index,
-                sample_stem=sample_stem,
-                raw_path=raw_path,
-                dll_dir=dll_dir,
-                requests=sample_requests,
-                raw_xic_batch_size=raw_xic_batch_size,
-            )
-        )
-
-    active_runner = runner or run_identity_trace_jobs
-    worker_results = active_runner(jobs, max_workers=max_workers) if jobs else []
-    return collect_identity_trace_results(
-        (*parent_results, *worker_results),
-        request_count=len(indexed_requests),
-    )
-
-
-def run_identity_trace_jobs(
-    jobs: Iterable[IdentityTraceSampleJob],
-    *,
-    max_workers: int,
-    executor_factory: Callable[..., Any] | None = None,
-) -> list[IdentityTraceWorkerResult]:
-    return _run_process_jobs(
-        jobs,
-        worker=extract_identity_trace_sample_job,
-        error_factory=_identity_trace_worker_error,
-        max_workers=max_workers,
-        executor_factory=executor_factory,
-    )
-
-
-def collect_identity_trace_results(
-    results: Iterable[IdentityTraceWorkerResult],
-    *,
-    request_count: int,
-) -> IdentityTraceProcessOutput:
-    successes: list[IdentityTraceSampleResult] = []
-    errors: list[IdentityTraceWorkerError] = []
-    for result in results:
-        if isinstance(result, IdentityTraceWorkerError):
-            errors.append(result)
-        else:
-            successes.append(result)
-    if errors:
-        messages = "; ".join(
-            f"{error.raw_name}: {error.message}"
-            for error in sorted(errors, key=lambda item: item.sample_index)
-        )
-        raise AlignmentProcessExecutionError(messages)
-
-    indexed: list[tuple[int, IdentityCoherenceTraceResult]] = [
-        item for result in successes for item in result.indexed_results
-    ]
-    indexed.sort(key=lambda item: item[0])
-    if [index for index, _result in indexed] != list(range(request_count)):
-        raise AlignmentProcessExecutionError("identity trace results are incomplete")
-    timing_stats = tuple(
-        stat
-        for result in sorted(successes, key=lambda item: item.sample_index)
-        for stat in result.timing_stats
-    )
-    return IdentityTraceProcessOutput(
-        results=tuple(result for _index, result in indexed),
-        timing_stats=timing_stats,
-    )
-
-
-def _run_process_jobs(
-    jobs: Iterable[Any],
-    *,
-    worker: Callable[[Any], Any],
-    error_factory: Callable[[Any, Exception], Any],
-    max_workers: int,
-    executor_factory: Callable[..., Any] | None = None,
-    progress_callback: ProcessProgressCallback | None = None,
-) -> list[Any]:
-    pending_jobs = list(jobs)
-    for job in pending_jobs:
-        validate_process_job_payload(job)
-    if not pending_jobs:
-        return []
-    context = get_context("spawn")
-    factory = executor_factory or ProcessPoolExecutor
-    results: list[Any] = []
-    next_job_index = 0
-    worker_count = min(max_workers, len(pending_jobs))
-
-    with factory(max_workers=worker_count, mp_context=context) as executor:
-        future_to_job: dict[Any, Any] = {}
-
-        def _submit_until_capacity() -> None:
-            nonlocal next_job_index
-            while (
-                len(future_to_job) < worker_count
-                and next_job_index < len(pending_jobs)
-            ):
-                job = pending_jobs[next_job_index]
-                next_job_index += 1
-                try:
-                    future = executor.submit(worker, job)
-                except Exception as exc:
-                    result = error_factory(job, exc)
-                    results.append(result)
-                    if progress_callback is not None:
-                        progress_callback(result)
-                    continue
-                future_to_job[future] = job
-
-        _submit_until_capacity()
-        while future_to_job:
-            done, _not_done = wait(
-                future_to_job,
-                timeout=0.1,
-                return_when=FIRST_COMPLETED,
-            )
-            if not done:
-                continue
-            for future in done:
-                job = future_to_job.pop(future)
-                _submit_until_capacity()
-                try:
-                    result = future.result()
-                except Exception as exc:
-                    result = error_factory(job, exc)
-                results.append(result)
-                if progress_callback is not None:
-                    progress_callback(result)
-    return results
-
-
 def _owner_build_worker_error(
     job: OwnerBuildSampleJob,
     exc: Exception,
@@ -856,173 +731,6 @@ def extract_owner_backfill_sample_job(
         )
 
 
-def extract_identity_trace_sample_job(
-    job: IdentityTraceSampleJob,
-) -> IdentityTraceWorkerResult:
-    from xic_extractor.raw_reader import open_raw
-
-    stats = _TimedProcessStats(sample_stem=job.sample_stem)
-    try:
-        raw_context = open_raw(job.raw_path, job.dll_dir)
-        raw = raw_context.__enter__()
-    except Exception:
-        indexed_results = tuple(
-            (
-                index,
-                _identity_trace_blocked_result(
-                    request,
-                    "raw_xic_extraction_error",
-                    raw_xic_request_count=1,
-                ),
-            )
-            for index, request in job.requests
-        )
-    else:
-        exc_info: tuple[
-            type[BaseException] | None,
-            BaseException | None,
-            TracebackType | None,
-        ] = (None, None, None)
-        try:
-            timed_raw = _TimedProcessRawSource(raw, stats=stats)
-            indexed_results = _extract_identity_trace_results_for_sample(
-                job.requests,
-                timed_raw,
-                raw_xic_batch_size=job.raw_xic_batch_size,
-            )
-        except BaseException as error:
-            exc_info = (type(error), error, error.__traceback__)
-            raise
-        finally:
-            raw_context.__exit__(*exc_info)
-
-    return IdentityTraceSampleResult(
-        sample_index=job.sample_index,
-        sample_stem=job.sample_stem,
-        indexed_results=indexed_results,
-        timing_stats=(
-            IdentityTraceTimingStats(
-                sample_stem=job.sample_stem,
-                elapsed_sec=stats.elapsed_sec,
-                extract_xic_count=stats.extract_xic_count,
-                point_count=stats.point_count,
-                extract_xic_batch_count=stats.extract_xic_batch_count,
-                raw_chromatogram_call_count=stats.raw_chromatogram_call_count,
-            ),
-        ),
-    )
-
-
-def _extract_identity_trace_results_for_sample(
-    indexed_requests: tuple[tuple[int, IdentityCoherenceTraceRequest], ...],
-    timed_raw: _TimedProcessRawSource,
-    *,
-    raw_xic_batch_size: int,
-) -> tuple[tuple[int, IdentityCoherenceTraceResult], ...]:
-    indexed_results: list[tuple[int, IdentityCoherenceTraceResult]] = []
-    for chunk in _chunked(indexed_requests, raw_xic_batch_size):
-        xic_requests = tuple(
-            _identity_trace_to_xic_request(request) for _, request in chunk
-        )
-        try:
-            traces = tuple(timed_raw.extract_xic_many(xic_requests))
-        except Exception:
-            indexed_results.extend(
-                (
-                    index,
-                    _identity_trace_blocked_result(
-                        request,
-                        "raw_xic_extraction_error",
-                        raw_xic_request_count=1,
-                    ),
-                )
-                for index, request in chunk
-            )
-            continue
-        for (index, request), xic_trace in zip(chunk, traces, strict=True):
-            try:
-                trace = CandidateTrace(
-                    rt_min=tuple(float(value) for value in xic_trace.rt),
-                    intensity=tuple(float(value) for value in xic_trace.intensity),
-                )
-            except (TypeError, ValueError):
-                result = _identity_trace_data_quality_result(
-                    request,
-                    "invalid_trace_payload",
-                )
-            else:
-                result = IdentityCoherenceTraceResult(
-                    request=request,
-                    trace=trace,
-                    status="pass",
-                    raw_xic_request_count=1,
-                    xic_point_count=len(trace.rt_min),
-                )
-            indexed_results.append((index, result))
-    return tuple(indexed_results)
-
-
-def _identity_trace_to_xic_request(
-    request: IdentityCoherenceTraceRequest,
-) -> XICRequest:
-    return XICRequest(
-        mz=request.precursor_mz,
-        rt_min=request.rt_min,
-        rt_max=request.rt_max,
-        ppm_tol=request.ppm_tolerance,
-    )
-
-
-def _identity_trace_blocked_result(
-    request: IdentityCoherenceTraceRequest,
-    blocked_reason: str,
-    *,
-    raw_xic_request_count: int = 0,
-) -> IdentityCoherenceTraceResult:
-    return IdentityCoherenceTraceResult(
-        request=request,
-        trace=None,
-        status="blocked_infrastructure",
-        blocked_reason=blocked_reason,
-        raw_xic_request_count=raw_xic_request_count,
-    )
-
-
-def _identity_trace_data_quality_result(
-    request: IdentityCoherenceTraceRequest,
-    reason: str,
-) -> IdentityCoherenceTraceResult:
-    return IdentityCoherenceTraceResult(
-        request=request,
-        trace=None,
-        status="data_quality_reject",
-        blocked_reason=reason,
-        raw_xic_request_count=1,
-    )
-
-
-def _identity_trace_worker_error(
-    job: IdentityTraceSampleJob,
-    exc: Exception,
-) -> IdentityTraceWorkerError:
-    return IdentityTraceWorkerError(
-        sample_index=job.sample_index,
-        sample_stem=job.sample_stem,
-        raw_name=job.raw_path.name,
-        message=f"{type(exc).__name__}: {exc}",
-    )
-
-
-def _chunked(
-    values: Sequence[Any],
-    size: int,
-) -> Iterable[tuple[Any, ...]]:
-    if size < 1:
-        raise ValueError("size must be >= 1")
-    for index in range(0, len(values), size):
-        yield tuple(values[index : index + size])
-
-
 def validate_owner_backfill_job_payload(job: OwnerBackfillSampleJob) -> None:
     validate_process_job_payload(job)
 
@@ -1043,135 +751,3 @@ def owner_backfill_job_payload_metrics(
         requests_per_feature=requests_per_feature,
         pickle_payload_bytes=process_job_payload_size_bytes(job),
     )
-
-
-def validate_process_job_payload(job: Any) -> None:
-    process_job_payload_size_bytes(job)
-
-
-def process_job_payload_size_bytes(job: Any) -> int:
-    _validate_payload_value(job, path="job")
-    try:
-        return len(pickle.dumps(job))
-    except Exception as exc:
-        raise TypeError(f"job payload is not pickleable: {exc}") from exc
-
-
-@dataclass
-class _TimedProcessStats:
-    sample_stem: str
-    elapsed_sec: float = 0.0
-    extract_xic_count: int = 0
-    extract_xic_batch_count: int = 0
-    raw_chromatogram_call_count: int = 0
-    point_count: int = 0
-
-
-class _TimedProcessRawSource:
-    def __init__(
-        self,
-        source: Any,
-        *,
-        stats: _TimedProcessStats,
-        timer: Callable[[], float] = perf_counter,
-    ) -> None:
-        self._source = source
-        self._stats = stats
-        self._timer = timer
-
-    def extract_xic(self, mz: float, rt_min: float, rt_max: float, ppm_tol: float):
-        raw_call_count_before = _raw_chromatogram_call_count(self._source)
-        start = self._timer()
-        try:
-            rt, intensity = self._source.extract_xic(mz, rt_min, rt_max, ppm_tol)
-        finally:
-            self._stats.extract_xic_count += 1
-            self._stats.extract_xic_batch_count += 1
-            self._stats.elapsed_sec += self._timer() - start
-            self._stats.raw_chromatogram_call_count += _raw_call_delta(
-                raw_call_count_before,
-                _raw_chromatogram_call_count(self._source),
-            )
-        self._stats.point_count += _trace_point_count(rt)
-        return rt, intensity
-
-    def extract_xic_many(self, requests):
-        requests = tuple(requests)
-        if hasattr(self._source, "extract_xic_many"):
-            raw_call_count_before = _raw_chromatogram_call_count(self._source)
-            start = self._timer()
-            try:
-                traces = tuple(self._source.extract_xic_many(requests))
-            finally:
-                self._stats.elapsed_sec += self._timer() - start
-            self._stats.extract_xic_count += len(requests)
-            self._stats.extract_xic_batch_count += 1 if requests else 0
-            self._stats.raw_chromatogram_call_count += _raw_call_delta(
-                raw_call_count_before,
-                _raw_chromatogram_call_count(self._source),
-            )
-            self._stats.point_count += sum(len(trace.intensity) for trace in traces)
-            return traces
-
-        traces: list[XICTrace] = []
-        for request in requests:
-            rt, intensity = self.extract_xic(
-                request.mz,
-                request.rt_min,
-                request.rt_max,
-                request.ppm_tol,
-            )
-            traces.append(XICTrace.from_arrays(rt, intensity))
-        return tuple(traces)
-
-    def scan_window_for_request(self, request):
-        return self._source.scan_window_for_request(request)
-
-    def retention_time_for_scan(self, scan_number):
-        return self._source.retention_time_for_scan(scan_number)
-
-
-def _trace_point_count(trace: object) -> int:
-    try:
-        return len(trace)  # type: ignore[arg-type]
-    except TypeError:
-        return 0
-
-
-def _raw_chromatogram_call_count(source: object) -> int | None:
-    value = getattr(source, "raw_chromatogram_call_count", None)
-    if isinstance(value, int):
-        return value
-    return None
-
-
-def _raw_call_delta(before: int | None, after: int | None) -> int:
-    if before is None or after is None:
-        return 0
-    return max(0, after - before)
-
-
-def _validate_payload_value(value: Any, *, path: str) -> None:
-    if value is None or isinstance(value, (str, int, float, bool, bytes, Path)):
-        return
-    if callable(value):
-        raise TypeError(f"{path} contains callable value")
-    if isinstance(value, io.IOBase):
-        raise TypeError(f"{path} contains file handle")
-    if isinstance(value, ModuleType):
-        raise TypeError(f"{path} contains module object")
-    if is_dataclass(value) and not isinstance(value, type):
-        for field in fields(value):
-            _validate_payload_value(
-                getattr(value, field.name),
-                path=f"{path}.{field.name}",
-            )
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            _validate_payload_value(key, path=f"{path}.<key>")
-            _validate_payload_value(item, path=f"{path}[{key!r}]")
-        return
-    if isinstance(value, (list, tuple, set, frozenset)):
-        for index, item in enumerate(value):
-            _validate_payload_value(item, path=f"{path}[{index}]")

@@ -492,7 +492,7 @@ def test_single_raw_pipeline_records_discovery_timing_stages(
         "discover.ms2_seeds",
         "discover.group_seeds",
         "discover.ms1_backfill",
-        "discover.feature_family",
+        "discover.peak_anchor",
         "discover.write_candidates_csv",
         "discover.write_review_csv",
     }
@@ -500,7 +500,7 @@ def test_single_raw_pipeline_records_discovery_timing_stages(
     assert records_by_stage["discover.ms2_seeds"].metrics["seed_count"] == 1
     assert records_by_stage["discover.group_seeds"].metrics["group_count"] == 1
     assert records_by_stage["discover.ms1_backfill"].metrics["candidate_count"] == 1
-    assert records_by_stage["discover.feature_family"].metrics["candidate_count"] == 1
+    assert records_by_stage["discover.peak_anchor"].metrics["candidate_count"] == 1
     assert records_by_stage["discover.write_candidates_csv"].metrics["row_count"] == 1
     assert records_by_stage["discover.write_review_csv"].metrics["row_count"] == 1
 

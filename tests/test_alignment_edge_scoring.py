@@ -260,6 +260,30 @@ def test_weak_seed_support_keeps_hard_pass_edge_weak() -> None:
     assert edge.seed_support_level == "weak"
 
 
+@pytest.mark.parametrize(
+    ("evidence_score", "expected_support", "expected_decision"),
+    [
+        (65, "strong", "strong_edge"),
+        (60, "strong", "strong_edge"),
+        (59, "moderate", "weak_edge"),
+        (55, "moderate", "weak_edge"),
+    ],
+)
+def test_seed_support_uses_anchor_min_evidence_score_threshold(
+    evidence_score: int,
+    expected_support: str,
+    expected_decision: str,
+) -> None:
+    edge = evaluate_owner_edge(
+        _owner("s1", evidence_score=evidence_score, seed_event_count=2),
+        _owner("s2", evidence_score=evidence_score, seed_event_count=2),
+        config=AlignmentConfig(anchor_min_evidence_score=60),
+    )
+
+    assert edge.seed_support_level == expected_support
+    assert edge.decision == expected_decision
+
+
 def test_identity_conflict_blocks_edge() -> None:
     edge = evaluate_owner_edge(
         _owner("s1", identity_conflict=True),

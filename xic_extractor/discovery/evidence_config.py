@@ -21,8 +21,6 @@ class DiscoveryEvidenceWeights:
     scan_support_low: int = -10
     legacy_trace_quality_high: int = 5
     legacy_trace_quality_low: int = -10
-    superfamily_representative: int = 5
-    superfamily_member: int = -5
 
 
 @dataclass(frozen=True)

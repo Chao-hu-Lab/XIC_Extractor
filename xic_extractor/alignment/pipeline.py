@@ -25,7 +25,7 @@ from xic_extractor.alignment.edge_scoring import (
     DriftLookupProtocol,
     OwnerEdgeEvidence,
 )
-from xic_extractor.alignment.identity_coherence_adapter import (
+from xic_extractor.alignment.identity_coherence.adapter import (
     run_identity_coherence_diagnostic,
 )
 from xic_extractor.alignment.ms1_index_source import (

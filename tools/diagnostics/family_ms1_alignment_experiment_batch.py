@@ -1,4 +1,4 @@
-"""Batch render shift-aware MS1 alignment experiments from overlay summaries."""
+"""Batch render peak-group MS1 alignment experiments from legacy family overlays."""
 
 from __future__ import annotations
 
@@ -63,8 +63,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    print(f"family MS1 alignment experiment batch TSV: {output_tsv}")
-    print(f"family MS1 alignment experiment batch JSON: {output_json}")
+    print(f"peak-group MS1 alignment experiment batch TSV: {output_tsv}")
+    print(f"peak-group MS1 alignment experiment batch JSON: {output_json}")
     return 0
 
 

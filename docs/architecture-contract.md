@@ -256,6 +256,10 @@ surface, not an active phase plan:
 - `xic_extractor/alignment/primary_consolidation.py`: add characterization tests
   before splitting graph construction, winner selection, cell merge, or loser
   audit helpers.
+- `xic_extractor/diagnostics/backfill_reconciliation_gallery.py`: keep as the
+  reconciliation-gallery orchestrator; continue moving static presentation
+  assets, input/index construction, classification, and HTML section rendering
+  into focused diagnostics submodules without changing TSV/HTML contracts.
 
 See also:
 

@@ -1038,11 +1038,15 @@ def test_owner_backfill_superwindow_crops_to_original_request_windows() -> None:
     class SuperWindowSource:
         def __init__(self) -> None:
             self.batches = []
+            self.retention_time_calls: dict[int, int] = {}
 
         def scan_window_for_request(self, request):
             return (int(round(request.rt_min * 100)), int(round(request.rt_max * 100)))
 
         def retention_time_for_scan(self, scan_number):
+            self.retention_time_calls[scan_number] = (
+                self.retention_time_calls.get(scan_number, 0) + 1
+            )
             return scan_number / 100.0
 
         def extract_xic_many(self, requests):
@@ -1089,6 +1093,12 @@ def test_owner_backfill_superwindow_crops_to_original_request_windows() -> None:
         (7.5, 10.2),
         (7.5, 10.2),
     ]
+    assert source.retention_time_calls == {
+        750: 1,
+        950: 1,
+        820: 1,
+        1020: 1,
+    }
     assert [(cell.cluster_id, cell.apex_rt) for cell in cells] == [
         ("FAM000001", 8.5),
         ("FAM000002", 9.2),

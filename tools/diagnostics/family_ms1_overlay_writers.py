@@ -1,4 +1,4 @@
-"""TSV/JSON output writers for family MS1 overlay diagnostics."""
+"""TSV/JSON writers for legacy family-id peak-group MS1 overlays."""
 
 from __future__ import annotations
 

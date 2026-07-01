@@ -74,6 +74,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             preset_runtime_options,
             args.standard_peak_backfill_publication_mode,
         )
+    if args.standard_peak_evidence_cache_dir is not None and not (
+        standard_peak_backfill_enabled
+    ):
+        print(
+            "--standard-peak-evidence-cache-dir requires a preset that enables "
+            "standard_peak_backfill",
+            file=sys.stderr,
+        )
+        return 2
     if (args.sample_info is None) != (args.targeted_istd_workbook is None):
         print(
             (
@@ -88,6 +97,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_dir = args.raw_dir.resolve()
     dll_dir = args.dll_dir.resolve()
     output_dir = args.output_dir.resolve()
+    standard_peak_evidence_cache_dir = (
+        args.standard_peak_evidence_cache_dir.resolve()
+        if args.standard_peak_evidence_cache_dir is not None
+        else None
+    )
     raw_workers, raw_xic_batch_size = _resolve_raw_execution_settings(args)
     owner_build_xic_backend = _effective_owner_build_xic_backend(
         args,
@@ -349,6 +363,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ),
                     render_workers=_standard_peak_render_workers(raw_workers),
                     chunk_workers=_standard_peak_chunk_workers(raw_workers),
+                    evidence_cache_dir=standard_peak_evidence_cache_dir,
                     timing_recorder=timing_recorder,
                 )
             if backfill_expansion_productization_mode == "clean-target-selective":
@@ -543,6 +558,15 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "and gallery behavior. review-gallery keeps RAW overlay evidence "
             "compact while rendering shift-aware review evidence and the "
             "activation-synced review gallery."
+        ),
+    )
+    parser.add_argument(
+        "--standard-peak-evidence-cache-dir",
+        type=Path,
+        help=(
+            "Optional content-keyed cache for standard-peak matrix-only overlay "
+            "trace evidence. Use only for repeated method-development reruns; "
+            "default one-shot runs do not use this cache."
         ),
     )
     parser.add_argument(

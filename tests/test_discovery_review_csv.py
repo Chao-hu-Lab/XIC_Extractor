@@ -19,7 +19,6 @@ EXPECTED_BRIEF_COLUMNS = (
     "ms2_support",
     "ms1_support",
     "rt_alignment",
-    "family_context",
     "candidate_id",
     "precursor_mz",
     "best_seed_rt",
@@ -35,7 +34,7 @@ EXPECTED_BRIEF_COLUMNS = (
 
 def test_discovery_brief_columns_are_stable_csv_contract() -> None:
     assert DISCOVERY_BRIEF_COLUMNS == EXPECTED_BRIEF_COLUMNS
-    assert len(DISCOVERY_BRIEF_COLUMNS) == 17
+    assert len(DISCOVERY_BRIEF_COLUMNS) == 16
 
 
 def test_discovery_run_outputs_carries_two_csv_paths() -> None:
@@ -141,13 +140,12 @@ def test_review_note_is_concise_and_not_full_reason(tmp_path: Path) -> None:
                 ms2_support="strong",
                 ms1_support="moderate",
                 rt_alignment="aligned",
-                family_context="representative",
             )
         ],
     )
 
     note = _read_csv(output_path)[0]["review_note"]
-    assert note == "strong MS2; moderate MS1; aligned RT; representative"
+    assert note == "strong MS2; moderate MS1; aligned RT"
     assert note != reason
 
 
@@ -159,7 +157,6 @@ def _candidate(
     ms2_support: str = "moderate",
     ms1_support: str = "moderate",
     rt_alignment: str = "aligned",
-    family_context: str = "singleton",
     candidate_id: str = "Sample_1#101",
     seed_event_count: int = 1,
     neutral_loss_tag: str = "DNA_dR",
@@ -172,7 +169,6 @@ def _candidate(
         ms2_support=ms2_support,
         ms1_support=ms1_support,
         rt_alignment=rt_alignment,
-        family_context=family_context,
         candidate_id=candidate_id,
         precursor_mz=258.1085,
         product_mz=142.0611,

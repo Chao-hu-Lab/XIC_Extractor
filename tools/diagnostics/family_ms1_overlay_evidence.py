@@ -1,4 +1,4 @@
-"""MS1 shape and coverage evidence for family overlay diagnostics."""
+"""MS1 shape and coverage evidence for legacy family-id peak-group overlays."""
 
 from __future__ import annotations
 

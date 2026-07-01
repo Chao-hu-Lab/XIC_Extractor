@@ -65,5 +65,5 @@ Peak model selection defines the durable product invariants for selected-hypothe
 
 - [Selected-hypothesis model-selection parity spec](../superpowers/specs/2026-06-02-selected-hypothesis-model-selection-parity-spec.md)
 - [LC-MS/MS evidence rules](../lcms-msms-evidence-rules.md)
-- [Evidence spine](evidence-spine.md) | [Family and hypothesis boundary](family-hypothesis-boundary.md) | [Targeted selection](targeted-selection.md) | [Quantitation context](quantitation-context.md)
+- [Evidence spine](evidence-spine.md) | [Peak anchor and group boundary](family-hypothesis-boundary.md) | [Targeted selection](targeted-selection.md) | [Quantitation context](quantitation-context.md)
 - [`tests/test_peak_model_selection.py`](../../tests/test_peak_model_selection.py)
