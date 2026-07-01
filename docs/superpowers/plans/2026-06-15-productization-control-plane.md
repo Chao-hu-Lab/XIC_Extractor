@@ -224,6 +224,12 @@ the same product decision surface: 4613 policy rows, 511 `write_ready`, 0
 `detected_flagged`, 4102 `blocked`, 511 matrix writes, and 511/511
 expected-diff pass. The policy summary now records
 `backfill_policy_quality_explanation_row_count=4613`, matching the sidecar TSV.
+Repository retention records this as a compact tracked summary at
+`docs/superpowers/validation/backfill_generated_policy_externalized_artifacts_v1/backfill_generated_policy_externalized_artifacts_summary.json`;
+the full generated policy TSV, quality-explanation TSV, and expected-diff
+acceptance JSON remain externalized under ignored `output/`, so this retention
+change does not alter maturity tier, active lane, writer authority, selected
+peak/area, counted detections, workbook, or matrix behavior.
 The most common blocked bucket remains the 1087 rows with missing overlay path,
 and the remaining blocked rows mainly carry combined shape/height/width/scan/
 apex-delta blockers or still need a new approved evidence class/passing oracle.

@@ -46,7 +46,7 @@ different questions:
 
 | Source | Owns | Does not own |
 | --- | --- | --- |
-| `CONTEXT.md` | Stable domain vocabulary, lane boundaries, and the shared evidence spine. | Current counts, active tier, writer scopes. |
+| `docs/product/domain-glossary.md` | Stable domain vocabulary, lane boundaries, and the shared evidence spine. | Current counts, active tier, writer scopes. |
 | `docs/architecture-contract.md` | Dependency direction and the rule that evidence providers feed the spine before any matrix/export contract. | Current validation packet status. |
 | `docs/lc-msms-evidence-rules.md` | Domain interpretation of MS1/MS2/RT/Backfill evidence and promotion constraints. | Current product lane state. |
 | `docs/superpowers/plans/2026-06-15-productization-control-plane.md` | Narrative tier board, active lane, and promotion history. | Low-level evidence fields. |
@@ -468,8 +468,8 @@ When adding or changing evidence:
 
 1. Update this file if the change adds a durable evidence provider, state,
    promotion boundary, or authority boundary.
-2. Update `CONTEXT.md` only when stable vocabulary, lane boundaries, or
-   authority concepts change.
+2. Update `docs/product/domain-glossary.md` only when stable vocabulary, lane
+   boundaries, or authority concepts change.
 3. Update `docs/lc-msms-evidence-rules.md` when the scientific/domain
    interpretation changes.
 4. Update `productization_status_index_v1.tsv`,

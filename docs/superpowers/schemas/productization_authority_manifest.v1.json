@@ -30,8 +30,10 @@
       "blocked_rows": 4102,
       "authority_scope": "backfill_policy_write_ready_rows",
       "authority_source": "generated_policy_write_ready_rows",
-      "artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy.tsv",
-      "artifact_sha256": "1585F9EBF6C216677406A03C57868EEA38A25B663F00566A9C84C37898D11659",
+      "artifact": "docs/superpowers/validation/backfill_generated_policy_externalized_artifacts_v1/backfill_generated_policy_externalized_artifacts_summary.json",
+      "artifact_sha256": "A3EEAC444838B26B05059FC982B41890B26E1EF8641C01699FCBB35AC0F4B0CF",
+      "externalized_source_artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy.tsv",
+      "externalized_source_artifact_sha256": "1585F9EBF6C216677406A03C57868EEA38A25B663F00566A9C84C37898D11659",
       "acceptance_artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/narrow_product_writer_expected_diff_acceptance.json",
       "acceptance_artifact_sha256": "093E4F4894D0D7FB05A54FDFDA8454618FEBA0A4AC93EFEC7B77CA64AE97458D"
     },
@@ -76,8 +78,10 @@
   "explanation_only_sources": [
     {
       "source_id": "backfill_policy_quality_explanations",
-      "artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy_quality_explanations.tsv",
-      "artifact_sha256": "023AD7794D7C79258BC06CE3A33E8ECA26B5D6866B7D4F0421B2ACECC6C8E4D4",
+      "artifact": "docs/superpowers/validation/backfill_generated_policy_externalized_artifacts_v1/backfill_generated_policy_externalized_artifacts_summary.json",
+      "artifact_sha256": "A3EEAC444838B26B05059FC982B41890B26E1EF8641C01699FCBB35AC0F4B0CF",
+      "externalized_source_artifact": "output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy_quality_explanations.tsv",
+      "externalized_source_artifact_sha256": "023AD7794D7C79258BC06CE3A33E8ECA26B5D6866B7D4F0421B2ACECC6C8E4D4",
       "may_grant_write_authority": false
     }
   ],

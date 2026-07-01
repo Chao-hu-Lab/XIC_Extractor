@@ -203,20 +203,32 @@ def test_index_source_hashes_match_manifest_and_available_artifacts() -> None:
     source_hashes = _parse_semicolon_pairs(source_hash_sets.pop())
     assert (
         source_hashes["policy"]
-        == manifest["current_authority"]["backfill"]["artifact_sha256"]
+        == manifest["current_authority"]["backfill"][
+            "externalized_source_artifact_sha256"
+        ]
     )
     assert (
         source_hashes["quality"]
-        == manifest["explanation_only_sources"][0]["artifact_sha256"]
+        == manifest["explanation_only_sources"][0][
+            "externalized_source_artifact_sha256"
+        ]
     )
 
-    local_artifacts = {
-        "policy": ROOT
-        / manifest["current_authority"]["backfill"]["artifact"],
-        "quality": ROOT
-        / manifest["explanation_only_sources"][0]["artifact"],
+    compact_artifacts = {
+        "policy_summary": manifest["current_authority"]["backfill"],
+        "quality_summary": manifest["explanation_only_sources"][0],
     }
-    for source_id, path in local_artifacts.items():
+    for source in compact_artifacts.values():
+        path = ROOT / source["artifact"]
+        assert artifact_sha256(path) == source["artifact_sha256"]
+
+    externalized_artifacts = {
+        "policy": ROOT
+        / manifest["current_authority"]["backfill"]["externalized_source_artifact"],
+        "quality": ROOT
+        / manifest["explanation_only_sources"][0]["externalized_source_artifact"],
+    }
+    for source_id, path in externalized_artifacts.items():
         if path.exists():
             assert artifact_sha256(path) == source_hashes[source_id]
 

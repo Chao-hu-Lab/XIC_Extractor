@@ -11,7 +11,8 @@ file(s) directly relevant to the current task unless a hard default below names
 a required preflight.
 
 - Directory layout and scratch hygiene: [`docs/project-layout.md`](docs/project-layout.md)
-- Stable domain glossary and product lane vocabulary: [`CONTEXT.md`](CONTEXT.md)
+- Stable domain glossary and product lane vocabulary:
+  [`docs/product/domain-glossary.md`](docs/product/domain-glossary.md)
 - Python runners, Thermo RAW/DLL paths, validation tiers, and command shapes:
   [`docs/agent/parameter-settings.md`](docs/agent/parameter-settings.md)
 - Known diagnostic conclusions: [`docs/diagnostic-ledger.md`](docs/diagnostic-ledger.md)

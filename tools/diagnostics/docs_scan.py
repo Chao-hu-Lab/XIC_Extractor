@@ -7,6 +7,7 @@ from pathlib import Path
 
 LOCAL_PATH_SCAN_EXCLUSIONS = {"tools/diagnostics/docs_management_audit.py"}
 LOCAL_PATH_SCAN_FALLBACK_DIRS = (
+    "config",
     "docs",
     "tests",
     "tools",
@@ -32,10 +33,8 @@ LOCAL_PATH_SCAN_TEXT_SUFFIXES = {
     ".yml",
 }
 LOCAL_PATH_SCAN_TEXT_FILENAMES = {
-    ".env.example",
     ".gitignore",
     "AGENTS.md",
-    "CONTEXT.md",
     "README.md",
 }
 

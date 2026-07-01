@@ -1,10 +1,16 @@
 # Changelog
 
+Doc placement: formal_repo_doc
+Doc kind: changelog
+Doc lifecycle: active
+Repo owner: docs/history/CHANGELOG.md
+Doc exit rule: Update only for durable milestone summaries, not branch diaries or command logs.
+
 Milestone-based development log. XIC Extractor uses internal development
 without formal releases, so entries are grouped by functional milestone
 rather than version numbers.
 
-For user-facing workflow guides, see [`docs/user/`](docs/user/README.md).
+For user-facing workflow guides, see [`docs/user/`](../user/README.md).
 
 ---
 

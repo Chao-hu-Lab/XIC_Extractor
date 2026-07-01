@@ -17,5 +17,3 @@
 /docs/superpowers/validation/lockbox*/**/*.md text eol=lf
 /docs/superpowers/validation/lockbox*/**/*.html text eol=lf
 /docs/superpowers/validation/**/*.tsv text eol=lf whitespace=-blank-at-eol
-/output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy.tsv text eol=lf -diff whitespace=-blank-at-eol
-/output/productization_realdata_seed_guard_85raw_20260617/generated_policy_quality_explained_no_raw_productization/standard_peak_backfill_policy_quality_explanations.tsv text eol=lf -diff whitespace=-blank-at-eol

@@ -17,13 +17,16 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.check_productization_state import artifact_sha256
-from tools.diagnostics.docs_policy import (
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.check_productization_state import artifact_sha256  # noqa: E402
+from tools.diagnostics.docs_policy import (  # noqa: E402
     MECHANICAL_ADJUDICATION_INDEX_REL,
     PRODUCTIZATION_AUTHORITY_MANIFEST_REL,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / PRODUCTIZATION_AUTHORITY_MANIFEST_REL
 DEFAULT_SCHEMA = (
     ROOT / "docs/superpowers/schemas/mechanical_adjudication_schema.v1.json"
@@ -265,16 +268,28 @@ def _check_source_hashes(
     explanation_sources = manifest.get("explanation_only_sources", [])
     if backfill is None or not explanation_sources:
         return
-    expected_policy_hash = backfill.get("artifact_sha256")
-    expected_quality_hash = explanation_sources[0].get("artifact_sha256")
+    expected_policy_hash = backfill.get(
+        "externalized_source_artifact_sha256",
+        backfill.get("artifact_sha256"),
+    )
+    expected_quality_hash = explanation_sources[0].get(
+        "externalized_source_artifact_sha256",
+        explanation_sources[0].get("artifact_sha256"),
+    )
     if source_hashes.get("policy") != expected_policy_hash:
         problems.append("index policy source hash does not match manifest")
     if source_hashes.get("quality") != expected_quality_hash:
         problems.append("index quality source hash does not match manifest")
 
     artifacts = {
-        "policy": backfill.get("artifact"),
-        "quality": explanation_sources[0].get("artifact"),
+        "policy": backfill.get(
+            "externalized_source_artifact",
+            backfill.get("artifact"),
+        ),
+        "quality": explanation_sources[0].get(
+            "externalized_source_artifact",
+            explanation_sources[0].get("artifact"),
+        ),
     }
     for source_id, relative in artifacts.items():
         if not isinstance(relative, str):
@@ -282,6 +297,36 @@ def _check_source_hashes(
         path = repo_root / relative
         if path.exists() and artifact_sha256(path) != source_hashes.get(source_id):
             problems.append(f"{source_id} artifact hash does not match index")
+
+    compact_sources = {
+        "policy": backfill,
+        "quality": explanation_sources[0],
+    }
+    for source_id, source in compact_sources.items():
+        relative = source.get("artifact")
+        expected_hash = source.get("artifact_sha256")
+        if not isinstance(relative, str) or not relative:
+            problems.append(f"{source_id} compact artifact path is missing")
+            continue
+        if not isinstance(expected_hash, str) or not expected_hash:
+            problems.append(f"{source_id} compact artifact hash is missing")
+            continue
+        path = repo_root / relative
+        if not path.is_file():
+            problems.append(f"{source_id} compact artifact is missing: {relative}")
+            continue
+        if artifact_sha256(path) != expected_hash:
+            problems.append(
+                f"{source_id} compact artifact hash does not match manifest"
+            )
+    _check_backfill_compact_summary(
+        backfill,
+        explanation_sources[0],
+        rows,
+        source_hashes,
+        repo_root,
+        problems,
+    )
 
 
 def _check_retained_authority_source_hashes(
@@ -324,6 +369,245 @@ def _check_retained_authority_source_hashes(
                 continue
             if artifact_sha256(path) != expected_hash:
                 problems.append(f"{label} {path_key} hash does not match manifest")
+
+
+def _check_backfill_compact_summary(
+    backfill: Mapping[str, Any],
+    explanation_source: Mapping[str, Any],
+    rows: Sequence[Mapping[str, str]],
+    source_hashes: Mapping[str, str],
+    repo_root: Path,
+    problems: list[str],
+) -> None:
+    relative = backfill.get("artifact")
+    quality_relative = explanation_source.get("artifact")
+    if not isinstance(relative, str) or not relative:
+        return
+    if quality_relative != relative:
+        problems.append("policy and quality compact artifacts must share one summary")
+        return
+    path = repo_root / relative
+    if not path.is_file():
+        return
+    summary = _read_json(path, problems)
+    if not summary:
+        return
+
+    current_scope = summary.get("current_scope")
+    if not isinstance(current_scope, Mapping):
+        problems.append("compact summary current_scope must be an object")
+    else:
+        _check_compact_summary_value(
+            current_scope,
+            "candidate_audit_universe_rows",
+            backfill.get("candidate_audit_universe_rows"),
+            "current_scope",
+            problems,
+        )
+        _check_compact_summary_value(
+            current_scope,
+            "current_product_authority_rows",
+            backfill.get("current_product_authority_rows"),
+            "current_scope",
+            problems,
+        )
+        _check_compact_summary_value(
+            current_scope,
+            "detected_flagged_rows",
+            backfill.get("detected_flagged_rows"),
+            "current_scope",
+            problems,
+        )
+        _check_compact_summary_value(
+            current_scope,
+            "blocked_rows",
+            backfill.get("blocked_rows"),
+            "current_scope",
+            problems,
+        )
+        _check_compact_summary_value(
+            current_scope,
+            "product_authority_scope",
+            backfill.get("authority_scope"),
+            "current_scope",
+            problems,
+        )
+
+    externalized = summary.get("externalized_artifacts")
+    if not isinstance(externalized, Mapping):
+        problems.append("compact summary externalized_artifacts must be an object")
+        return
+
+    expected_rows = backfill.get("candidate_audit_universe_rows")
+    if rows and expected_rows != len(rows):
+        problems.append("manifest backfill candidate rows must match index row count")
+
+    policy = externalized.get("standard_peak_backfill_policy")
+    quality = externalized.get("standard_peak_backfill_policy_quality_explanations")
+    acceptance = externalized.get("narrow_product_writer_expected_diff_acceptance")
+    _check_compact_summary_artifact(
+        label="policy",
+        artifact=policy,
+        manifest_path=backfill.get("externalized_source_artifact"),
+        manifest_sha=backfill.get("externalized_source_artifact_sha256"),
+        index_sha=source_hashes.get("policy"),
+        expected_rows=expected_rows,
+        expected_write_authority=True,
+        expected_may_grant_write_authority=None,
+        expected_scope=backfill.get("authority_scope"),
+        problems=problems,
+    )
+    _check_compact_summary_artifact(
+        label="quality",
+        artifact=quality,
+        manifest_path=explanation_source.get("externalized_source_artifact"),
+        manifest_sha=explanation_source.get("externalized_source_artifact_sha256"),
+        index_sha=source_hashes.get("quality"),
+        expected_rows=expected_rows,
+        expected_write_authority=False,
+        expected_may_grant_write_authority=explanation_source.get(
+            "may_grant_write_authority",
+        ),
+        expected_scope=None,
+        problems=problems,
+    )
+    _check_compact_summary_acceptance(
+        artifact=acceptance,
+        backfill=backfill,
+        policy_artifact=policy,
+        problems=problems,
+    )
+
+    if isinstance(policy, Mapping):
+        policy_counts = policy.get("policy_decision_counts")
+        if not isinstance(policy_counts, Mapping):
+            problems.append("compact summary policy decision counts must be an object")
+        else:
+            index_policy_counts = Counter(
+                row.get("source_policy_decision", "") for row in rows
+            )
+            expected_counts = {
+                "write_ready": index_policy_counts.get("write_ready", 0),
+                "detected_flagged": index_policy_counts.get("detected_flagged", 0),
+                "blocked": index_policy_counts.get("blocked", 0),
+            }
+            for decision, expected in expected_counts.items():
+                if policy_counts.get(decision) != expected:
+                    problems.append(
+                        "compact summary policy decision count "
+                        f"{decision} does not match index",
+                    )
+
+
+def _check_compact_summary_acceptance(
+    *,
+    artifact: Any,
+    backfill: Mapping[str, Any],
+    policy_artifact: Any,
+    problems: list[str],
+) -> None:
+    if not isinstance(artifact, Mapping):
+        problems.append("compact summary acceptance artifact must be an object")
+        return
+    if artifact.get("path") != backfill.get("acceptance_artifact"):
+        problems.append("compact summary acceptance path does not match manifest")
+    if artifact.get("sha256") != backfill.get("acceptance_artifact_sha256"):
+        problems.append("compact summary acceptance sha256 does not match manifest")
+    if artifact.get("acceptance_status") != "pass":
+        problems.append("compact summary acceptance status must be pass")
+    if artifact.get("activation_application_status") != "applied":
+        problems.append("compact summary acceptance application status must be applied")
+    if artifact.get("expected_scope") != backfill.get("authority_scope"):
+        problems.append(
+            "compact summary acceptance expected_scope does not match manifest"
+        )
+    if artifact.get("eligible_audit_row_count") != backfill.get(
+        "current_product_authority_rows",
+    ):
+        problems.append(
+            "compact summary acceptance eligible_audit_row_count "
+            "does not match manifest"
+        )
+    if artifact.get("matrix_cells_written") != backfill.get(
+        "current_product_authority_rows",
+    ):
+        problems.append(
+            "compact summary acceptance matrix_cells_written does not match manifest"
+        )
+    if artifact.get("product_surface_changed") != "TRUE":
+        problems.append(
+            "compact summary acceptance product_surface_changed must be TRUE"
+        )
+    if isinstance(policy_artifact, Mapping):
+        if artifact.get("activation_scope_audit_tsv") != policy_artifact.get("path"):
+            problems.append(
+                "compact summary acceptance activation_scope_audit_tsv "
+                "does not match policy"
+            )
+        if artifact.get("activation_scope_audit_sha256") != policy_artifact.get(
+            "sha256",
+        ):
+            problems.append(
+                "compact summary acceptance activation_scope_audit_sha256 "
+                "does not match policy"
+            )
+
+
+def _check_compact_summary_artifact(
+    *,
+    label: str,
+    artifact: Any,
+    manifest_path: Any,
+    manifest_sha: Any,
+    index_sha: str | None,
+    expected_rows: Any,
+    expected_write_authority: bool,
+    expected_may_grant_write_authority: Any,
+    expected_scope: Any,
+    problems: list[str],
+) -> None:
+    if not isinstance(artifact, Mapping):
+        problems.append(f"compact summary {label} artifact must be an object")
+        return
+    if artifact.get("path") != manifest_path:
+        problems.append(f"compact summary {label} path does not match manifest")
+    if artifact.get("sha256") != manifest_sha:
+        problems.append(f"compact summary {label} sha256 does not match manifest")
+    if index_sha is not None and artifact.get("sha256") != index_sha:
+        problems.append(f"compact summary {label} sha256 does not match index")
+    if artifact.get("data_rows") != expected_rows:
+        problems.append(f"compact summary {label} data_rows does not match manifest")
+    if artifact.get("write_authority") is not expected_write_authority:
+        problems.append(
+            f"compact summary {label} write_authority does not match manifest"
+        )
+    if (
+        expected_may_grant_write_authority is not None
+        and artifact.get("may_grant_write_authority")
+        is not expected_may_grant_write_authority
+    ):
+        problems.append(
+            f"compact summary {label} may_grant_write_authority "
+            "does not match manifest"
+        )
+    if (
+        expected_scope is not None
+        and artifact.get("product_authority_scope") != expected_scope
+    ):
+        problems.append(
+            f"compact summary {label} product_authority_scope does not match manifest"
+        )
+
+
+def _check_compact_summary_value(
+    mapping: Mapping[str, Any],
+    field: str,
+    expected: Any,
+    label: str,
+    problems: list[str],
+) -> None:
+    if mapping.get(field) != expected:
+        problems.append(f"compact summary {label} {field} does not match manifest")
 
 
 def _mapping_path(
