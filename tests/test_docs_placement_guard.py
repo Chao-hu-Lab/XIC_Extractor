@@ -274,6 +274,20 @@ def test_parse_name_status_keeps_specs_non_markdown_payloads() -> None:
     ]
 
 
+def test_parse_name_status_treats_rename_source_as_deletion() -> None:
+    entries, ignored_deletions = parse_name_status(
+        "R100\t"
+        "docs/superpowers/plans/2026-04-07-old-plan.md\t"
+        "docs/product/old-plan.md\n"
+    )
+
+    assert ignored_deletions == 0
+    assert [(entry.status, entry.path) for entry in entries] == [
+        ("D", "docs/superpowers/plans/2026-04-07-old-plan.md"),
+        ("R", "docs/product/old-plan.md"),
+    ]
+
+
 def test_repo_support_doc_requires_owner_and_passes(tmp_path: Path) -> None:
     path = "docs/superpowers/file-management/docs-cleanup/example-support-note.md"
     _write(
@@ -665,6 +679,24 @@ def test_lifecycle_managed_deletion_requires_retirement_evidence() -> None:
     assert result.ignored_deletions == 0
     assert any(
         problem.path == path
+        and "deletion requires staged retirement evidence" in problem.reason
+        for problem in result.problems
+    )
+
+
+def test_lifecycle_managed_rename_source_requires_retirement_evidence() -> None:
+    source = "docs/superpowers/plans/2026-04-07-old-plan.md"
+    destination = "docs/product/old-plan.md"
+    entries, ignored_deletions = parse_name_status(f"R100\t{source}\t{destination}\n")
+
+    result = check_doc_placement(
+        Path("."),
+        entries,
+        ignored_deletions=ignored_deletions,
+    )
+
+    assert any(
+        problem.path == source
         and "deletion requires staged retirement evidence" in problem.reason
         for problem in result.problems
     )

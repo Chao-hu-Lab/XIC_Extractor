@@ -214,8 +214,8 @@ DOC_ROUTING_MECHANICAL_REFERRER_PREFIXES = (
 # keep the classifier so historical manifests or local scratch indexes do not
 # accidentally become candidate referrers or topic owners.
 DOC_ROUTING_TOPIC_PREFIX = "docs/superpowers/topics/"
-DOC_ROUTING_SPECS_INDEX_PATH = "docs/superpowers/specs/readme.md"
-DOC_ROUTING_SCHEMAS_INDEX_PATH = "docs/superpowers/schemas/readme.md"
+DOC_ROUTING_SPECS_INDEX_PATH = "docs/superpowers/specs/README.md"
+DOC_ROUTING_SCHEMAS_INDEX_PATH = "docs/superpowers/schemas/README.md"
 DOC_ROUTING_AUTHORITY_REFERRER_PATHS = frozenset(
     {
         "docs/superpowers/validation/ARTIFACT_INVENTORY.tsv",

@@ -87,6 +87,13 @@ def parse_name_status(output: str) -> tuple[list[StagedMarkdown], int]:
         status = normalize_status(parts[0])
         if len(parts) < 2:
             continue
+        if status == "R" and len(parts) >= 3:
+            source_path = parts[1]
+            if is_markdown_path(source_path):
+                entries.append(StagedMarkdown(status="D", path=source_path))
+            else:
+                ignored_deletions += 1
+
         path = parts[-1]
         if status == "D":
             if is_markdown_path(path):

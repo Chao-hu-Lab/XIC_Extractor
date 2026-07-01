@@ -65,10 +65,20 @@ def _normalize_title(filename: str) -> str:
     return stem.lower().replace("-", " ").replace("_", " ").strip()
 
 
-def _find_in_vault(title: str, vault_path: Path) -> Path | None:
+def _find_in_vault(
+    title: str,
+    vault_path: Path,
+    *,
+    rel_path: str,
+    source_text: str,
+) -> Path | None:
     normalized = _normalize_title(title)
     for md in vault_path.rglob("*.md"):
-        if _normalize_title(md.name) == normalized:
+        if _normalize_title(md.name) == normalized and _vault_copy_matches(
+            md,
+            rel_path,
+            source_text,
+        ):
             return md
     return None
 
@@ -147,6 +157,23 @@ def _source_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _vault_copy_matches(path: Path, rel_path: str, source_text: str) -> bool:
+    vault_text = path.read_text(encoding="utf-8", errors="ignore")
+    if _source_hash(vault_text) == _source_hash(source_text):
+        return True
+
+    normalized_rel = normalize_path_text(rel_path).lstrip("./")
+    normalized_vault_text = normalize_path_text(vault_text)
+    if normalized_rel not in normalized_vault_text:
+        return False
+
+    marker = "\n## Original Content\n"
+    if marker not in vault_text:
+        return False
+    original_text = vault_text.split(marker, 1)[1]
+    return _source_hash(original_text) == _source_hash(source_text)
+
+
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -214,6 +241,19 @@ def _vault_destination(fpath: Path, vault_archive: Path) -> Path:
     return vault_archive / fpath.name
 
 
+def _safe_vault_destination(fpath: Path, vault_archive: Path, source_text: str) -> Path:
+    dest = _vault_destination(fpath, vault_archive)
+    if not dest.exists():
+        return dest
+    if _vault_copy_matches(
+        dest,
+        fpath.as_posix(),
+        source_text,
+    ):
+        return dest
+    return dest.with_name(f"{dest.stem}-{_source_hash(source_text)[:12]}{dest.suffix}")
+
+
 def _ensure_vault_copy(
     fpath: Path,
     rel_path: str,
@@ -223,12 +263,18 @@ def _ensure_vault_copy(
     *,
     execute: bool,
 ) -> Path:
-    vault_match = _find_in_vault(fpath.name, vault_path)
+    source_text = fpath.read_text(encoding="utf-8", errors="ignore")
+    vault_match = _find_in_vault(
+        fpath.name,
+        vault_path,
+        rel_path=rel_path,
+        source_text=source_text,
+    )
     if vault_match:
         result.already_in_vault.append((rel_path, vault_match))
         return vault_match
 
-    dest = _vault_destination(fpath, vault_archive)
+    dest = _safe_vault_destination(fpath, vault_archive, source_text)
     result.copied_to_vault.append((rel_path, dest))
     if execute:
         vault_archive.mkdir(parents=True, exist_ok=True)
@@ -493,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
         f"\nSummary: {total} {summary_label}, "
         f"{len(result.kept)} kept, {len(result.errors)} errors"
     )
-    return 0
+    return 1 if result.errors else 0
 
 
 if __name__ == "__main__":

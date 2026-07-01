@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.diagnostics.docs_policy import (
+from tools.diagnostics.docs_policy import (  # noqa: E402
     DOC_KIND_MARKER,
     DOC_REPO_OWNER_MARKER,
     marker_value,
@@ -207,7 +207,10 @@ def main(argv: list[str] | None = None) -> int:
 
     for plan in result.planned:
         action = "WROTE" if plan in result.written else "PLAN"
-        print(f"  {action}: {plan.target_source_path} → stub for [[{plan.target_note}]]")
+        print(
+            f"  {action}: {plan.target_source_path}"
+            f" → stub for [[{plan.target_note}]]"
+        )
 
     for path, reason in result.skipped:
         print(f"  SKIP: {path} ({reason})")
@@ -223,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         f" {len(result.errors)} errors"
         f" (of {total} rows)"
     )
-    return 0
+    return 1 if result.errors else 0
 
 
 if __name__ == "__main__":

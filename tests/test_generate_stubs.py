@@ -5,6 +5,7 @@ from tools.diagnostics.generate_stubs import (
     generate_stub_content,
     generate_stubs,
     infer_repo_owner,
+    main,
     parse_blocker_tsv,
 )
 
@@ -122,3 +123,27 @@ def test_generate_stubs_execute_writes_stub(tmp_path: object) -> None:
     assert "Doc placement: repo_stub_plus_obsidian" in stub_text
     assert "Doc kind: note" in stub_text
     assert "[[Example Note.md]]" in stub_text
+
+
+def test_generate_stubs_cli_fails_when_required_stub_errors(
+    tmp_path: object,
+    capsys: object,
+) -> None:
+    repo_root = tmp_path / "repo"  # type: ignore[union-attr]
+    repo_root.mkdir()
+    tsv = tmp_path / "blockers.tsv"  # type: ignore[union-attr]
+    tsv.write_text(
+        '"target_source_path"\t"target_note"\t"target_doc_class"\t"target_line_count"'
+        '\t"reference_type"\t"referrer_path"\t"referrer_kind"\t"referrer_line"'
+        '\t"referrer_text"\t"suggested_resolution"\t"evidence_terms"\t"strong_risk_terms"\n'
+        '"docs/notes/missing.md"\t"Missing Note.md"\t"development-history"\t"50"'
+        '\t"name_title"\t"docs/agent/c.md"\t"agent_runtime_doc"\t"1"'
+        '\t"ref"\t"keep_target_or_leave_stub_first"\t""\t""\n',
+        encoding="utf-8",
+    )
+
+    exit_code = main([str(tsv), "--repo-root", str(repo_root), "--execute"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    assert "ERROR: docs/notes/missing.md (target file does not exist)" in captured.out

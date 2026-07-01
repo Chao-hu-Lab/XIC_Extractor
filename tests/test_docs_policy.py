@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from tools.diagnostics.docs_policy import classify_doc, classify_doc_path
+from pathlib import Path
+
+from tools.diagnostics.docs_policy import (
+    DOC_ROUTING_SCHEMAS_INDEX_PATH,
+    DOC_ROUTING_SPECS_INDEX_PATH,
+    classify_doc,
+    classify_doc_path,
+)
 
 
 def test_docs_policy_marks_validation_as_route_retained_contract_surface() -> None:
@@ -234,3 +241,10 @@ def test_lifecycle_managed_not_overridden_by_metadata() -> None:
     )
 
     assert classification.is_lifecycle_managed
+
+
+def test_superpowers_index_constants_match_case_sensitive_paths() -> None:
+    assert DOC_ROUTING_SPECS_INDEX_PATH == "docs/superpowers/specs/README.md"
+    assert DOC_ROUTING_SCHEMAS_INDEX_PATH == "docs/superpowers/schemas/README.md"
+    assert Path(DOC_ROUTING_SPECS_INDEX_PATH).exists()
+    assert Path(DOC_ROUTING_SCHEMAS_INDEX_PATH).exists()
