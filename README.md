@@ -129,4 +129,4 @@ uv run xic-extractor-cli --base-dir .
 | Maintainers | [Product topic index](docs/product/README.md) | Product contracts, output schemas, authority boundaries |
 | Developers | [Architecture contract](docs/architecture-contract.md) | Package ownership, dependency rules, refactoring discipline |
 | Developers | [Project layout](docs/project-layout.md) | Directory structure, naming conventions, file placement rules |
-| Domain experts | [LC-MS/MS evidence rules](docs/lcms-msms-evidence-rules.md) | Evidence semantics, peak selection, area ownership |
+| Domain experts | [LC-MS/MS evidence rules](docs/lc-msms-evidence-rules.md) | Evidence semantics, peak selection, area ownership |

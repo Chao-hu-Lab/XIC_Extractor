@@ -3782,11 +3782,13 @@ at that older checkpoint, not the latest release claim.
   feasibility gate; current writer authority remained 511 `write_ready` cells.
 - New tier: `parked` for broad Backfill auto-write. Current 511-cell
   `production_ready` writer authority is unchanged.
-- Evidence:
-  `docs/superpowers/notes/backfill_broad_autowrite_feasibility_gate_v1.md`
-  revalidated artifact hashes and counts, assessed ISTD reference semantics,
-  compared the 3015 unresolved trace-matched rows against the 511 approved rows,
-  and output exactly `park_broad_backfill`.
+- Evidence: this control-plane entry and `docs/product/backfill.md` retain the
+  durable `park_broad_backfill` decision after the historical note was retired.
+  The retired note revalidated artifact hashes and counts, assessed ISTD
+  reference semantics, compared the 3015 unresolved trace-matched rows against
+  the 511 approved rows, and output exactly `park_broad_backfill`; its retirement
+  record is
+  `docs/superpowers/file-management/docs-cleanup/2026-06-30_source-copy-stub-removal-approval-packet.md`.
 - Product surface changed: docs/control-plane only. No ProductWriter, matrix,
   workbook, selected area, counted detection, workbook schema, CLI/config, or
   TSV schema behavior changed.

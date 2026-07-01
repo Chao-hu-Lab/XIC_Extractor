@@ -57,19 +57,15 @@ docs/superpowers/fixtures/diagnostic_ledger_2026_05_28/targeted_gt_alignment_aud
 docs/superpowers/notes/2026-06-04-targeted-expected-diff-bc1055-closeout.md
 docs/superpowers/productization/evidence/2026-06-22_cc-framework-improvements_dna-dr-performance-pass.md
 docs/superpowers/notes/2026-06-02-selected-hypothesis-model-selection-characterization-map.md
-```
-
-## Deferred Path
-
-Do not include this path in the first deletion batch while this branch or its PR
-may still use the plan as a compatibility stub:
-
-```text
 docs/superpowers/plans/2026-06-28-family-abstraction-removal.md
 ```
 
-It can be reconsidered after branch PR closeout covers the implementation
-summary and the exact-referrer scan remains clean.
+## Deferred Paths
+
+None. The family-abstraction-removal plan is no longer a compatibility stub in
+this follow-up PR because its durable claims are owned by
+`docs/product/discovery.md`, `docs/product/family-hypothesis-boundary.md`, and
+`docs/architecture-contract.md`, and the exact-referrer scan remained clean.
 
 ## Classification Inventory
 
@@ -82,7 +78,7 @@ summary and the exact-referrer scan remains clean.
 | `docs/superpowers/notes/2026-06-04-targeted-expected-diff-bc1055-closeout.md` | validation_closeout | archived | repo_distilled_plus_obsidian_original | historical_progress | Row-specific BC1055/8-oxodG activation lesson and count impact. | Long closeout body and reviewer chronology. | `docs/product/targeted-selection.md`; `docs/lc-msms-evidence-rules.md` | removed same-path source-copy stub | Source note `XIC Targeted Expected-Diff BC1055 Closeout Source`; manifest `original_repo_path` match. | exact referrers `0` before approval packet | approved and applied | Medium-low because it records a product-ready historical row; owner doc must remain the authority. | removed |
 | `docs/superpowers/productization/evidence/2026-06-22_cc-framework-improvements_dna-dr-performance-pass.md` | performance_evidence | archived | repo_distilled_plus_obsidian_original | historical_progress | Exact-output-preserving 8RAW performance lesson for `dna_dr_product_ready`. | Old timing narrative and run detail. | `docs/product/presets.md`; `docs/agent/product-validation-contract.md` | removed same-path source-copy stub | Source note `XIC DNA DR Product Ready Performance Pass Source`; manifest `original_repo_path` match. | exact referrers `0` before approval packet | approved and applied | Medium-low because it is useful performance history but not preset authority. | removed |
 | `docs/superpowers/notes/2026-06-02-selected-hypothesis-model-selection-characterization-map.md` | note | archived | repo_product_doc | duplicate_boilerplate | Historical map formalized into peak model-selection product docs. | Notes-path duplicate of formal owner. | `docs/product/peak-model-selection.md`; `docs/lc-msms-evidence-rules.md` | removed formal-doc compatibility stub | No source copy required; formal owner carries durable rules. | exact referrers `0` before approval packet | approved and applied | Low if historical exact path is no longer needed. | removed |
-| `docs/superpowers/plans/2026-06-28-family-abstraction-removal.md` | plan | implemented | repo_distilled_plus_obsidian_original | historical_progress | Family-abstraction-removal implementation summary and product owner pointers. | Original implementation plan body. | `docs/product/discovery.md`; `docs/product/family-hypothesis-boundary.md`; `docs/architecture-contract.md` | same-path source-copy stub | Source note `XIC Family Abstraction Removal Source`; manifest `original_repo_path` match. | exact referrers `0` | explicit approval after branch/PR closeout | Medium while this branch is still active. | defer until PR closeout |
+| `docs/superpowers/plans/2026-06-28-family-abstraction-removal.md` | plan | implemented | repo_distilled_plus_obsidian_original | historical_progress | Family-abstraction-removal implementation summary and product owner pointers. | Original implementation plan body. | `docs/product/discovery.md`; `docs/product/family-hypothesis-boundary.md`; `docs/architecture-contract.md` | removed same-path source-copy stub | Source note `XIC Family Abstraction Removal Source`; manifest `original_repo_path` match. | exact referrers `0` | approved and applied after owner absorption and clean referrer scan | Low; owner docs carry the durable claims. | removed |
 
 ## Deletion Rule
 
